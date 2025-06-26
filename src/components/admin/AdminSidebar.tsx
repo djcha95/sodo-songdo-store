@@ -1,15 +1,15 @@
 // src/components/admin/AdminSidebar.tsx
 
-import React from 'react';
 import { NavLink } from 'react-router-dom';
 import './AdminSidebar.css';
-import sodomallLogo from '../../assets/sodomall_logo.png';
+import brandLogo from '@/assets/Sodomall_Logo.png';
 import { 
   Home, Package, ShoppingCart, Truck, Users, Star, Bot, 
   ClipboardList, Gift, Image as ImageIcon, MessageSquare, TestTube2 
 } from 'lucide-react';
+import type React from 'react'; // ✅ 개선 사항: 타입 전용으로 import 하도록 변경
 
-// 재사용성을 위해 메뉴 아이템을 컴포넌트로 분리 (선택사항이지만 권장)
+// 재사용성을 위해 메뉴 아이템을 컴포넌트로 분리
 const MenuItem = ({ to, icon, text }: { to: string; icon: React.ReactNode; text: string }) => (
   <li className="menu-item">
     <NavLink to={to}>
@@ -28,7 +28,8 @@ const AdminSidebar = () => {
   return (
     <aside className="admin-sidebar">
       <div className="sidebar-header">
-        <img src={sodomallLogo} alt="소도몰 로고" className="sidebar-logo" />
+        {/* ✅ 개선 사항: 변수명을 import한 'brandLogo'로 수정 */}
+        <img src={brandLogo} alt="소도몰 로고" className="sidebar-logo" />
         <h1 className="sidebar-title">소도몰 관리</h1>
       </div>
       <nav className="sidebar-nav">
