@@ -1,4 +1,5 @@
-// sodomall-app/src/context/AuthContext.tsx
+// src/context/AuthContext.tsx
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp, query, collection, where, onSnapshot, orderBy, updateDoc } from "firebase/firestore";
@@ -46,10 +47,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (currentUser) {
         const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
+        try {
+          const userSnap = await getDoc(userRef);
 
-        if (!userSnap.exists()) {
-          try {
+          if (!userSnap.exists()) {
             await setDoc(userRef, {
               uid: currentUser.uid,
               email: currentUser.email,
@@ -60,25 +61,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
             setIsAdmin(false);
             console.log("Firestore에 새 유저 정보를 생성했습니다.");
-          } catch (error) {
-            console.error("첫 로그인 유저 정보 저장 실패:", error);
+          } else {
+            setIsAdmin(userSnap.data().isAdmin === true);
           }
-        } else {
-          setIsAdmin(userSnap.data().isAdmin === true);
+          
+          setUser(currentUser); // [수정] 비동기 작업 후 user 상태 업데이트
+          
+          const q = query(collection(db, "notifications"), where("userId", "==", currentUser.uid), orderBy("createdAt", "desc"));
+          unsubNotifs = onSnapshot(q, (snapshot) => {
+            const newNotifications = snapshot.docs.map(d => ({
+              id: d.id,
+              ...d.data(),
+              timestamp: d.data().createdAt?.toDate() || new Date()
+            }) as Notification);
+            setNotifications(newNotifications);
+          });
+          
+        } catch (error) {
+          console.error("인증 상태 변경 처리 중 오류:", error);
+          setUser(null); // 오류 발생 시 사용자 상태 초기화
+          setIsAdmin(false);
+          setNotifications([]);
         }
-        
-        setUser(currentUser);
-        
-        const q = query(collection(db, "notifications"), where("userId", "==", currentUser.uid), orderBy("createdAt", "desc"));
-        unsubNotifs = onSnapshot(q, (snapshot) => {
-          // [수정] Firestore Timestamp를 Date 객체로 변환하여 타입 불일치 해결
-          const newNotifications = snapshot.docs.map(d => ({
-            id: d.id,
-            ...d.data(),
-            timestamp: d.data().createdAt?.toDate() || new Date() // createdAt을 Date 객체로 변환
-          }) as Notification);
-          setNotifications(newNotifications);
-        });
 
       } else {
         setUser(null);
@@ -86,9 +90,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setNotifications([]);
       }
 
-      setLoading(false);
+      setLoading(false); // [수정] 사용자 상태 업데이트 로직이 끝난 후 loading을 false로 설정
       
-      return () => unsubNotifs();
+      return () => unsubNotifs(); // 클린업 함수는 unsubAuth와 함께 반환
     });
 
     return () => unsubAuth();

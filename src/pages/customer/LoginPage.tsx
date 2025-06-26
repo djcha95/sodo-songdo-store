@@ -1,101 +1,109 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, OAuthProvider } from "firebase/auth";
+// src/pages/customer/LoginPage.tsx
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // [추가] useNavigate 다시 import
+import { signInWithPopup, OAuthProvider } from "firebase/auth";
 import { auth } from '../../firebase';
 import './LoginPage.css';
+import { useAuth } from '@/context/AuthContext';
 
-// [추가] 카카오 SDK를 초기화하고 Firebase와 연동하기 위한 함수
+// [수정] 카카오 SDK 초기화 함수를 더욱 견고하게 만듭니다.
+let kakaoInitialized = false;
+
 const initKakao = () => {
-  if (window.Kakao && !window.Kakao.isInitialized()) {
-    // [중요] 여기에 본인의 카카오 JavaScript 키를 입력해주세요.
-    // .env 파일에 VITE_KAKAO_JS_KEY 로 저장하고 사용하시는 것을 추천합니다.
-    window.Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY);
-  }
+  return new Promise<void>((resolve, reject) => {
+    if (kakaoInitialized) {
+      console.log("DEBUG: Kakao SDK is already initialized (via flag).");
+      resolve();
+      return;
+    }
+
+    if (window.Kakao && window.Kakao.isInitialized()) {
+      console.log("DEBUG: Kakao SDK is already initialized (via SDK check).");
+      kakaoInitialized = true;
+      resolve();
+      return;
+    }
+    
+    const checkKakaoLoad = setInterval(() => {
+      if (window.Kakao) {
+        clearInterval(checkKakaoLoad);
+        try {
+          console.log("DEBUG: Kakao SDK script is loaded. Initializing...");
+          window.Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY);
+          kakaoInitialized = true;
+          console.log("DEBUG: Kakao SDK initialized successfully.");
+          resolve();
+        } catch (error) {
+          console.error("DEBUG: Failed to initialize Kakao SDK:", error);
+          reject(error);
+        }
+      }
+    }, 100);
+  });
 };
 
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate(); // [추가] useNavigate 훅 사용
 
-  // [추가] 컴포넌트 마운트 시 카카오 SDK 초기화
-  React.useEffect(() => {
-    initKakao();
+  useEffect(() => {
+    console.log("DEBUG: LoginPage useEffect is running.");
+    initKakao().catch(err => {
+      console.error("DEBUG: Kakao SDK 초기화 오류 (useEffect):", err);
+      setError("카카오 로그인 기능을 사용할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    });
   }, []);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate('/');
-    } catch (err: any) {
-      setError(err.message);
+  
+  // [수정] user 상태가 변경되면 메인 페이지로 즉시 이동
+  useEffect(() => {
+    if (user) {
+      console.log("DEBUG: User is now logged in. Navigating to home from LoginPage.");
+      navigate('/', { replace: true });
     }
-  };
+  }, [user, navigate]);
 
-  const handleGoogleLogin = async () => {
-    setError('');
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      navigate('/');
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
 
-  // [추가] 카카오 로그인 핸들러
   const handleKakaoLogin = async () => {
+    console.log("DEBUG: handleKakaoLogin clicked.");
     setError('');
+    setLoading(true);
+    
+    if (!window.Kakao || !window.Kakao.isInitialized()) {
+      console.error("DEBUG: Kakao SDK is not initialized when button clicked.");
+      setError("카카오 SDK가 초기화되지 않았습니다. 잠시만 기다려주세요.");
+      setLoading(false);
+      return;
+    }
+    
     try {
-      // 카카오 로그인이 팝업창을 띄우도록 설정
       const provider = new OAuthProvider('oidc.kakao');
-      // Firebase signInWithPopup을 사용하여 카카오 계정으로 로그인
+      console.log("DEBUG: Attempting to sign in with Kakao via Firebase popup.");
       await signInWithPopup(auth, provider);
-      navigate('/');
+      console.log("DEBUG: signInWithPopup successful. Waiting for AuthContext update.");
+      // 페이지 전환은 useEffect에서 user 상태 변화를 감지하여 처리
     } catch (err: any) {
-      setError(err.message);
-      console.error("Kakao 로그인 실패:", err);
+      if (err.code === 'auth/popup-closed-by-user') {
+          console.log("DEBUG: Login popup was closed by user.");
+      } else {
+          setError(err.message);
+          console.error("DEBUG: Kakao login failed:", err);
+      }
+      setLoading(false);
     }
   };
 
   return (
     <div className="login-container">
       <div className="login-box">
-        <h2>로그인</h2>
-        <form onSubmit={handleLogin}>
-          <div className="form-group">
-            <label htmlFor="email">이메일</label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="password">비밀번호</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <p className="error-message">{error}</p>}
-          <button type="submit" className="login-button">로그인</button>
-        </form>
+        <h2 className="title">차도몰</h2>
+        <p className="subtitle">차도몰에 오신 것을 환영합니다!</p>
         <div className="social-login-options">
-          <button onClick={handleGoogleLogin} className="google-login-button">
-            Google로 로그인
-          </button>
-          {/* [추가] 카카오 로그인 버튼 */}
-          <button onClick={handleKakaoLogin} className="kakao-login-button">
-            Kakao로 로그인
+          {error && <p className="error-message">{error}</p>}
+          <button onClick={handleKakaoLogin} className="kakao-login-button" disabled={loading}>
+            {loading ? '로그인 중...' : '카카오로 시작하기'}
           </button>
         </div>
       </div>
