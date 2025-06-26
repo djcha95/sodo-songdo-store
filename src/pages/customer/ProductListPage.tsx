@@ -13,7 +13,7 @@ import Header from '../../components/Header';
 import BannerSlider from '../../components/BannerSlider';
 import ProductDetailPage from './ProductDetailPage';
 import type { Product, CartItem, Banner, StorageType, SalesType } from '../../types';
-import brandLogo from '../../assets/sodomall_logo.png';
+import brandLogo from '../../assets/Sodomall_Logo.png';
 
 type ProductStatus = 'ONSITE_SALE' | 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
