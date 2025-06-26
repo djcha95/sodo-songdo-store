@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/Header';
 import type { Product } from '../../types';
 // ✅ 개선 사항: 경로 및 파일명 대소문자 수정
-import brandLogo from '../../../assets/Sodomall_Logo.png'; 
+import brandLogo from '@/assets/Sodomall_Logo.png';
 import '../customer/ProductListPage.css';
 import './ProductListPageAdmin.css';
 import { useNavigate } from 'react-router-dom';
