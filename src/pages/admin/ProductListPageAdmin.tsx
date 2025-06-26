@@ -1,19 +1,22 @@
+// src/pages/admin/ProductListPageAdmin.tsx
+
 import { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/Header';
 import type { Product } from '../../types';
-import brandLogo from '../../assets/sodomall_logo.png';
+// ✅ 개선 사항: 경로 및 파일명 대소문자 수정
+import brandLogo from '../../../assets/Sodomall_Logo.png'; 
 import '../customer/ProductListPage.css';
 import './ProductListPageAdmin.css';
-import { useNavigate } from 'react-router-dom'; // useNavigate 추가
+import { useNavigate } from 'react-router-dom';
 
 const ProductListPageAdmin = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const navigate = useNavigate(); // useNavigate 훅 초기화
+  const navigate = useNavigate();
 
   const fetchAllProducts = useCallback(async () => {
     setLoading(true);
@@ -41,7 +44,6 @@ const ProductListPageAdmin = () => {
     }
   }, [user, fetchAllProducts]);
 
-  // 게시 상태 변경 핸들러
   const handleTogglePublish = async (product: Product) => {
     const productRef = doc(db, 'products', product.id);
     try {
@@ -55,7 +57,6 @@ const ProductListPageAdmin = () => {
     }
   };
 
-  // 상품 삭제 핸들러
   const handleDelete = async (productId: string, productName: string) => {
     if (window.confirm(`'${productName}' 상품을 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
       try {
@@ -69,16 +70,13 @@ const ProductListPageAdmin = () => {
   };
 
   const handleAddNewProduct = () => {
-    // 새 상품 추가 페이지로 이동
     navigate('/admin/products/add');
   };
 
-  // [수정] 상품 수정 페이지로 이동하도록 변경
   const handleEdit = (productId: string) => {
-    navigate(`/admin/products/edit/${productId}`); // 상품 ID를 파라미터로 전달
+    navigate(`/admin/products/edit/${productId}`);
   };
 
-  // 가격 표시를 위한 헬퍼 함수
   const displayPrice = (pricingOptions: Product['pricingOptions']) => {
     if (!pricingOptions || pricingOptions.length === 0) {
       return '가격 미정';
