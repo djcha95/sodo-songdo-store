@@ -1,19 +1,17 @@
 // src/pages/customer/ProductListPage.tsx
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
 import isEqual from 'lodash.isequal';
 import { ShoppingCart, Plus, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { db, getActiveBanners } from '../../firebase';
 import './ProductListPage.css'; // 아래에 제공된 CSS 코드를 사용해주세요.
-import { useAuth } from '../../context/AuthContext';
-import { useCart } from '../../context/CartContext';
-import Header from '../../components/Header';
-import BannerSlider from '../../components/BannerSlider';
+import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
+import Header from '@/components/Header';
+import BannerSlider from '@/components/BannerSlider';
 import ProductDetailPage from './ProductDetailPage';
-import type { Product, CartItem, Banner, StorageType, SalesType } from '../../types';
-import brandLogo from '../../assets/Sodomall_Logo.png';
+import type { Product, CartItem, Banner, StorageType, SalesType } from '@/types';
+import brandLogo from '@/assets/Sodomall_Logo.png';
 
 type ProductStatus = 'ONSITE_SALE' | 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
@@ -187,6 +185,7 @@ const useHorizontalScroll = () => {
         setIsDragging(true);
         if (animationFrameRef.current) {
             cancelAnimationFrame(animationFrameRef.current);
+            // [수정] ref의 .current 속성에 값 할당
             animationFrameRef.current = null;
         }
         setStartX(e.pageX - scrollRef.current.offsetLeft);
@@ -272,6 +271,7 @@ const ProductListPage = () => {
     const ongoingScroll = useHorizontalScroll();
     const additionalReservationScroll = useHorizontalScroll();
 
+    // [수정] allProducts 의존성 제거 및 데이터 패칭 로직 수정
     useEffect(() => {
         const fetchAllData = async () => {
             if (!user) {
@@ -283,6 +283,10 @@ const ProductListPage = () => {
             
             setLoading(true);
             try {
+                // [수정] 절대 경로 별칭(@/)을 사용하여 import 경로 통일
+                const { db, getActiveBanners } = await import('@/firebase');
+                const { collection, getDocs, query, orderBy, where } = await import('firebase/firestore');
+
                 const bannersPromise = getActiveBanners();
                 const productsQuery = query(
                     collection(db, 'products'),
@@ -300,14 +304,26 @@ const ProductListPage = () => {
                     ...doc.data(),
                 } as Product));
 
-                if (!isEqual(allProducts, productList)) {
-                    setAllProducts(productList);
-                    const initialQuantities: { [productId: string]: number } = {};
+                // [수정] 상태가 변경될 때만 업데이트
+                setAllProducts(prevProducts => {
+                    if (!isEqual(prevProducts, productList)) {
+                        return productList;
+                    }
+                    return prevProducts;
+                });
+
+                // [추가] productQuantities 초기화 로직
+                setProductQuantities(prevQuantities => {
+                    const newQuantities: { [productId: string]: number } = {};
+                    let isChanged = false;
                     productList.forEach(p => {
-                        initialQuantities[p.id] = 1;
+                        const currentQuantity = prevQuantities[p.id];
+                        newQuantities[p.id] = currentQuantity !== undefined ? currentQuantity : 1;
+                        if (currentQuantity === undefined) isChanged = true;
                     });
-                    setProductQuantities(initialQuantities);
-                }
+                    return isChanged ? newQuantities : prevQuantities;
+                });
+                
             } catch (error) {
                 console.error("데이터 로딩 중 오류 발생:", error);
             } finally {
@@ -315,8 +331,9 @@ const ProductListPage = () => {
             }
         };
 
+        // [수정] 의존성 배열에서 allProducts 제거. user가 변경될 때만 호출
         fetchAllData();
-    }, [user, allProducts]);
+    }, [user]);
 
     const { onSiteSaleProducts, ongoingProducts, additionalReservationProducts, pastProducts } = useMemo(() => {
         const now = new Date();
@@ -391,9 +408,11 @@ const ProductListPage = () => {
 
     const handleAddToCart = useCallback((product: Product) => {
         const quantity = productQuantities[product.id] || 1;
+        // [수정] selectedUnit과 unitPrice에 대한 undefined 오류 방지를 위해 optional chaining 및 기본값 사용
         const item: CartItem = {
             productId: product.id, productName: product.name,
-            selectedUnit: product.pricingOptions[0].unit, unitPrice: product.pricingOptions[0].price,
+            selectedUnit: product.pricingOptions?.[0]?.unit || '', // 기본값 설정
+            unitPrice: product.pricingOptions?.[0]?.price || 0, // 기본값 설정
             quantity: quantity, imageUrl: product.imageUrls?.[0] || 'https://via.placeholder.com/150',
             maxOrderPerPerson: product.maxOrderPerPerson, availableStock: product.stock,
             salesType: product.salesType,
