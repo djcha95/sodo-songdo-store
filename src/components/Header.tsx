@@ -1,19 +1,24 @@
 // src/components/Header.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Bell } from 'lucide-react';
+import { ChevronLeft, Bell, ShoppingCart, CalendarDays } from 'lucide-react';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import './Header.css';
 
-// Notification 타입 정의 (AuthContext와 일치하도록 정의)
+// Notification 타입 정의
 interface Notification {
   id: string;
   message: string;
   isRead: boolean;
-  timestamp: Date; // AuthContext의 타입과 일치하도록 유지
+  timestamp: Date;
 }
 
 interface HeaderProps {
   title?: string;
   brandLogoUrl?: string;
+  brandName?: string;
+  storeName?: string;
   onBack?: () => void;
   currentUserName?: string;
   notifications?: Notification[];
@@ -23,6 +28,8 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   title,
   brandLogoUrl,
+  brandName,
+  storeName,
   onBack,
   currentUserName,
   notifications = [],
@@ -30,42 +37,66 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const [currentDate, setCurrentDate] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const today = new Date();
-    const month = today.getMonth() + 1;
-    const date = today.getDate();
-    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayOfWeek = dayNames[today.getDay()];
-    setCurrentDate(`${month}/${date} (${dayOfWeek})`);
+    setCurrentDate(format(today, 'M/d(EEE)', { locale: ko }));
   }, []);
 
-  // 환영 메시지 추가
-  const greetingMessage = currentUserName ? `${currentUserName}님, 안녕하세요!` : '안녕하세요!';
-
-  // 읽지 않은 알림 개수 계산
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // 수정: 날짜 클릭 핸들러를 /mypage/orders 경로로 이동
+  const handleDateClick = () => {
+    navigate('/mypage/orders');
+  };
 
   return (
     <header className="main-header">
-      <div className="header-left">
+      {/* 좌측 영역: 날짜 */}
+      <div className="header-left-spacer">
         {onBack && (
           <button onClick={onBack} className="header-back-button">
             <ChevronLeft size={24} color="#333" />
           </button>
         )}
-        {/* 제목이 있으면 제목을, 없으면 날짜를 표시 */}
-        <span className="current-date">{title || currentDate}</span> {/* 날짜는 항상 표시되도록 변경 */}
+        {/* 수정: 날짜 영역을 버튼으로 만들어 클릭 이벤트 추가 */}
+        <button className="header-date-button" onClick={handleDateClick}>
+          <span className="header-date-and-icon">
+            <CalendarDays size={18} className="header-icon" />
+            <span className="current-date">{currentDate}</span>
+          </span>
+        </button>
       </div>
+
+      {/* 중앙 영역: 타이틀 또는 로고 텍스트 */}
       <div className="header-center">
-        {brandLogoUrl && (
+        {title && (
+          <span className="header-title-wrapper">
+            {/* 제목에 맞는 아이콘 추가 (예시) */}
+            {title === '장바구니' && <ShoppingCart size={24} className="header-title-icon" />}
+            {title === '예약 내역' && <Bell size={24} className="header-title-icon" />}
+            <h1 className="header-page-title">{title}</h1>
+          </span>
+        )}
+        {/* 로고 대신 텍스트를 표시하는 조건 추가 */}
+        {!title && brandName && storeName && (
+          <div className="brand-text-logo-container">
+              <span className="brand-name">{brandName}</span>
+              <span className="store-name">{storeName}</span>
+          </div>
+        )}
+        {/* brandLogoUrl이 있을 경우 이미지를 표시하는 기존 로직 유지 */}
+        {!title && brandLogoUrl && !(brandName && storeName) && (
           <div className="brand-logo-container">
             <img src={brandLogoUrl} alt="Brand Logo" className="brand-logo" />
           </div>
         )}
       </div>
-      <div className="header-actions">
-        {/* 알림 버튼 추가 */}
+
+      {/* 우측 영역: 알림 & 환영 메시지 */}
+      <div className="header-actions-spacer">
+        {currentUserName && <span className="greeting-message">{currentUserName}님, 안녕하세요!</span>}
         {notifications && notifications.length > 0 && (
           <div className="notification-container">
             <button
@@ -97,8 +128,6 @@ const Header: React.FC<HeaderProps> = ({
             )}
           </div>
         )}
-        {/* 환영 메시지 다시 추가 */}
-        <span className="greeting-message">{greetingMessage}</span>
       </div>
     </header>
   );

@@ -1,188 +1,228 @@
-// src/pages/admin/OrderListPage.tsx
+// src/pages/customer/OrderHistoryPage.tsx
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, query, orderBy, Timestamp, updateDoc, doc, onSnapshot, increment } from 'firebase/firestore';
-import { db } from '../../firebase';
-import { Loader } from 'lucide-react';
-import './OrderListPage.css';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import Header from '../../components/Header';
+import { getUserOrders } from '../../firebase';
+import type { Order, OrderItem } from '../../types';
+import { Timestamp } from 'firebase/firestore';
+import "../customer/OrderHistoryPage.css";
+import { motion } from 'framer-motion';
+import { AiOutlineCheckCircle, AiOutlineCloseCircle, AiOutlineClockCircle, AiOutlineExclamationCircle } from 'react-icons/ai';
+import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
+import Collapsible from 'react-collapsible'; // Collapsible 컴포넌트 import
 
-/**
-앙 기모찌
- */
-
-type OrderStatus = '예약' | '선입금' | '완료' | '취소';
-interface Order {
-  id: string;
-  userId?: string;
-  customerName: string;
-  productName: string;
-  totalPrice: number;
-  status: OrderStatus;
-  orderDate: Timestamp;
+interface OrderItemWithDetails extends OrderItem {
+  category?: string;
+  subCategory?: string;
+  arrivalDate?: Timestamp;
+  expirationDate?: Timestamp;
 }
 
-/**
- * 공통 로딩 스피너 컴포넌트.
- * 다른 관리자 페이지에서도 재사용될 수 있습니다. 앙 기모찌
- */
-const LoadingSpinner = () => (
-    <div className="loading-overlay">
-        <Loader size={48} className="spin" />
-        <p>데이터를 불러오는 중...</p>
-    </div>
-);
+interface GroupedOrders {
+  [date: string]: Order[];
+}
 
-const OrderListPage = () => {
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
+const OrderHistoryPage: React.FC = () => {
+  const { user, notifications = [], handleMarkAsRead = () => {} } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Firestore에서 주문 데이터를 실시간으로 가져옵니다.
   useEffect(() => {
-    setIsLoading(true);
-    // 'orderDate'를 기준으로 최신순으로 정렬
-    const ordersQuery = query(collection(db, 'orders'), orderBy('orderDate', 'desc'));
-    
-    // onSnapshot을 사용하여 실시간 업데이트를 구독합니다.
-    const unsubscribe = onSnapshot(ordersQuery, (querySnapshot) => {
-      const ordersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-      setAllOrders(ordersData);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("주문 목록 실시간 로딩 오류:", error);
-      setIsLoading(false);
-      // 사용자에게 에러 메시지를 표시하는 상태를 추가할 수 있습니다.
-    });
-
-    // 컴포넌트 언마운트 시 구독을 해제합니다.
-    return () => unsubscribe();
-  }, []);
-
-  /**
-   * 검색어와 필터에 따라 주문 목록을 필터링합니다.
-   * useMemo를 사용하여 검색/필터 조건이 변경될 때만 재계산하도록 최적화했습니다.
-   */
-  const filteredOrders = useMemo(() => {
-    let results = allOrders;
-    // 상태 필터링
-    if (statusFilter !== 'all') {
-      results = results.filter(order => order.status === statusFilter);
-    }
-    // 검색어 필터링 (주문자 이름 기준)
-    if (searchTerm) {
-      results = results.filter(order =>
-        (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    return results;
-  }, [searchTerm, statusFilter, allOrders]);
-
-  /**
-   * 주문 상태를 업데이트하고, '취소' 시 노쇼 카운트를 증가시킵니다.
-   * useCallback을 사용하여 의존성 변경 시에만 함수가 재생성되도록 최적화했습니다.
-   */
-  const handleStatusChange = useCallback(async (order: Order, newStatus: OrderStatus) => {
-    const orderRef = doc(db, 'orders', order.id);
-
-    try {
-      await updateDoc(orderRef, { status: newStatus });
-
-      // 상태가 '취소'로 변경되고, userId가 있는 경우에만 노쇼 카운트를 올립니다.
-      if (newStatus === '취소' && order.userId) {
-        const userRef = doc(db, 'users', order.userId);
-        await updateDoc(userRef, {
-            noShowCount: increment(1)
-        });
-        alert(`주문 상태가 '취소'로 변경되었으며, 고객의 노쇼 횟수가 1 증가했습니다.`);
+    const fetchOrders = async () => {
+      if (!user) {
+        setLoading(false);
+        setError('로그인이 필요합니다.');
+        return;
       }
-    } catch (error) {
-      alert('상태 업데이트에 실패했습니다. 다시 시도해주세요.');
-      console.error("상태 업데이트 오류: ", error);
+      setLoading(true);
+      setError(null);
+
+      try {
+        const fetchedOrders = await getUserOrders(user.uid);
+        const ordersWithDummyDates = fetchedOrders.map(order => ({
+          ...order,
+          items: order.items.map(item => ({
+            ...item,
+            arrivalDate: order.orderDate,
+            expirationDate: new Timestamp(order.orderDate.seconds + 5 * 24 * 60 * 60, 0),
+          })),
+        }));
+        setOrders(ordersWithDummyDates);
+      } catch (err) {
+        console.error("예약 내역 불러오기 오류:", err);
+        setError('예약 내역을 불러오지 못했습니다.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [user]);
+
+  // 주문을 날짜별로 그룹화
+  const groupedOrders = useMemo(() => {
+    if (!orders.length) return {};
+    const groups: GroupedOrders = {};
+    orders.forEach(order => {
+      const dateKey = order.orderDate?.toDate().toLocaleDateString('ko-KR') || '날짜 미정';
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(order);
+    });
+    return groups;
+  }, [orders]);
+
+  const getOrderStatusDisplay = (order: Order) => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const pickupDeadline = order.pickupDeadlineDate?.toDate();
+    const isPickupDeadlinePassed = pickupDeadline && pickupDeadline.getTime() < now.getTime();
+
+    switch (order.status) {
+      case 'cancelled':
+        return { text: '예약 취소', className: 'status-cancelled', icon: <AiOutlineCloseCircle /> };
+      case 'delivered':
+        return { text: '픽업 완료', className: 'status-delivered', icon: <AiOutlineCheckCircle /> };
+      case 'paid':
+        if (isPickupDeadlinePassed) {
+          return { text: '노쇼', className: 'status-noshow', icon: <AiOutlineExclamationCircle /> };
+        }
+        return { text: '선입금 완료', className: 'status-paid', icon: <AiOutlineCheckCircle /> };
+      case 'pending':
+        if (isPickupDeadlinePassed) {
+          return { text: '노쇼', className: 'status-noshow', icon: <AiOutlineExclamationCircle /> };
+        }
+        return { text: '예약중', className: 'status-pending', icon: <AiOutlineClockCircle /> };
+      default:
+        return { text: order.status, className: '', icon: null };
     }
-  }, []);
-  
-  /**
-   * 주문 상태에 따른 CSS 클래스를 반환하는 함수.
-   * 인라인 스타일 대신 CSS 파일에서 상태별 스타일을 관리할 수 있도록 개선합니다.
-   */
-  const getStatusClass = (status: OrderStatus) => {
-    return `status-${status}`;
   };
 
-  // 데이터 로딩 중일 때 로딩 스피너 표시
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
+  const formatDate = (timestamp?: Timestamp | null) => {
+    if (!timestamp) return '미정';
+    const date = timestamp.toDate();
+    return date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' });
+  };
+
+
+  /* ───── 렌더링 ───── */
+
+  const Body = () => {
+    if (loading) return <p className="loading-message">예약 내역을 불러오는 중…</p>;
+    if (error) return <p className="error-message">{error}</p>;
+    if (orders.length === 0) return <p className="no-orders-message">예약 내역이 없습니다.</p>;
+
+    const dates = Object.keys(groupedOrders).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+    return (
+      <div className="order-history-list">
+        {dates.map((date, index) => (
+          <motion.div
+            key={date}
+            className="order-group-card"
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: index * 0.1 }}
+            viewport={{ once: true, amount: 0.8 }}
+          >
+            <Collapsible
+              triggerTagName="div"
+              trigger={
+                <div className="collapsible-header">
+                  <div className="header-text">
+                    <span className="group-date">{date}</span>
+                    <span className="group-order-count">총 {groupedOrders[date].length}건</span>
+                  </div>
+                  <div className="header-icon-wrapper">
+                    <IoIosArrowDown className="header-icon" />
+                  </div>
+                </div>
+              }
+              triggerWhenOpen={
+                <div className="collapsible-header">
+                  <div className="header-text">
+                    <span className="group-date">{date}</span>
+                    <span className="group-order-count">총 {groupedOrders[date].length}건</span>
+                  </div>
+                  <div className="header-icon-wrapper">
+                    <IoIosArrowUp className="header-icon" />
+                  </div>
+                </div>
+              }
+              transitionTime={300}
+              easing="ease-in-out"
+            >
+              <div className="collapsible-content">
+                {groupedOrders[date].map((order: Order) => {
+                  const statusDisplay = getOrderStatusDisplay(order);
+                  return (
+                    <div key={order.id} className="order-card-in-group">
+                      <div className="order-header-section-in-group">
+                        <span className="order-id">주문번호: {order.id.slice(0, 8)}...</span>
+                        <span className={`order-status-badge ${statusDisplay.className}`}>
+                          {statusDisplay.icon}
+                          {statusDisplay.text}
+                        </span>
+                      </div>
+                      <ul className="order-items-detail-list">
+                        {(order.items as OrderItemWithDetails[] || []).map((item: OrderItemWithDetails, idx: number) => (
+                          <li key={idx} className="order-item-detail-row">
+                            <div className="product-main-info">
+                              <span className="product-name-qty">
+                                {item.name} <span className="product-quantity-display">({item.quantity}개)</span>
+                              </span>
+                              <span className="product-category">
+                                [{item.category || '기타'}]
+                                {item.subCategory && ` (${item.subCategory})`}
+                              </span>
+                            </div>
+                            <div className="product-sub-info">
+                              <span className="product-price">{(item.price * item.quantity).toLocaleString()}원</span>
+                              <div className="product-date-info-group">
+                                <span className="product-date-info">
+                                  입고: {formatDate(item.arrivalDate)}
+                                </span>
+                                <span className="product-date-info">
+                                  유통: {formatDate(item.expirationDate)}
+                                </span>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="order-footer-section">
+                        <span className="order-pickup-info">
+                          픽업 예정일: {order.pickupDate?.toDate().toLocaleDateString() || '미정'}
+                          {order.pickupDeadlineDate && ` (마감: ${formatDate(order.pickupDeadlineDate)})`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Collapsible>
+          </motion.div>
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div className="order-list-container">
-      <h1 className="order-list-header">전체 주문 관리</h1>
-      
-      <div className="order-controls">
-        <input
-          type="text"
-          placeholder="주문자 이름으로 검색..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
-        />
-        <div className="status-filter-buttons">
-          {(['all', '예약', '선입금', '완료', '취소'] as const).map(status => (
-            <button 
-              key={status} 
-              onClick={() => setStatusFilter(status)}
-              className={`status-filter-btn ${statusFilter === status ? 'active' : ''}`}
-            >
-              {status === 'all' ? '전체' : status}
-            </button>
-          ))}
-        </div>
+    <>
+      <Header
+        title="예약 내역"
+        notifications={notifications}
+        onMarkAsRead={handleMarkAsRead}
+      />
+      <div className="customer-page-container">
+        <Body />
       </div>
-      
-      <div className="order-table-wrapper">
-        {filteredOrders.length > 0 ? (
-            <table className="order-table">
-                <thead>
-                    <tr>
-                      <th>주문일자</th>
-                      <th>주문자</th>
-                      <th>상품명</th>
-                      <th>주문금액</th>
-                      <th>현재 상태</th>
-                      <th className="status-change-col">상태 변경</th>
-                    </tr>
-                </thead>
-                <tbody>
-                  {filteredOrders.map(order => (
-                    <tr key={order.id}>
-                      <td>{order.orderDate.toDate().toLocaleDateString('ko-KR')}</td>
-                      <td>{order.customerName}</td>
-                      <td>{order.productName}</td>
-                      <td>{order.totalPrice.toLocaleString()}원</td>
-                      <td><span className={`status-badge ${getStatusClass(order.status)}`}>{order.status}</span></td>
-                      <td>
-                        <select 
-                          value={order.status} 
-                          onChange={(e) => handleStatusChange(order, e.target.value as OrderStatus)} 
-                          className="status-select"
-                        >
-                          <option value="예약">예약</option>
-                          <option value="선입금">선입금</option>
-                          <option value="완료">완료</option>
-                          <option value="취소">취소</option> 
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-            </table>
-        ) : (
-            <p className="no-data-message">표시할 주문이 없습니다.</p>
-        )}
-      </div>
-    </div>
+    </>
   );
 };
 
-export default OrderListPage;
+export default OrderHistoryPage;

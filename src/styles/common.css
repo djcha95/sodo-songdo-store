@@ -152,6 +152,47 @@
     margin: 0;
 }
 
+/* -------------------- */
+/* --- Order Status Badge --- */
+/* -------------------- */
+.order-status-badge {
+    position: absolute;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    padding: 6px 12px;
+    border-radius: var(--border-radius-full);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    color: var(--bg-color-white);
+    text-transform: uppercase;
+    box-shadow: var(--box-shadow-sm);
+    transition: all 0.3s ease;
+    z-index: 10;
+}
+
+.order-status-badge.pending { /* 예약중 */
+    background-color: var(--warning-color); /* 주황색 */
+}
+
+.order-status-badge.delivered { /* 픽업완료 */
+    background-color: var(--accent-color); /* 초록색 */
+}
+
+.order-status-badge.cancelled { /* 취소됨 */
+    background-color: var(--danger-color); /* 빨간색 */
+}
+
+.order-status-badge.no-show { /* 노쇼 (새로 추가) */
+    background-color: var(--danger-color-dark); /* 더 진한 빨간색 */
+    animation: pulse 1.5s infinite; /* 애니메이션 효과 추가 */
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
 /* --- General Layout Utilities --- */
 .flex-row {
     display: flex;

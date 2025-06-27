@@ -48,6 +48,24 @@
   padding: 5px; /* 내부 여백 조정 */
 }
 
+/* [수정] 요일 헤더 스타일 - 일월화수목금토 순서에 맞춰 색상 적용 */
+.react-calendar__month-view__weekdays__weekday {
+  color: #333;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* 일요일 헤더 색상 */
+.react-calendar__month-view__weekdays__weekday:nth-child(1) abbr {
+  color: #dc3545 !important; /* 빨간색 */
+}
+
+/* 토요일 헤더 색상 */
+.react-calendar__month-view__weekdays__weekday:nth-child(7) abbr {
+  color: #007bff !important; /* 파란색 */
+}
+
+/* 날짜 타일 색상 */
 .react-calendar__tile--now {
   background: #e6e6e6 !important;
 }
@@ -62,15 +80,50 @@
   background: #0056b3;
 }
 
+/* [수정] 토요일 날짜 타일 색상 - 클래스명으로 제어 */
+.saturday-tile {
+  color: #007bff !important; /* 파란색 */
+}
+
+/* [추가] 일요일 날짜 타일 색상 - 라이브러리 기본값 대신 직접 적용 */
+.react-calendar__month-view__days__day:nth-child(7n+1) {
+    color: #dc3545 !important;
+}
+
+
+/* 점(dot) 스타일 */
 .dot {
   position: absolute;
-  bottom: 5px; /* 날짜 아래에 위치 */
+  bottom: 5px;
   width: 6px;
   height: 6px;
-  background-color: #007bff; /* 주문이 있는 날짜에 표시될 점 색상 */
   border-radius: 50%;
 }
 
+/* [수정] 픽업일 점 스타일 - 중앙에 위치 */
+.pickup-dot {
+  background-color: #28a745; /* 녹색: 픽업일 */
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* [수정] 공휴일 점 스타일 - 겹치지 않도록 조정 */
+.holiday-dot {
+  background-color: #dc3545; /* 빨간색: 공휴일 */
+  /* 픽업일 점과 겹치지 않도록 약간 위로 올림 */
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+
+/* 공휴일 타일 스타일 */
+.holiday-tile {
+  background-color: #ffeaea !important; /* 연한 빨간색 배경 */
+  font-weight: bold;
+}
+
+/* 나머지 기존 스타일 유지 */
 .order-list-section {
   width: 100%;
   max-width: 600px;
@@ -104,7 +157,7 @@
   margin-bottom: 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px; /* 항목 간 간격 추가 */
+  gap: 10px;
 }
 
 .order-summary {
@@ -148,20 +201,20 @@
 .product-name-qty {
   font-weight: bold;
   color: #333;
-  flex-basis: 50%; /* 이름-수량 영역 */
+  flex-basis: 50%;
 }
 
 .product-category {
   font-size: 0.8em;
   color: #888;
-  flex-basis: 20%; /* 카테고리 영역 */
+  flex-basis: 20%;
   text-align: center;
 }
 
 .product-price {
   font-size: 0.9em;
   color: #555;
-  flex-basis: 30%; /* 가격 영역 */
+  flex-basis: 30%;
   text-align: right;
 }
 

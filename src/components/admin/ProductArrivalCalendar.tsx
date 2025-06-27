@@ -1,12 +1,12 @@
-// src/components/customer/ProductArrivalCalendar.tsx
+// src/components/admin/ProductArrivalCalendar.tsx
 
 import React, { useState, useEffect } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import './ProductArrivalCalendar.css';
-import { getProductArrivals } from '../../firebase'; // FIX: import 경로 수정
+import './ProductArrivalCalendar.css'; // 경로 수정
+import { getProductArrivals } from '../../firebase';
 import type { Product } from '../../types';
-import Header from '../Header';
+import Header from '../Header'; // Header 컴포넌트는 공통이므로 경로는 그대로 유지
 
 type ValuePiece = Date | null;
 type Value = ValuePiece | [ValuePiece, ValuePiece];
@@ -29,11 +29,11 @@ const ProductArrivalCalendar: React.FC = () => {
       setError(null);
       try {
         const products = await getProductArrivals();
-        const arrivals = products.map((product: Product) => ({ // FIX: product에 타입 명시
+        const arrivals = products.map((product: Product) => ({
           id: product.id,
           name: product.name,
           arrivalDate: product.arrivalDate?.toDate() || new Date(0),
-        })).filter((item: ArrivalItem) => item.arrivalDate.getTime() > 0); // FIX: item에 타입 명시
+        })).filter((item: ArrivalItem) => item.arrivalDate.getTime() > 0);
 
         setProductArrivals(arrivals);
       } catch (err) {
@@ -50,7 +50,7 @@ const ProductArrivalCalendar: React.FC = () => {
 
   const tileContent = ({ date, view }: { date: Date; view: string }) => {
     if (view === 'month') {
-      const hasArrival = productArrivals.some((item: ArrivalItem) => { // FIX: item에 타입 명시
+      const hasArrival = productArrivals.some((item: ArrivalItem) => {
         return item.arrivalDate.getFullYear() === date.getFullYear() &&
                item.arrivalDate.getMonth() === date.getMonth() &&
                item.arrivalDate.getDate() === date.getDate();
@@ -61,7 +61,7 @@ const ProductArrivalCalendar: React.FC = () => {
   };
 
   const selectedDateArrivals = Array.isArray(value) && value[0]
-    ? productArrivals.filter((item: ArrivalItem) => { // FIX: item에 타입 명시
+    ? productArrivals.filter((item: ArrivalItem) => {
         const selectedSingleDate = value[0] as Date;
         return item.arrivalDate.getFullYear() === selectedSingleDate.getFullYear() &&
                item.arrivalDate.getMonth() === selectedSingleDate.getMonth() &&
@@ -93,7 +93,7 @@ const ProductArrivalCalendar: React.FC = () => {
               <h3>{Array.isArray(value) && value[0] ? (value[0] as Date).toLocaleDateString() : '날짜를 선택하세요'} 입고 예정 상품</h3>
               {selectedDateArrivals.length > 0 ? (
                 <ul className="arrival-list">
-                  {selectedDateArrivals.map((item: ArrivalItem) => ( // FIX: item에 타입 명시
+                  {selectedDateArrivals.map((item: ArrivalItem) => (
                     <li key={item.id} className="arrival-item-card">
                       <p className="arrival-item-product">{item.name}</p>
                       <p className="arrival-item-date">입고일: {item.arrivalDate.toLocaleDateString()}</p>

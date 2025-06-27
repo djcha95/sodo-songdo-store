@@ -1,13 +1,14 @@
 // src/components/BottomNav.tsx
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext'; // useCart 훅 import
-import { FiHome, FiMessageSquare, FiShoppingCart, FiUser, FiSettings } from 'react-icons/fi';
+import { useCart } from '../context/CartContext';
+// FiMessageSquare를 FiShoppingBag으로 교체합니다.
+import { FiHome, FiShoppingBag, FiShoppingCart, FiUser, FiSettings } from 'react-icons/fi';
 import './BottomNav.css';
 
 const BottomNav = () => {
   const { isAdmin } = useAuth();
-  const { cartItemCount } = useCart(); // cartItemCount 가져오기
+  const { cartItemCount } = useCart();
 
   const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
     return "nav-link" + (isActive ? " active" : "");
@@ -19,14 +20,15 @@ const BottomNav = () => {
         <FiHome />
         <span>홈</span>
       </NavLink>
+      {/* '공구 요청'에서 '현장 판매'로 변경 */}
       <NavLink to="/board" className={getNavLinkClass}>
-        <FiMessageSquare />
-        <span>공구 요청</span>
+        <FiShoppingBag /> {/* 아이콘 변경 */}
+        <span>현장 판매</span> {/* 텍스트 변경 */}
       </NavLink>
       <NavLink to="/cart" className={getNavLinkClass}>
-        <div className="cart-icon-wrapper"> {/* 뱃지를 위한 래퍼 추가 */}
+        <div className="cart-icon-wrapper">
           <FiShoppingCart />
-          {cartItemCount > 0 && ( // cartItemCount가 0보다 클 때만 뱃지 표시
+          {cartItemCount > 0 && (
             <span className="cart-badge">{cartItemCount}</span>
           )}
         </div>

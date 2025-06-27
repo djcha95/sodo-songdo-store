@@ -1,4 +1,4 @@
-// src/firebase.ts (최종 통합본 - updateBannerOrderBatch 추가)
+// src/firebase.ts
 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
@@ -15,9 +15,10 @@ import {
   updateDoc,
   deleteDoc,
   Timestamp,
-  writeBatch, // writeBatch 임포트 확인
+  writeBatch,
   increment,
   serverTimestamp,
+  getCountFromServer,
 } from 'firebase/firestore';
 import {
   getStorage,
@@ -58,15 +59,22 @@ export const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' |
   const docRef = await addDoc(collection(db, 'products'), { ...productData, imageUrls, createdAt: serverTimestamp() });
   return docRef.id;
 };
+
 export const getProductById = async (productId: string): Promise<Product | null> => {
     const docRef = doc(db, 'products', productId);
     const docSnap = await getDoc(docRef);
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Product : null;
 };
-export const updateProduct = async (productId: string, productData: Partial<Product>, newImageFiles: File[], existingImageUrls: string[]) => {
-    const newImageUrls = await uploadImages(newImageFiles, 'products');
-    await updateDoc(doc(db, 'products', productId), { ...productData, imageUrls: [...existingImageUrls, ...newImageUrls] });
+
+export const updateProduct = async (productId: string, productData: Partial<Product>, newImageFiles?: File[], existingImageUrls?: string[]) => {
+    let finalImageUrls = existingImageUrls || [];
+    if (newImageFiles && newImageFiles.length > 0) {
+        const newUrls = await uploadImages(newImageFiles, 'products');
+        finalImageUrls = [...finalImageUrls, ...newUrls];
+    }
+    await updateDoc(doc(db, 'products', productId), { ...productData, imageUrls: finalImageUrls });
 };
+
 export const getProductArrivals = async (): Promise<Product[]> => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -75,12 +83,77 @@ export const getProductArrivals = async (): Promise<Product[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
 };
 
+export const addEncoreStock = async (productId: string, additionalStock: number) => {
+  if (additionalStock <= 0) {
+    throw new Error("추가할 재고는 0보다 커야 합니다.");
+  }
+  const productRef = doc(db, 'products', productId);
+
+  await updateDoc(productRef, {
+    stock: increment(additionalStock),
+    reservationStock: increment(additionalStock),
+    encoreCount: increment(1),
+    status: 'selling',
+    isPublished: true,
+  });
+};
+
+export const updateProductOnsiteSaleStatus = async (productId: string, isAvailable: boolean) => {
+  const productRef = doc(db, 'products', productId);
+  await updateDoc(productRef, { isAvailableForOnsiteSale: isAvailable });
+};
+
+// --- Product Batch (Bulk) Functions ---
+export const updateProductsStatus = async (productIds: string[], isPublished: boolean) => {
+  const batch = writeBatch(db);
+  const newStatus = isPublished ? 'selling' : 'draft';
+
+  productIds.forEach(id => {
+    const productRef = doc(db, 'products', id);
+    batch.update(productRef, { isPublished, status: newStatus });
+  });
+
+  await batch.commit();
+};
+
+export const deleteProducts = async (productIds: string[]) => {
+  const batch = writeBatch(db);
+
+  productIds.forEach(id => {
+    const productRef = doc(db, 'products', id);
+    batch.delete(productRef);
+  });
+
+  await batch.commit();
+};
+
+
+// --- Product Count Function ---
+export const getProductsCount = async (category: string, storageType: string): Promise<number> => {
+  const productsCollection = collection(db, 'products');
+  const queryConstraints = [];
+
+  if (category !== 'all') {
+    queryConstraints.push(where('category', '==', category));
+  }
+  if (storageType !== 'all') {
+    queryConstraints.push(where('storageType', '==', storageType));
+  }
+
+  // 검색 쿼리는 클라이언트에서 처리하므로 여기서는 제외
+  const countQuery = query(productsCollection, ...queryConstraints);
+  const snapshot = await getCountFromServer(countQuery);
+  
+  return snapshot.data().count;
+};
+
+
 // --- Banner Functions ---
 export const addBanner = async (bannerData: Omit<Banner, 'id' | 'imageUrl'> & { order: number; createdAt: Timestamp }, imageFile: File) => {
     const imageUrl = await uploadImages([imageFile], 'banners').then(urls => urls[0]);
     await addDoc(collection(db, 'banners'), { ...bannerData, imageUrl });
 };
-// FIX: updateBanner 함수의 data 타입에 createdAt 포함
+
 export const updateBanner = async (id: string, data: Partial<Omit<Banner, 'id' | 'imageUrl'>>, imageFile?: File) => {
     const bannerRef = doc(db, 'banners', id);
     const bannerSnap = await getDoc(bannerRef);
@@ -89,20 +162,19 @@ export const updateBanner = async (id: string, data: Partial<Omit<Banner, 'id' |
 
     if (imageFile) {
         if (bannerSnap.data().imageUrl) {
-          // 기존 이미지 URL이 있다면 스토리지에서 삭제 시도
           const oldImageUrl = bannerSnap.data().imageUrl;
           try {
             const oldImageRef = ref(storage, oldImageUrl);
             await deleteObject(oldImageRef);
           } catch (e) {
-            console.warn("이전 배너 이미지 삭제 실패 (이미 존재하지 않거나 권한 문제):", e);
+            console.warn("이전 배너 이미지 삭제 실패:", e);
           }
         }
-        // 새 이미지 업로드 및 URL 할당
         bannerDataToUpdate.imageUrl = await uploadImages([imageFile], 'banners').then(urls => urls[0]);
     }
     await updateDoc(bannerRef, bannerDataToUpdate);
 };
+
 export const deleteBanner = async (id: string) => {
     const bannerRef = doc(db, 'banners', id);
     const bannerSnap = await getDoc(bannerRef);
@@ -111,18 +183,19 @@ export const deleteBanner = async (id: string) => {
     }
     await deleteDoc(bannerRef);
 };
+
 export const getAllBanners = async (): Promise<Banner[]> => {
     const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Banner));
 };
+
 export const getActiveBanners = async (): Promise<Banner[]> => {
     const q = query(collection(db, 'banners'), where('isActive', '==', true), orderBy('order', 'asc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Banner));
 };
 
-// FIX: updateBannerOrderBatch 함수 추가
 export const updateBannerOrderBatch = async (updates: { id: string; order: number }[]) => {
   const batch = writeBatch(db);
   updates.forEach(update => {
@@ -139,41 +212,63 @@ export const getCategories = async (): Promise<Category[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
 };
+
 export const addCategory = async (categoryData: Omit<Category, 'id'>) => {
     await addDoc(collection(db, 'categories'), categoryData);
 };
+
 export const updateCategory = async (categoryId: string, categoryData: Partial<Category>) => {
     await updateDoc(doc(db, 'categories', categoryId), categoryData);
 };
+
 export const deleteCategory = async (categoryId: string) => {
     await deleteDoc(doc(db, 'categories', categoryId));
 };
 
 // --- Order Functions ---
 export const createOrder = async (orderData: Omit<Order, 'id' | 'orderDate'>) => {
-    await addDoc(collection(db, 'orders'), { ...orderData, orderDate: serverTimestamp() });
+    const batch = writeBatch(db);
+    const orderRef = doc(collection(db, 'orders'));
+    batch.set(orderRef, { ...orderData, id: orderRef.id, orderDate: serverTimestamp() });
+
+    for (const item of orderData.items) {
+        const productRef = doc(db, 'products', item.id);
+        batch.update(productRef, { stock: increment(-item.quantity) });
+    }
+    
+    await batch.commit();
+    return orderRef.id;
 };
+
 export const searchOrdersByPhoneNumber = async (phoneSuffix: string): Promise<Order[]> => {
-    const q = query(collection(db, 'orders'), where('customerPhoneLast4', '==', phoneSuffix)); // 'customerPhone' -> 'customerPhoneLast4'로 수정
+    const q = query(collection(db, 'orders'), where('customerPhoneLast4', '==', phoneSuffix)); 
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
+
 export const updateOrderStatus = async (orderIds: string[], status: Order['status']) => {
     const batch = writeBatch(db);
     for (const id of orderIds) {
         const orderRef = doc(db, 'orders', id);
         batch.update(orderRef, { status });
-        // '취소'가 아닌 'cancelled' 와 비교.
         if (status === 'cancelled') {
             const orderSnap = await getDoc(orderRef);
-            if (orderSnap.exists() && orderSnap.data().userId) {
-                const userRef = doc(db, 'users', orderSnap.data().userId);
-                batch.update(userRef, { noShowCount: increment(1) });
+            if (orderSnap.exists()) {
+                const orderData = orderSnap.data() as Order;
+                for (const item of orderData.items) {
+                    const productRef = doc(db, 'products', item.id);
+                    batch.update(productRef, { stock: increment(item.quantity) });
+                }
+                if (orderData.userId) {
+                    const userRef = doc(db, 'users', orderData.userId);
+                    batch.update(userRef, { noShowCount: increment(1) });
+                }
             }
         }
     }
     await batch.commit();
 };
+
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
     const q = query(collection(db, 'orders'), where('userId', '==', userId), orderBy('orderDate', 'desc'));
     const snapshot = await getDocs(q);
@@ -185,7 +280,6 @@ export async function getDailyDashboardData(): Promise<{ todayStock: TodayStockI
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-    // 오늘 입고 예정 물품
     const stockQuery = query(collection(db, 'products'), where('arrivalDate', '>=', todayStart), where('arrivalDate', '<=', todayEnd));
     const stockSnapshot = await getDocs(stockQuery);
     const todayStock: TodayStockItem[] = stockSnapshot.docs.map(doc => {
@@ -193,7 +287,6 @@ export async function getDailyDashboardData(): Promise<{ todayStock: TodayStockI
         return { id: doc.id, name: product.name, quantity: product.stock ?? 0 };
     });
 
-    // 오늘 선입금된 주문 (픽업 예정일이 오늘인 주문 중 paid 상태인 경우)
     const ordersQuery = query(
         collection(db, 'orders'),
         where('pickupDate', '>=', todayStart),

@@ -1,104 +1,275 @@
 // src/pages/admin/UserListPage.tsx
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
+import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { Loader, ArrowUp, ArrowDown } from 'lucide-react';
 
-interface AppUser {
-  uid: string;
-  email: string;
-  displayName: string;
-  role: 'admin' | 'customer';
-  noShowCount?: number; // 노쇼 횟수
-  isRestricted?: boolean; // 이용 제한 여부
+import './UserListPage.css';
+
+// 타입 정의
+interface AppUser extends DocumentData {
+    uid: string;
+    email: string;
+    displayName: string;
+    role: 'admin' | 'customer';
+    noShowCount?: number;
+    isRestricted?: boolean;
+    customerPhoneLast4?: string;
+    totalOrders?: number;
+    pickedUpOrders?: number;
+    pickupRate?: number;
+    totalPriceSum?: number;
+    createdAt?: Date;
 }
 
-const UserListPage = () => {
-  const [allUsers, setAllUsers] = useState<AppUser[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<AppUser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+interface Order extends DocumentData {
+    id: string;
+    userId: string;
+    status: 'pending' | 'picked_up' | 'cancelled';
+    totalPrice: number;
+    orderDate: Timestamp;
+}
 
-  useEffect(() => {
-    // 실시간 업데이트를 위해 onSnapshot 사용
-    const usersQuery = query(collection(db, 'users'));
-    const unsubscribe = onSnapshot(usersQuery, (querySnapshot) => {
-        const usersData = querySnapshot.docs.map(doc => ({
-          uid: doc.id,
-          ...doc.data()
-        } as AppUser));
-        setAllUsers(usersData);
-        // 검색어 유지를 위해 필터링된 목록도 함께 업데이트하지 않고,
-        // searchTerm, allUsers 의존성 useEffect에서 처리하도록 합니다.
-        setIsLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+// 정렬 기준 타입
+type SortKey = 'displayName' | 'totalOrders' | 'noShowCount' | 'createdAt' | 'pickupRate' | 'totalPriceSum';
 
-  useEffect(() => {
-    const results = allUsers.filter(user =>
-      (user.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredUsers(results);
-  }, [searchTerm, allUsers]);
-
-  if (isLoading) return <div>사용자 목록을 불러오는 중...</div>;
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', margin: 0 }}>전체 고객 관리</h1>
-        <input
-          type="text"
-          placeholder="이름 또는 이메일로 검색..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ padding: '10px', width: '300px', borderRadius: '6px', border: '1px solid #ccc' }}
-        />
-      </div>
-      <div style={{ backgroundColor: 'white', boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)', borderRadius: '0.5rem', overflowX: 'auto' }}>
-        <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', minWidth: '800px' }}>
-          <thead>
-            <tr>
-              <th style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>이름</th>
-              <th style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>이메일</th>
-              <th style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>권한</th>
-              <th style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>노쇼</th>
-              <th style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>상태</th>
-              <th style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>상세 보기</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.map(user => (
-              <tr key={user.uid}>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>{user.displayName || '이름 없음'}</td>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>{user.email}</td>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
-                  <span style={{ textTransform: 'uppercase', fontWeight: 600, color: user.role === 'admin' ? '#ef4444' : '#6b7280' }}>
-                    {user.role}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontWeight: 600, color: (user.noShowCount || 0) > 0 ? '#ef4444' : 'inherit' }}>
-                  {user.noShowCount || 0} 회
-                </td>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
-                  {user.isRestricted && <span style={{color: 'white', backgroundColor: '#ef4444', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem'}}>이용 제한중</span>}
-                </td>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
-                  <Link to={`/admin/users/${user.uid}`} style={{ color: '#007bff', fontWeight: '600' }}>
-                    관리
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredUsers.length === 0 && <p style={{ textAlign: 'center', padding: '20px' }}>결과가 없습니다.</p>}
-      </div>
+// 로딩 스피너 컴포넌트
+const LoadingSpinner = () => (
+    <div className="loading-overlay">
+        <Loader size={48} className="spin" />
+        <p>데이터를 불러오는 중...</p>
     </div>
-  );
+);
+
+const UserListPage = () => {
+    const [allUsers, setAllUsers] = useState<AppUser[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState<SortKey>('createdAt');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    const calculateUserStats = useCallback(async (users: AppUser[]): Promise<AppUser[]> => {
+        if (users.length === 0) return [];
+
+        const ordersQuery = query(collection(db, 'orders'));
+        const ordersSnapshot = await getDocs(ordersQuery);
+        
+        const allOrders: Order[] = ordersSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                userId: data.userId as string,
+                status: data.status as 'pending' | 'picked_up' | 'cancelled',
+                totalPrice: data.totalPrice as number,
+                orderDate: data.orderDate as Timestamp,
+            };
+        });
+
+        const userStatsMap = new Map<string, { totalOrders: number; pickedUpOrders: number; totalPriceSum: number }>();
+
+        allOrders.forEach(order => {
+            if (order.userId) {
+                const stats = userStatsMap.get(order.userId) || { totalOrders: 0, pickedUpOrders: 0, totalPriceSum: 0 };
+                stats.totalOrders += 1;
+                stats.totalPriceSum += order.totalPrice || 0;
+                if (order.status === 'picked_up') {
+                    stats.pickedUpOrders += 1;
+                }
+                userStatsMap.set(order.userId, stats);
+            }
+        });
+
+        const usersWithStats = users.map(user => {
+            const stats = userStatsMap.get(user.uid) || { totalOrders: 0, pickedUpOrders: 0, totalPriceSum: 0 };
+            const pickupRate = stats.totalOrders > 0 ? (stats.pickedUpOrders / stats.totalOrders) * 100 : 0;
+            return {
+                ...user,
+                totalOrders: stats.totalOrders,
+                pickedUpOrders: stats.pickedUpOrders,
+                pickupRate: parseFloat(pickupRate.toFixed(1)),
+                totalPriceSum: stats.totalPriceSum,
+            };
+        });
+        
+        return usersWithStats;
+    }, []);
+
+    useEffect(() => {
+        setIsLoading(true);
+        const usersQuery = query(collection(db, 'users'));
+        const unsubscribe = onSnapshot(usersQuery, async (querySnapshot) => {
+            const usersData = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    uid: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate()
+                } as AppUser;
+            });
+
+            const usersWithStats = await calculateUserStats(usersData);
+            setAllUsers(usersWithStats);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("사용자 목록 실시간 로딩 오류:", error);
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [calculateUserStats]);
+
+    const handleSort = (key: SortKey) => {
+        if (sortBy === key) {
+            setSortDirection(prevDirection => (prevDirection === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortBy(key);
+            setSortDirection('desc');
+        }
+    };
+
+    const filteredAndSortedUsers = useMemo(() => {
+        let results = allUsers.filter(user =>
+            (user.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (user.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (user.customerPhoneLast4 || '').includes(searchTerm)
+        );
+
+        if (sortBy) {
+            results.sort((a, b) => {
+                const aValue = a[sortBy] ?? (sortBy === 'createdAt' ? new Date(0) : 0);
+                const bValue = b[sortBy] ?? (sortBy === 'createdAt' ? new Date(0) : 0);
+
+                if (aValue instanceof Date && bValue instanceof Date) {
+                    return sortDirection === 'asc' ? aValue.getTime() - bValue.getTime() : bValue.getTime() - aValue.getTime();
+                } 
+                
+                if (typeof aValue === 'number' && typeof bValue === 'number') {
+                    return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+                }
+                
+                const aStr = String(aValue).toLowerCase();
+                const bStr = String(bValue).toLowerCase();
+                if (aStr < bStr) return sortDirection === 'asc' ? -1 : 1;
+                if (aStr > bStr) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return results;
+    }, [searchTerm, allUsers, sortBy, sortDirection]);
+
+    const renderSortIndicator = (key: SortKey) => {
+        if (sortBy !== key) return null;
+        return sortDirection === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />;
+    };
+
+    if (isLoading) return <LoadingSpinner />;
+
+    return (
+        <div className="user-list-container">
+            <div className="header-container">
+                <h1 className="page-title">전체 고객 관리</h1>
+                <div className="controls-container">
+                    <input
+                        type="text"
+                        placeholder="이름, 이메일, 전화번호 검색..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="search-input"
+                    />
+                </div>
+            </div>
+            
+            <div className="table-wrapper">
+                {filteredAndSortedUsers.length > 0 ? (
+                    <table className="user-list-table">
+                        <thead>
+                            <tr>
+                                {/* [수정] th의 자식 div에 flex를 적용하여 정렬 아이콘을 표시합니다. */}
+                                <th onClick={() => handleSort('displayName')} className="sortable">
+                                    <div className="sortable-header">
+                                        <span>이름</span>
+                                        {renderSortIndicator('displayName')}
+                                    </div>
+                                </th>
+                                <th>전화번호</th>
+                                <th>이메일</th>
+                                <th>권한</th>
+                                <th onClick={() => handleSort('noShowCount')} className="sortable">
+                                    <div className="sortable-header">
+                                        <span>노쇼</span>
+                                        {renderSortIndicator('noShowCount')}
+                                    </div>
+                                </th>
+                                <th>상태</th>
+                                <th onClick={() => handleSort('totalOrders')} className="sortable">
+                                    <div className="sortable-header">
+                                        <span>총 주문</span>
+                                        {renderSortIndicator('totalOrders')}
+                                    </div>
+                                </th>
+                                <th onClick={() => handleSort('pickupRate')} className="sortable">
+                                    <div className="sortable-header">
+                                        <span>픽업율</span>
+                                        {renderSortIndicator('pickupRate')}
+                                    </div>
+                                </th>
+                                <th onClick={() => handleSort('totalPriceSum')} className="sortable text-right">
+                                    <div className="sortable-header">
+                                        <span>총 구매 금액</span>
+                                        {renderSortIndicator('totalPriceSum')}
+                                    </div>
+                                </th>
+                                <th onClick={() => handleSort('createdAt')} className="sortable">
+                                    <div className="sortable-header">
+                                        <span>가입일</span>
+                                        {renderSortIndicator('createdAt')}
+                                    </div>
+                                </th>
+                                <th>관리</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredAndSortedUsers.map(user => (
+                                <tr key={user.uid}>
+                                    <td>{user.displayName || '이름 없음'}</td>
+                                    <td>****{user.customerPhoneLast4 || '----'}</td>
+                                    <td>{user.email}</td>
+                                    <td>
+                                        <span className={`user-role role-${user.role}`}>
+                                            {user.role === 'admin' ? '관리자' : '고객'}
+                                        </span>
+                                    </td>
+                                    <td className={user.noShowCount && user.noShowCount > 0 ? 'text-danger' : ''}>
+                                        {user.noShowCount || 0} 회
+                                    </td>
+                                    <td>
+                                        {user.isRestricted && <span className="status-badge restricted">이용 제한</span>}
+                                    </td>
+                                    <td>{user.totalOrders ?? 0} 건</td>
+                                    <td>{user.pickupRate?.toFixed(1) ?? '0.0'}%</td>
+                                    <td className="text-right">{user.totalPriceSum?.toLocaleString() ?? 0} 원</td>
+                                    <td>{user.createdAt ? user.createdAt.toLocaleDateString('ko-KR') : '-'}</td>
+                                    <td>
+                                        <Link to={`/admin/users/${user.uid}`} className="manage-link">
+                                            상세 보기
+                                        </Link>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
+                    <div className="no-data-message">
+                       <p>{searchTerm ? `"${searchTerm}"에 대한 검색 결과가 없습니다.` : "표시할 사용자가 없습니다."}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 };
 
 export default UserListPage;

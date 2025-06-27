@@ -10,7 +10,7 @@ export type SalesType = 'PRE_ORDER_UNLIMITED' | 'IN_STOCK';
 /**
  * @description 상품의 보관 타입
  */
-export type StorageType = 'ROOM' | 'CHILLED' | 'FROZEN'; // 추가: 실온, 냉장, 냉동
+export type StorageType = 'ROOM' | 'CHILLED' | 'FROZEN';
 
 /**
  * @description 상품의 가격 옵션
@@ -31,13 +31,15 @@ export interface Product {
   imageUrls: string[];
   category?: string;
   subCategory?: string;
-  storageType: StorageType; // 추가: 보관 타입
+  storageType: StorageType;
 
   // 판매 및 재고 정보
   salesType: SalesType;
   initialStock: number;
-  stock: number; // 현재 남은 재고
-  maxOrderPerPerson?: number | null; // null도 허용하도록 변경
+  stock: number;
+  reservationStock?: number;
+  maxOrderPerPerson?: number | null;
+  isAvailableForOnsiteSale?: boolean; // 현장 판매 가능 여부
 
   // 상태 및 날짜 정보
   status: 'draft' | 'selling' | 'scheduled' | 'sold_out' | 'ended';
@@ -45,18 +47,15 @@ export interface Product {
   publishAt: Timestamp;
   deadlineDate: Timestamp;
   arrivalDate: Timestamp;
-
   pickupDate?: Timestamp;
-  pickupDeadlineDate?: Timestamp | null; // null도 허용하도록 변경
-  expirationDate?: Timestamp | null; // null도 허용하도록 변경
-  publishDate?: Timestamp; // Product에는 publishDate가 publishAt으로 정의되어 있었으므로 확인 필요. ProductAddAdminPage에는 publishAt만 사용됨.
+  pickupDeadlineDate?: Timestamp | null;
+  expirationDate?: Timestamp | null;
 
   // 메타 정보
   encoreCount: number;
   isNew: boolean;
   createdAt: Timestamp;
   specialLabels?: string[];
-  isAvailableForOnsiteSale?: boolean;
 }
 
 /**
@@ -70,6 +69,8 @@ export interface OrderItem {
     unit: string;
     category?: string;
     subCategory?: string;
+    arrivalDate?: Timestamp;
+    expirationDate?: Timestamp;
 }
 
 /**
@@ -82,10 +83,15 @@ export interface CartItem {
   unitPrice: number;
   quantity: number;
   imageUrl: string;
-  maxOrderPerPerson?: number | null; // null도 허용하도록 변경
+  maxOrderPerPerson?: number | null;
   availableStock: number;
   salesType: SalesType;
 }
+
+/**
+ * @description 주문 상태 타입
+ */
+export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled';
 
 /**
  * @description Firestore `orders` 컬렉션의 문서 타입
@@ -97,7 +103,7 @@ export interface Order {
     items: OrderItem[];
     totalPrice: number;
     orderDate: Timestamp;
-    status: 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled';
+    status: OrderStatus; 
     pickupDate?: Timestamp;
     pickupDeadlineDate?: Timestamp;
     customerPhoneLast4?: string;
@@ -153,7 +159,9 @@ export interface PreviewProduct {
   subCategory?: string;
 }
 
-// [추가됨] 매장 정보 타입 정의
+/**
+ * @description 매장 정보 타입 정의
+ */
 export interface StoreInfo {
   name: string;
   businessNumber: string;

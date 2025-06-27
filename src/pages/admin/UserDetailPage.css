@@ -1,140 +1,87 @@
-/* src/pages/admin/UserDetailPage.css */
+/* src/pages/admin/UserDetailPage.css 에 추가/수정 */
 
-.user-detail-container {
-    padding: 2rem;
-    background-color: var(--bg-color-gray-soft); /* ProductAddAdminPage.css 변수 재활용 */
-    min-height: calc(100vh - 60px);
-}
-
-.back-link {
-    display: inline-block;
-    margin-bottom: var(--spacing-lg);
-    font-size: var(--font-size-default);
-    color: var(--text-color-secondary);
-    text-decoration: none;
-    transition: color var(--transition-speed-fast);
-}
-
-.back-link:hover {
-    color: var(--primary-color);
-}
-
+/* 기존 user-info-card 내부 구조 변경 */
 .user-info-card {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start; /* 상단 정렬 */
     background: var(--bg-color-white);
     padding: var(--spacing-2xl);
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-sm);
     margin-bottom: var(--spacing-2xl);
     border: 1px solid var(--border-color-extra-light);
-    flex-wrap: wrap; /* 반응형 */
-    gap: var(--spacing-lg);
+    flex-wrap: wrap;
+    gap: var(--spacing-2xl);
 }
 
-.user-details {
-    flex-grow: 1;
+.user-details-left {
+    flex: 1; /* 왼쪽 정보 영역이 공간을 차지하도록 */
+    min-width: 250px; /* 최소 너비 */
 }
 
-.user-name {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--text-color-strong);
-    margin: 0 0 var(--spacing-xs) 0;
-}
-
-.user-email {
-    font-size: var(--font-size-default);
-    color: var(--text-color-secondary);
-    margin: 0;
-}
-
-.no-show-count {
-    margin: var(--spacing-sm) 0 0 0;
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-color-primary);
-}
-
-.restriction-button {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: none;
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    color: var(--color-white);
-    font-weight: var(--font-weight-semibold);
-    transition: background-color var(--transition-speed-fast), transform var(--transition-speed-fast);
+.user-controls-right {
     display: flex;
-    align-items: center;
-    gap: var(--spacing-xxs);
+    flex-direction: column; /* 버튼을 세로로 정렬 */
+    gap: var(--spacing-sm);
+    align-items: flex-end; /* 오른쪽 정렬 */
 }
 
-.restrict-btn {
-    background-color: var(--text-color-error); /* 빨간색 */
+.user-controls-right .restriction-button {
+    width: 180px; /* 버튼 너비 통일 */
+    justify-content: center; /* 아이콘과 텍스트 중앙 정렬 */
 }
 
-.restrict-btn:hover {
-    background-color: var(--text-color-error-dark);
-    transform: translateY(-1px);
+/* 주문 통계 카드 */
+.order-stats-card {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-2xl);
 }
 
-.unrestrict-btn {
-    background-color: var(--border-color-success); /* 초록색 */
-}
-
-.unrestrict-btn:hover {
-    background-color: var(--text-color-success);
-    transform: translateY(-1px);
-}
-
-.order-history-title {
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-bold);
-    color: var(--text-color-strong);
-    margin-bottom: var(--spacing-lg);
-}
-
-.order-history-table-wrapper {
-    background: var(--bg-color-white);
-    box-shadow: var(--shadow-sm);
+.stat-item {
+    text-align: center;
+    padding: var(--spacing-lg);
+    background-color: var(--bg-color-gray-light);
     border-radius: var(--border-radius-md);
-    overflow-x: auto;
     border: 1px solid var(--border-color-extra-light);
 }
 
-.order-history-table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 600px;
-    text-align: left;
-}
-
-.order-history-table th, .order-history-table td {
-    padding: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color-extra-light);
-    color: var(--text-color-primary);
-}
-
-.order-history-table th {
-    background-color: var(--bg-color-gray-medium);
+.stat-item h4 {
+    margin: 0 0 var(--spacing-sm) 0;
     font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
     color: var(--text-color-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-weight: var(--font-weight-semibold);
 }
 
-.order-history-table tr:last-child td {
-    border-bottom: none;
+.stat-item p {
+    margin: 0;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--primary-color-dark);
 }
 
-.order-history-table .text-right {
-    text-align: right;
+/* 테이블 상태 뱃지 */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: var(--border-radius-pill);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-white);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.no-data-message {
-    padding: var(--spacing-2xl);
-    text-align: center;
-    color: var(--text-color-secondary);
-    font-style: italic;
+.status-picked_up {
+    background-color: var(--border-color-success); /* 초록색 */
+}
+
+.status-pending {
+    background-color: var(--text-color-warning); /* 주황색 */
+}
+
+.status-cancelled {
+    background-color: var(--text-color-error); /* 빨간색 */
 }

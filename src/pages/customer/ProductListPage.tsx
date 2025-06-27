@@ -3,15 +3,15 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Timestamp } from 'firebase/firestore';
 import isEqual from 'lodash.isequal';
-import { ShoppingCart, Plus, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
-import './ProductListPage.css'; // 아래에 제공된 CSS 코드를 사용해주세요.
+import { ShoppingCart, Plus, Minus, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react';
+import './ProductListPage.css';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import Header from '@/components/Header';
 import BannerSlider from '@/components/BannerSlider';
 import ProductDetailPage from './ProductDetailPage';
-import type { Product, CartItem, Banner, StorageType, SalesType } from '@/types';
-import brandLogo from '@/assets/Sodomall_Logo.png';
+import type { Product, CartItem, Banner, SalesType } from '@/types';
+// import brandLogo from '@/assets/Sodomall_Logo.png'; // 로고 이미지 import 제거
 
 type ProductStatus = 'ONSITE_SALE' | 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
@@ -28,26 +28,44 @@ const areProductCardPropsEqual = (prevProps: any, nextProps: any) => {
            prevProps.status === nextProps.status;
 };
 
-const MemoizedProductCard = React.memo(({ 
-    product, 
-    status, 
-    quantity, 
+const MemoizedProductCard = React.memo(({
+    product,
+    status,
+    quantity,
     onQuantityChange,
     onAddToCart,
     onCardClick
-}: { 
-    product: Product; 
-    status: ProductStatus; 
-    quantity: number; 
+}: {
+    product: Product;
+    status: ProductStatus;
+    quantity: number;
     onQuantityChange: (productId: string, amount: number) => void;
     onAddToCart: (product: Product) => void;
     onCardClick: (productId: string) => void;
 }) => {
-    const isSoldOutForDisplay = product.salesType === 'IN_STOCK' && (product.stock === 0 || product.status === 'sold_out');
-    const isPast = status === 'PAST';
-    const isBuyable = !isSoldOutForDisplay && !isPast;
+    // [수정] 재고 상태 표시 로직
+    const getStockDisplay = useCallback((product: Product, status: ProductStatus) => {
+        // '마감' 상태를 최우선으로 처리
+        if (status === 'PAST' || product.status === 'sold_out' || product.stock === 0) {
+            return '마감';
+        }
 
-    const displayStock = product.salesType === 'PRE_ORDER_UNLIMITED' ? '예약 중' : `${product.stock.toLocaleString()}개`;
+        // '예약가능' 상태 처리
+        if (product.salesType === 'PRE_ORDER_UNLIMITED') {
+            return '예약가능';
+        }
+
+        // '남은 재고' 상태 처리
+        if (product.salesType === 'IN_STOCK' && product.stock > 0) {
+            return `${product.stock.toLocaleString()}개 남음`;
+        }
+        
+        return ''; // 기타 경우
+    }, []);
+
+    const isBuyable = status === 'ONSITE_SALE' || status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION';
+    const isSoldOutForDisplay = product.salesType === 'IN_STOCK' && (product.stock === 0 || product.status === 'sold_out');
+    const isPastOrEnded = status === 'PAST' || isSoldOutForDisplay;
 
     const handleLocalQuantityChange = (e: React.MouseEvent, amount: number) => {
         e.stopPropagation();
@@ -59,30 +77,12 @@ const MemoizedProductCard = React.memo(({
         onAddToCart(product);
     };
 
-    const getStockColorClass = (stock: number, salesType: SalesType) => {
-        if (salesType === 'PRE_ORDER_UNLIMITED') return ''; 
-        if (stock === 0) return 'stock-color-zero';
+    const getStockColorClass = (stock: number, salesType: SalesType, status: ProductStatus) => {
+        if (status === 'PAST' || status === 'ADDITIONAL_RESERVATION' || stock === 0) return 'past-stock';
+        if (salesType === 'PRE_ORDER_UNLIMITED') return 'pre-order-unlimited';
         if (stock < 10) return 'stock-color-low';
         if (stock < 50) return 'stock-color-medium';
-        return 'stock-color-high';
-    };
-
-    const getStorageTypeClass = (storageType: StorageType) => {
-        switch (storageType) {
-            case 'ROOM': return 'room';
-            case 'CHILLED': return 'chilled';
-            case 'FROZEN': return 'frozen';
-            default: return '';
-        }
-    };
-
-    const formatPrice = (pricingOptions: Product['pricingOptions'] = []) => {
-        if (!pricingOptions || pricingOptions.length === 0) return '가격 미정';
-        if (pricingOptions.length === 1) {
-            return `${pricingOptions[0].price.toLocaleString()}원`;
-        }
-        const minPrice = Math.min(...pricingOptions.map((option: any) => option.price));
-        return `${minPrice.toLocaleString()}원~`;
+        return ''; // stock-color-high 대신 기본 스타일 사용
     };
 
     const formatPickupDateAndDay = (timestamp: Timestamp | undefined | null) => {
@@ -94,51 +94,45 @@ const MemoizedProductCard = React.memo(({
         const dayOfWeek = dayNames[date.getDay()];
         return `${month}/${day}(${dayOfWeek})`;
     };
+    
+    // [수정] 마감된 상품도 상세 페이지로 이동 가능하도록 onClick 이벤트 수정
+    const handleCardClick = () => {
+        onCardClick(product.id);
+    };
 
     return (
-        <div className={`product-card-wrapper ${isPast ? 'past-product' : ''}`}>
-            <div className="product-card" onClick={() => !isPast && onCardClick(product.id)}>
+        <div className={`product-card-wrapper ${status === 'PAST' ? 'past-product-card' : ''}`}>
+            <div className="product-card" onClick={handleCardClick}>
                 <div className="product-image-wrapper">
                     <img src={product.imageUrls?.[0] || `https://placehold.co/400x400?text=${product.name}`} alt={product.name} className="product-image" />
-                    {isSoldOutForDisplay && !isPast && <span className="product-badge sold-out">품절</span>}
-                    {isPast && <span className="product-badge past-badge">판매 종료</span>}
-                    {product.storageType && (
-                        <span className={`storage-badge ${getStorageTypeClass(product.storageType)}`}>
-                            {product.storageType === 'ROOM' && '실온'}
-                            {product.storageType === 'CHILLED' && '냉장'}
-                            {product.storageType === 'FROZEN' && '냉동'}
-                        </span>
-                    )}
+                    {isPastOrEnded && <span className="product-badge sold-out">마감</span>}
+                    {/* [삭제] 보관 유형 뱃지 제거 */}
                 </div>
+                {/* [수정] 카드 컨텐츠 영역의 여백 최소화 */}
                 <div className="product-content">
-                    <div>
-                        <h3 className="product-title-list">{product.name}</h3>
-                        <div className="product-details-summary">
-                            <p className="product-price-summary">{formatPrice(product.pricingOptions)}</p>
-                            <div className="product-pickup-stock-details">
-                                <span className="product-pickup-info">
-                                    픽업: <span className="pickup-info-value">{formatPickupDateAndDay(product.pickupDate) || '미정'}</span>
-                                </span>
-                                <span className={`product-stock-info ${getStockColorClass(product.stock, product.salesType)}`}>
-                                    재고: <span className="stock-count">{displayStock}</span>
-                                </span>
-                            </div>
-                        </div>
+                    {/* [수정] 픽업일과 재고 정보를 한 줄에 좌우로 배치 */}
+                    <div className="product-details-summary">
+                        <span className="product-pickup-info">
+                            픽업: <span className="pickup-info-value">{formatPickupDateAndDay(product.pickupDate) || '미정'}</span>
+                        </span>
+                        <span className={`product-stock-info ${getStockColorClass(product.stock, product.salesType, status)}`}>
+                            {getStockDisplay(product, status)}
+                        </span>
                     </div>
                     {isBuyable && (
                         <div className="quantity-control-and-cart-actions">
                             <div className="quantity-control">
                                 <button onClick={(e) => handleLocalQuantityChange(e, -1)} className="quantity-button" disabled={quantity <= 1}>
-                                    <Minus size={16} />
+                                    <Minus size={14} />
                                 </button>
                                 <span className="quantity-display">{quantity}</span>
                                 <button onClick={(e) => handleLocalQuantityChange(e, 1)} className="quantity-button" disabled={product.salesType === 'IN_STOCK' && quantity >= product.stock}>
-                                    <Plus size={16} />
+                                    <Plus size={14} />
                                 </button>
                             </div>
-                            {/* [수정] 길쭉한 장바구니 버튼으로 변경 */}
-                            <button onClick={handleAddToCartClick} className="add-to-cart-button" disabled={isSoldOutForDisplay}>
-                                <ShoppingCart size={18} />
+                            {/* [수정] 담기 버튼이 잘리지 않도록 flex-grow 적용 */}
+                            <button onClick={handleAddToCartClick} className="add-to-cart-button" disabled={isPastOrEnded}>
+                                <ShoppingCart size={16} />
                                 <span>담기</span>
                             </button>
                         </div>
@@ -149,7 +143,6 @@ const MemoizedProductCard = React.memo(({
     );
 }, areProductCardPropsEqual);
 
-// [신규] 독립적인 가로 스크롤 로직을 위한 커스텀 훅
 const useHorizontalScroll = () => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -157,6 +150,9 @@ const useHorizontalScroll = () => {
     const [scrollLeft, setScrollLeft] = useState(0);
     const [velocity, setVelocity] = useState(0);
     const animationFrameRef = useRef<number | null>(null);
+
+    const [showLeftArrow, setShowLeftArrow] = useState(false);
+    const [showRightArrow, setShowRightArrow] = useState(false);
 
     const startInertiaScroll = useCallback(() => {
         if (animationFrameRef.current) {
@@ -171,8 +167,10 @@ const useHorizontalScroll = () => {
                 return;
             }
 
-            scrollRef.current.scrollLeft += velocity;
-            setVelocity(prev => prev * 0.92); // 마찰 계수
+            if (scrollRef.current) {
+                scrollRef.current.scrollLeft += velocity;
+            }
+            setVelocity(prev => prev * 0.92);
             animationFrameRef.current = requestAnimationFrame(animateScroll);
         };
 
@@ -185,7 +183,6 @@ const useHorizontalScroll = () => {
         setIsDragging(true);
         if (animationFrameRef.current) {
             cancelAnimationFrame(animationFrameRef.current);
-            // [수정] ref의 .current 속성에 값 할당
             animationFrameRef.current = null;
         }
         setStartX(e.pageX - scrollRef.current.offsetLeft);
@@ -220,38 +217,65 @@ const useHorizontalScroll = () => {
         const x = e.pageX - scrollRef.current.offsetLeft;
         const walk = x - startX;
         const newScrollLeft = scrollLeft - walk;
-        
+
         const currentScroll = scrollRef.current.scrollLeft;
         const diff = newScrollLeft - currentScroll;
-        
+
         scrollRef.current.scrollLeft = newScrollLeft;
         setVelocity(diff);
     }, [isDragging, startX, scrollLeft]);
-    
-    // [신규] 페이지 단위 스크롤 함수
+
     const scrollByPage = useCallback((direction: 'left' | 'right') => {
         if (scrollRef.current) {
             const container = scrollRef.current;
-            // 현재 보이는 영역의 너비만큼 스크롤하여 페이지 넘김 효과 구현
-            const scrollAmount = container.clientWidth; 
+            const scrollAmount = container.clientWidth * 0.8;
             container.scrollBy({
                 left: direction === 'right' ? scrollAmount : -scrollAmount,
                 behavior: 'smooth',
             });
         }
-    }, []); // ref는 의존성 배열에 필요 없음
+    }, []);
 
     useEffect(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+            const { scrollLeft, scrollWidth, clientWidth } = container;
+            const isScrollable = scrollWidth > clientWidth;
+            
+            if (isScrollable) {
+                const isAtStart = scrollLeft <= 1;
+                const isAtEnd = Math.ceil(scrollLeft) + clientWidth >= scrollWidth - 1;
+                
+                setShowLeftArrow(!isAtStart);
+                setShowRightArrow(!isAtEnd);
+            } else {
+                setShowLeftArrow(false);
+                setShowRightArrow(false);
+            }
+        };
+        
+        const observer = new ResizeObserver(handleScroll);
+        observer.observe(container);
+
+        container.addEventListener('scroll', handleScroll);
+        
+        const initialCheck = setTimeout(handleScroll, 100);
+
         return () => {
+            container.removeEventListener('scroll', handleScroll);
+            observer.disconnect();
+            clearTimeout(initialCheck);
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
     }, []);
-    
+
     const mouseHandlers = { onMouseDown, onMouseLeave, onMouseUp, onMouseMove };
 
-    return { scrollRef, mouseHandlers, scrollByPage };
+    return { scrollRef, mouseHandlers, scrollByPage, showLeftArrow, showRightArrow };
 };
 
 
@@ -265,13 +289,13 @@ const ProductListPage = () => {
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [productQuantities, setProductQuantities] = useState<{ [productId: string]: number }>({});
     const [countdown, setCountdown] = useState<Countdown | null>(null);
-    
-    // [수정] 각 가로 스크롤 섹션을 위한 독립적인 훅 인스턴스 생성
+    const [showCartSuccessModal, setShowCartSuccessModal] = useState(false); // [추가] 모달 표시 상태
+
     const onSiteSaleScroll = useHorizontalScroll();
     const ongoingScroll = useHorizontalScroll();
     const additionalReservationScroll = useHorizontalScroll();
+    const pastProductsScroll = useHorizontalScroll();
 
-    // [수정] allProducts 의존성 제거 및 데이터 패칭 로직 수정
     useEffect(() => {
         const fetchAllData = async () => {
             if (!user) {
@@ -280,10 +304,9 @@ const ProductListPage = () => {
                 setActiveBanners([]);
                 return;
             }
-            
+
             setLoading(true);
             try {
-                // [수정] 절대 경로 별칭(@/)을 사용하여 import 경로 통일
                 const { db, getActiveBanners } = await import('@/firebase');
                 const { collection, getDocs, query, orderBy, where } = await import('firebase/firestore');
 
@@ -304,7 +327,6 @@ const ProductListPage = () => {
                     ...doc.data(),
                 } as Product));
 
-                // [수정] 상태가 변경될 때만 업데이트
                 setAllProducts(prevProducts => {
                     if (!isEqual(prevProducts, productList)) {
                         return productList;
@@ -312,18 +334,17 @@ const ProductListPage = () => {
                     return prevProducts;
                 });
 
-                // [추가] productQuantities 초기화 로직
+                // [수정] 옵셔널 체이닝 할당 오류 수정
                 setProductQuantities(prevQuantities => {
-                    const newQuantities: { [productId: string]: number } = {};
-                    let isChanged = false;
+                    const newQuantities: { [productId: string]: number } = { ...prevQuantities };
                     productList.forEach(p => {
-                        const currentQuantity = prevQuantities[p.id];
-                        newQuantities[p.id] = currentQuantity !== undefined ? currentQuantity : 1;
-                        if (currentQuantity === undefined) isChanged = true;
+                        if (newQuantities[p.id] === undefined) {
+                             newQuantities[p.id] = 1;
+                        }
                     });
-                    return isChanged ? newQuantities : prevQuantities;
+                    return newQuantities;
                 });
-                
+
             } catch (error) {
                 console.error("데이터 로딩 중 오류 발생:", error);
             } finally {
@@ -331,7 +352,6 @@ const ProductListPage = () => {
             }
         };
 
-        // [수정] 의존성 배열에서 allProducts 제거. user가 변경될 때만 호출
         fetchAllData();
     }, [user]);
 
@@ -344,19 +364,19 @@ const ProductListPage = () => {
 
         allProducts.forEach(p => {
             if (p.status === 'draft' || (p.status === 'scheduled' && p.publishAt && p.publishAt.toDate() > now)) return;
-            
+
             const deadline = p.deadlineDate?.toDate();
             const pickupDeadline = p.pickupDeadlineDate?.toDate();
 
             if (p.isAvailableForOnsiteSale && p.stock > 0) {
                 onsite.push(p);
-            } 
+            }
             else if (p.status === 'selling' && deadline && now < deadline) {
                 ongoing.push(p);
-            } 
+            }
             else if (deadline && pickupDeadline && now > deadline && now < pickupDeadline && p.stock > 0) {
                 additional.push(p);
-            } 
+            }
             else {
                 past.push(p);
             }
@@ -391,7 +411,7 @@ const ProductListPage = () => {
         }, 1000);
         return () => clearInterval(interval);
     }, [fastestDeadline]);
-    
+
     const handleQuantityChange = useCallback((productId: string, amount: number) => {
         const product = allProducts.find(p => p.id === productId);
         if (!product) return;
@@ -408,17 +428,23 @@ const ProductListPage = () => {
 
     const handleAddToCart = useCallback((product: Product) => {
         const quantity = productQuantities[product.id] || 1;
-        // [수정] selectedUnit과 unitPrice에 대한 undefined 오류 방지를 위해 optional chaining 및 기본값 사용
         const item: CartItem = {
             productId: product.id, productName: product.name,
-            selectedUnit: product.pricingOptions?.[0]?.unit || '', // 기본값 설정
-            unitPrice: product.pricingOptions?.[0]?.price || 0, // 기본값 설정
+            selectedUnit: product.pricingOptions?.[0]?.unit || '',
+            unitPrice: product.pricingOptions?.[0]?.price || 0,
             quantity: quantity, imageUrl: product.imageUrls?.[0] || 'https://via.placeholder.com/150',
             maxOrderPerPerson: product.maxOrderPerPerson, availableStock: product.stock,
             salesType: product.salesType,
         };
         addToCart(item);
-        alert(`${product.name} ${quantity}개를 장바구니에 담았습니다.`);
+        // alert(`${product.name} ${quantity}개를 장바구니에 담았습니다.`); // 기존 alert 대신 모달 사용
+        
+        // [추가] 모달 표시 및 2초 후 숨기기
+        setShowCartSuccessModal(true);
+        setTimeout(() => {
+            setShowCartSuccessModal(false);
+        }, 2000); // 2초 후 자동으로 사라짐
+        
     }, [addToCart, productQuantities]);
 
     const handleCardClick = useCallback((productId: string) => {
@@ -442,27 +468,35 @@ const ProductListPage = () => {
     if (loading) return <div className="loading-spinner">상품 목록을 불러오는 중...</div>;
     if (!user) return <div className="login-prompt">로그인하시면 상품 목록을 보실 수 있습니다.</div>;
 
-    // [수정] 섹션 렌더링 함수가 scrollHook을 받도록 시그니처 변경
     const renderProductSection = (
-        title: string, 
-        products: Product[], 
-        status: ProductStatus, 
-        horizontal: boolean, 
-        scrollHook?: ReturnType<typeof useHorizontalScroll>, 
-        countdownTimer?: React.ReactNode
+        title: string,
+        products: Product[],
+        status: ProductStatus,
+        horizontal: boolean,
+        scrollHook?: ReturnType<typeof useHorizontalScroll>,
+        countdownTimer?: Countdown | null
     ) => {
         if (products.length === 0 && status !== 'PAST') return null;
 
         return (
             <section className="product-section">
-                <h2 className="section-title">
-                    <span>{title}</span>
-                    {countdownTimer}
+                <h2 className={`section-title ${status === 'ONGOING' ? 'ongoing' : ''} ${status === 'ADDITIONAL_RESERVATION' ? 'additional' : ''}`}>
+                    <span className="title-text">
+                         {status === 'ONGOING' && <span className="section-icon ongoing-icon">🔥</span>}
+                         {status === 'ADDITIONAL_RESERVATION' && <span className="section-icon additional-icon">✨</span>}
+                         {title}
+                    </span>
+                    {countdownTimer && <span className="countdown-timer">{formatCountdown(countdownTimer)}</span>}
                 </h2>
                 {products.length > 0 ? (
                     <div className="horizontal-scroll-container">
-                        <div 
-                            className={`product-grid ${horizontal ? 'horizontal-scroll' : ''}`}
+                        {horizontal && (
+                            <button className={`scroll-arrow left-arrow ${scrollHook?.showLeftArrow ? 'visible' : ''}`} onClick={() => scrollHook?.scrollByPage('left')}>
+                                <ChevronLeft size={28} />
+                            </button>
+                        )}
+                        <div
+                            className={`product-grid ${horizontal ? 'horizontal-scroll' : 'general-grid'}`}
                             ref={horizontal ? scrollHook?.scrollRef : undefined}
                             {...(horizontal && scrollHook ? scrollHook.mouseHandlers : {})}
                         >
@@ -476,15 +510,10 @@ const ProductListPage = () => {
                                 />
                             ))}
                         </div>
-                        {horizontal && scrollHook && (
-                            <>
-                                <button className="scroll-arrow left-arrow" onClick={() => scrollHook.scrollByPage('left')}>
-                                    <ChevronLeft size={32} />
-                                </button>
-                                <button className="scroll-arrow right-arrow" onClick={() => scrollHook.scrollByPage('right')}>
-                                    <ChevronRight size={32} />
-                                </button>
-                            </>
+                        {horizontal && (
+                            <button className={`scroll-arrow right-arrow ${scrollHook?.showRightArrow ? 'visible' : ''}`} onClick={() => scrollHook?.scrollByPage('right')}>
+                                <ChevronRight size={28} />
+                            </button>
                         )}
                     </div>
                 ) : (
@@ -498,22 +527,21 @@ const ProductListPage = () => {
 
     return (
         <>
-            <Header currentUserName={user?.displayName ?? '고객님'} brandLogoUrl={brandLogo} />
+            <Header currentUserName={user?.displayName ?? '고객님'} brandName="소도몰" storeName="송도랜드마크점" />
             <div className="customer-page-container">
                 <BannerSlider banners={activeBanners} className="banner-slider-container" />
                 
-                {/* [수정] 각 섹션에 맞는 독립적인 scrollHook 인스턴스 전달 */}
-                {renderProductSection('🏃‍♀️ 지금 바로 구매!', onSiteSaleProducts, 'ONSITE_SALE', true, onSiteSaleScroll)}
+                {renderProductSection('지금 바로 구매!', onSiteSaleProducts, 'ONSITE_SALE', true, onSiteSaleScroll)}
                 
                 {renderProductSection(
-                    '🔥 공동구매 진행 중', 
+                    '공동구매 진행 중', 
                     ongoingProducts, 'ONGOING', true, ongoingScroll,
-                    <span className="countdown-timer-wrapper">{formatCountdown(countdown)}</span>
+                    countdown
                 )}
                 
-                {renderProductSection('✨ 마감 임박! 추가 예약', additionalReservationProducts, 'ADDITIONAL_RESERVATION', true, additionalReservationScroll)}
+                {renderProductSection('마감 임박! 추가 예약', additionalReservationProducts, 'ADDITIONAL_RESERVATION', true, additionalReservationScroll)}
                 
-                {renderProductSection('🌙 지난 공동구매', pastProducts, 'PAST', false)}
+                {renderProductSection('지난 공동구매', pastProducts, 'PAST', true, pastProductsScroll)}
             </div>
 
             {isDetailModalOpen && selectedProductId && (
@@ -522,6 +550,14 @@ const ProductListPage = () => {
                     isOpen={isDetailModalOpen}
                     onClose={() => setIsDetailModalOpen(false)}
                 />
+            )}
+            
+            {/* [추가] 장바구니 담기 성공 모달 팝업 */}
+            {showCartSuccessModal && (
+                <div className={`cart-success-modal ${showCartSuccessModal ? 'visible' : ''}`}>
+                    <CheckCircle size={48} className="modal-icon"/>
+                    <span>장바구니에 담았습니다!</span>
+                </div>
             )}
         </>
     );

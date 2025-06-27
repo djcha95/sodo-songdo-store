@@ -1,10 +1,10 @@
 // src/pages/admin/AdminPage.tsx
 
 import React, { Suspense } from 'react';
-import { Routes, Route, Navigate, useLocation, matchPath, Link } from 'react-router-dom'; // Link 추가
+import { Routes, Route, Navigate, useLocation, matchPath, Link } from 'react-router-dom';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import './AdminPage.css';
-import { Home } from 'lucide-react'; // 아이콘 추가
+import { Home } from 'lucide-react';
 
 const LoadingSpinner = () => <div className="loading-spinner">로딩 중...</div>;
 
@@ -24,6 +24,8 @@ const CouponAdminPage = React.lazy(() => import('./CouponAdminPage'));
 const EncoreAdminPage = React.lazy(() => import('./EncoreAdminPage'));
 const OrderListPage = React.lazy(() => import('./OrderListPage'));
 const PickupProcessingPage = React.lazy(() => import('./PickupProcessingPage'));
+// [추가] 관리자용 입고 달력 컴포넌트 import
+const ProductArrivalCalendar = React.lazy(() => import('../../components/admin/ProductArrivalCalendar'));
 
 
 // --- 개선: 라우트 정보를 배열로 관리하여 제목을 동적으로 처리 ---
@@ -42,6 +44,8 @@ const adminRoutes = [
   { path: '/admin/coupons', title: '쿠폰 관리', element: <CouponAdminPage /> },
   { path: '/admin/banners', title: '배너 관리', element: <BannerAdminPage /> },
   { path: '/admin/board', title: '게시판 관리', element: <BoardAdminPage /> },
+  // [추가] ProductArrivalCalendar 라우트 추가
+  { path: '/admin/product-arrivals', title: '상품 입고 관리', element: <ProductArrivalCalendar /> },
   { path: '/admin/test', title: '테스트 페이지', element: <MinimalTestPage /> },
 ];
 
@@ -70,7 +74,7 @@ const AdminPage = () => {
             <Routes>
               {/* 기본 경로는 대시보드로 리디렉션 */}
               <Route index element={<Navigate to="dashboard" replace />} />
-              
+
               {/* 배열에 정의된 라우트를 동적으로 생성 */}
               {adminRoutes.map(route => (
                 // '/admin' 접두사를 제외한 경로를 path로 사용

@@ -24,19 +24,19 @@ a:hover {
   text-decoration: underline;
 }
 
-/* --- 2. 고객용 페이지 전용 레이아웃 컨테이너 --- */
+/* --- 2. 고객용 페이지 전용 레이아웃 컨테이너 (여백 제거) --- */
 /* App.tsx의 CustomerLayout에 적용되어 중앙 정렬과 카드 스타일을 만듭니다. */
 .customer-page-container {
   max-width: 1200px;
-  margin: var(--spacing-xl) auto;
-  padding: var(--spacing-md);
+  margin: var(--spacing-xl) 0; /* 좌우 margin을 0으로 설정하여 여백 제거 */
+  padding: 0; /* 모든 화면에서 기본 좌우 패딩을 0으로 설정 */
   box-sizing: border-box;
 }
 
 /* 데스크톱 화면에서 고객용 페이지에 배경색과 그림자 추가 */
 @media (min-width: 768px) {
   .customer-page-container {
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg); /* 태블릿/데스크톱에서 적절한 여백 다시 추가 */
     background-color: var(--bg-color-white);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--box-shadow-md);

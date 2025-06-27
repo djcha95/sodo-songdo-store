@@ -36,14 +36,16 @@ const MyPage = () => {
               <span>예약 내역</span>
               <FiChevronRight />
             </li>
+            {/* 수정: '주문 달력' -> '픽업 달력'으로 텍스트 변경 */}
             <li onClick={() => navigate('/mypage/orders')}>
-              <span>주문 달력</span>
+              <span>픽업 달력</span>
               <FiChevronRight />
             </li>
-            <li onClick={() => navigate('/mypage/arrivals')}>
+            {/* 삭제: 고객용 페이지에서 입고 달력 메뉴 제거 */}
+            {/* <li onClick={() => navigate('/mypage/arrivals')}>
               <span>입고 달력</span>
               <FiChevronRight />
-            </li>
+            </li> */}
             <li onClick={() => alert('마감된 상품 목록 페이지로 이동합니다.')}>
               <span>마감된 상품 목록</span>
               <FiChevronRight />
