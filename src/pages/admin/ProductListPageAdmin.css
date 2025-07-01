@@ -273,6 +273,24 @@ input:checked + .slider:before {
   color: var(--primary-color-dark);
 }
 
+/* [추가] 배너 등록 버튼 스타일 */
+.admin-banner-button {
+  background-color: #ff9900;
+  color: white;
+  border: 1px solid #ff9900;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-md);
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-banner-button:hover {
+    background-color: #e68a00;
+    border-color: #e68a00;
+}
+
 .no-products-cell {
     text-align: center;
     padding: 40px;

@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { collection, getDocs, query, orderBy, doc, updateDoc, Timestamp, limit, startAfter, endBefore, limitToLast, DocumentData, QueryDocumentSnapshot, where, QueryConstraint } from 'firebase/firestore';
-import { db, updateProductOnsiteSaleStatus, getProductsCount } from '../../firebase';
-import type { Product, Category, StorageType } from '../../types';
+import { db, updateProductOnsiteSaleStatus, getProductsCount, addBannerFromProduct } from '../../firebase';
+import type { Product, Category, StorageType, Banner } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { useAdminBulkSelection } from '../../context/AdminBulkSelectionContext';
 import BulkActionBar from '@/components/admin/BulkActionBar';
-import { Edit2, Loader, Plus, Filter, SortAsc, SortDesc, Search, Store, ChevronLeft, ChevronRight } from 'lucide-react';
+import BannerAddModal from '@/components/admin/BannerAddModal';
+import { Edit2, Loader, Plus, Filter, SortAsc, SortDesc, Search, Store, ChevronLeft, ChevronRight, Volume2 } from 'lucide-react';
 
 import './ProductListPageAdmin.css';
 
@@ -88,6 +89,9 @@ const ProductListPageAdmin: React.FC = () => {
   
   const [isFetching, setIsFetching] = useState(false);
 
+  // [추가] 배너 등록 모달 상태
+  const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
+  const [selectedProductForBanner, setSelectedProductForBanner] = useState<Product | null>(null);
 
   const fetchPage = useCallback(async (direction: 'next' | 'prev' | 'first' = 'first') => {
     if (isFetching) return;
@@ -235,6 +239,37 @@ const ProductListPageAdmin: React.FC = () => {
   
   const isAllSelected = finalProductList.length > 0 && selectedIds.length === finalProductList.length;
 
+  // [추가] 배너 등록 모달 관련 핸들러
+  const openBannerModal = (product: Product) => {
+    setSelectedProductForBanner(product);
+    setIsBannerModalOpen(true);
+  };
+
+  const closeBannerModal = () => {
+    setIsBannerModalOpen(false);
+    setSelectedProductForBanner(null);
+  };
+  
+  const handleAddBanner = async (bannerData: Omit<Banner, 'id' | 'createdAt'>) => {
+    if (!selectedProductForBanner || selectedProductForBanner.imageUrls.length === 0) {
+      alert('배너로 등록할 상품의 이미지가 없습니다.');
+      return;
+    }
+    try {
+        // addBannerFromProduct 함수를 사용하여 이미지를 Firestore Storage에 업로드하지 않고 URL만 사용
+        await addBannerFromProduct({
+            ...bannerData,
+            imageUrl: selectedProductForBanner.imageUrls[0],
+            productId: selectedProductForBanner.id,
+        });
+        alert('배너가 성공적으로 등록되었습니다!');
+        closeBannerModal();
+    } catch (error) {
+        console.error("배너 등록 실패:", error);
+        alert('배너 등록에 실패했습니다. 다시 시도해 주세요.');
+    }
+  };
+
   return (
     <div className="admin-page-container product-list-admin-container">
       <div className="admin-page-header">
@@ -299,6 +334,7 @@ const ProductListPageAdmin: React.FC = () => {
                 <th style={{width: '30%'}}>상품명</th>
                 <th>재고</th>
                 <th>가격</th>
+                <th>앵콜 요청</th>
                 <th style={{textAlign: 'center'}}>현장판매</th>
                 <th style={{textAlign: 'center'}}>게시</th>
                 <th>관리</th>
@@ -314,6 +350,13 @@ const ProductListPageAdmin: React.FC = () => {
                     <td className="product-name-cell"><EditableCell value={product.name} onSave={(newValue) => handleCellSave(product.id, 'name', newValue)} /></td>
                     <td className="stock-cell"><EditableCell value={product.stock} onSave={(newValue) => handleCellSave(product.id, 'stock', newValue)} /></td>
                     <td>{product.pricingOptions[0]?.price.toLocaleString() || '미정'}원</td>
+                    {/* [추가] 앵콜 요청 횟수 셀 */}
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Volume2 size={16} style={{ marginRight: '4px' }} />
+                        {product.encoreCount ?? 0}
+                      </div>
+                    </td>
                     <td style={{textAlign: 'center'}}>
                         <label className="toggle-switch small">
                           <input type="checkbox" checked={!!product.isAvailableForOnsiteSale} onChange={() => handleToggleOnsiteSale(product)} />
@@ -326,11 +369,14 @@ const ProductListPageAdmin: React.FC = () => {
                         <span className="slider round"></span>
                       </label>
                     </td>
-                    <td><button onClick={() => navigate(`/admin/products/edit/${product.id}`)} className="admin-edit-button">상세 수정</button></td>
+                    <td>
+                        <button onClick={() => openBannerModal(product)} className="admin-banner-button">배너 등록</button>
+                        <button onClick={() => navigate(`/admin/products/edit/${product.id}`)} className="admin-edit-button">상세 수정</button>
+                    </td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={9} className="no-products-cell">표시할 상품이 없습니다.</td></tr>
+                <tr><td colSpan={10} className="no-products-cell">표시할 상품이 없습니다.</td></tr>
               )}
             </tbody>
           </table>
@@ -351,6 +397,13 @@ const ProductListPageAdmin: React.FC = () => {
         </>
       )}
       <BulkActionBar onActionComplete={() => fetchPage('first')} />
+      {/* [추가] 배너 등록 모달 */}
+      <BannerAddModal
+        isOpen={isBannerModalOpen}
+        onClose={closeBannerModal}
+        onSave={handleAddBanner}
+        product={selectedProductForBanner}
+      />
     </div>
   );
 };

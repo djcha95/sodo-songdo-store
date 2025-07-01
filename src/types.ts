@@ -1,6 +1,6 @@
 // src/types.ts
 
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp, FieldValue } from 'firebase/firestore'; // [수정] FieldValue 타입 추가
 
 /**
  * @description 상품 판매 방식
@@ -52,10 +52,12 @@ export interface Product {
   expirationDate?: Timestamp | null;
 
   // 메타 정보
-  encoreCount: number;
   isNew: boolean;
   createdAt: Timestamp;
   specialLabels?: string[];
+  // [수정] 앵콜 요청 관련 필드를 메타 정보에 통합
+  encoreCount?: number; // 앵콜 요청 횟수
+  encoreRequesterIds?: string[]; // 앵콜 요청을 한 사용자들의 ID 목록
 }
 
 /**
@@ -103,7 +105,7 @@ export interface Order {
     items: OrderItem[];
     totalPrice: number;
     orderDate: Timestamp;
-    status: OrderStatus; 
+    status: OrderStatus;
     pickupDate?: Timestamp;
     pickupDeadlineDate?: Timestamp;
     customerPhoneLast4?: string;
@@ -119,6 +121,7 @@ export interface Banner {
   order: number;
   createdAt: Timestamp;
   isActive: boolean;
+  productId?: string; // [추가] 배너가 상품으로부터 생성되었을 경우 상품 ID
 }
 
 /**
@@ -171,4 +174,16 @@ export interface StoreInfo {
   email: string;
   operatingHours: string[];
   description: string;
+}
+
+// [수정] 사용자 문서의 타입 정의 (null 허용)
+export interface UserDocument {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+  isAdmin: boolean;
+  // [추가] 사용자가 앵콜 요청한 상품 ID 목록
+  encoreRequestedProductIds?: string[];
+  createdAt?: Timestamp | FieldValue; // [수정] FieldValue 타입을 추가
 }

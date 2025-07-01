@@ -179,8 +179,10 @@
         width: 36px;
         height: 36px;
     }
-    .scroll-arrow.left-arrow { left: -18px; } /* 컨테이너 밖으로 빼기 */
-    .scroll-arrow.right-arrow { right: -18px; }
+    /* [수정] 화살표 위치를 컨테이너의 좌우 끝에 고정 */
+    .scroll-arrow.left-arrow { left: 0; }
+    .scroll-arrow.right-arrow { right: 0; }
+
     .add-to-cart-button span {
         display: none; /* '담기' 텍스트 숨기기 */
     }
@@ -215,8 +217,9 @@
     gap: var(--spacing-lg);
     padding: 0 var(--spacing-lg);
   }
-  .scroll-arrow.left-arrow { left: -20px; }
-  .scroll-arrow.right-arrow { right: -20px; }
+  /* [수정] 화살표 위치를 컨테이너의 좌우 끝에 고정 */
+  .scroll-arrow.left-arrow { left: 0; }
+  .scroll-arrow.right-arrow { right: 0; }
   .add-to-cart-button span {
       display: inline-block;
   }
@@ -244,11 +247,11 @@
   }
   .product-grid:not(.horizontal-scroll) {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: var(--spacing-xl);
     padding: 0 var(--spacing-xl);
   }
-  .scroll-arrow.left-arrow { left: -25px; }
-  .scroll-arrow.right-arrow { right: -25px; }
+  /* [수정] 화살표 위치를 컨테이너의 좌우 끝에 고정 */
+  .scroll-arrow.left-arrow { left: 0; }
+  .scroll-arrow.right-arrow { right: 0; }
 }
 
 
@@ -309,6 +312,8 @@
 }
 .product-badge.sold-out {
   background-color: rgba(220, 53, 69, 0.8);
+  /* [수정] 클릭 이벤트를 통과시키도록 추가 */
+  pointer-events: none;
 }
 .product-badge.past-badge {
   background-color: rgba(108, 117, 125, 0.8);
@@ -491,24 +496,26 @@
 }
 
 /* --- 8. 지난 상품 (판매 종료) --- */
-.past-product .product-card {
-  cursor: default;
+.past-product-card .product-card {
+  /* [추가] 마감된 상품도 클릭 가능하도록 커서 유지 */
+  cursor: pointer;
 }
-.past-product .product-card:hover {
-  transform: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+.past-product-card .product-card:hover {
+  /* [수정] 마감 상품도 hover 효과 유지 */
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.1);
 }
 /* [수정] 흑백 필터 제거 */
-.past-product .product-image {
+.past-product-card .product-image {
   filter: none;
 }
-.past-product .product-content {
+.past-product-card .product-content {
   color: var(--text-color-light);
 }
-.past-product .product-title-list,
-.past-product .product-price-summary,
-.past-product .product-pickup-info,
-.past-product .product-stock-info {
+.past-product-card .product-title-list,
+.past-product-card .product-price-summary,
+.past-product-card .product-pickup-info,
+.past-product-card .product-stock-info {
   color: var(--text-color-light) !important;
 }
 .encore-info {
@@ -582,21 +589,18 @@
   transform: translateY(-50%) scale(1.1);
 }
 /* 스크롤 화살표 위치를 horizontal-scroll-container의 padding 영역으로 조정 */
+/* [수정] 배너 화살표 위치를 컨테이너의 좌우 끝에 고정 */
 .horizontal-scroll-container .scroll-arrow.left-arrow {
-  left: 0;
+  left: 0; /* 컨테이너 좌측 끝에 붙도록 */
 }
 .horizontal-scroll-container .scroll-arrow.right-arrow {
-  right: 0;
+  right: 0; /* 컨테이너 우측 끝에 붙도록 */
 }
-/* 화살표 위치 반응형 조정 */
+/* 화살표 위치 반응형 조정 - 모바일, 태블릿, 데스크탑 모두 동일하게 좌우 끝에 배치 */
 @media (max-width: 599px) {
     .horizontal-scroll-container .scroll-arrow.left-arrow { left: 0; }
     .horizontal-scroll-container .scroll-arrow.right-arrow { right: 0; }
-    .scroll-arrow {
-        /* 마진 영역에 위치하도록 조정 */
-        margin-left: -1 * var(--spacing-sm);
-        margin-right: -1 * var(--spacing-sm);
-    }
+    /* 빈 규칙셋 제거 */
 }
 @media (min-width: 600px) {
     .horizontal-scroll-container .scroll-arrow.left-arrow { left: 0; }

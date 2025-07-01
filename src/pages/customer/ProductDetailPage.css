@@ -64,7 +64,7 @@
   width: 100%; height: 100%;
   object-fit: contain;
   display: block;
-  transition: opacity 0.3s ease-in-out; /* 부드러운 전환 효과 추가 */
+  /* [수정] 이미지 전환 효과는 CSS transition 대신 React state 변경으로 처리 */
 }
 .image-nav-btn {
   position: absolute; top: 50%;
@@ -75,6 +75,8 @@
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.2s ease;
   opacity: 1;
+  /* [추가] 클릭 이벤트를 받도록 pointer-events 설정 */
+  pointer-events: auto;
 }
 .image-nav-btn.prev { left: 10px; }
 .image-nav-btn.next { right: 10px; }
@@ -86,12 +88,12 @@
   color: white; padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.8rem; font-weight: 500;
+  /* [추가] 클릭 이벤트를 받지 않도록 pointer-events 설정 */
+  pointer-events: none;
 }
+/* [삭제] 상품 이미지 위에 'SOLD OUT' 또는 '마감' 오버레이 CSS 제거 */
 .sold-out-overlay {
-  position: absolute; inset: 0;
-  background-color: rgba(255, 255, 255, 0.7);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2.2rem; font-weight: 700; color: var(--text-color-dark);
+  display: none; /* 이 요소를 완전히 숨깁니다 */
 }
 
 /* --- 상품 정보 영역 --- */
@@ -129,7 +131,7 @@
 }
 .product-description {
   font-size: 1rem; color: #555;
-  line-height: 1.6; margin: 16px auto 0; /* 상단 마진 추가 및 중앙 정렬 */
+  line-height: 1.6; margin: 8px auto 0; /* 상단 마진을 8px로 줄임 */
   max-width: 90%;
   white-space: pre-wrap;
   word-break: keep-all;
@@ -181,9 +183,9 @@
     flex-direction: column;
     gap: 16px; /* 구매 컨트롤 섹션 내부 간격 조정 */
 }
-.info-chip.countdown { 
+.info-chip.countdown {
   background-color: #ffe8e8;
-  color: #d94848; 
+  color: #d94848;
   border-color: #fdd8d8;
   width: fit-content;
   margin: 0 auto; /* 중앙 정렬 */
@@ -209,31 +211,6 @@
   background-repeat: no-repeat; background-size: 1.2em 1.2em;
   padding-right: 2.5rem;
 }
-/* 장바구니에 담긴 수량 표시 스타일 */
-/* 해당 UI를 제거했으므로 주석 처리하거나 제거합니다. */
-/*
-.cart-quantity-info {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background-color: var(--bg-color-light);
-    color: var(--text-color-dark);
-    font-size: 0.95rem;
-    font-weight: 600;
-    padding: 12px 16px;
-    border-radius: var(--border-radius-md);
-    border: 1px solid var(--border-color-light);
-}
-.cart-quantity-info span {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.cart-quantity-info strong {
-    color: var(--primary-color);
-}
-*/
 .product-purchase-footer {
   display: flex;
   gap: 8px; /* 간격을 8px로 줄여 컴팩트하게 만듭니다. */
@@ -306,6 +283,47 @@
     gap: 8px;
 }
 
+/* [추가] 앵콜 요청 버튼 스타일 */
+.encore-request-btn {
+    width: 100%;
+    height: 48px;
+    background-color: #ff4d4f; /* 붉은 계열 색상 */
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-md);
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background-color 0.2s;
+}
+
+.encore-request-btn:hover:not(:disabled) {
+    background-color: #d92529;
+}
+
+.encore-request-btn:disabled {
+    background-color: var(--bg-color-dark);
+    color: var(--text-color-light);
+    cursor: not-allowed;
+}
+.encore-request-btn span {
+    display: inline;
+}
+.encore-request-count {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color-dark);
+    background-color: var(--bg-color-light);
+    padding: 6px 12px;
+    border-radius: var(--border-radius-full);
+}
+
 /* --- 이미지 라이트박스(확대 뷰어) --- */
 .image-lightbox-overlay {
   position: fixed; inset: 0;
@@ -358,6 +376,8 @@
   width: 60px; height: 60px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: background-color 0.2s;
+  /* [추가] 클릭 이벤트를 받도록 pointer-events 설정 */
+  pointer-events: auto;
 }
 .image-nav-btn-lightbox.prev { left: 16px; }
 .image-nav-btn-lightbox.next { right: 16px; }
@@ -370,6 +390,8 @@
   color: white; padding: 8px 16px;
   border-radius: 20px;
   font-size: 1rem; font-weight: 500;
+  /* [추가] 클릭 이벤트를 받지 않도록 pointer-events 설정 */
+  pointer-events: none;
 }
 
 
@@ -414,7 +436,7 @@
       align-items: flex-start; /* 데스크탑에서 좌측 정렬 */
   }
   .product-description {
-      margin: 12px 0 0; /* 중앙 정렬 해제 */
+      margin: 8px 0 0; /* 중앙 정렬 해제 및 간격 줄임 */
       max-width: 100%;
   }
   .product-meta-info {

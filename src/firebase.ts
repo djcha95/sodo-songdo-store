@@ -14,12 +14,15 @@ import {
   getDoc,
   updateDoc,
   deleteDoc,
-  Timestamp,
   writeBatch,
   increment,
   serverTimestamp,
   getCountFromServer,
+  arrayUnion,
+  arrayRemove, // [추가] 배열에서 요소 제거
+  setDoc, // [추가] 문서 생성/업데이트
 } from 'firebase/firestore';
+// [수정] 해당 파일에서 직접 사용되지 않는 Timestamp 타입 임포트를 제거합니다.
 import {
   getStorage,
   ref,
@@ -27,7 +30,7 @@ import {
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
-import type { Product, Banner, Order, TodayStockItem, TodayOrderItem, Category, OrderItem, StoreInfo } from './types';
+import type { Product, Banner, Order, TodayStockItem, TodayOrderItem, Category, OrderItem, StoreInfo, UserDocument } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 const firebaseConfig = {
@@ -103,6 +106,78 @@ export const updateProductOnsiteSaleStatus = async (productId: string, isAvailab
   await updateDoc(productRef, { isAvailableForOnsiteSale: isAvailable });
 };
 
+// [수정] 앵콜 요청 시 상품 문서와 사용자 문서 모두 업데이트
+export const updateEncoreRequest = async (productId: string, userId: string) => {
+  const productRef = doc(db, 'products', productId);
+  const userRef = doc(db, 'users', userId);
+  
+  const batch = writeBatch(db);
+
+  // 상품 문서: encoreCount 증가 및 요청자 ID 추가
+  batch.update(productRef, {
+    encoreCount: increment(1),
+    encoreRequesterIds: arrayUnion(userId),
+  });
+
+  // 사용자 문서: 요청한 상품 ID 추가 (영구 저장)
+  batch.update(userRef, {
+    encoreRequestedProductIds: arrayUnion(productId),
+  });
+
+  await batch.commit();
+};
+
+// [수정] 상품 상태가 'selling'으로 바뀔 때 encoreCount 초기화 및 요청자 목록 초기화
+export const resetEncoreRequest = async (productId: string) => {
+  const productRef = doc(db, 'products', productId);
+  
+  // 모든 사용자의 요청 기록에서 이 상품 ID 제거
+  const usersQuery = query(collection(db, 'users'), where('encoreRequestedProductIds', 'array-contains', productId));
+  const userDocs = await getDocs(usersQuery);
+  
+  const batch = writeBatch(db);
+  userDocs.docs.forEach(userDoc => {
+      const userRef = doc(db, 'users', userDoc.id);
+      batch.update(userRef, {
+          encoreRequestedProductIds: arrayRemove(productId),
+      });
+  });
+
+  // 상품 문서의 encoreCount와 encoreRequesterIds 초기화
+  batch.update(productRef, {
+    encoreCount: 0,
+    encoreRequesterIds: [],
+  });
+  
+  await batch.commit();
+};
+
+// --- User Functions ---
+// [추가] 사용자 문서가 있는지 확인하고 없으면 생성 (회원가입 시)
+export const checkAndCreateUserDocument = async (uid: string, email: string | null, displayName: string | null, photoURL: string | null) => {
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+        await setDoc(userRef, {
+            uid,
+            email,
+            displayName,
+            photoURL,
+            isAdmin: false,
+            createdAt: serverTimestamp(),
+            encoreRequestedProductIds: [],
+        } as UserDocument); // [수정] `createdAt` 필드에 대한 타입 캐스팅
+    }
+};
+
+// [추가] Firestore에서 사용자 문서 데이터 불러오기
+export const getUserDocument = async (uid: string): Promise<UserDocument | null> => {
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    return userSnap.exists() ? userSnap.data() as UserDocument : null;
+};
+
+
 // --- Product Batch (Bulk) Functions ---
 export const updateProductsStatus = async (productIds: string[], isPublished: boolean) => {
   const batch = writeBatch(db);
@@ -111,6 +186,11 @@ export const updateProductsStatus = async (productIds: string[], isPublished: bo
   productIds.forEach(id => {
     const productRef = doc(db, 'products', id);
     batch.update(productRef, { isPublished, status: newStatus });
+    
+    // [수정] 'selling'으로 변경될 때 앵콜 요청 기록 초기화 함수 호출
+    if (newStatus === 'selling') {
+      resetEncoreRequest(id); // 비동기 호출
+    }
   });
 
   await batch.commit();
@@ -140,7 +220,6 @@ export const getProductsCount = async (category: string, storageType: string): P
     queryConstraints.push(where('storageType', '==', storageType));
   }
 
-  // 검색 쿼리는 클라이언트에서 처리하므로 여기서는 제외
   const countQuery = query(productsCollection, ...queryConstraints);
   const snapshot = await getCountFromServer(countQuery);
   
@@ -149,9 +228,13 @@ export const getProductsCount = async (category: string, storageType: string): P
 
 
 // --- Banner Functions ---
-export const addBanner = async (bannerData: Omit<Banner, 'id' | 'imageUrl'> & { order: number; createdAt: Timestamp }, imageFile: File) => {
+export const addBanner = async (bannerData: Omit<Banner, 'id' | 'imageUrl' | 'createdAt'>, imageFile: File) => {
     const imageUrl = await uploadImages([imageFile], 'banners').then(urls => urls[0]);
-    await addDoc(collection(db, 'banners'), { ...bannerData, imageUrl });
+    await addDoc(collection(db, 'banners'), { ...bannerData, imageUrl, createdAt: serverTimestamp() });
+};
+
+export const addBannerFromProduct = async (bannerData: Omit<Banner, 'id' | 'createdAt' | 'imageUrl'> & { imageUrl: string }) => {
+    await addDoc(collection(db, 'banners'), { ...bannerData, createdAt: serverTimestamp() });
 };
 
 export const updateBanner = async (id: string, data: Partial<Omit<Banner, 'id' | 'imageUrl'>>, imageFile?: File) => {
@@ -241,7 +324,7 @@ export const createOrder = async (orderData: Omit<Order, 'id' | 'orderDate'>) =>
 };
 
 export const searchOrdersByPhoneNumber = async (phoneSuffix: string): Promise<Order[]> => {
-    const q = query(collection(db, 'orders'), where('customerPhoneLast4', '==', phoneSuffix)); 
+    const q = query(collection(db, 'orders'), where('customerPhoneLast4', '==', phoneSuffix));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };

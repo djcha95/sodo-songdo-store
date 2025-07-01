@@ -1,54 +1,42 @@
-# React + TypeScript + Vite
+# 🛍️ 소도몰 프로젝트
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+이 문서는 '소도몰' 프로젝트의 구조와 주요 코드의 역할을 정리하기 위해 작성되었습니다.
 
-Currently, two official plugins are available:
+## 🚀 프로젝트 소개
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+-   **목표:** React와 Firebase를 사용하여 간단한 상품 쇼핑몰 웹사이트를 구축합니다.
+-   **주요 기능:** 회원가입, 로그인, 상품 목록 보기, 상품 상세 정보 보기, 관리자 페이지 등
 
-## Expanding the ESLint configuration
+## 🛠️ 사용된 기술 스택
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+-   **프론트엔드:** React, TypeScript, Vite
+-   **백엔드 & 데이터베이스:** Firebase (Firestore, Authentication)
+-   **스타일링:** 일반 CSS 파일 및 모듈 (CSS Modules)
+-   **배포:** Vercel
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 📁 디렉토리(폴더) 구조 설명
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+프로젝트의 주요 폴더와 파일 역할은 다음과 같습니다.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+SODOMALL-APP/
+├── public/              # 이미지, 폰트 등 정적 파일 보관
+├── scripts/             # 프로젝트 관련 보조 스크립트 파일 보관
+├── src/                 # ✅ 핵심 소스 코드가 있는 폴더
+│   ├── assets/          # 로고, 아이콘 등 작은 이미지 파일 보관
+│   ├── components/      # 여러 곳에서 재사용되는 작은 UI 조각들
+│   │   ├── admin/       # 관리자 페이지용 컴포넌트
+│   │   └── customer/    # 고객 페이지용 컴포넌트
+│   ├── context/         # 앱 전역 상태 관리를 위한 Context API 파일들 (인증, 장바구니 등)
+│   ├── firebase/        # Firebase 초기 설정 및 관련 함수 모음
+│   ├── layouts/         # 페이지들의 공통적인 레이아웃(헤더, 푸터 등)을 정의
+│   ├── pages/           # 웹사이트의 각 페이지 단위 컴포넌트
+│   │   ├── admin/       # 관리자 관련 페이지
+│   │   └── customer/    # 고객 관련 페이지
+│   └── styles/          # 전역적으로 사용되는 CSS 스타일 파일 보관
+├── .env                 # API 키 등 민감한 정보 보관 (Git에 올리면 안 됨)
+├── firebase.json        # Firebase 호스팅, Firestore 규칙 등 설정
+├── index.html           # 앱의 진입점이 되는 메인 HTML 파일
+├── package.json         # 프로젝트 정보 및 의존성 라이브러리 목록
+├── README.md            # 바로 이 파일! 프로젝트 설명서
+├── tsconfig.json        # TypeScript 컴파일러 설정
+└── vite.config.ts       # Vite 빌드 도구 설정

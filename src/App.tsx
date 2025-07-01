@@ -1,4 +1,4 @@
-// src/App.tsx (수정안)
+// src/App.tsx
 
 import React, { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { SelectionProvider } from './context/SelectionContext';
 import { AdminBulkSelectionProvider } from './context/AdminBulkSelectionContext';
+import { EncoreRequestProvider } from './context/EncoreRequestContext';
 
 const LoadingSpinner = () => <div className="loading-spinner">로딩 중...</div>;
 
@@ -47,27 +48,30 @@ function App() {
     <BrowserRouter>
       <Suspense fallback={<LoadingSpinner />}>
         <AuthProvider>
-          <CartProvider>
-            {/* 고객용 수량 선택 Provider */}
-            <SelectionProvider>
-              {/* 관리자용 일괄 선택 Provider */}
-              <AdminBulkSelectionProvider>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/admin/*" element={<AdminPage />} />
-                  {/* CustomerLayout을 ProtectedRoute로 감싸서 모든 고객 페이지에 적용 */}
-                  <Route
-                    path="/*"
-                    element={
-                      <ProtectedRoute>
-                        <CustomerLayout />
-                      </ProtectedRoute>
-                    }
-                  />
-                </Routes>
-              </AdminBulkSelectionProvider>
-            </SelectionProvider>
-          </CartProvider>
+          {/* [중요] EncoreRequestProvider를 AuthProvider 바로 아래에 추가합니다. */}
+          <EncoreRequestProvider>
+            <CartProvider>
+              {/* 고객용 수량 선택 Provider */}
+              <SelectionProvider>
+                {/* 관리자용 일괄 선택 Provider */}
+                <AdminBulkSelectionProvider>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/admin/*" element={<AdminPage />} />
+                    {/* CustomerLayout을 ProtectedRoute로 감싸서 모든 고객 페이지에 적용 */}
+                    <Route
+                      path="/*"
+                      element={
+                        <ProtectedRoute>
+                          <CustomerLayout />
+                        </ProtectedRoute>
+                      }
+                    />
+                  </Routes>
+                </AdminBulkSelectionProvider>
+              </SelectionProvider>
+            </CartProvider>
+          </EncoreRequestProvider>
         </AuthProvider>
       </Suspense>
     </BrowserRouter>
