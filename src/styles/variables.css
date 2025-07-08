@@ -1,0 +1,80 @@
+/* src/styles/variables.css */
+
+:root {
+    /* Colors */
+    --primary-color: #007bff; /* 주조색 (파란색 계열) */
+    --secondary-color: #6c757d; /* 보조색 (회색 계열) */
+    --accent-color: #28a745; /* 강조색 (성공/예약 - 초록색) */
+    --danger-color: #dc3545; /* 위험/삭제 (빨간색) */
+    --warning-color: #ffc107; /* 경고 (노란색) */
+
+    --text-color-dark: #343a40; /* 어두운 텍스트 */
+    --text-color-medium: #495057; /* 중간 텍스트 */
+    --text-color-light: #adb5bd; /* 연한 텍스트 */
+    --text-color-black: #212529; /* 거의 검정에 가까운 텍스트 */
+
+    --bg-color-light: #f8f9fa; /* 연한 배경색 */
+    --bg-color-medium: #e9ecef; /* 중간 배경색 */
+    --bg-color-dark: #dee2e6; /* 어두운 배경색 */
+    --bg-color-white: #ffffff; /* 흰색 배경 */
+    --bg-color-gray-soft: #f4f4f5; /* App.css의 기본 배경색 */
+    
+    --border-color-light: #e0e0e0; /* 연한 테두리 */
+    --border-color-medium: #ced4da; /* 중간 테두리 */
+    --border-color-dark: #dee2e6; /* 어두운 테두리 */
+
+    /* Admin Specific Colors (사이드바 등) */
+    --admin-sidebar-dark-bg: #111827;
+    --admin-sidebar-light-text: #9ca3af;
+    --admin-sidebar-hover-bg: #374151;
+    --admin-sidebar-active-bg: #4f46e5; /* indigo-600 */
+    --admin-header-bg: #ffffff;
+    --admin-header-text: #111827;
+
+
+    /* Typography */
+    --font-family-sans-serif: 'Noto Sans KR', sans-serif, -apple-system, BlinkMacMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-size-xs: 0.75rem; /* 12px */
+    --font-size-sm: 0.875rem; /* 14px */
+    --font-size-base: 1rem; /* 16px */
+    --font-size-md: 1.125rem; /* 18px */
+    --font-size-lg: 1.25rem; /* 20px */
+    --font-size-xl: 1.5rem; /* 24px */
+    --font-size-xxl: 1.875rem; /* 30px */
+    --font-size-xxxl: 2.25rem; /* 36px */
+
+    --font-weight-light: 300;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --font-weight-extrabold: 800;
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px; /* 1rem */
+    --spacing-lg: 24px; /* 1.5rem */
+    --spacing-xl: 32px; /* 2rem */
+    --spacing-xxl: 48px; /* 3rem */
+
+    /* Border Radius */
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --border-radius-xl: 16px;
+    --border-radius-full: 9999px; /* Tailwind 'rounded-full' */
+    --border-radius-circle: 50%;
+
+    /* Box Shadow */
+    --box-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --box-shadow-md: 0 4px 10px rgba(0, 0, 0, 0.08);
+    --box-shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.15);
+    --box-shadow-xl: 0 10px 30px rgba(0, 0, 0, 0.2);
+
+    /* Transitions */
+    --transition-speed-fast: 0.15s;
+    --transition-speed-normal: 0.2s;
+    --transition-speed-slow: 0.3s;
+    --transition-timing-function: ease-in-out;
+}

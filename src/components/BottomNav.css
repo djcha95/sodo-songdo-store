@@ -1,0 +1,75 @@
+/* src/components/BottomNav.css */
+
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 60px; /* 하드코딩된 값 유지 (레이아웃에 중요) */
+    background-color: var(--bg-color-white);
+    border-top: 1px solid var(--border-color-light);
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1); /* 하드코딩된 그림자 값 유지 (미세 조정) */
+    z-index: 1000;
+}
+
+.nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    text-decoration: none;
+    color: var(--text-color-medium);
+    font-size: var(--font-size-sm);
+    padding: 5px 0; /* 하드코딩된 값 유지 (미세 조정) */
+    transition: color var(--transition-speed-normal) var(--transition-timing-function);
+    position: relative;
+}
+
+.nav-link svg {
+    font-size: var(--font-size-xl);
+    margin-bottom: 3px; /* 하드코딩된 값 유지 (미세 조정) */
+}
+
+.nav-link.active {
+    color: var(--primary-color);
+    font-weight: var(--font-weight-semibold);
+}
+
+.cart-icon-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cart-badge {
+    position: absolute;
+    top: -5px; /* 하드코딩된 값 유지 (미세 조정) */
+    right: -10px; /* 하드코딩된 값 유지 (미세 조정) */
+    background-color: var(--danger-color);
+    color: var(--bg-color-white);
+    font-size: 0.7rem; /* 하드코딩된 값 유지 (미세 조정) */
+    font-weight: var(--font-weight-bold);
+    border-radius: var(--border-radius-circle);
+    width: 20px; /* 하드코딩된 값 유지 (미세 조정) */
+    height: 20px; /* 하드코딩된 값 유지 (미세 조정) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px; /* 하드코딩된 값 유지 (미세 조정) */
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+@media (max-width: 600px) {
+    .nav-link {
+        font-size: 0.7rem; /* 하드코딩된 값 유지 (미세 조정) */
+    }
+    .nav-link svg {
+        font-size: 1.3rem; /* 하드코딩된 값 유지 (미세 조정) */
+    }
+}

@@ -1,0 +1,134 @@
+/* src/components/customer/ProductSection.css */
+
+/* --- 섹션 기본 레이아웃 --- */
+.page-section {
+  margin-bottom: 24px;
+}
+.page-section:last-child {
+  margin-bottom: 0;
+}
+
+/* --- 섹션 헤더 (제목, 카운트다운) --- */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1; /* 너비가 줄어들 때 제목이 먼저 줄어들도록 함 */
+}
+
+.section-countdown {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #495057;
+  background-color: #fff0f1;
+  padding: 4px 8px;
+  border-radius: 16px;
+  border: 1px solid #ffdde0;
+  flex-shrink: 0; /* 너비가 줄어들어도 크기 유지 */
+}
+
+.countdown-icon {
+  color: #e63946;
+}
+
+.countdown-time {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e63946;
+  animation: pulse-red 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-red {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+/* --- 수평 스크롤 상품 목록 --- */
+.horizontal-scroll-container {
+  position: relative;
+}
+
+.product-grid.horizontal-scroll {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px; /* 그림자 효과 등을 위한 여백 */
+  margin: -4px; /* 패딩으로 인한 레이아웃 밀림 방지 */
+  scroll-snap-type: x mandatory; /* 스크롤 시 카드에 딱 맞게 멈춤 */
+  justify-content: flex-start;
+  align-items: end; /* 높이가 다른 카드를 하단 기준으로 정렬 */
+  /* 스크롤바 숨기기 */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.product-grid.horizontal-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.product-grid.horizontal-scroll > * {
+  width: 185px;
+  scroll-snap-align: start;
+}
+
+/* --- 스크롤 화살표 버튼 --- */
+.scroll-arrow {
+  display: none; /* 모바일에서는 숨김 */
+}
+
+/* --- 반응형 디자인 (데스크탑) --- */
+@media (min-width: 768px) {
+  .page-section {
+    margin-bottom: 40px;
+  }
+  
+  .section-countdown {
+    gap: 6px;
+    font-size: 0.9rem;
+    padding: 6px 12px;
+  }
+
+  .section-countdown .countdown-time {
+    font-size: 1.1rem;
+  }
+
+  .product-grid.horizontal-scroll > * {
+    width: 240px; /* 데스크탑에서 카드 너비 증가 */
+  }
+
+  .scroll-arrow {
+    display: flex; /* 데스크탑에서 표시 */
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-color-arrow, rgba(255, 255, 255, 0.9));
+    border: 1px solid var(--border-color-light);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10;
+    box-shadow: var(--box-shadow-sm);
+  }
+  .scroll-arrow.prev {
+    left: -20px;
+  }
+  .scroll-arrow.next {
+    right: -20px;
+  }
+}

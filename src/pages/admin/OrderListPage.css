@@ -1,0 +1,290 @@
+/* src/pages/customer/OrderHistoryPage.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+
+body {
+    font-family: 'Pretendard', sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+}
+
+.customer-page-container {
+    padding: 24px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.loading-message, .error-message, .no-orders-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: #888;
+    font-size: 1.1em;
+}
+
+.error-message {
+    color: #d32f2f;
+    font-weight: bold;
+}
+
+.order-history-list {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* 카드 그룹 사이 간격 */
+}
+
+/* 날짜별 그룹화된 아코디언 카드 스타일 */
+.order-group-card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    overflow: hidden; /* 자식 요소의 border-radius를 위해 */
+    transition: box-shadow 0.3s ease;
+}
+
+.order-group-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* 아코디언 헤더 (트리거) 스타일 */
+.Collapsible__trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    cursor: pointer;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    font-weight: 700;
+    font-size: 1.1em;
+    color: #495057;
+    transition: background-color 0.2s ease;
+    user-select: none; /* 텍스트 선택 방지 */
+}
+
+.Collapsible__trigger:hover {
+    background-color: #e9ecef;
+}
+
+.Collapsible__trigger.is-open {
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.group-date {
+    font-size: 1.2em;
+    color: #212121;
+}
+
+.group-order-count {
+    font-size: 0.85em;
+    font-weight: 500;
+    color: #888;
+}
+
+.header-icon-wrapper {
+    transition: transform 0.3s ease;
+}
+
+/* 아코디언 내용 스타일 */
+.Collapsible__contentOuter {
+    transition: height 300ms ease-in-out;
+}
+
+.collapsible-content {
+    padding: 20px 25px;
+}
+
+/* 그룹 내부 개별 주문 카드 스타일 */
+.order-card-in-group {
+    background-color: #fff;
+    padding: 15px 0;
+    border-bottom: 1px dashed #f0f0f0;
+}
+
+.order-card-in-group:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.order-header-section-in-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.order-id {
+    font-size: 0.9em;
+    color: #888;
+    font-weight: 500;
+}
+
+/* 상태 배지 스타일 (기존과 동일) */
+.order-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 16px; /* Pill 형태 */
+    text-transform: capitalize; 
+}
+
+.order-status-badge svg {
+    font-size: 1em;
+}
+
+.status-pending { background-color: #eef2ff; color: #4361ee; }
+.status-paid { background-color: #fffbe6; color: #f9c74f; }
+.status-shipped { background-color: #e0f2fe; color: #00b4d8; }
+.status-delivered { background-color: #e8f5e9; color: #4caf50; }
+.status-cancelled { background-color: #fbecec; color: #f44336; }
+.status-noshow { background-color: #fef2f2; color: #ef4444; }
+
+
+/* 상품 목록 상세 */
+.order-items-detail-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.order-item-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-top: 1px dashed #f8f9fa;
+}
+
+.order-item-detail-row:first-child {
+    border-top: none;
+}
+
+.product-main-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-basis: 60%; /* 공간 분배 */
+}
+
+.product-name-qty {
+    font-weight: 600;
+    font-size: 1.1em;
+    color: #212121;
+}
+
+.product-quantity-display {
+    font-weight: 500;
+    color: #555;
+    font-size: 0.9em;
+}
+
+.product-category {
+    font-size: 0.85em;
+    color: #888;
+}
+
+.product-sub-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* 우측 정렬 */
+    gap: 4px;
+    flex-basis: 40%; /* 공간 분배 */
+    text-align: right;
+}
+
+.product-price {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #212121;
+}
+
+.product-date-info-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.product-date-info {
+    font-size: 0.8em;
+    color: #757575;
+    font-weight: 500;
+}
+
+
+/* 푸터 섹션 (카드 그룹 내부) */
+.order-footer-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    padding-top: 15px;
+    border-top: 1px dashed #e9ecef;
+    margin-top: 10px;
+}
+
+.order-pickup-info {
+    font-size: 0.95em;
+    color: #555;
+    font-weight: 600;
+}
+
+/* 모바일 반응형 */
+@media (max-width: 600px) {
+    .customer-page-container {
+        padding: 15px;
+    }
+    .Collapsible__trigger {
+        padding: 15px 20px;
+        font-size: 1em;
+    }
+    .collapsible-content {
+        padding: 15px 20px;
+    }
+    .order-header-section-in-group {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .order-item-detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 12px 0;
+    }
+    .product-main-info, .product-sub-info {
+        flex-basis: 100%;
+        width: 100%;
+        align-items: flex-start;
+        text-align: left;
+    }
+    .product-sub-info {
+        border-top: 1px solid #eee;
+        padding-top: 10px;
+    }
+    .product-price {
+        font-size: 1.1em;
+    }
+    .product-date-info-group {
+        flex-direction: row; /* 날짜 정보를 한 줄로 */
+        gap: 15px;
+    }
+    .order-footer-section {
+        align-items: flex-start;
+    }
+    .order-pickup-info {
+        font-size: 0.9em;
+    }
+}

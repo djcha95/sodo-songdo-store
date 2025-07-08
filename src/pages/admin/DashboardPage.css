@@ -1,0 +1,94 @@
+/* src/pages/admin/DashboardPage.css */
+
+.dashboard-container {
+    padding: var(--spacing-lg);
+}
+
+.dashboard-widget {
+    background-color: #fff;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--box-shadow-md);
+    overflow: hidden;
+}
+
+.widget-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color-light);
+    color: var(--text-color-dark);
+}
+
+.widget-header h2 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    margin: 0;
+}
+
+.widget-content {
+    /* 테이블이 너무 커질 경우를 대비해 가로 스크롤을 허용합니다. */
+    overflow-x: auto;
+}
+
+.stock-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.stock-table th, 
+.stock-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color-light);
+    font-size: 0.9rem;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.stock-table th {
+    background-color: #f8f9fa;
+    font-weight: 500;
+}
+
+.stock-table td strong {
+    font-weight: bold;
+    color: var(--primary-color);
+    font-size: 1rem;
+}
+
+.stock-input {
+    width: 80px;
+    padding: 6px 8px;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--border-color-medium);
+    text-align: right;
+    font-size: 0.9rem;
+}
+
+.stock-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-color-light);
+}
+
+.save-stock-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border-radius: var(--border-radius-sm);
+    background-color: var(--primary-color);
+    color: white;
+    transition: background-color 0.2s;
+}
+
+.save-stock-button:hover {
+    background-color: var(--primary-color-dark);
+}
+
+.no-data-message {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-color-medium);
+}

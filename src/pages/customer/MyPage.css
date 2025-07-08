@@ -1,0 +1,85 @@
+/* src/pages/customer/MyPage.css */
+
+.mypage-container {
+  padding: var(--spacing-lg); /* 1.5rem */
+}
+
+.profile-section {
+  padding: var(--spacing-md); /* 1rem */
+  background-color: var(--bg-color-light); /* #f8f9fa */
+  border-radius: var(--border-radius-md); /* 8px */
+  text-align: center;
+  margin-bottom: var(--spacing-xl); /* 2rem */
+  box-shadow: var(--box-shadow-sm); /* 추가 */
+}
+
+.profile-section h2 {
+  margin: 0 0 var(--spacing-sm) 0; /* 0.5rem */
+  font-size: var(--font-size-xl); /* 1.5rem */
+  color: var(--text-color-dark); /* #343a40 */
+}
+
+.profile-section p {
+  margin: 0;
+  color: var(--secondary-color); /* #6c757d */
+  font-size: var(--font-size-base); /* 추가 */
+}
+
+.mypage-nav .mypage-menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background-color: var(--bg-color-white); /* #ffffff */
+  border-radius: var(--border-radius-md); /* 8px */
+  overflow: hidden;
+  border: 1px solid var(--border-color-light); /* #e9ecef */
+  box-shadow: var(--box-shadow-sm); /* 추가 */
+}
+
+.mypage-nav li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg); /* 1rem 1.5rem */
+  cursor: pointer;
+  transition: background-color var(--transition-speed-normal);
+  border-bottom: 1px solid var(--border-color-light); /* #e9ecef */
+}
+
+.mypage-nav li:last-child {
+  border-bottom: none;
+}
+
+.mypage-nav li:hover {
+  background-color: var(--bg-color-light); /* #f8f9fa */
+}
+
+.mypage-nav li span {
+  font-size: var(--font-size-md); /* 1.1rem */
+  font-weight: var(--font-weight-medium); /* 500 */
+  color: var(--text-color-dark); /* 추가 */
+}
+
+.mypage-nav li svg {
+  color: var(--text-color-light); /* #adb5bd */
+  font-size: var(--font-size-xl); /* 추가 */
+}
+
+.logout-section {
+  margin-top: var(--spacing-xl); /* 2rem */
+  text-align: center;
+}
+
+.logout-button {
+  background: none;
+  border: none;
+  color: var(--text-color-light); /* #adb5bd */
+  cursor: pointer;
+  font-size: 0.9rem; /* 변수 없음 */
+  text-decoration: underline;
+  transition: color var(--transition-speed-normal); /* 추가 */
+}
+
+.logout-button:hover {
+  color: var(--text-color-dark); /* #343a40 */
+}

@@ -1,0 +1,15 @@
+/* src/layouts/CustomerLayout.css */
+
+/* [수정] layout-container는 더 이상 높이나 스크롤을 제어하지 않습니다. */
+.layout-container {
+  position: relative;
+  background-color: #fff;
+  min-height: 100vh; /* 최소 높이만 보장 */
+}
+
+/* [삭제] .layout-container.modal-open 규칙은 더 이상 필요 없으므로 삭제합니다. */
+
+/* [수정] main-content-area의 인위적인 padding-top을 제거합니다. */
+.main-content-area {
+  padding-top: 0; 
+}

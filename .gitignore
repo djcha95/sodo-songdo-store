@@ -1,0 +1,27 @@
+# .gitignore
+
+# 의존성 폴더
+/node_modules
+/scripts/node_modules
+
+# 빌드 결과물
+/dist
+
+# 환경 변수 파일
+.env
+.env.*
+*.local
+
+# IDE 및 시스템 파일
+.DS_Store
+.idea/
+.vscode/
+
+# 로그 파일
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Firebase 비밀 키 파일 (가장 중요!)
+/scripts/sso-do-firebase-adminsdk-fbsvc-6fcec91050.json

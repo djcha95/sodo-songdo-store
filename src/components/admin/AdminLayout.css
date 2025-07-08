@@ -1,0 +1,69 @@
+/* src/components/admin/AdminLayout.css */
+
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-sidebar {
+  width: var(--admin-sidebar-width, 240px); /* 240px */
+  background-color: var(--admin-sidebar-dark-bg); /* #111827 */
+  color: var(--text-color-light); /* #d1d5db */
+  padding: var(--spacing-xl); /* 24px */
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-title {
+  font-size: var(--font-size-xl); /* 1.5rem */
+  font-weight: var(--font-weight-bold);
+  color: var(--bg-color-white); /* #ffffff */
+  margin-bottom: var(--spacing-xl); /* 2rem */
+  padding-left: var(--spacing-md); /* 10px */
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem; /* 하드코딩된 값 유지 */
+  flex-grow: 1;
+}
+
+.admin-nav-link {
+  color: var(--text-color-light); /* #d1d5db */
+  text-decoration: none;
+  padding: var(--spacing-md) 15px; /* 12px 15px (15px 하드코딩) */
+  border-radius: var(--border-radius-sm); /* 6px */
+  transition: background-color var(--transition-speed-normal), color var(--transition-speed-normal);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md); /* 12px */
+}
+
+.admin-nav-link:hover {
+  background-color: var(--admin-sidebar-hover-bg); /* #374151 */
+  color: var(--bg-color-white); /* #ffffff */
+}
+
+.admin-nav-link.active {
+  background-color: var(--admin-sidebar-active-bg); /* #4f46e5 */
+  color: var(--bg-color-white); /* #ffffff */
+  font-weight: var(--font-weight-semibold);
+}
+
+/* [추가] 하위 메뉴 스타일 */
+.sub-link {
+  font-size: 0.9em; /* 하드코딩된 값 유지 */
+  padding: 10px 15px; /* 하드코딩된 값 유지 */
+  color: var(--admin-sidebar-light-text); /* #9ca3af */
+}
+
+.sub-link.active {
+  color: var(--bg-color-white); /* #ffffff */
+  background-color: #4338ca; /* 하드코딩된 값 유지 (활성 하위 메뉴는 좀 더 어둡게) */
+}
+
+/* [추가] 사이드바 하단 (쇼핑몰로 돌아가기) */
+.admin-footer {
+  margin-top: auto;
+}

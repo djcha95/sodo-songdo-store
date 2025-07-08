@@ -1,0 +1,151 @@
+/* src/components/admin/AdminSidebar.css (개선된 최종본) */
+
+.admin-sidebar {
+  width: 256px; /* 너비 조정 */
+  flex-shrink: 0; /* flex 컨테이너 내에서 너비가 줄어들지 않도록 설정 */
+  background-color: var(--admin-sidebar-dark-bg);
+  color: var(--admin-sidebar-light-text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* 화면 전체 높이 사용 */
+  overflow-y: auto; /* 내용이 길어지면 스크롤 */
+  box-shadow: var(--box-shadow-md);
+  padding: var(--spacing-md);
+  box-sizing: border-box;
+  transition: width var(--transition-speed-normal) ease-in-out;
+}
+
+/* 스크롤바 숨기기 (선택 사항) */
+.admin-sidebar::-webkit-scrollbar {
+  display: none;
+}
+.admin-sidebar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-lg);
+  border-bottom: 1px solid var(--admin-sidebar-hover-bg);
+  margin-bottom: var(--spacing-md);
+}
+
+.sidebar-logo {
+  width: 32px;
+  height: 32px;
+  margin-right: var(--spacing-md);
+}
+
+.sidebar-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--bg-color-white);
+  margin: 0;
+  white-space: nowrap; /* 너비가 줄어들 때 줄바꿈 방지 */
+}
+
+.sidebar-nav {
+  flex-grow: 1; /* 남는 공간을 모두 차지하여 메뉴를 채움 */
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-group-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--admin-sidebar-light-text);
+  text-transform: uppercase;
+  padding: var(--spacing-lg) var(--spacing-sm) var(--spacing-xs);
+  white-space: nowrap;
+}
+
+/* '기타' 메뉴 그룹 상단 여백 */
+.menu-group-spacer {
+  margin-top: var(--spacing-lg);
+}
+
+.menu-item a {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin: var(--spacing-xs) 0;
+  color: var(--admin-sidebar-light-text);
+  text-decoration: none;
+  border-radius: var(--border-radius-md);
+  transition: background-color var(--transition-speed-normal), color var(--transition-speed-normal);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.menu-item a:hover {
+  background-color: var(--admin-sidebar-hover-bg);
+  color: var(--bg-color-white);
+}
+
+.menu-item a.active {
+  background-color: var(--admin-sidebar-active-bg);
+  color: var(--bg-color-white);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 아이콘 스타일 */
+.menu-item svg {
+  flex-shrink: 0; /* 아이콘이 찌그러지지 않도록 설정 */
+}
+
+
+/* --- 반응형 디자인 (모바일/태블릿) --- */
+@media (max-width: 768px) {
+  .admin-sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color-dark);
+  }
+
+  /* 모바일에서는 헤더 숨기기 */
+  .sidebar-header {
+    display: none;
+  }
+  
+  .sidebar-nav {
+    flex-grow: 1;
+  }
+
+  .sidebar-nav ul {
+    display: flex;
+    justify-content: flex-start; /* 좌측 정렬 */
+    align-items: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+  }
+
+  /* 모바일에서는 메뉴 그룹 제목 숨기기 */
+  .menu-group-title {
+    display: none;
+  }
+  
+  .menu-item a {
+    flex-direction: column; /* 아이콘과 텍스트를 세로로 배치 */
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+    margin: 0;
+    font-size: var(--font-size-xs);
+  }
+
+  .menu-item span {
+    display: block; /* 모바일에서 텍스트가 보이도록 */
+  }
+}

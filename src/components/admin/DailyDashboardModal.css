@@ -1,0 +1,306 @@
+/* src/components/admin/DailyDashboardModal.css */
+
+/* 모달 오버레이 및 기본 컨테이너는 common.css의 .modal-overlay, .modal-content를 사용 */
+
+.admin-dashboard-modal {
+    max-width: 600px; /* 대시보드 모달의 최대 너비 */
+    padding: var(--spacing-md); /* 기본 패딩 (common.css에서 오버라이드) */
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg); /* 1.5rem */
+    padding-bottom: var(--spacing-sm); /* 8px */
+    border-bottom: 1px solid var(--border-color-light);
+}
+
+.modal-header h2 {
+    font-size: var(--font-size-xl); /* 1.25rem */
+    font-weight: var(--font-weight-bold);
+    color: var(--text-color-dark);
+}
+
+.modal-loading {
+    padding: var(--spacing-xl); /* 2rem */
+    text-align: center;
+    color: var(--secondary-color);
+}
+
+.dashboard-sections-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg); /* 1.5rem */
+}
+
+.dashboard-section {
+    /* common.css의 .section-card 스타일 상속 */
+    padding: var(--spacing-md); /* 1rem (section-card의 기본 패딩보다 작게) */
+    box-shadow: var(--box-shadow-sm); /* common.css의 box-shadow-sm */
+    border: 1px solid var(--border-color-light); /* 추가: 경계선 */
+}
+
+.dashboard-section h3 {
+    font-size: var(--font-size-base); /* 1rem */
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-sm); /* 0.5rem */
+    color: var(--text-color-dark);
+}
+
+.dashboard-section .dashboard-list {
+    list-style: disc;
+    padding-left: var(--spacing-lg); /* 1.25rem */
+}
+
+.dashboard-section .dashboard-list li {
+    font-size: var(--font-size-sm); /* 0.875rem */
+    color: var(--text-color-medium);
+    margin-bottom: var(--spacing-xs);
+}
+
+.dashboard-section .dashboard-empty-text {
+    font-size: var(--font-size-sm); /* 0.875rem */
+    color: var(--text-color-light);
+}
+
+.prepaid-orders-title {
+    color: var(--primary-color); /* #2563eb -> primary-color */
+}
+
+.reservations-title {
+    color: var(--accent-color); /* #16a34a -> accent-color */
+}
+
+.modal-footer {
+    margin-top: var(--spacing-lg); /* 1.5rem */
+    padding-top: var(--spacing-md); /* 1rem */
+    border-top: 1px solid var(--border-color-light);
+    display: flex;
+    justify-content: flex-end; /* 오른쪽 정렬 */
+    align-items: center;
+}
+
+.dont-show-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm); /* 0.5rem */
+    font-size: var(--font-size-sm); /* 0.875rem */
+    color: var(--text-color-medium);
+    cursor: pointer;
+}
+/* 모달 닫기 버튼은 common.css의 .modal-close-button 사용 */
+/* 모바일 반응형 (필요시 추가) */
+@media (max-width: 600px) {
+    .admin-dashboard-modal {
+        max-width: 95%;
+        padding: var(--spacing-md);
+    }
+    .modal-header h2 {
+        font-size: var(--font-size-lg);
+    }
+    .dashboard-section {
+        padding: var(--spacing-sm);
+    }
+}
+
+/* src/components/admin/DailyDashboardModal.css */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px); /* 배경 블러 효과 */
+}
+
+.modal-content.admin-dashboard-modal {
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    padding: 30px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: fadeInScale 0.3s ease-out forwards;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.modal-close-button {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6c757d;
+    transition: color 0.2s;
+}
+
+.modal-close-button:hover {
+    color: #343a40;
+}
+
+.modal-header {
+    text-align: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.8em;
+    color: #343a40;
+}
+
+.modal-header .modal-date {
+    font-size: 0.9em;
+    color: #888;
+    margin-top: 5px;
+}
+
+.modal-error-message {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.modal-loading {
+    text-align: center;
+    padding: 40px;
+    font-size: 1.1em;
+    color: #6c757d;
+}
+
+.dashboard-sections-wrapper {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-section {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-section .section-title {
+    font-size: 1.3em;
+    color: #495057;
+    margin-top: 0;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #dee2e6;
+}
+
+.dashboard-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1; /* 내용을 채우도록 확장 */
+}
+
+.dashboard-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #eff1f3;
+    font-size: 0.95em;
+    color: #343a40;
+}
+
+.dashboard-list li:last-child {
+    border-bottom: none;
+}
+
+.item-quantity {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.pickup-info {
+    font-size: 0.85em;
+    color: #6c757d;
+    margin-left: 5px;
+}
+
+.option-stock-list {
+    list-style: disc;
+    margin: 5px 0 0 20px;
+    padding: 0;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.option-stock-list li {
+    padding: 2px 0;
+    border-bottom: none; /* 하위 목록은 경계선 없음 */
+}
+
+.dashboard-empty-text {
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.modal-footer {
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+    text-align: right;
+}
+
+.dont-show-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+    color: #6c757d;
+    cursor: pointer;
+}
+
+.dont-show-label input[type="checkbox"] {
+    transform: scale(1.2);
+    cursor: pointer;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+    .modal-content.admin-dashboard-modal {
+        padding: 20px;
+    }
+    .dashboard-sections-wrapper {
+        grid-template-columns: 1fr;
+    }
+}

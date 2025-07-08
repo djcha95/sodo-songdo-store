@@ -1,0 +1,275 @@
+/* src/pages/customer/OrderHistoryPage.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap');
+
+body {
+    font-family: 'Pretendard', sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+}
+
+/* 전체 컨테이너 너비 (카드 크기) */
+.customer-page-container {
+    padding: 15px;
+    max-width: 360px;
+    margin: 0 auto;
+}
+
+.loading-message, .error-message, .no-orders-message {
+    text-align: center;
+    padding: 20px 10px;
+    color: #888;
+    font-size: 0.9em;
+}
+
+.error-message {
+    color: #d32f2f;
+    font-weight: bold;
+}
+
+.order-history-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 날짜별 그룹화된 아코디언 카드 스타일 */
+.order-group-card {
+    background-color: #ffffff;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+    transition: box-shadow 0.3s ease;
+    position: relative; 
+}
+
+.order-group-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* ────────── 아코디언 헤더 (트리거) 스타일 ────────── */
+.Collapsible__trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    cursor: pointer;
+    background-color: #fafafa;
+    border-bottom: 1px solid #eef0f2;
+    font-weight: 700;
+    font-size: 0.9em; 
+    color: #495057;
+    transition: background-color 0.2s ease;
+    user-select: none;
+}
+
+.Collapsible__trigger:hover {
+    background-color: #f0f0f0;
+}
+
+.Collapsible__trigger.is-open {
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.header-text {
+    display: flex;
+    flex-grow: 1;
+    justify-content: space-between;
+    align-items: center;
+    gap: 5px;
+    padding-right: 15px;
+}
+
+.group-date {
+    font-size: 1.05em;
+    color: #212121;
+}
+
+.group-order-count {
+    font-size: 0.75em;
+    font-weight: 500;
+    color: #888;
+    min-width: 45px;
+    text-align: right;
+}
+
+.header-icon-wrapper {
+    transition: transform 0.3s ease;
+    margin-left: 8px;
+}
+
+/* ────────── 아코디언 내용 스타일 ────────── */
+.Collapsible__contentOuter {
+    transition: height 300ms ease-in-out;
+}
+
+.collapsible-content {
+    padding: 0 15px;
+}
+
+/* 그룹 내부 개별 주문 카드 스타일 */
+.order-card-in-group {
+    background-color: #fff;
+}
+
+/* 상품 목록 상세 */
+.order-items-detail-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* ────────── 개별 상품 항목 (행 컨테이너) ────────── */
+.order-item-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f5f5f5;
+    position: relative; /* 상태 배지 위치 지정을 위한 상대 위치 설정 */
+}
+.order-card-in-group:last-child .order-item-detail-row:last-child {
+    border-bottom: none;
+}
+
+/* ────────── 상단 행: 상품명과 수량 ────────── */
+.item-top-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 상품명 그룹 (좌측 정렬) */
+.product-name-group {
+    justify-self: start;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    text-align: left;
+    min-width: 0;
+}
+
+.product-name {
+    font-weight: 700;
+    font-size: 1em;
+    color: #212121;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.product-category {
+    font-size: 0.75em;
+    color: #888;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ────────── 상태 배지 (우측 상단) ────────── */
+.order-status-badge {
+    position: absolute;
+    top: 12px;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+    z-index: 5;
+}
+
+/* ────────── 하단 행: 픽업일, 수량, 가격 (수정됨) ────────── */
+.item-bottom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 8px;
+    position: relative;
+    padding-top: 5px;
+    /* 이전의 absolute 관련 속성은 제거 */
+    padding-right: 0;
+    padding-bottom: 0;
+}
+
+.product-pickup-info {
+    font-size: 0.85em;
+    color: #555;
+    font-weight: 500;
+    justify-self: start;
+}
+
+/* [수정] 수량과 가격을 감싸는 그룹을 Flexbox로 재조정 */
+.quantity-price-group {
+    /* absolute 제거 */
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    /* Flexbox 정렬 */
+    justify-content: flex-end;
+    flex-grow: 1;
+}
+
+/* [수정] 가격 스타일: 취소선이 그어진 것처럼 보이는 text-decoration 제거 */
+.product-price {
+    font-size: 1.15em;
+    font-weight: 800;
+    color: #212121;
+    white-space: nowrap;
+    text-decoration: none; /* 혹시 모를 취소선 스타일 제거 */
+}
+
+/* [수정] 수량 스타일: 겹치지 않게 Flexbox 내에서 정렬 */
+.product-quantity-display {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #444;
+    white-space: nowrap;
+    background-color: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 15px;
+    border: 1px solid #e9ecef;
+}
+
+
+/* 상태 배지 색상 */
+.order-status-badge svg { font-size: 0.9em; }
+.status-pending { background-color: #fef3c7; color: #d97706; }
+.status-paid { background-color: #ecfdf5; color: #10b981; }
+.status-shipped { background-color: #e0f2fe; color: #00b4d8; }
+.status-delivered { background-color: #e8f5e9; color: #4caf50; }
+.status-cancelled { background-color: #fbecec; color: #f44336; }
+.status-noshow { background-color: #fef2f2; color: #ef4444; }
+
+
+/* 모바일 반응형 (큰 변화는 없지만 폰트 등 미세 조정) */
+@media (max-width: 600px) {
+    .customer-page-container {
+        padding: 10px;
+    }
+    .collapsible-content {
+        padding: 0 12px;
+    }
+    .order-item-detail-row {
+        padding: 10px 0;
+        gap: 6px;
+    }
+    .product-name {
+        font-size: 0.95em;
+    }
+    .product-price {
+        font-size: 1.1em;
+    }
+}

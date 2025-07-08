@@ -1,0 +1,147 @@
+/* src/pages/customer/StoreInfoPage.css */
+
+.store-info-container {
+  padding: var(--spacing-lg); /* 전체 컨테이너 패딩 */
+  background-color: var(--bg-color-white); /* 흰색 배경 */
+  min-height: calc(100vh - var(--header-height, 60px) - var(--bottom-nav-height, 70px)); /* 최소 높이 설정 */
+}
+
+@media (min-width: 768px) {
+  .store-info-container {
+    max-width: 800px; /* 데스크탑에서 최대 너비 제한 */
+    margin: var(--spacing-xl) auto; /* 중앙 정렬 */
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--box-shadow-md);
+    padding: var(--spacing-xl);
+  }
+}
+
+.store-section {
+  margin-bottom: var(--spacing-xl); /* 섹션 간 간격 */
+  border-bottom: 1px solid var(--border-color-light); /* 섹션 구분선 */
+  padding-bottom: var(--spacing-lg);
+}
+
+.store-section:last-of-type {
+  border-bottom: none; /* 마지막 섹션은 구분선 없음 */
+  margin-bottom: var(--spacing-md);
+}
+
+.section-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--primary-color); /* 파란색 제목 */
+  margin-bottom: var(--spacing-md);
+}
+
+.store-description {
+  font-size: var(--font-size-base);
+  color: var(--text-color-medium);
+  line-height: 1.6;
+}
+
+/* 정보 항목 스타일 */
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start; /* 내용이 길어질 경우 상단 정렬 */
+  padding: var(--spacing-sm) 0; /* 각 정보 항목 패딩 */
+  border-bottom: 1px dashed var(--border-color-light); /* 점선 구분선 */
+}
+
+.info-item:last-child {
+  border-bottom: none; /* 마지막 항목은 구분선 없음 */
+}
+
+.info-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-color-light);
+  flex-basis: 30%; /* 라벨 영역 너비 */
+  min-width: 80px; /* 최소 너비 */
+  font-weight: var(--font-weight-semibold);
+}
+
+.info-value {
+  font-size: var(--font-size-base);
+  color: var(--text-color-dark);
+  flex-basis: 70%; /* 값 영역 너비 */
+  text-align: right; /* 값을 오른쪽에 정렬 */
+  word-break: break-word; /* 긴 텍스트 줄바꿈 */
+}
+
+.info-value.link-value {
+  color: var(--primary-color); /* 링크는 파란색 */
+  text-decoration: none;
+}
+
+.info-value.link-value:hover {
+  text-decoration: underline;
+}
+
+/* 운영 시간 목록 */
+.operating-hours-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.operating-hours-list li {
+  font-size: var(--font-size-base);
+  color: var(--text-color-dark);
+  padding: var(--spacing-xs) 0; /* 상하 4px 패딩 */
+}
+
+/* 연락하기 버튼 */
+.contact-buttons {
+  display: flex;
+  gap: var(--spacing-md); /* 버튼 간 간격 */
+  margin-top: var(--spacing-xl); /* 푸터 위 간격 */
+}
+
+.contact-button {
+  flex: 1; /* 동일한 너비로 확장 */
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  text-decoration: none;
+  transition: all var(--transition-speed-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.contact-button.primary {
+  background-color: var(--primary-color);
+  color: var(--bg-color-white);
+  border: 1px solid var(--primary-color);
+}
+
+.contact-button.primary:hover {
+  background-color: #0056b3; /* primary-dark-color */
+  border-color: #0056b3;
+}
+
+.contact-button.secondary {
+  background-color: var(--bg-color-white);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+
+.contact-button.secondary:hover {
+  background-color: var(--primary-color);
+  color: var(--bg-color-white);
+}
+
+/* 로딩/에러 메시지 스타일 */
+.loading-message, .error-message {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-color-medium);
+}
+
+.error-message {
+  color: var(--danger-color);
+}

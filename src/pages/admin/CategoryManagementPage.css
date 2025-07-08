@@ -1,0 +1,251 @@
+/* src/pages/admin/CategoryManagementPage.css */
+
+.category-management-container {
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    position: relative; 
+}
+
+.section-card {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.section-card h3 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.category-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.category-form input[type="text"] {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1em;
+}
+
+.category-form button {
+    padding: 10px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.category-form button:hover:enabled {
+    background-color: #0056b3;
+}
+
+.category-form button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.category-form .cancel-btn {
+    background-color: #6c757d;
+}
+.category-form .cancel-btn:hover:enabled {
+    background-color: #5a6268;
+}
+
+.category-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.category-item {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.category-item.selected {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+    background-color: #e7f1ff;
+}
+
+.category-main-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* [수정] 대분류 이름 클릭 영역 스타일 */
+.category-name-display {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    flex-grow: 1;
+    padding-right: 10px; 
+}
+.category-name-display:hover {
+    color: #007bff;
+}
+
+.category-actions .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    color: #6c757d;
+}
+.category-actions .icon-btn:hover {
+    color: #007bff;
+}
+.category-actions .trash-btn:hover {
+    color: #dc3545;
+}
+
+/* [추가] 인라인 편집 폼 스타일 */
+.inline-edit-form {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+    gap: 5px;
+}
+.inline-edit-form input {
+    flex-grow: 1;
+    padding: 5px;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    font-size: 1em;
+}
+.inline-edit-form button {
+    padding: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #007bff;
+}
+.inline-edit-form button:hover {
+    opacity: 0.7;
+}
+.inline-edit-form .cancel-btn {
+    color: #dc3545;
+}
+
+/* [추가] 하위 카테고리 추가 폼 스타일 */
+.add-subcategory-form-wrapper {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed #ddd;
+}
+.subcategory-add-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+.subcategory-add-form input {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #007bff;
+    border-radius: 5px;
+}
+.subcategory-add-form button {
+    padding: 8px 12px;
+    font-size: 0.9em;
+}
+
+
+.subcategory-list {
+    list-style: none; /* 점 리스트 제거 (아이콘으로 대체 가능) */
+    padding-left: 0;
+    margin-top: 10px;
+    border-top: 1px dashed #eee;
+    padding-top: 10px;
+}
+
+.subcategory-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 0.95em;
+    color: #555;
+    padding-left: 10px; /* 들여쓰기 */
+    position: relative;
+}
+.subcategory-item::before {
+    content: '-'; /* 들여쓰기 점 대신 - 사용 */
+    position: absolute;
+    left: 0;
+    color: #888;
+}
+
+.subcategory-item .trash-btn {
+    padding: 3px;
+}
+
+/* [추가] 하위 카테고리 인라인 편집 폼 */
+.subcategory-inline-edit {
+    flex-grow: 1;
+    margin-left: 10px; /* 기존 텍스트 위치와 맞춤 */
+}
+.subcategory-name-display {
+    cursor: pointer;
+    flex-grow: 1;
+}
+.subcategory-name-display:hover {
+    color: #007bff;
+}
+
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    border-radius: 8px; 
+}
+
+.loading-overlay .spin {
+    animation: spin 1s linear infinite;
+}
+
+.error-message-banner {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 5px;
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.no-data-message {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+}

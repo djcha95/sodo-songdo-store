@@ -1,0 +1,27 @@
+/* src/pages/customer/ProductListPage.css */
+
+/* 💡 [추가] 페이지 전체의 세로 스크롤을 강제로 활성화합니다. */
+html,
+body {
+  overflow-y: auto !important;
+  height: auto !important;
+}
+
+.banner-slider-container {
+  margin-bottom: 0 !important;
+}
+
+.page-section.banner-section {
+  margin-bottom: 16px; 
+}
+
+.no-products-message {
+  text-align: center;
+  padding: 60px 20px;
+  color: #868e96;
+}
+.no-products-message p {
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  font-weight: 500;
+}

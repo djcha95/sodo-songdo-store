@@ -1,0 +1,89 @@
+/* src/pages/admin/AdminPage.css (개선된 최종본) */
+
+/* 참고: 아래 코드의 var(--variable-name) 형태의 변수들은
+  전역 CSS 파일(예: src/styles/variables.css)에 정의되어 있어야 합니다.
+*/
+
+/* --- 1. 전체 관리자 레이아웃 --- */
+.admin-layout {
+  display: flex;
+  height: 100vh;
+  background-color: #f8f9fa; /* var(--bg-color-gray-soft) */
+  overflow: hidden;
+}
+
+/* --- 2. 관리자 메인 컨텐츠 전체 영역 --- */
+.admin-main {
+  flex-grow: 1; /* 사이드바를 제외한 나머지 공간을 모두 차지 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 내부 스크롤은 admin-content에서 담당 */
+}
+
+/* --- 3. 메인 컨텐츠 상단 헤더 --- */
+.admin-header {
+  background-color: #ffffff; /* var(--admin-header-bg) */
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid #dee2e6; /* var(--border-color-medium) */
+  flex-shrink: 0; /* 높이가 줄어들지 않도록 고정 */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* var(--box-shadow-sm) */
+  z-index: 10;
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 1.5rem; /* var(--font-size-xl) */
+  font-weight: 600; /* var(--font-weight-semibold) */
+  color: #343a40; /* var(--admin-header-text) */
+  line-height: 1.2;
+}
+
+/* --- 4. 실제 페이지 컴포넌트가 표시될 영역 --- */
+.admin-content {
+  flex-grow: 1;
+  overflow-y: auto; /* 컨텐츠가 길어지면 이 영역만 스크롤 */
+  padding: 2rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- 로딩 스피너 --- */
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 1.2rem;
+  color: #868e96; /* var(--text-color-light) */
+}
+
+
+/* --- 반응형 디자인 (모바일/태블릿 최적화) --- */
+@media (max-width: 768px) {
+  .admin-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  /* 모바일에서는 AdminSidebar가 상단 네비게이션 역할을 하므로
+    AdminSidebar 컴포넌트 내부의 반응형 스타일이 적용될 것입니다.
+    (기존 AdminPage.css의 반응형 코드는 AdminSidebar.css로 이동하는 것이 적합)
+  */
+  
+  .admin-main {
+    width: 100%;
+  }
+
+  .admin-header {
+    padding: 1rem 1.5rem;
+    text-align: center;
+  }
+
+  .admin-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .admin-content {
+    padding: 1.5rem;
+  }
+}

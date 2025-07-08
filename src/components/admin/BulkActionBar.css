@@ -1,0 +1,105 @@
+/* src/components/admin/BulkActionBar.css */
+.bulk-action-bar {
+  position: sticky;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 40px);
+  max-width: 600px;
+  background-color: var(--primary-color-dark);
+  color: white;
+  padding: 12px 20px;
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--box-shadow-xl);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1000;
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--font-size-base);
+}
+
+.clear-selection-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: white;
+  padding: 4px 8px;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.clear-selection-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--border-radius-md);
+  font-weight: var(--font-weight-bold);
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.action-btn.publish {
+  background-color: #28a745; color: white;
+}
+.action-btn.publish:hover {
+  background-color: #218838;
+}
+
+.action-btn.hide {
+  background-color: #ffc107; color: #333;
+}
+.action-btn.hide:hover {
+  background-color: #e0a800;
+}
+
+.action-btn.delete {
+  background-color: #dc3545; color: white;
+}
+.action-btn.delete:hover {
+  background-color: #c82333;
+}
+
+.bulk-loader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+}
+
+.bulk-loader .spin {
+    animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

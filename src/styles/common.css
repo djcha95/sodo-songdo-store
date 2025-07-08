@@ -1,0 +1,251 @@
+/* src/styles/common.css */
+
+/* --- Common Buttons --- */
+.common-button {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: background-color var(--transition-speed-normal) var(--transition-timing-function),
+                border-color var(--transition-speed-normal) var(--transition-timing-function),
+                color var(--transition-speed-normal) var(--transition-timing-function);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-xs);
+    text-decoration: none;
+    line-height: 1; /* 텍스트 높이 일관성 */
+    white-space: nowrap; /* 버튼 텍스트 줄바꿈 방지 */
+}
+
+.common-button.primary {
+    background-color: var(--primary-color);
+    color: var(--bg-color-white);
+    border: 1px solid var(--primary-color);
+}
+.common-button.primary:hover:not(:disabled) {
+    background-color: #0056b3; /* Primary dark */
+    border-color: #0056b3;
+}
+
+.common-button.secondary {
+    background-color: var(--bg-color-white);
+    color: var(--text-color-medium);
+    border: 1px solid var(--border-color-medium);
+}
+.common-button.secondary:hover:not(:disabled) {
+    background-color: var(--bg-color-medium);
+    border-color: var(--secondary-color);
+}
+
+.common-button.accent {
+    background-color: var(--accent-color);
+    color: var(--bg-color-white);
+    border: 1px solid var(--accent-color);
+}
+.common-button.accent:hover:not(:disabled) {
+    background-color: #218838; /* Accent dark */
+    border-color: #218838;
+}
+
+.common-button.danger {
+    background-color: var(--danger-color);
+    color: var(--bg-color-white);
+    border: 1px solid var(--danger-color);
+}
+.common-button.danger:hover:not(:disabled) {
+    background-color: #c82333; /* Danger dark */
+    border-color: #c82333;
+}
+
+.common-button:disabled {
+    background-color: var(--bg-color-dark);
+    color: var(--text-color-light);
+    border-color: var(--border-color-medium);
+    cursor: not-allowed;
+    opacity: 0.7;
+    box-shadow: none;
+}
+
+/* --- Form Elements --- */
+.form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+    display: block;
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-xs);
+    color: var(--text-color-medium);
+    font-size: var(--font-size-base);
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="date"],
+.form-group input[type="datetime-local"],
+.form-group textarea,
+.form-group .file-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--border-color-medium);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-base);
+    box-sizing: border-box;
+    transition: border-color var(--transition-speed-normal) var(--transition-timing-function),
+                box-shadow var(--transition-speed-normal) var(--transition-timing-function);
+    color: var(--text-color-dark);
+    background-color: var(--bg-color-white);
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group .file-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* primary-color 투명 */
+}
+
+.form-group .help-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-color-light);
+    margin-top: var(--spacing-xs);
+}
+
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-icon input {
+    padding-left: calc(var(--spacing-md) + 12px); /* 아이콘 공간 + 여백 */
+}
+
+.input-with-icon .input-icon {
+    position: absolute;
+    left: var(--spacing-sm);
+    color: var(--text-color-light);
+}
+
+/* --- Card Styles --- */
+.section-card {
+    background-color: var(--bg-color-white);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--box-shadow-sm);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.section-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+    color: var(--text-color-medium);
+}
+
+.section-card-header h3 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    margin: 0;
+}
+
+/* -------------------- */
+/* --- Order Status Badge --- */
+/* -------------------- */
+.order-status-badge {
+    position: absolute;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    padding: 6px 12px;
+    border-radius: var(--border-radius-full);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    color: var(--bg-color-white);
+    text-transform: uppercase;
+    box-shadow: var(--box-shadow-sm);
+    transition: all 0.3s ease;
+    z-index: 10;
+}
+
+.order-status-badge.pending { /* 예약중 */
+    background-color: var(--warning-color); /* 주황색 */
+}
+
+.order-status-badge.delivered { /* 픽업완료 */
+    background-color: var(--accent-color); /* 초록색 */
+}
+
+.order-status-badge.cancelled { /* 취소됨 */
+    background-color: var(--danger-color); /* 빨간색 */
+}
+
+.order-status-badge.no-show { /* 노쇼 (새로 추가) */
+    background-color: var(--danger-color-dark); /* 더 진한 빨간색 */
+    animation: pulse 1.5s infinite; /* 애니메이션 효과 추가 */
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* --- General Layout Utilities --- */
+.flex-row {
+    display: flex;
+    align-items: center;
+}
+
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.align-center { align-items: center; }
+.gap-sm { gap: var(--spacing-sm); }
+.gap-md { gap: var(--spacing-md); }
+.gap-lg { gap: var(--spacing-lg); }
+
+/* Hide scrollbar for specific elements */
+.hide-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera*/
+}
+
+/* Page Section Titles */
+.section-title {
+  font-size: var(--font-size-lg); /* 1.25rem = 20px */
+  font-weight: var(--font-weight-bold);
+  color: var(--text-color-dark);
+  margin-bottom: var(--spacing-md); /* 16px */
+  padding-bottom: var(--spacing-sm); /* 8px */
+  border-bottom: 2px solid var(--border-color-light);
+}
+
+@media (min-width: 768px) {
+  .section-title {
+    font-size: var(--font-size-xl); /* 1.5rem = 24px */
+  }
+}
+
+/* --- Status Badge (For Admin Pages) --- */
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  text-transform: capitalize;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.status-selling { background-color: #2f9e44; } /* 판매중 (초록색) */
+.status-scheduled { background-color: #f76707; } /* 예정 (주황색) */
+.status-ended { background-color: #868e96; } /* 종료 (회색) */
+.status-sold_out { background-color: #c92a2a; } /* 품절 (빨강색) */
+.status-draft { background-color: #495057; } /* 임시저장 (진한회색) */
+.status-unknown { background-color: #ced4da; color: #495057; }

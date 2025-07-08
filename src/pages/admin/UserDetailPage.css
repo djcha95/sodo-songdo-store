@@ -1,0 +1,87 @@
+/* src/pages/admin/UserDetailPage.css 에 추가/수정 */
+
+/* 기존 user-info-card 내부 구조 변경 */
+.user-info-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start; /* 상단 정렬 */
+    background: var(--bg-color-white);
+    padding: var(--spacing-2xl);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--spacing-2xl);
+    border: 1px solid var(--border-color-extra-light);
+    flex-wrap: wrap;
+    gap: var(--spacing-2xl);
+}
+
+.user-details-left {
+    flex: 1; /* 왼쪽 정보 영역이 공간을 차지하도록 */
+    min-width: 250px; /* 최소 너비 */
+}
+
+.user-controls-right {
+    display: flex;
+    flex-direction: column; /* 버튼을 세로로 정렬 */
+    gap: var(--spacing-sm);
+    align-items: flex-end; /* 오른쪽 정렬 */
+}
+
+.user-controls-right .restriction-button {
+    width: 180px; /* 버튼 너비 통일 */
+    justify-content: center; /* 아이콘과 텍스트 중앙 정렬 */
+}
+
+/* 주문 통계 카드 */
+.order-stats-card {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-2xl);
+}
+
+.stat-item {
+    text-align: center;
+    padding: var(--spacing-lg);
+    background-color: var(--bg-color-gray-light);
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--border-color-extra-light);
+}
+
+.stat-item h4 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-color-secondary);
+    text-transform: uppercase;
+    font-weight: var(--font-weight-semibold);
+}
+
+.stat-item p {
+    margin: 0;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--primary-color-dark);
+}
+
+/* 테이블 상태 뱃지 */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: var(--border-radius-pill);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-white);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-picked_up {
+    background-color: var(--border-color-success); /* 초록색 */
+}
+
+.status-pending {
+    background-color: var(--text-color-warning); /* 주황색 */
+}
+
+.status-cancelled {
+    background-color: var(--text-color-error); /* 빨간색 */
+}
