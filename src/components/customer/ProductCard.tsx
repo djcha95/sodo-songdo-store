@@ -249,7 +249,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
 
     if (isWaitlistAvailable) {
       return (
-        // ✅ [수정] 이 div에 onClick 핸들러를 추가하여 이벤트 버블링을 막습니다.
         <div className="action-controls" onClick={(e) => e.stopPropagation()}>
           <QuantityInput quantity={quantity} setQuantity={setQuantity} />
           <button className="waitlist-btn" onClick={handleRequestWaitlist}>
@@ -269,7 +268,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     const maxStockForUI = (physicalStock != null && physicalStock !== -1) ? physicalStock : 999;
     
     return (
-      // ✅ [수정] 이 div에 onClick 핸들러를 추가하여 이벤트 버블링을 막습니다.
       <div className="action-controls" onClick={(e) => e.stopPropagation()}>
         <QuantityInput quantity={quantity} setQuantity={setQuantity} maxStock={maxStockForUI} />
         {isJustAdded ? (
@@ -295,7 +293,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
           </div>
         )}
         <div className="card-image-container">
-          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchPriority="low" />
+          {/* ✅ [수정] fetchPriority를 fetchpriority로 변경하여 React 경고를 해결합니다. */}
+          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchpriority="low" />
           {!isPurchasable && !isWaitlistAvailable && status !== 'PAST' && <div className="card-overlay-badge">{isSoldOut ? '품절' : '마감'}</div>}
         </div>
         <div className="card-content-container">
