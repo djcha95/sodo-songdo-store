@@ -1,7 +1,9 @@
 // src/context/CartContext.tsx
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import type { CartItem } from '../types'; 
+// ✅ Timestamp 객체를 직접 사용하기 위해 import 합니다.
+import { Timestamp } from 'firebase/firestore';
 
 interface CartContextType {
   cartItems: CartItem[];
@@ -15,11 +17,20 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-export const CartProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
       const storedCartItems = localStorage.getItem('cartItems');
-      return storedCartItems ? JSON.parse(storedCartItems) : [];
+      if (storedCartItems) {
+        const parsedItems = JSON.parse(storedCartItems);
+        // ✅ [수정] localStorage에서 불러온 데이터의 날짜 형식을 복구합니다.
+        return parsedItems.map((item: any) => ({
+          ...item,
+          // Firestore Timestamp 객체를 다시 생성합니다.
+          pickupDate: new Timestamp(item.pickupDate.seconds, item.pickupDate.nanoseconds),
+        }));
+      }
+      return [];
     } catch (error) {
       console.error('Failed to parse cart items from localStorage', error);
       return [];
@@ -28,6 +39,7 @@ export const CartProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }
 
   useEffect(() => {
     try {
+      // ✅ Timestamp 객체도 올바르게 JSON으로 변환되므로, 저장 로직은 그대로 둡니다.
       localStorage.setItem('cartItems', JSON.stringify(cartItems));
     } catch (error) {
       console.error('Failed to save cart items to localStorage', error);
@@ -46,30 +58,24 @@ export const CartProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }
 
   const addToCart = useCallback((newItem: CartItem) => {
     setCartItems(prevItems => {
-      // 💡 [수정] 상품 ID와 모든 옵션 ID(variantGroupId, itemId)가 일치하는 상품을 찾습니다.
       const existingItemIndex = prevItems.findIndex(
         item => 
           item.productId === newItem.productId && 
-          item.roundId === newItem.roundId && // 같은 판매 회차인지도 확인
+          item.roundId === newItem.roundId &&
           item.variantGroupId === newItem.variantGroupId &&
           item.itemId === newItem.itemId
       );
 
-      // 이미 장바구니에 있는 경우
       if (existingItemIndex > -1) {
         const updatedItems = [...prevItems];
         const existingItem = updatedItems[existingItemIndex];
         
-        // 새로 추가하는 수량과 기존 수량을 합칩니다.
         updatedItems[existingItemIndex] = {
           ...existingItem,
           quantity: existingItem.quantity + newItem.quantity,
         };
-        console.log('Cart: Merged item quantity.', updatedItems);
         return updatedItems;
       } else {
-        // 장바구니에 없는 새로운 상품인 경우
-        console.log('Cart: Added new item.', [...prevItems, newItem]);
         return [...prevItems, newItem];
       }
     });
@@ -85,7 +91,7 @@ export const CartProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }
     setCartItems(prevItems => 
       prevItems.map(item =>
         (item.productId === productId && item.variantGroupId === variantGroupId && item.itemId === itemId)
-          ? { ...item, quantity: Math.max(1, quantity) } // 최소 수량은 1로 유지
+          ? { ...item, quantity: Math.max(1, quantity) }
           : item
       )
     );

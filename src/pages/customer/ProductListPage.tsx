@@ -28,6 +28,22 @@ const getDisplayRound = (product: Product): SalesRound | null => {
   return null;
 };
 
+const getTotalStock = (round: SalesRound | null): number => {
+  if (!round) return 0;
+  return round.variantGroups?.reduce((acc, vg) => {
+    if (vg.totalPhysicalStock != null && vg.totalPhysicalStock !== -1) {
+      return acc + vg.totalPhysicalStock;
+    }
+    const itemsStock = vg.items?.reduce((itemAcc, item) => itemAcc + (item.stock === -1 ? Infinity : (item.stock || 0)), 0) || 0;
+    return acc + itemsStock;
+  }, 0) ?? 0;
+};
+
+const getRepresentativePrice = (round: SalesRound | null): number => {
+  return round?.variantGroups?.[0]?.items?.[0]?.price ?? 0;
+};
+
+
 const ProductListPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -70,28 +86,42 @@ const ProductListPage: React.FC = () => {
         tempPast.push(product);
         return;
       }
-
-      const totalStock = round.variantGroups?.reduce((acc, vg) => {
-          if (vg.totalPhysicalStock != null && vg.totalPhysicalStock !== -1) return acc + vg.totalPhysicalStock;
-          return acc + (vg.items?.reduce((itemAcc, item) => itemAcc + (item.stock === -1 ? Infinity : (item.stock || 0)), 0) || 0);
-      }, 0) ?? 0;
-
-      if (totalStock <= 0 && totalStock !== Infinity) {
-          tempPast.push(product);
-          return;
-      }
-
+      
       if (now.isBefore(deadline)) {
         tempOngoing.push(product);
       } else {
         tempAdditional.push(product);
       }
     });
+    
+    tempOngoing.sort((a, b) => {
+      const roundA = getDisplayRound(a);
+      const roundB = getDisplayRound(b);
+
+      const stockA = getTotalStock(roundA);
+      const stockB = getTotalStock(roundB);
+
+      const isWaitlistA = stockA === 0;
+      const isWaitlistB = stockB === 0;
+
+      if (isWaitlistA && !isWaitlistB) return 1;
+      if (!isWaitlistA && isWaitlistB) return -1;
+
+      if (stockA !== stockB) {
+        return stockA - stockB;
+      }
+
+      const priceA = getRepresentativePrice(roundA);
+      const priceB = getRepresentativePrice(roundB);
+      return priceB - priceA;
+    });
+
 
     tempAdditional.sort((a, b) => (getDisplayRound(a)?.pickupDate.toMillis() || 0) - (getDisplayRound(b)?.pickupDate.toMillis() || 0));
     
     const oneWeekAgo = dayjs().subtract(7, 'day');
     const filteredPast = tempPast.filter(product => {
+      // ✅ [수정] 오타를 수정했습니다. (getDisplayround -> getDisplayRound)
       const round = getDisplayRound(product);
       if (!round) return false;
       const pickupDate = dayjs(round.pickupDate.toDate());
@@ -108,9 +138,14 @@ const ProductListPage: React.FC = () => {
 
   useEffect(() => {
     if (ongoingProducts.length === 0) { setCountdown(null); return; }
-    const deadlines = ongoingProducts.map(p => getDisplayRound(p)!.deadlineDate.toDate().getTime());
+    const deadlines = ongoingProducts
+      .map(p => getDisplayRound(p)?.deadlineDate.toDate().getTime())
+      .filter((d): d is number => d !== undefined);
+
     if (deadlines.length === 0) return;
+    
     const fastestDeadline = Math.min(...deadlines);
+    
     const intervalId = setInterval(() => {
       const remainingSeconds = dayjs(fastestDeadline).diff(dayjs(), 'second');
       if (remainingSeconds <= 0) { setCountdown("마감!"); clearInterval(intervalId); return; }

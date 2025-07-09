@@ -3,7 +3,7 @@
 import { db } from './firebaseConfig';
 import {
   collection,
-  addDoc,
+
   doc,
   getDocs,
   updateDoc,
@@ -12,13 +12,12 @@ import {
   orderBy,
   runTransaction,
   serverTimestamp,
-  Timestamp,
+  
 } from 'firebase/firestore';
-import type { Order, OrderStatus, OrderItem, Product, SalesRound, VariantGroup } from '@/types';
-import type { DocumentData } from 'firebase/firestore';
+import type { Order, OrderStatus, OrderItem, Product } from '@/types';
 
 /**
- * 새로운 주문을 생성하고, 관련된 모든 상품의 재고를 트랜잭션 내에서 안전하게 차감합니다.
+ * @description 새로운 주문을 생성하고, 트랜잭션 내에서 실시간 재고를 확인하고 예약을 확정합니다.
  * @param orderData 'id', 'createdAt' 등이 제외된 순수 주문 데이터
  * @returns 생성된 주문의 ID
  */
@@ -26,7 +25,7 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
   const newOrderRef = doc(collection(db, 'orders'));
   
   await runTransaction(db, async (transaction) => {
-    // 1. 주문에 포함된 각 상품에 대해 재고 확인 및 차감 로직 실행
+    // 1. 주문에 포함된 각 상품에 대해 실시간 재고 확인
     for (const item of orderData.items) {
       const productRef = doc(db, 'products', item.productId);
       const productDoc = await transaction.get(productRef);
@@ -36,52 +35,63 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
       }
 
       const productData = productDoc.data() as Product;
-      const salesHistory = productData.salesHistory || [];
+      const salesRound = productData.salesHistory.find(r => r.roundId === item.roundId);
+      const variantGroup = salesRound?.variantGroups.find(vg => vg.id === item.variantGroupId);
       
-      let roundFound = false;
-      // ✅ [개선] 'any' 타입 대신 명확한 타입을 사용하여 안정성 강화
-      const newSalesHistory = salesHistory.map((round: SalesRound) => {
-        if (round.roundId === item.roundId) {
-          roundFound = true;
-          const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
-            if (vg.id === item.variantGroupId) {
-              const stockToDeduct = item.quantity; // 주문 수량만큼 재고 차감
-              
-              // 옵션별 재고 차감
-              const newItems = vg.items.map(productItem => {
-                if (productItem.id === item.itemId) {
-                  if (productItem.stock !== -1 && productItem.stock < item.quantity) {
-                    throw new Error(`재고 부족: ${item.productName} (${item.itemName})`);
-                  }
-                  productItem.stock -= item.quantity;
-                }
-                return productItem;
-              });
-              vg.items = newItems;
-
-              // 그룹 전체 물리적 재고 차감 (설정된 경우)
-              if (vg.totalPhysicalStock != null && vg.totalPhysicalStock !== -1) {
-                if (vg.totalPhysicalStock < stockToDeduct) {
-                  throw new Error(`물리적 재고 부족: ${item.productName} (${vg.groupName})`);
-                }
-                vg.totalPhysicalStock -= stockToDeduct;
-              }
-            }
-            return vg;
-          });
-          round.variantGroups = newVariantGroups;
-        }
-        return round;
-      });
-
-      if (!roundFound) {
+      if (!salesRound || !variantGroup) {
         throw new Error(`판매 정보를 찾을 수 없습니다: ${item.productName}`);
       }
+
+      const totalPhysicalStock = variantGroup.totalPhysicalStock;
+
+      // 물리적 총재고가 설정되지 않았거나 무제한(-1)이면 재고 체크를 건너뜁니다.
+      if (totalPhysicalStock === null || totalPhysicalStock === -1) {
+        continue; // 다음 아이템으로 넘어감
+      }
+
+      // 2. 'orders' 컬렉션에서 해당 상품 옵션이 포함된 모든 유효한 주문을 조회합니다.
+      const ordersQuery = query(
+        collection(db, 'orders'),
+        where('items', 'array-contains-any', [
+          { 
+            productId: item.productId, 
+            roundId: item.roundId, 
+            variantGroupId: item.variantGroupId,
+            itemId: item.itemId,
+          }
+        ]),
+        // '예약 완료', '픽업 완료', '구매 확정' 상태의 주문만 재고 계산에 포함
+        where('status', 'in', ['RESERVED', 'PICKED_UP', 'COMPLETED'])
+      );
       
-      transaction.update(productRef, { salesHistory: newSalesHistory });
+      const existingOrdersSnap = await getDocs(ordersQuery);
+      
+      let totalOrderedQuantity = 0;
+      existingOrdersSnap.forEach(orderDoc => {
+        const order = orderDoc.data() as Order;
+        order.items.forEach((orderedItem: OrderItem) => {
+          // 동일한 상품 옵션에 대한 수량을 누적합니다.
+          if (
+            orderedItem.productId === item.productId &&
+            orderedItem.roundId === item.roundId &&
+            orderedItem.variantGroupId === item.variantGroupId
+          ) {
+            totalOrderedQuantity += orderedItem.quantity;
+          }
+        });
+      });
+      
+      // 3. 실제 구매 가능한 재고를 계산합니다.
+      const availableStock = totalPhysicalStock - totalOrderedQuantity;
+
+      // 4. 현재 주문하려는 수량이 구매 가능한 재고보다 많은지 확인합니다.
+      if (availableStock < item.quantity) {
+        // 재고 부족 시, 트랜잭션을 중단하고 사용자에게 명확한 오류 메시지를 보냅니다.
+        throw new Error(`죄송합니다. '${item.productName}'의 재고가 부족합니다. (현재 ${availableStock}개 구매 가능)`);
+      }
     }
 
-    // 2. 모든 재고 차감이 성공하면 주문 문서 생성
+    // 5. 모든 상품의 재고가 충분함을 확인한 후, 주문 문서를 생성합니다.
     const orderNumber = `SODOMALL-${Date.now()}`;
     const newOrderData = {
       ...orderData,
@@ -95,11 +105,8 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
   return newOrderRef.id;
 };
 
-
 /**
- * 특정 사용자의 모든 주문 목록을 가져옵니다. (마이페이지 등에서 사용)
- * @param userId 사용자 ID
- * @returns 생성일 기준 내림차순으로 정렬된 사용자의 주문 목록
+ * 특정 사용자의 모든 주문 목록을 가져옵니다.
  */
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   if (!userId) return [];
@@ -112,52 +119,22 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
 
-
 /**
- * 휴대폰 번호로 주문을 검색합니다. (픽업 처리 페이지 등에서 사용)
- * @param phoneNumber 전체 또는 일부 휴대폰 번호
- * @returns 검색된 주문 목록
+ * 휴대폰 번호로 주문을 검색합니다.
  */
 export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Order[]> => {
   if (!phoneNumber || phoneNumber.length < 4) return [];
   const querySnapshot = await getDocs(collection(db, 'orders'));
   const allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
   
-  // ✅ [개선] 전체 번호가 아닌 끝자리만으로도 검색할 수 있도록 endsWith 사용
   return allOrders.filter(order => 
     order.customerInfo?.phone?.endsWith(phoneNumber)
   );
 };
 
-
 /**
- * 특정 주문의 상태를 업데이트합니다. (관리자 페이지 등에서 사용)
- * @param orderId 주문 ID
- * @param status 새로운 주문 상태
+ * 특정 주문의 상태를 업데이트합니다.
  */
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
   await updateDoc(doc(db, 'orders', orderId), { status });
-};
-
-
-/**
- * '예약' 상태인 모든 상품의 총수량을 계산합니다. (대시보드 등에서 사용)
- * @returns 각 상품 옵션별 예약된 수량을 담은 객체 (키: '상품ID_회차ID_아이템ID')
- */
-export const getReservedQuantities = async (): Promise<Record<string, number>> => {
-  const quantities: Record<string, number> = {};
-  const q = query(collection(db, 'orders'), where('status', '==', 'RESERVED'));
-  
-  const querySnapshot = await getDocs(q);
-  
-  querySnapshot.forEach((doc: DocumentData) => {
-    const order = doc.data() as Order;
-    order.items.forEach((item: OrderItem) => {
-      // ✅ [개선] 더 정확한 재고 추적을 위해 상품, 회차, 아이템 ID를 모두 조합한 키 사용
-      const itemKey = `${item.productId}_${item.roundId}_${item.itemId}`;
-      quantities[itemKey] = (quantities[itemKey] || 0) + item.quantity;
-    });
-  });
-  
-  return quantities;
 };

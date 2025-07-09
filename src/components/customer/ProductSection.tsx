@@ -12,10 +12,14 @@ interface ProductSectionProps {
 }
 
 const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countdownText }) => {
- const { scrollRef, scrollByPage, showLeftArrow, showRightArrow } = useHorizontalScroll();
+ // ✅ [수정] 개선된 훅을 사용합니다.
+ const { scrollRef, mouseHandlers, scrollByPage, showLeftArrow, showRightArrow } = useHorizontalScroll();
 
  const cardElements = React.Children.toArray(children);
- if (cardElements.length === 0) return null;
+ // 섹션에 내용이 없거나, 빈 div만 있는 경우 렌더링하지 않습니다.
+ if (cardElements.length === 0 || (cardElements.length === 1 && !cardElements[0])) {
+    return null;
+ }
 
  return (
    <section className="page-section product-section">
@@ -24,19 +28,20 @@ const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countd
        {countdownText && (
          <div className="section-countdown">
            <Clock size={14} className="countdown-icon" />
-           {/* ✅ '마감까지' -> '마감' 으로 텍스트 수정 */}
            <span>마감</span>
            <span className="countdown-time">{countdownText}</span>
          </div>
        )}
      </div>
      <div className="horizontal-scroll-container">
+       {/* ✅ [수정] 이제 화살표가 컨텐츠 로딩 후에도 정상적으로 표시됩니다. */}
        {showLeftArrow && (
          <button className="scroll-arrow prev" onClick={() => scrollByPage('left')} aria-label="이전 상품 보기">
            <ChevronLeft />
          </button>
        )}
-       <div className="product-grid horizontal-scroll" ref={scrollRef}>
+       {/* ✅ [수정] 스크롤 컨테이너에 마우스 드래그 이벤트를 적용합니다. */}
+       <div className="product-grid horizontal-scroll" ref={scrollRef} {...mouseHandlers}>
          {children}
        </div>
        {showRightArrow && (

@@ -1,45 +1,146 @@
 /* src/components/customer/ProductSection.css */
 
-.page-section { margin-bottom: 40px; }
-.page-section:last-child { margin-bottom: 0; }
+.page-section {
+  margin-bottom: 15px;
+}
+.page-section:last-child {
+  margin-bottom: 0;
+}
 
-.section-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 0px; }
-.section-title { font-size: 1.5rem; font-weight: 700; margin: 0; }
-.section-countdown { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; color: #495057; background-color: #fff0f1; padding: 6px 12px; border-radius: 16px; border: 1px solid #ffdde0; }
-.countdown-icon { color: #e63946; }
-.countdown-time { font-size: 1.1rem; font-weight: 700; color: #e63946; animation: pulse-red 2.5s infinite ease-in-out; }
-@keyframes pulse-red { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  margin-bottom: 0px;
+}
+.section-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-left: 0px;
+}
+.section-countdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: #495057;
+  background-color: #fff0f1;
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid #ffdde0;
+  flex-shrink: 0;
+  margin-right: 0px;
+}
+.countdown-icon {
+  color: #e63946;
+}
+.countdown-time {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e63946;
+  animation: pulse-red 2.5s infinite ease-in-out;
+}
+@keyframes pulse-red {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
 
 /* --- 수평 스크롤 상품 목록 --- */
-.horizontal-scroll-container { position: relative; width: 100%; }
-.product-grid.horizontal-scroll { display: grid; grid-auto-flow: column; gap: 16px; overflow-x: auto; padding: 4px; margin: -4px; scroll-snap-type: x mandatory; justify-content: flex-start; align-items: end; -ms-overflow-style: none; scrollbar-width: none; }
-.product-grid.horizontal-scroll::-webkit-scrollbar { display: none; }
-.product-grid.horizontal-scroll > * { width: 200px; scroll-snap-align: start; }
-@media (min-width: 768px) { .product-grid.horizontal-scroll > * { width: 240px; } }
+.horizontal-scroll-container {
+  position: relative;
+  width: 100%;
+}
+.product-grid.horizontal-scroll {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 0 12px 16px 12px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-right: 12px;
+  justify-content: flex-start;
+  /* ✅ [수정] stretch -> end 로 변경하여 카드 높이가 강제로 늘어나는 것을 방지하고 하단 정렬을 유지합니다. */
+  align-items: end;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  cursor: grab;
+}
+.product-grid.horizontal-scroll::-webkit-scrollbar {
+  display: none;
+}
+.product-grid.horizontal-scroll > * {
+  width: 200px;
+  scroll-snap-align: start;
+}
 
-/* --- 스크롤 화살표 버튼 --- */
+/* --- 스크롤 화살표 버튼 (공통 스타일) --- */
 .scroll-arrow {
-  /* ✅ 이제 항상 flex로 설정하여 보이도록 하되, hook에서 display: none으로 제어 */
   display: flex;
   position: absolute;
-  top: 45%; /* 살짝 위로 조정 */
+  top: 45%;
   transform: translateY(-50%);
-  width: 44px;
-  height: 44px;
   align-items: center;
   justify-content: center;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.95);
   border: 1px solid #dee2e6;
   border-radius: 50%;
   cursor: pointer;
   z-index: 10;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   transition: opacity 0.2s, transform 0.2s;
   opacity: 0.8;
 }
-.scroll-arrow:hover { opacity: 1; transform: translateY(-50%) scale(1.05); }
-.scroll-arrow.prev { left: -22px; }
-.scroll-arrow.next { right: -22px; }
+.scroll-arrow:hover {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.05);
+}
 
-/* 모바일에서는 화살표 숨김 */
-@media (max-width: 767px) { .scroll-arrow { display: none !important; } }
+/* --- 💻 데스크탑(1024px 이상) 스타일 --- */
+@media (min-width: 1024px) {
+  .section-title {
+    padding-left: 40px;
+  }
+  .section-countdown {
+    margin-right: 40px;
+  }
+  .product-grid.horizontal-scroll {
+    gap: 20px;
+    padding-left: 40px;
+    padding-right: 40px;
+    scroll-padding-right: 40px;
+  }
+  .product-grid.horizontal-scroll > * {
+    width: 240px;
+  }
+  .scroll-arrow {
+    width: 44px;
+    height: 44px;
+  }
+  .scroll-arrow.prev {
+    left: 16px;
+  }
+  .scroll-arrow.next {
+    right: 16px;
+  }
+}
+
+/* --- 📱 모바일(1023px 이하) 스타일 --- */
+@media (max-width: 1023px) {
+  .scroll-arrow {
+    width: 36px;
+    height: 36px;
+  }
+  .scroll-arrow.prev {
+    left: 4px;
+  }
+  .scroll-arrow.next {
+    right: 4px;
+  }
+}

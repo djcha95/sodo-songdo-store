@@ -19,11 +19,6 @@ export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
 /**
  * @description 상품의 개별 옵션 또는 단위를 나타냅니다. (예: '500g', '매운맛')
- * @param {string} id - 옵션의 고유 ID
- * @param {string} name - 옵션의 이름 (예: '500g')
- * @param {number} price - 옵션의 가격
- * @param {number} stock - 옵션별 재고. -1은 무제한을 의미합니다.
- * @param {number} stockDeductionAmount - 이 옵션 1개 구매 시 차감될 물리적 재고량
  */
 export interface ProductItem {
   id: string;
@@ -37,11 +32,6 @@ export interface ProductItem {
 
 /**
  * @description 상품 내 옵션 그룹을 나타냅니다. (예: '용량', '맛')
- * @param {string} id - 옵션 그룹의 고유 ID
- * @param {string} groupName - 옵션 그룹의 이름 (예: '용량')
- * @param {ProductItem[]} items - 이 그룹에 속한 ProductItem 배열
- * @param {number | null} totalPhysicalStock - 그룹 전체가 공유하는 물리적 재고 (예: '원물 100kg 한정')
- * @param {string} stockUnitType - 물리적 재고의 단위 (예: 'kg', '박스')
  */
 export interface VariantGroup {
   id: string;
@@ -52,10 +42,19 @@ export interface VariantGroup {
 }
 
 /**
+ * ✅ [추가] 대기 명단에 등록된 사용자 정보를 나타냅니다.
+ * @param {string} userId - 대기 신청한 사용자의 ID
+ * @param {number} quantity - 대기 신청한 수량
+ * @param {Timestamp} timestamp - 대기 신청 시각
+ */
+export interface WaitlistEntry {
+  userId: string;
+  quantity: number;
+  timestamp: Timestamp;
+}
+
+/**
  * @description 하나의 상품에 대한 개별 판매 회차 정보를 담습니다.
- * @param {string} roundId - 판매 회차의 고유 ID
- * @param {string} roundName - 판매 회차의 이름 (예: '1차 공동구매', '앵콜! 감사세일')
- * @param {SalesRoundStatus} status - 현재 판매 회차의 상태
  */
 export interface SalesRound {
   roundId: string;
@@ -67,12 +66,13 @@ export interface SalesRound {
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
   createdAt: Timestamp;
+  // ✅ [추가] 대기 명단 기능 지원을 위한 속성
+  waitlist: WaitlistEntry[];
+  waitlistCount: number;
 }
 
 /**
  * @description 대표 상품의 고유 정보를 담는 최상위 객체입니다.
- * @param {string} groupName - 대표 상품의 이름 (예: '햇살담은 김치')
- * @param {SalesRound[]} salesHistory - 이 상품의 모든 판매 회차 기록
  */
 export interface Product {
   id: string;
@@ -98,7 +98,6 @@ export interface Product {
 
 /**
  * @description 장바구니에 담긴 개별 상품 항목을 나타냅니다.
- * @param {string} itemName - 사용자가 선택한 옵션의 이름 (예: '500g')
  */
 export interface CartItem {
   productId: string;
