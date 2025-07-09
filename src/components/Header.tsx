@@ -1,14 +1,13 @@
 // src/components/Header.tsx
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Bell, CalendarDays } from 'lucide-react';
+import { ChevronLeft, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext'; // [추가]
+import { useAuth } from '@/context/AuthContext';
 import './Header.css';
 
-// HeaderProps 인터페이스에서 currentUserName, brandName 등 제거
 interface HeaderProps {
   title?: string;
   onBack?: () => void;
@@ -17,7 +16,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ title, onBack }) => {
   const [currentDate, setCurrentDate] = useState('');
   const navigate = useNavigate();
-  const { user } = useAuth(); // [추가] 훅을 통해 직접 사용자 정보 가져오기
+  const { user } = useAuth();
 
   useEffect(() => {
     const today = new Date();
@@ -27,8 +26,9 @@ const Header: React.FC<HeaderProps> = ({ title, onBack }) => {
   const handleDateClick = () => navigate('/mypage/orders');
 
   return (
-    <header className="main-header">
-      <div className="header-left-spacer">
+    // ✅ CSS와 연동을 위해 className 추가
+    <header className="main-header customer-header-sticky">
+      <div className="header-left">
         {onBack ? (
           <button onClick={onBack} className="header-back-button">
             <ChevronLeft size={24} />
@@ -52,11 +52,14 @@ const Header: React.FC<HeaderProps> = ({ title, onBack }) => {
         )}
       </div>
 
-      <div className="header-actions-spacer">
-        {user?.displayName && <span className="greeting-message">{user.displayName}님, 안녕하세요!</span>}
-        <button className="notification-button">
-          <Bell size={20} />
-        </button>
+      <div className="header-right">
+        {/* ✅ 인사말 UI 변경 */}
+        {user?.displayName && (
+          <div className="greeting-message">
+            <span>{user.displayName}님</span>
+            <span className="greeting-subtext">안녕하세요!</span>
+          </div>
+        )}
       </div>
     </header>
   );

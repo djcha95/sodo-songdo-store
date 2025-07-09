@@ -1,11 +1,6 @@
 /* src/components/Header.css */
 
 .main-header {
-  position: sticky;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 100; /* 다른 요소 위에 있도록 z-index 유지 */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -16,202 +11,101 @@
   box-sizing: border-box;
 }
 
+/* ✅ 헤더 고정을 위한 sticky 속성 */
+.customer-header-sticky {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+}
 
-/* 좌측/우측 영역을 유연하게 늘려서 중앙을 비움 */
-.header-left-spacer, .header-actions-spacer {
+/* 각 영역 정렬 */
+.header-left, .header-right {
     display: flex;
     align-items: center;
     flex: 1;
-    min-width: 0;
 }
-
-.header-left-spacer {
+.header-left {
     justify-content: flex-start;
-    gap: var(--spacing-sm);
 }
-
-.header-actions-spacer {
+.header-right {
     justify-content: flex-end;
-    gap: var(--spacing-md);
 }
-
-/* 중앙 영역: 고정된 위치 */
 .header-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     flex-shrink: 0;
 }
 
-/* 날짜 아이콘과 텍스트 */
-.header-date-and-icon {
+/* 좌측 날짜 버튼 */
+.header-date-button {
     display: flex;
     align-items: center;
     gap: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: background-color 0.2s;
 }
-
-.header-icon {
-    color: var(--primary-color);
+.header-date-button:hover {
+    background-color: #f8f9fa;
 }
+.header-icon { color: var(--primary-color); }
+.current-date { font-size: 0.95rem; color: #343a40; font-weight: 600; }
 
-.current-date {
-    font-size: var(--font-size-md);
-    color: var(--primary-color-dark);
-    font-weight: var(--font-weight-bold);
-    white-space: nowrap;
-}
-
-/* --- 페이지 제목 스타일 (타이틀 prop 사용 시) --- */
-.header-title-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--bg-color-white);
-    border: 2px solid var(--primary-color);
-    padding: 6px 15px;
-    border-radius: var(--border-radius-md);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    position: relative;
-    overflow: hidden;
-    gap: 6px;
-}
-
-.header-title-wrapper::before {
-    content: none;
-}
-
-.header-page-title {
-    /* 수정: 나머지 페이지 제목 폰트 크기 확대 */
-    font-size: var(--font-size-xxl);
-    font-weight: var(--font-weight-extrabold);
-    color: var(--primary-color-dark);
-    margin: 0;
-    z-index: 1;
-    white-space: nowrap;
-}
-
-.header-title-icon {
-    width: 20px;
-    height: 20px;
-    color: var(--primary-color);
-}
-
-/* --- 로고 텍스트 스타일 (brandName prop 사용 시) --- */
+/* 중앙 로고 */
 .brand-text-logo-container {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     line-height: 1.1;
-    text-align: center;
-    padding: 5px 15px;
-    background: none;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    animation: none;
 }
-
-/* 수정: 소도몰 텍스트 굵기 조정 */
 .brand-name {
-    font-size: var(--font-size-xxl);
-    font-weight: 800; /* 900 -> 800으로 조정 */
-    color: var(--primary-color-dark);
-    white-space: nowrap;
-    letter-spacing: normal;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--primary-color);
 }
-
 .store-name {
-    font-size: var(--font-size-sm);
-    color: var(--text-color-medium);
+    font-size: 0.8rem;
+    color: #868e96;
     font-weight: 500;
-    white-space: nowrap;
-    text-shadow: none;
-    margin-top: 2px;
 }
 
-/* 기타 스타일 (기존 유지) */
-.brand-logo-container {
+/* 우측 인사말 */
+.greeting-message {
     display: flex;
-    align-items: center;
-    height: 100%;
+    flex-direction: column;
+    align-items: flex-end; /* 우측 정렬 */
+    line-height: 1.3;
+}
+.greeting-message span:first-child {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #212529;
+}
+.greeting-subtext {
+    font-size: 0.85rem;
+    color: #868e96;
 }
 
-.brand-logo {
-    height: 50px;
-    width: auto;
-    object-fit: contain;
+/* 뒤로가기 버튼 등 기타 */
+.header-page-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #212529;
 }
-
 .header-back-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 45px;
-  height: 45px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
   border-radius: 50%;
+  cursor: pointer;
   transition: background-color 0.2s ease;
-  flex-shrink: 0;
 }
-
-.header-back-button:hover {
-  background-color: var(--bg-color-light);
-}
-
-.header-back-button svg {
-  color: var(--primary-color-dark);
-  width: 24px;
-  height: 24px;
-}
-
-.greeting-message {
-    font-size: var(--font-size-base);
-    color: var(--primary-color-dark);
-    font-weight: var(--font-weight-bold);
-    white-space: pre-wrap;
-    text-align: right;
-    line-height: 1.3;
-}
-
-/* 모바일 반응형 */
-@media (max-width: 600px) {
-    .main-header {
-        height: 60px;
-        padding: 0 var(--spacing-md);
-    }
-    .header-page-title {
-        /* 모바일에서는 더 크게 */
-        font-size: var(--font-size-xl);
-    }
-    .header-title-wrapper {
-        padding: 6px 12px;
-    }
-    .header-title-icon {
-        width: 18px;
-        height: 18px;
-    }
-    .brand-logo {
-        height: 40px;
-    }
-    .header-back-button {
-        width: 35px;
-        height: 35px;
-    }
-    .header-back-button svg {
-        width: 20px;
-        height: 20px;
-    }
-    .current-date {
-        font-size: var(--font-size-sm);
-    }
-    .greeting-message {
-        font-size: var(--font-size-xs);
-    }
-    .brand-name {
-        font-size: var(--font-size-xl);
-        font-weight: 700; /* 굵기 조정 */
-    }
-    .store-name {
-        font-size: var(--font-size-xs);
-    }
-}
+.header-back-button:hover { background-color: #f1f3f5; }
+.header-back-button svg { color: #495057; }

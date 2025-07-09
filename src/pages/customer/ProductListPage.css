@@ -1,11 +1,6 @@
 /* src/pages/customer/ProductListPage.css */
 
-/* 💡 [추가] 페이지 전체의 세로 스크롤을 강제로 활성화합니다. */
-html,
-body {
-  overflow-y: auto !important;
-  height: auto !important;
-}
+/* ✅ [수정] 헤더 고정 문제를 유발하던 불필요한 전역 스타일을 삭제합니다. */
 
 .banner-slider-container {
   margin-bottom: 0 !important;

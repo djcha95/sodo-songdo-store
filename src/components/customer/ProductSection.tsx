@@ -3,7 +3,6 @@
 import React from 'react';
 import './ProductSection.css';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
-// [수정] Clock 아이콘을 lucide-react에서 가져옵니다.
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 interface ProductSectionProps {
@@ -24,9 +23,9 @@ const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countd
        <h2 className="section-title">{title}</h2>
        {countdownText && (
          <div className="section-countdown">
-           {/* [수정] 아이콘 크기를 14로 줄입니다. */}
            <Clock size={14} className="countdown-icon" />
-           <span>마감까지</span>
+           {/* ✅ '마감까지' -> '마감' 으로 텍스트 수정 */}
+           <span>마감</span>
            <span className="countdown-time">{countdownText}</span>
          </div>
        )}
