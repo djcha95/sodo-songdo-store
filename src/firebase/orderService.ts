@@ -3,7 +3,6 @@
 import { db } from './firebaseConfig';
 import {
   collection,
-
   doc,
   getDocs,
   updateDoc,
@@ -12,7 +11,6 @@ import {
   orderBy,
   runTransaction,
   serverTimestamp,
-  
 } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem, Product } from '@/types';
 
@@ -44,12 +42,10 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
 
       const totalPhysicalStock = variantGroup.totalPhysicalStock;
 
-      // 물리적 총재고가 설정되지 않았거나 무제한(-1)이면 재고 체크를 건너뜁니다.
       if (totalPhysicalStock === null || totalPhysicalStock === -1) {
-        continue; // 다음 아이템으로 넘어감
+        continue;
       }
 
-      // 2. 'orders' 컬렉션에서 해당 상품 옵션이 포함된 모든 유효한 주문을 조회합니다.
       const ordersQuery = query(
         collection(db, 'orders'),
         where('items', 'array-contains-any', [
@@ -60,7 +56,6 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
             itemId: item.itemId,
           }
         ]),
-        // '예약 완료', '픽업 완료', '구매 확정' 상태의 주문만 재고 계산에 포함
         where('status', 'in', ['RESERVED', 'PICKED_UP', 'COMPLETED'])
       );
       
@@ -70,7 +65,6 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
       existingOrdersSnap.forEach(orderDoc => {
         const order = orderDoc.data() as Order;
         order.items.forEach((orderedItem: OrderItem) => {
-          // 동일한 상품 옵션에 대한 수량을 누적합니다.
           if (
             orderedItem.productId === item.productId &&
             orderedItem.roundId === item.roundId &&
@@ -81,17 +75,13 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
         });
       });
       
-      // 3. 실제 구매 가능한 재고를 계산합니다.
       const availableStock = totalPhysicalStock - totalOrderedQuantity;
 
-      // 4. 현재 주문하려는 수량이 구매 가능한 재고보다 많은지 확인합니다.
       if (availableStock < item.quantity) {
-        // 재고 부족 시, 트랜잭션을 중단하고 사용자에게 명확한 오류 메시지를 보냅니다.
         throw new Error(`죄송합니다. '${item.productName}'의 재고가 부족합니다. (현재 ${availableStock}개 구매 가능)`);
       }
     }
 
-    // 5. 모든 상품의 재고가 충분함을 확인한 후, 주문 문서를 생성합니다.
     const orderNumber = `SODOMALL-${Date.now()}`;
     const newOrderData = {
       ...orderData,
@@ -104,6 +94,7 @@ export const submitOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'o
 
   return newOrderRef.id;
 };
+
 
 /**
  * 특정 사용자의 모든 주문 목록을 가져옵니다.
@@ -137,4 +128,26 @@ export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Or
  */
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
   await updateDoc(doc(db, 'orders', orderId), { status });
+};
+
+/**
+ * ✅ [수정] 누락되었던 함수를 다시 추가합니다.
+ * '예약' 상태인 모든 상품의 총수량을 계산합니다. (대시보드 등에서 사용)
+ * @returns 각 상품 옵션별 예약된 수량을 담은 객체 (키: '상품ID_회차ID_아이템ID')
+ */
+export const getReservedQuantities = async (): Promise<Record<string, number>> => {
+  const quantities: Record<string, number> = {};
+  const q = query(collection(db, 'orders'), where('status', '==', 'RESERVED'));
+  
+  const querySnapshot = await getDocs(q);
+  
+  querySnapshot.forEach((doc) => {
+    const order = doc.data() as Order;
+    order.items.forEach((item: OrderItem) => {
+      const itemKey = `${item.productId}_${item.roundId}_${item.itemId}`;
+      quantities[itemKey] = (quantities[itemKey] || 0) + item.quantity;
+    });
+  });
+  
+  return quantities;
 };
