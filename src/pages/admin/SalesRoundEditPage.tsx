@@ -9,11 +9,11 @@ import toast from 'react-hot-toast';
 import { Save, PlusCircle, X, Loader, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
 import './ProductAddAdminPage.css';
 
-// --- UI 상태 관리용 타입 정의 ---
+// UI 상태 관리용 타입 정의
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
 interface VariantGroupUI { id: string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
 
-// --- 헬퍼 함수 ---
+// 헬퍼 함수
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
 const formatToDateTimeLocal = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const formatDateToYYYYMMDD = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
@@ -22,10 +22,8 @@ const formatNumberWithCommas = (value: number | ''): string => { if (value === '
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 const LoadingSpinner = () => (<div className="loading-overlay"><Loader size={48} className="spin" /> <p>잠시만 기다려 주세요...</p></div>);
 const storageTypeOptions: { key: StorageType; name:string; className: string }[] = [{ key: 'ROOM', name: '실온', className: 'storage-btn-room' }, { key: 'COLD', name: '냉장', className: 'storage-btn-cold' }, { key: 'FROZEN', name: '냉동', className: 'storage-btn-frozen' }];
-const bundleUnitKeywords = ['묶음', '박스', '곽', '세트', '팩', '봉지'];
-const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'];
 
-// --- 메인 컴포넌트 ---
+// 메인 컴포넌트
 const SalesRoundEditPage: React.FC = () => {
     const { productId, roundId } = useParams<{ productId: string; roundId: string }>();
     const navigate = useNavigate();
@@ -80,7 +78,7 @@ const SalesRoundEditPage: React.FC = () => {
                     expirationDate: vg.items[0]?.expirationDate?.toDate() || null, expirationDateInput: vg.items[0]?.expirationDate ? formatDateToYYYYMMDD(vg.items[0].expirationDate.toDate()) : '',
                     items: (vg.items || []).map((item) => ({
                         id: item.id || generateUniqueId(), name: item.name, price: item.price, limitQuantity: item.limitQuantity ?? '',
-                        deductionAmount: item.stockDeductionAmount, isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k))
+                        deductionAmount: item.stockDeductionAmount, isBundleOption: ['묶음', '박스', '곽', '세트', '팩', '봉지'].some(k => item.name.includes(k))
                     }))
                 }));
                 setVariantGroups(mappedVGs);
@@ -101,7 +99,7 @@ const SalesRoundEditPage: React.FC = () => {
     const handleGroupDateBlur = useCallback((id: string, dateStr: string) => { const parsedDate = parseDateString(dateStr); if (dateStr && !parsedDate) { toast.error('유효하지 않은 날짜 형식입니다. (예: 250715 또는 20250715)'); return; } handleVariantGroupChange(id, 'expirationDate', parsedDate); handleVariantGroupChange(id, 'expirationDateInput', parsedDate ? formatDateToYYYYMMDD(parsedDate) : '');}, [handleVariantGroupChange]);
     const addNewVariantGroup = useCallback(() => { setVariantGroups(prev => [...prev, { id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); }, []);
     const removeVariantGroup = useCallback((id: string) => { if (variantGroups.length > 1) setVariantGroups(prev => prev.filter(vg => vg.id !== id)); else toast.error("최소 1개의 하위 그룹이 필요합니다."); }, [variantGroups.length]);
-    const handleItemChange = useCallback((vgId: string, itemId: string, field: keyof Omit<ProductItemUI, 'isBundleOption'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: vg.items.map(item => { if (item.id === itemId) { const updatedItem = { ...item, [field]: value }; if (field === 'name') { const isBundle = bundleUnitKeywords.some(k => String(value).includes(k)) || !singleUnitKeywords.some(k => String(value).includes(k)); updatedItem.isBundleOption = isBundle; updatedItem.deductionAmount = isBundle ? item.deductionAmount : 1;} return updatedItem; } return item; }) } : vg)); }, []);
+    const handleItemChange = useCallback((vgId: string, itemId: string, field: keyof Omit<ProductItemUI, 'isBundleOption'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: vg.items.map(item => { if (item.id === itemId) { const updatedItem = { ...item, [field]: value }; if (field === 'name') { const isBundle = ['묶음', '박스', '곽', '세트', '팩', '봉지'].some(k => String(value).includes(k)) || !['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'].some(k => String(value).includes(k)); updatedItem.isBundleOption = isBundle; updatedItem.deductionAmount = isBundle ? item.deductionAmount : 1;} return updatedItem; } return item; }) } : vg)); }, []);
     const handlePriceChange = useCallback((vgId: string, itemId: string, value: string) => { const numericValue = parseFormattedNumber(value); setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: vg.items.map(item => item.id === itemId ? { ...item, price: numericValue } : item) } : vg)); }, []);
     const addNewItem = useCallback((vgId: string) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: [...vg.items, { id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] } : vg)); }, []);
     const removeItem = useCallback((vgId: string, itemId: string) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? (vg.items.length > 1 ? { ...vg, items: vg.items.filter(item => item.id !== itemId) } : vg) : vg)); }, []);
@@ -159,22 +157,7 @@ const SalesRoundEditPage: React.FC = () => {
                         <p className="section-subtitle">상품의 기본 정보는 모든 판매 회차에 공통 적용됩니다.</p>
                         <div className="form-group"><label>대표 상품명 *</label><input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}/></div>
-                        <div className="form-group">
-                            <label>대표 이미지 *</label>
-                            <div className="compact-image-uploader">
-                                <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>
-                                {/* ✅ 아래 코드에서 불필요한 '<' 기호를 제거하여 오류를 수정했습니다. */}
-                                {imagePreviews.map((p,i) => (
-                                    <div key={p+i} className="thumbnail-preview">
-                                        <img src={p} alt="" />
-                                        <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>
-                                    </div>
-                                ))}
-                                {imagePreviews.length < 10 && (
-                                    <button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>
-                                )}
-                            </div>
-                        </div>
+                        <div className="form-group"><label>대표 이미지 *</label><div className="compact-image-uploader"><input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>{imagePreviews.map((p,i) => (<div key={p+i} className="thumbnail-preview"><img src={p} alt=""/><button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button></div>))}{imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}</div></div>
                     </div>
 
                     <div className="form-section">
@@ -183,21 +166,21 @@ const SalesRoundEditPage: React.FC = () => {
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} required/></div>
                         {variantGroups.map(vg => (
                             <div className="variant-group-card" key={vg.id}>
-                                <div className="variant-group-header">
-                                    <div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} required /></div>
-                                    <div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div>
-                                    <div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>
-                                    {productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><X size={14}/></button>}
+                                <div className="variant-group-header-final">
+                                    <input type="text" className="vg-name-input" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder="하위 상품 그룹명" required />
+                                    <div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="총 재고"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div>
+                                    <input type="text" className="vg-expiry-input" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="유통기한(YYMMDD)" maxLength={8}/>
+                                    <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? "마지막 그룹은 삭제할 수 없습니다." : "그룹 삭제"}><Trash2 size={16}/></button>
                                 </div>
                                 {vg.items.map(item => (
                                     <div className="option-item-card" key={item.id}>
+                                        <button type="button" onClick={()=>removeItem(vg.id,item.id)} className="remove-item-btn" disabled={vg.items.length <= 1} title={vg.items.length <= 1 ? "마지막 옵션은 삭제할 수 없습니다." : "옵션 삭제"}><Trash2 size={14}/></button>
                                         <div className="option-item-grid-2x2">
                                             <div className="form-group-grid item-name"><label>선택지 *</label><input type="text" value={item.name} onChange={e=>handleItemChange(vg.id, item.id, 'name', e.target.value)} required/></div>
                                             <div className="form-group-grid item-price"><label>가격 *</label><div className="price-input-wrapper"><input type="text" value={formatNumberWithCommas(item.price)} onChange={e=>handlePriceChange(vg.id, item.id, e.target.value)} required/><span>원</span></div></div>
                                             <div className="form-group-grid item-limit"><label className="tooltip-container"><span>구매 제한</span><span className="tooltip-text">한 고객이 이 옵션을 구매할 수 있는 최대 수량입니다.</span></label><input type="number" value={item.limitQuantity} onChange={e=>handleItemChange(vg.id, item.id, 'limitQuantity', e.target.value)} placeholder="없음"/></div>
                                             <div className="form-group-grid item-deduction"><label className="tooltip-container"><span>차감 단위 *</span><span className="tooltip-text">이 옵션 1개 판매 시, '그룹 총 재고'에서 차감될 수량입니다.</span></label><input type="number" value={item.deductionAmount} onChange={e=>handleItemChange(vg.id, item.id, 'deductionAmount', e.target.value)} required/></div>
                                         </div>
-                                        {vg.items.length > 1 && <button type="button" onClick={()=>removeItem(vg.id,item.id)} className="remove-item-btn"><Trash2 size={14}/></button>}
                                     </div>
                                 ))}
                                 <div className="option-item-actions"><button type="button" onClick={()=>addNewItem(vg.id)} className="add-item-btn">구매 옵션 추가</button></div>

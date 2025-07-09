@@ -162,10 +162,10 @@ const ProductAddAdminPage: React.FC = () => {
                                     <div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div>
                                     <div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="없으면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div>
                                     <div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>
-                                    {productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><X size={14}/></button>}
+                                    {productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><Trash2 size={14}/></button>} {/* Changed X to Trash2 */}
                                 </div>
                                 {vg.items.map(item => (
-                                    <div className="option-item-card" key={item.id}>
+                                    <div className="option-item-section" key={item.id}> {/* Changed class name */}
                                         <div className="option-item-grid-2x2">
                                             <div className="form-group-grid item-name"><label>선택지 *</label><input type="text" value={item.name} onChange={e=>handleItemChange(vg.id, item.id, 'name', e.target.value)} placeholder="예: 1개" required/></div>
                                             <div className="form-group-grid item-price"><label>가격 *</label><div className="price-input-wrapper"><input type="text" value={formatNumberWithCommas(item.price)} onChange={e=>handlePriceChange(vg.id, item.id, e.target.value)} placeholder="0" required/><span>원</span></div></div>

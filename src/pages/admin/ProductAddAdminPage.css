@@ -59,13 +59,16 @@
 
 /* --- 판매 옵션 --- */
 .variant-group-card { border-radius: 12px; padding-top: 16px; }
-.variant-group-header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px dashed #dee2e6; }
+.variant-group-header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px dashed #dee2e6; position: relative; } /* Added position:relative */
 .variant-group-header .form-group.full-width { flex: 2 1 200px; }
 .variant-group-header .form-group { flex: 1 1 120px; margin-bottom: 0; }
 .stock-input-wrapper { position: relative; }
 .stock-input-wrapper input { padding-right: 55px; }
 .stock-input-wrapper .stock-unit-addon { position: absolute; right: 1px; top: 1px; bottom: 1px; background: #f1f3f5; padding: 0 10px; border-radius: 0 7px 7px 0; display: flex; align-items: center; font-size: 0.95rem; color: #495057; }
-.option-item-card { border: 1px solid #f1f3f5; border-radius: 10px; padding: 24px; margin-bottom: 16px; position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+/* .option-item-card 제거 */
+/* .option-item-card { border: 1px solid #f1f3f5; border-radius: 10px; padding: 24px; margin-bottom: 16px; position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); } */
+.option-item-section { margin-bottom: 20px; padding: 20px; border: 1px solid #f1f3f5; border-radius: 10px; position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); } /* New style for option items */
+
 /* 최종 2x2 그리드 */
 .option-item-grid-2x2 { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: auto auto; gap: 20px 24px; }
 .option-item-grid-2x2 .item-name { grid-column: 1 / 2; }
@@ -77,6 +80,30 @@
 .tooltip-text { visibility: hidden; width: 240px; background-color: #343a40; color: #fff; text-align: left; border-radius: 6px; padding: 10px 14px; position: absolute; z-index: 1; bottom: 130%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s 0.5s, visibility 0.2s 0.5s; font-size: 0.9rem; line-height: 1.5; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
 .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
 .add-group-btn-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+/* Remove variant group button positioning */
+.remove-variant-group-btn {
+    position: absolute;
+    right: 0; /* Adjust as needed for alignment with other inputs */
+    top: 50%; /* Center vertically within the header if desired, or adjust */
+    transform: translateY(-50%);
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #868e96;
+    transition: all 0.2s;
+    margin-left: 10px; /* Space between date input and button */
+    top: 8px; /* Adjust this to align with the '유통기한' label */
+    right: 0px; /* Adjust this to align with the '유통기한' label */
+}
+.remove-variant-group-btn:hover { background: #fa5252; color: white; border-color: #fa5252; transform: scale(1.1); }
+
 
 /* --- 발행 및 기간 설정 --- */
 .storage-type-select, .publish-option-buttons { display: flex; border: 1px solid #ced4da; border-radius: 8px; overflow: hidden; }
@@ -105,6 +132,6 @@
 .add-item-btn, .add-group-btn { border: 1px dashed #adb5bd; background-color: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 1rem; color: #495057; cursor: pointer; transition: all 0.2s; text-align: center; width: 100%; font-weight: 500; }
 .add-item-btn { flex: 1; }
 .add-item-btn:hover, .add-group-btn:hover { border-color: #364fc7; color: #364fc7; background-color: #e9ecef; }
-.remove-item-btn, .remove-variant-group-btn { position: absolute; top: 16px; right: 16px; background: white; border: 1px solid #dee2e6; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #868e96; transition: all 0.2s; }
-.remove-item-btn:hover, .remove-variant-group-btn:hover { background: #fa5252; color: white; border-color: #fa5252; transform: scale(1.1); }
+.remove-item-btn { position: absolute; top: 16px; right: 16px; background: white; border: 1px solid #dee2e6; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #868e96; transition: all 0.2s; } /* Removed .remove-variant-group-btn from this selector */
+.remove-item-btn:hover { background: #fa5252; color: white; border-color: #fa5252; transform: scale(1.1); }
 .category-select-wrapper { display: flex; gap: 10px; margin-bottom: 16px; }
