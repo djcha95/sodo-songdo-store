@@ -42,7 +42,7 @@ export interface VariantGroup {
 }
 
 /**
- * ✅ [추가] 대기 명단에 등록된 사용자 정보를 나타냅니다.
+ * @description 대기 명단에 등록된 사용자 정보를 나타냅니다.
  * @param {string} userId - 대기 신청한 사용자의 ID
  * @param {number} quantity - 대기 신청한 수량
  * @param {Timestamp} timestamp - 대기 신청 시각
@@ -66,7 +66,6 @@ export interface SalesRound {
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
   createdAt: Timestamp;
-  // ✅ [추가] 대기 명단 기능 지원을 위한 속성
   waitlist: WaitlistEntry[];
   waitlistCount: number;
 }
@@ -113,6 +112,8 @@ export interface CartItem {
   unitPrice: number;
   stock: number;
   pickupDate: Timestamp;
+  // ✅ [추가] 이 아이템이 '예약'인지 '대기'인지 구분하는 상태
+  status: 'RESERVATION' | 'WAITLIST';
 }
 
 /**
@@ -238,4 +239,13 @@ export interface TodayOngoingProductSummary {
         }[];
     }[];
     totalReservedQuantity: number;
+}
+
+export interface WaitlistItem {
+  productId: string;
+  productName: string; // variantGroupName을 productName으로 사용
+  itemName: string;    // 옵션 이름
+  quantity: number;
+  imageUrl: string;
+  timestamp: Timestamp;
 }

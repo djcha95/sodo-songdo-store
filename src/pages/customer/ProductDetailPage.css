@@ -14,17 +14,18 @@
   backdrop-filter: blur(4px);
 }
 
+/* [수정] 메인 컨텐츠 영역: 직접 스크롤하지 않고, flex 컨테이너 역할만 합니다. */
 .product-detail-modal-content {
+  position: relative;
   background-color: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
+  width: 100%;
+  max-width: 700px; /* 최대 너비 설정 */
+  height: 95vh;    /* 높이를 %가 아닌 vh로 설정하여 뷰포트 기준*/
+  max-height: 95vh;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
-  width: 90%;
-  max-width: 800px;
-  position: relative;
+  overflow: hidden; /* 내부 스크롤이 부모를 넘지 않도록 hidden 처리 */
 }
 
 .modal-close-btn-top {
@@ -44,12 +45,16 @@
   justify-content: center;
 }
 
+/* [추가] 실제 스크롤이 일어날 영역 */
+.modal-scroll-area {
+  flex-grow: 1; /* 남은 공간을 모두 차지 */
+  overflow-y: auto; /* 이 영역만 스크롤 되도록 설정 */
+  padding: 20px; /* 기존 컨텐츠 패딩을 이쪽으로 이동 */
+}
+
 .main-content-area {
   display: flex;
   flex-direction: row;
-  overflow-y: auto;
-  flex-grow: 1;
-  padding: 24px;
 }
 
 .image-gallery-wrapper {
@@ -209,19 +214,9 @@
   border-radius: 14px;
 }
 
-.purchase-controls-section {
-  padding: 12px 16px;
-  border-top: 1px solid #f0f0f0;
-  background-color: #fff;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 1001;
-}
-
 .select-wrapper {
   position: relative;
+  margin-bottom: 10px;
 }
 .price-select {
   width: 100%;
@@ -250,110 +245,118 @@
 }
 
 .product-purchase-footer {
+  flex-shrink: 0;
+  background-color: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  padding: 10px 20px 20px 20px;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
   display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: center;
 }
-.quantity-controls-footer {
+
+.purchase-action-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.quantity-controls-fixed {
   display: flex;
   align-items: center;
   border: 1px solid #ddd;
-  border-radius: 8px;
+  border-radius: 5px;
   overflow: hidden;
+  height: 48px;
 }
-.quantity-controls-footer button {
+
+.quantity-btn {
   background: none;
   border: none;
-  padding: 10px 14px;
+  padding: 8px 10px;
+  font-size: 20px;
   cursor: pointer;
-  font-size: 1.2em;
-  color: #555;
-}
-.quantity-controls-footer button:disabled {
-  color: #ccc;
-  cursor: not-allowed;
-}
-.quantity-controls-footer span {
-  padding: 8px 16px;
-  border-left: 1px solid #ddd;
-  border-right: 1px solid #ddd;
-  font-size: 1em;
-  font-weight: 600;
-}
-.price-and-cart-wrapper {
+  height: 100%;
   display: flex;
-  flex-grow: 1;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
 }
-.footer-total-price {
-  font-size: 1.4em;
+
+.quantity-input-fixed,
+.quantity-display-fixed {
+  width: 60px;
+  text-align: center;
+  font-size: 20px;
+  border: none;
+  padding: 8px 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f9f9f9;
+}
+
+.footer-total-price-fixed {
+  font-size: 22px;
   font-weight: 700;
-  color: #000;
-  text-align: right;
   flex-shrink: 0;
 }
 
-.add-to-cart-btn-main {
-  background-image: linear-gradient(to right, #fa5252, #e64980);
+.add-to-cart-btn-fixed,
+.waitlist-btn-fixed,
+.encore-request-btn-fixed,
+.sold-out-btn-fixed {
+  flex-grow: 1;
+  background-color: #007bff;
   color: white;
   border: none;
   padding: 14px 18px;
   border-radius: 8px;
   cursor: pointer;
+  font-size: 16px; /* 폰트 크기 18px에서 16px로 줄임 */
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 1.1em;
-  font-weight: bold;
-  flex-grow: 1;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(250, 82, 82, 0.3);
-}
-.add-to-cart-btn-main:hover:not(:disabled) {
-  transform: scale(1.03);
-  box-shadow: 0 6px 20px rgba(250, 82, 82, 0.4);
+  gap: 4px; /* 아이콘과 텍스트 간격 8px에서 4px로 줄임 */
+  transition: background-color 0.2s, transform 0.2s;
 }
 
-.sold-out-btn-main,
-.encore-request-btn {
-  border: none;
-  padding: 16px 20px;
-  border-radius: 8px;
-  font-size: 1.1em;
-  font-weight: bold;
-  width: 100%;
+.waitlist-btn-fixed {
+  background-color: #6c757d;
 }
-.sold-out-btn-main {
-  background-color: #ccc;
-  color: #666;
+
+.encore-request-btn-fixed {
+  background-color: #28a745;
+}
+
+.sold-out-btn-fixed {
+  background-color: #dc3545;
+}
+
+.add-to-cart-btn-fixed:hover,
+.waitlist-btn-fixed:hover,
+.encore-request-btn-fixed:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.add-to-cart-btn-fixed:disabled,
+.waitlist-btn-fixed:disabled,
+.encore-request-btn-fixed:disabled,
+.sold-out-btn-fixed:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
 }
-.encore-wrapper {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
+
+.quantity-input-fixed:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
-.encore-request-count {
-  color: #555;
-  font-size: 0.9em;
-}
-.encore-request-btn {
-  background-color: #f08080;
-  color: white;
-  cursor: pointer;
-}
-.encore-request-btn:hover:not(:disabled) {
-  background-color: #e07070;
-}
-.encore-request-btn:disabled {
-  background-color: #ddd;
-  color: #888;
-  cursor: not-allowed;
-}
+
 
 .image-lightbox-overlay {
   position: fixed;
@@ -427,7 +430,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 300px; /* 스켈레톤 UI와 높이를 맞추기 위해 조정 */
+  height: 300px;
 }
 .spinner-icon {
   width: 48px;
@@ -523,7 +526,6 @@
   .main-content-area {
     flex-direction: column;
     padding: 0;
-    padding-bottom: 200px;
     box-sizing: border-box;
   }
   .image-gallery-wrapper {
@@ -539,14 +541,6 @@
     text-align: center;
     margin-top: 1rem;
   }
-  .purchase-controls-section {
-    position: fixed;
-    bottom: 65px;
-    left: 0;
-    right: 0;
-    width: 100%;
-    margin-top: 0;
-  }
   .product-key-info {
     padding: 12px;
   }
@@ -555,4 +549,15 @@
     grid-template-columns: 90px 1fr;
     gap: 8px;
   }
+
+  .modal-scroll-area {
+    padding-bottom: 200px;
+  }
+}
+
+.encore-request-btn.waitlist-btn {
+  background-color: #10b981;
+}
+.encore-request-btn.waitlist-btn:hover:not(:disabled) {
+  background-color: #0f9d6e;
 }

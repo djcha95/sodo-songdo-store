@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import type { CartItem } from '../types'; 
-// ✅ Timestamp 객체를 직접 사용하기 위해 import 합니다.
 import { Timestamp } from 'firebase/firestore';
 
 interface CartContextType {
@@ -11,6 +10,7 @@ interface CartContextType {
   removeFromCart: (productId: string, variantGroupId: string, itemId: string) => void;
   updateCartItemQuantity: (productId: string, variantGroupId: string, itemId: string, quantity: number) => void;
   clearCart: () => void;
+  removeReservedItems: () => void; // ✅ [추가] 예약 상품 제거 함수 타입
   cartTotal: number;
   cartItemCount: number;
 }
@@ -23,10 +23,8 @@ export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       const storedCartItems = localStorage.getItem('cartItems');
       if (storedCartItems) {
         const parsedItems = JSON.parse(storedCartItems);
-        // ✅ [수정] localStorage에서 불러온 데이터의 날짜 형식을 복구합니다.
         return parsedItems.map((item: any) => ({
           ...item,
-          // Firestore Timestamp 객체를 다시 생성합니다.
           pickupDate: new Timestamp(item.pickupDate.seconds, item.pickupDate.nanoseconds),
         }));
       }
@@ -38,21 +36,20 @@ export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
   });
 
   useEffect(() => {
-    try {
-      // ✅ Timestamp 객체도 올바르게 JSON으로 변환되므로, 저장 로직은 그대로 둡니다.
-      localStorage.setItem('cartItems', JSON.stringify(cartItems));
-    } catch (error) {
-      console.error('Failed to save cart items to localStorage', error);
-    }
+    localStorage.setItem('cartItems', JSON.stringify(cartItems));
   }, [cartItems]);
 
   const cartTotal = useMemo(() => 
-    cartItems.reduce((total, item) => total + (item.unitPrice * item.quantity), 0), 
+    cartItems
+      .filter(item => item.status === 'RESERVATION')
+      .reduce((total, item) => total + (item.unitPrice * item.quantity), 0), 
     [cartItems]
   );
-
+  
   const cartItemCount = useMemo(() => 
-    cartItems.reduce((count, item) => count + item.quantity, 0), 
+    cartItems
+      .filter(item => item.status === 'RESERVATION')
+      .reduce((count, item) => count + item.quantity, 0), 
     [cartItems]
   );
 
@@ -61,8 +58,6 @@ export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       const existingItemIndex = prevItems.findIndex(
         item => 
           item.productId === newItem.productId && 
-          item.roundId === newItem.roundId &&
-          item.variantGroupId === newItem.variantGroupId &&
           item.itemId === newItem.itemId
       );
 
@@ -70,9 +65,17 @@ export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
         const updatedItems = [...prevItems];
         const existingItem = updatedItems[existingItemIndex];
         
+        // ✅ [개선] 상태 병합 로직 개선
+        const isNewItemReservation = newItem.status === 'RESERVATION';
+        
+        // 새로 추가하는 아이템이 '예약'이면, 기존 아이템의 상태도 '예약'으로 승격시킵니다.
+        // 새로 추가하는 아이템이 '대기'이면, 기존 아이템의 상태를 그대로 유지합니다.
+        const finalStatus = isNewItemReservation ? 'RESERVATION' : existingItem.status;
+
         updatedItems[existingItemIndex] = {
           ...existingItem,
           quantity: existingItem.quantity + newItem.quantity,
+          status: finalStatus,
         };
         return updatedItems;
       } else {
@@ -101,15 +104,21 @@ export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     setCartItems([]);
   }, []);
 
+  // ✅ [추가] '예약' 상태의 상품만 장바구니에서 제거하는 함수
+  const removeReservedItems = useCallback(() => {
+    setCartItems(prevItems => prevItems.filter(item => item.status !== 'RESERVATION'));
+  }, []);
+
   const value = useMemo(() => ({
     cartItems,
     addToCart,
     removeFromCart,
     updateCartItemQuantity,
     clearCart,
+    removeReservedItems, // ✅ Context에 함수 추가
     cartTotal,
     cartItemCount,
-  }), [cartItems, addToCart, removeFromCart, updateCartItemQuantity, clearCart, cartTotal, cartItemCount]);
+  }), [cartItems, addToCart, removeFromCart, updateCartItemQuantity, clearCart, removeReservedItems, cartTotal, cartItemCount]);
 
   return (
     <CartContext.Provider value={value}>

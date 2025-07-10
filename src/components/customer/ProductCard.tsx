@@ -7,9 +7,9 @@ import 'dayjs/locale/ko';
 import { Flame, Minus, Plus, ChevronRight, Calendar, Hourglass, Check } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
-import { requestWaitlist } from '@/firebase/productService';
 import toast from 'react-hot-toast';
 import type { Product, SalesRound, CartItem, ProductStatus } from '@/types';
+import useLongPress from '@/hooks/useLongPress';
 import './ProductCard.css';
 
 // --- Helper Functions ---
@@ -25,15 +25,13 @@ const getDisplayRound = (product: Product): SalesRound | null => {
 // --- Quantity Controls Component ---
 interface QuantityInputProps {
   quantity: number;
-  setQuantity: (updater: React.SetStateAction<number>) => void;
+  setQuantity: React.Dispatch<React.SetStateAction<number>>;
   maxStock?: number;
 }
 
 const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, maxStock = 999 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -42,54 +40,26 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
     }
   }, [isEditing]);
 
-  const handleQuantityChange = (newQuantity: number) => {
-    const validatedQuantity = Math.max(1, Math.min(newQuantity, maxStock));
-    setQuantity(validatedQuantity);
-  };
+  const handleUpdateQuantity = useCallback((change: number) => {
+    setQuantity(q => Math.max(1, Math.min(q + change, maxStock)));
+  }, [setQuantity, maxStock]);
 
-  const stopCounter = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    timeoutRef.current = null;
-    intervalRef.current = null;
+  const handleDirectInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value, 10);
+    setQuantity(isNaN(value) ? 1 : Math.max(1, Math.min(value, maxStock)));
   };
-
-  const startCounter = (delta: number) => {
-    stopCounter();
-    handleQuantityChange(quantity + delta);
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(() => {
-        setQuantity(q => Math.max(1, Math.min(q + delta, maxStock)));
-      }, 100);
-    }, 400);
-  };
-
-  const handleInputBlur = () => {
-    setIsEditing(false);
-    if (inputRef.current) {
-      const numValue = parseInt(inputRef.current.value, 10);
-      if (isNaN(numValue) || numValue < 1) {
-        setQuantity(1);
-      }
-    }
-  };
-
+  
+  const handleInputBlur = () => setIsEditing(false);
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      inputRef.current?.blur();
-    }
+    if (e.key === 'Enter') inputRef.current?.blur();
   };
+
+  const decreaseHandlers = useLongPress(() => handleUpdateQuantity(-1), () => handleUpdateQuantity(-1));
+  const increaseHandlers = useLongPress(() => handleUpdateQuantity(1), () => handleUpdateQuantity(1));
 
   return (
     <div className="quantity-controls">
-      <button
-        onMouseDown={(e) => { e.stopPropagation(); startCounter(-1); }}
-        onMouseUp={stopCounter}
-        onMouseLeave={stopCounter}
-        onTouchStart={(e) => { e.stopPropagation(); startCounter(-1); }}
-        onTouchEnd={stopCounter}
-        disabled={quantity <= 1}
-      >
+      <button {...decreaseHandlers} disabled={quantity <= 1}>
         <Minus size={16} />
       </button>
       {isEditing ? (
@@ -98,7 +68,7 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
           type="number"
           className="quantity-input"
           value={quantity}
-          onChange={(e) => handleQuantityChange(parseInt(e.target.value, 10) || 1)}
+          onChange={handleDirectInputChange}
           onBlur={handleInputBlur}
           onKeyDown={handleInputKeyDown}
           onClick={(e) => e.stopPropagation()}
@@ -108,14 +78,7 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
           {quantity}
         </span>
       )}
-      <button
-        onMouseDown={(e) => { e.stopPropagation(); startCounter(1); }}
-        onMouseUp={stopCounter}
-        onMouseLeave={stopCounter}
-        onTouchStart={(e) => { e.stopPropagation(); startCounter(1); }}
-        onTouchEnd={stopCounter}
-        disabled={quantity >= maxStock}
-      >
+      <button {...increaseHandlers} disabled={quantity >= maxStock}>
         <Plus size={16} />
       </button>
     </div>
@@ -139,11 +102,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    return () => {
-      if (addedTimeoutRef.current) {
-        clearTimeout(addedTimeoutRef.current);
-      }
-    };
+    return () => { if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current); };
   }, []);
 
   const cardData = useMemo(() => {
@@ -157,11 +116,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     const isSoldOut = totalStock === 0;
-    
-    const isLimitedStock = 
-      status === 'ADDITIONAL_RESERVATION' || 
-      (status === 'ONGOING' && totalStock > 0 && totalStock < Infinity);
-
+    const isLimitedStock = status === 'ONGOING' && totalStock > 0 && totalStock < Infinity;
     const isPurchasable = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && !isSoldOut;
     const isWaitlistAvailable = status === 'ONGOING' && isSoldOut;
     const singleOptionItem = !isMultiOption ? displayRound.variantGroups?.[0]?.items?.[0] : null;
@@ -194,6 +149,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       unitPrice: singleOptionItem.price,
       stock: singleOptionItem.stock,
       pickupDate: displayRound.pickupDate,
+      status: 'RESERVATION',
     };
     
     addToCart(cartItem);
@@ -202,29 +158,45 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
 
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
-    addedTimeoutRef.current = setTimeout(() => {
-      setIsJustAdded(false);
-    }, 1500);
+    addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
 
   }, [product, quantity, cardData, addToCart, isJustAdded]);
   
-  const handleRequestWaitlist = useCallback(async (e: React.MouseEvent) => {
+  const handleRequestWaitlist = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!cardData || !cardData.displayRound || !user) {
       if (!user) toast.error("대기 신청을 하려면 로그인이 필요합니다.");
       return;
     }
-
-    const toastId = toast.loading("대기 명단에 등록 중입니다...");
-    try {
-      await requestWaitlist(product.id, cardData.displayRound.roundId, user.uid, quantity);
-      toast.success("대기 명단에 등록되었습니다!", { id: toastId });
-      setQuantity(1);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "신청 중 오류가 발생했습니다.";
-      toast.error(message, { id: toastId });
+    
+    const { displayRound, singleOptionItem } = cardData;
+    if (!singleOptionItem) {
+      toast.error("옵션이 하나인 상품만 대기 신청이 가능합니다.");
+      return;
     }
-  }, [product.id, quantity, cardData, user]);
+
+    const waitlistItem: CartItem = {
+      productId: product.id,
+      productName: product.groupName,
+      imageUrl: product.imageUrls?.[0] || '',
+      roundId: displayRound.roundId,
+      roundName: displayRound.roundName,
+      variantGroupId: displayRound.variantGroups?.[0]?.id || '',
+      variantGroupName: displayRound.variantGroups?.[0]?.groupName || '',
+      itemId: singleOptionItem.id || '',
+      itemName: singleOptionItem.name,
+      quantity: quantity,
+      unitPrice: singleOptionItem.price,
+      stock: singleOptionItem.stock,
+      pickupDate: displayRound.pickupDate,
+      status: 'WAITLIST',
+    };
+    
+    addToCart(waitlistItem);
+    toast.success(`${product.groupName} ${quantity}개를 대기 목록에 추가했어요!`);
+    setQuantity(1);
+    
+  }, [product, quantity, cardData, user, addToCart]);
 
   const handleCardClick = useCallback(() => { 
     navigate(`/product/${product.id}`, { state: { background: location } }); 
@@ -232,13 +204,14 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
 
   if (!cardData) return null;
 
+  // ✅ [오류 수정] useMemo로 계산된 값들을 여기서 분해하여 변수로 선언합니다.
   const { isPurchasable, isMultiOption, isSoldOut, isWaitlistAvailable, price, pickupDateFormatted, storageType, totalStock, isLimitedStock } = cardData;
 
   const getStorageTypeInfo = (type: string | undefined) => {
     switch (type) {
-      case 'FROZEN': return { label: '냉동', style: { backgroundColor: '#5c7cfa', color: '#fff', fontWeight: 600 } };
-      case 'COLD': return { label: '냉장', style: { backgroundColor: '#e63946', color: '#fff', fontWeight: 600 } };
-      case 'ROOM': return { label: '실온', style: { backgroundColor: '#212529', color: '#fff', fontWeight: 600 } };
+      case 'FROZEN': return { label: '냉동', style: { backgroundColor: '#5c7cfa', color: '#fff' } };
+      case 'COLD': return { label: '냉장', style: { backgroundColor: '#e63946', color: '#fff' } };
+      case 'ROOM': return { label: '실온', style: { backgroundColor: '#212529', color: '#fff' } };
       default: return null;
     }
   };
@@ -289,12 +262,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       <div className="product-card-final" onClick={handleCardClick}>
         {isLimitedStock && (
           <div className="card-top-badge">
-            <Flame size={14} /> {isMultiOption ? '한정수량 예약중!' : `${totalStock}개 한정!`}
+            <Flame size={14} /> {isMultiOption ? '한정수량' : `${totalStock}개 한정`}
           </div>
         )}
         <div className="card-image-container">
-          {/* ✅ [수정] fetchPriority를 fetchpriority로 변경하여 React 경고를 해결합니다. */}
-          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchpriority="low" />
+          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchPriority="low" />
           {!isPurchasable && !isWaitlistAvailable && status !== 'PAST' && <div className="card-overlay-badge">{isSoldOut ? '품절' : '마감'}</div>}
         </div>
         <div className="card-content-container">

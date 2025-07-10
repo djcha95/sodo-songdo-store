@@ -2,50 +2,66 @@
 
 import { useCallback, useRef, useEffect } from 'react';
 
-/**
- * ✅ [버그 수정] Stale Closure 문제를 해결하기 위해, callback을 ref로 관리합니다.
- * 이를 통해 렌더링이 반복되어도 항상 최신 콜백 함수를 참조하여 기능이 멈추지 않습니다.
- */
 const useLongPress = (
-  callback: () => void,
+  longPressCallback: () => void,
+  clickCallback: () => void,
   { delay = 100, initialDelay = 400 } = {}
 ) => {
-  const callbackRef = useRef(callback);
+  const longPressCallbackRef = useRef(longPressCallback);
+  const clickCallbackRef = useRef(clickCallback);
+
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // ✅ "꾹 누르기"가 발동되었는지 추적하는 플래그
+  const longPressTriggeredRef = useRef(false);
 
-  // 매 렌더링마다 최신 콜백 함수를 ref에 저장
   useEffect(() => {
-    callbackRef.current = callback;
-  }, [callback]);
+    longPressCallbackRef.current = longPressCallback;
+    clickCallbackRef.current = clickCallback;
+  }, [longPressCallback, clickCallback]);
 
+  // 마우스를 누르기 시작할 때
   const start = useCallback((event: React.MouseEvent | React.TouchEvent) => {
-    event.preventDefault();
-    // ref에 저장된 최신 콜백을 즉시 실행
-    callbackRef.current();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    
+    // 플래그 초기화
+    longPressTriggeredRef.current = false;
 
-    // 초기 딜레이 후 반복 시작
+    // 꾹 누르기 타이머 설정
     timeoutRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true; // 플래그 세우기
+      longPressCallbackRef.current(); // 꾹 누르기 콜백 첫 실행
+      
+      // 반복 실행 설정
       intervalRef.current = setInterval(() => {
-        // ref에 저장된 최신 콜백을 반복적으로 실행
-        callbackRef.current();
+        longPressCallbackRef.current();
       }, delay);
     }, initialDelay);
   }, [delay, initialDelay]);
 
+  // 마우스를 떼거나, 버튼 밖으로 나갔을 때
   const stop = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
     }
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
-      intervalRef.current = null;
     }
   }, []);
 
-  // 컴포넌트 언마운트 시 클린업
+  // ✅ "짧은 클릭"을 처리할 onClick 핸들러
+  const handleClick = useCallback(() => {
+    // 꾹 누르기가 발동되지 않았을 때만 짧은 클릭으로 간주
+    if (!longPressTriggeredRef.current) {
+      clickCallbackRef.current();
+    }
+  }, []);
+
   useEffect(() => {
+    // 컴포넌트 언마운트 시 모든 타이머 정리
     return stop;
   }, [stop]);
 
@@ -55,6 +71,7 @@ const useLongPress = (
     onMouseLeave: stop,
     onTouchStart: start,
     onTouchEnd: stop,
+    onClick: handleClick, // ✅ onClick 핸들러를 반환
   };
 };
 
