@@ -109,3 +109,100 @@
 }
 .header-back-button:hover { background-color: #f1f3f5; }
 .header-back-button svg { color: #495057; }
+
+/* src/components/Header.css */
+
+/* ... 기존 Header.css 내용 ... */
+
+
+/* ✅ [추가] 알림 기능 관련 스타일 */
+.header-right {
+  /* 자식 요소들을 정렬하기 위해 flex 추가 */
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.notification-container {
+  position: relative;
+}
+
+.notification-button {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color-dark);
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.notification-button:hover {
+  background-color: var(--bg-color-medium);
+}
+
+.notification-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: var(--danger-color);
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 2px solid var(--bg-color-white);
+}
+
+.notification-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background-color: var(--bg-color-white);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--box-shadow-lg);
+  width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1000;
+  border: 1px solid var(--border-color-light);
+}
+
+.notification-item {
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  color: var(--text-color-dark);
+  border-bottom: 1px solid var(--border-color-light);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-item:hover {
+  background-color: var(--bg-color-light);
+}
+
+.notification-item.read {
+  color: var(--text-color-light);
+  background-color: var(--bg-color-light-gray);
+}
+
+.notification-item.no-notifications {
+  color: var(--text-color-light);
+  text-align: center;
+  padding: 24px;
+  cursor: default;
+}

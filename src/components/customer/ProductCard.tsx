@@ -266,7 +266,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
           </div>
         )}
         <div className="card-image-container">
-          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchPriority="low" />
+          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchpriority="low" />
           {!isPurchasable && !isWaitlistAvailable && status !== 'PAST' && <div className="card-overlay-badge">{isSoldOut ? '품절' : '마감'}</div>}
         </div>
         <div className="card-content-container">

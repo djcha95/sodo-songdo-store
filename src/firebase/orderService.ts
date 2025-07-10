@@ -15,22 +15,17 @@ import {
 } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem, Product, WaitlistEntry, WaitlistItem } from '@/types';
 
-// ✅ [추가] 현재 예약된 총수량을 계산하는 헬퍼 함수
 const getAlreadyReservedQuantities = async (productIds: string[]): Promise<Map<string, number>> => {
   const reservedQuantities = new Map<string, number>();
   if (productIds.length === 0) {
     return reservedQuantities;
   }
-
-  // 최적화를 위해 관련 상품 ID가 포함된 주문들만 가져오도록 시도할 수 있으나,
-  // Firestore의 array-contains-any는 10개로 제한되므로, 모든 예약 주문을 가져와 클라이언트에서 필터링합니다.
   const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PICKED_UP']));
   
   const querySnapshot = await getDocs(q);
   querySnapshot.forEach(orderDoc => {
     const order = orderDoc.data() as Order;
     order.items.forEach(item => {
-      // 현재 확인하려는 상품 목록에 포함된 아이템만 계산
       if (productIds.includes(item.productId)) {
         const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
         const currentQty = reservedQuantities.get(key) || 0;
@@ -54,14 +49,12 @@ export const submitOrder = async (
   let newOrderId: string | undefined = undefined;
   const detailedWaitlistedItems: WaitlistItem[] = [];
 
-  // ✅ [수정] 트랜잭션 시작 전에, 주문할 상품들의 현재 총 예약 수량을 미리 계산합니다.
   const productIds = [...new Set(orderData.items.map(item => item.productId))];
   const reservedQuantitiesMap = await getAlreadyReservedQuantities(productIds);
 
   await runTransaction(db, async (transaction) => {
     const productDataMap = new Map<string, Product>();
     
-    // 1단계: 모든 상품 문서 읽기
     for (const item of orderData.items) {
       if (!productDataMap.has(item.productId)) {
         const productRef = doc(db, 'products', item.productId);
@@ -76,7 +69,6 @@ export const submitOrder = async (
     const itemsToReserve: OrderItem[] = [];
     const itemsToWaitlist: (WaitlistEntry & { productId: string; roundId: string })[] = [];
 
-    // 2단계: 메모리에서 재고 계산 및 분배
     for (const item of orderData.items) {
       const productData = productDataMap.get(item.productId)!;
       const salesRound = productData.salesHistory.find(r => r.roundId === item.roundId);
@@ -86,11 +78,13 @@ export const submitOrder = async (
         throw new Error(`판매 정보를 찾을 수 없습니다: ${item.productName}`);
       }
 
+      // ✅ [개선] 생성될 OrderItem에 deadlineDate를 추가하기 위해 여기서 할당
+      const deadlineDate = salesRound.deadlineDate;
+
       const totalPhysicalStock = variantGroup.totalPhysicalStock;
       
       let availableStock = Infinity;
       if (totalPhysicalStock !== null && totalPhysicalStock !== -1) {
-        // ✅ [수정] 미리 계산해온 예약 수량을 사용하여 정확한 재고를 계산합니다.
         const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
         const alreadyReserved = reservedQuantitiesMap.get(key) || 0;
         availableStock = totalPhysicalStock - alreadyReserved;
@@ -100,7 +94,8 @@ export const submitOrder = async (
       const quantityToWaitlist = item.quantity - quantityToReserve;
 
       if (quantityToReserve > 0) {
-        itemsToReserve.push({ ...item, quantity: quantityToReserve });
+        // ✅ [개선] deadlineDate를 예약 아이템에 포함시킵니다.
+        itemsToReserve.push({ ...item, quantity: quantityToReserve, deadlineDate });
       }
 
       if (quantityToWaitlist > 0) {
@@ -124,7 +119,6 @@ export const submitOrder = async (
       }
     }
 
-    // 3단계: 모든 쓰기 작업
     if (itemsToReserve.length > 0) {
       const newOrderRef = doc(collection(db, 'orders'));
       newOrderId = newOrderRef.id;
@@ -180,6 +174,54 @@ export const submitOrder = async (
   };
 };
 
+/**
+ * ✨ [신규] 예약을 취소하는 함수
+ * @param orderId 취소할 주문의 ID
+ * @param userId 현재 로그인한 사용자의 ID
+ */
+export const cancelOrder = async (orderId: string, userId: string): Promise<void> => {
+  const orderRef = doc(db, 'orders', orderId);
+
+  await runTransaction(db, async (transaction) => {
+    const orderDoc = await transaction.get(orderRef);
+    if (!orderDoc.exists()) {
+      throw new Error("주문 정보를 찾을 수 없습니다.");
+    }
+
+    const order = orderDoc.data() as Order;
+
+    // 1. 본인의 주문이 맞는지, '예약 확정' 상태인지 확인
+    if (order.userId !== userId) {
+      throw new Error("본인의 주문만 취소할 수 있습니다.");
+    }
+    if (order.status !== 'RESERVED') {
+      throw new Error("예약 확정 상태의 주문만 취소할 수 있습니다.");
+    }
+
+    // 2. 취소 정책 확인 (마감 2시간 전까지만 가능)
+    const firstItem = order.items[0];
+    if (!firstItem || !firstItem.deadlineDate) {
+        // 마감일 정보가 없는 레거시 주문 데이터는 일단 취소 가능하도록 처리
+        // 혹은 throw new Error("주문의 마감일 정보를 찾을 수 없어 취소가 불가능합니다."); 와 같이 처리 가능
+    } else {
+      const deadline = firstItem.deadlineDate.toDate();
+      const now = new Date();
+      const hoursUntilDeadline = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntilDeadline < 2) {
+        throw new Error("취소 불가: 마감 2시간 전에는 예약을 취소할 수 없습니다.");
+      }
+    }
+
+    // 3. 주문 상태를 'CANCELED'로 변경
+    transaction.update(orderRef, { status: 'CANCELED' });
+    
+    // 참고: 재고 복구 로직은 현재 포함되지 않았습니다.
+    // 필요 시, 취소된 상품의 수량만큼 'products' 컬렉션의 재고를 다시 늘려주는 로직을 여기에 추가할 수 있습니다.
+  });
+};
+
+
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   if (!userId) return [];
   const q = query(
@@ -205,7 +247,6 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus): P
   await updateDoc(doc(db, 'orders', orderId), { status });
 };
 
-// 이 함수는 대시보드 등 다른 곳에서 전체 예약 수량을 보여줄 때 사용할 수 있습니다.
 export const getReservedQuantities = async (): Promise<Record<string, number>> => {
   const quantities: Record<string, number> = {};
   const q = query(collection(db, 'orders'), where('status', '==', 'RESERVED'));

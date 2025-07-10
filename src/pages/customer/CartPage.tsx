@@ -17,8 +17,7 @@ import './CartPage.css';
 
 const CartPage: React.FC = () => {
   const { user } = useAuth();
-  // ✅ [개선] 새로 추가된 removeReservedItems 함수를 가져옵니다.
-  const { cartItems, cartTotal, cartItemCount, removeFromCart, updateCartItemQuantity, removeReservedItems } = useCart();
+  const { cartItems, cartTotal: originalCartTotal, cartItemCount: originalCartItemCount, removeFromCart, updateCartItemQuantity, removeReservedItems } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
@@ -27,19 +26,77 @@ const CartPage: React.FC = () => {
   const [inputValue, setInputValue] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [pendingRemovalIds, setPendingRemovalIds] = useState<string[]>([]);
+  const removalTimers = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const visibleCartItems = useMemo(() =>
+    cartItems.filter(item => {
+      const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+      return !pendingRemovalIds.includes(uniqueId);
+    }),
+    [cartItems, pendingRemovalIds]
+  );
+  
   const reservationItems = useMemo(() => 
-    cartItems.filter(item => item.status === 'RESERVATION').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
-    [cartItems]
+    visibleCartItems.filter(item => item.status === 'RESERVATION').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
+    [visibleCartItems]
   );
   const waitlistItems = useMemo(() =>
-    cartItems.filter(item => item.status === 'WAITLIST').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
-    [cartItems]
+    visibleCartItems.filter(item => item.status === 'WAITLIST').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
+    [visibleCartItems]
   );
+
+  const { cartTotal, cartItemCount } = useMemo(() => {
+    if (pendingRemovalIds.length === 0) {
+      return { cartTotal: originalCartTotal, cartItemCount: originalCartItemCount };
+    }
+    const pendingItems = cartItems.filter(item => {
+      const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+      return pendingRemovalIds.includes(uniqueId) && item.status === 'RESERVATION';
+    });
+    
+    const pendingTotal = pendingItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+    const pendingCount = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    return {
+      cartTotal: originalCartTotal - pendingTotal,
+      cartItemCount: originalCartItemCount - pendingCount,
+    };
+  }, [cartItems, pendingRemovalIds, originalCartTotal, originalCartItemCount]);
 
   const handleRemoveItem = (item: CartItem) => {
     const { productId, variantGroupId, itemId } = item;
-    removeFromCart(productId, variantGroupId, itemId);
-    toast.success(`${item.productName}을(를) 목록에서 삭제했습니다.`);
+    const uniqueId = `${productId}-${variantGroupId}-${itemId}`;
+
+    setPendingRemovalIds(prev => [...prev, uniqueId]);
+
+    const timerId = setTimeout(() => {
+      removeFromCart(productId, variantGroupId, itemId);
+      setPendingRemovalIds(prev => prev.filter(id => id !== uniqueId));
+      delete removalTimers.current[uniqueId];
+      toast.success(`${item.productName}이(가) 완전히 삭제되었습니다.`);
+    }, 4000);
+
+    removalTimers.current[uniqueId] = timerId;
+
+    toast.custom((t) => (
+      <div className="undo-toast">
+        <span>{`${item.productName} 삭제됨`}</span>
+        <button onClick={() => {
+          clearTimeout(removalTimers.current[uniqueId]);
+          delete removalTimers.current[uniqueId];
+          setPendingRemovalIds(prev => prev.filter(id => id !== uniqueId));
+          toast.dismiss(t.id);
+          toast.error('삭제가 취소되었습니다.');
+        }}>
+          실행 취소
+        </button>
+      </div>
+    ), {
+      id: `undo-${uniqueId}`,
+      duration: 4000,
+      className: 'toast-style-primary',
+    });
   };
 
   const handleConfirmReservation = async () => {
@@ -59,23 +116,22 @@ const CartPage: React.FC = () => {
     };
 
     setIsProcessingOrder(true);
-    const loadingToastId = toast.loading('예약을 확정하는 중입니다...');
-    
-    try {
-      await submitOrder(orderPayload);
-      toast.success('예약이 성공적으로 완료되었습니다!', { id: loadingToastId });
-      
-      // ✅ [개선] 주문 성공 시, 복잡한 로직 대신 새 함수를 호출하여 예약 상품만 제거합니다.
-      removeReservedItems();
 
-      navigate('/mypage/history');
+    const promise = submitOrder(orderPayload);
 
-    } catch (error: any) {
-        console.error("Order submission failed:", error);
-        toast.error(error.message || '예약 확정 중 오류가 발생했습니다.', { id: loadingToastId });
-    } finally {
-        setIsProcessingOrder(false);
-    }
+    toast.promise(promise, {
+      loading: '예약을 확정하는 중입니다...',
+      success: (result) => {
+        removeReservedItems();
+        navigate('/mypage/history');
+        return result.reservedCount > 0 
+          ? '예약이 성공적으로 완료되었습니다!'
+          : '예약된 상품 없이 대기만 신청되었습니다.';
+      },
+      error: (err) => err.message || '예약 확정 중 오류가 발생했습니다.',
+    }).finally(() => {
+      setIsProcessingOrder(false);
+    });
   };
 
   const showOrderConfirmation = () => {
@@ -143,33 +199,55 @@ const CartPage: React.FC = () => {
     }
   }, [editingQuantityId]);
 
-  const formatPickupDate = (timestamp: Timestamp) => format(timestamp.toDate(), 'M/d(EEE)', { locale: ko });
+  useEffect(() => {
+    const timers = removalTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
 
+  const formatPickupDate = (timestamp: Timestamp) => format(timestamp.toDate(), 'M/d(EEE)', { locale: ko });
+  
   const renderCartItemCard = (item: CartItem) => {
     const isEditing = editingQuantityId === `${item.productId}-${item.variantGroupId}-${item.itemId}`;
     const decreaseHandlers = createQuantityHandlers(item, -1);
     const increaseHandlers = createQuantityHandlers(item, 1);
     
     return (
-      <div key={`${item.productId}-${item.variantGroupId}-${item.itemId}`} className={`cart-item-card-final ${item.status === 'WAITLIST' ? 'waitlist-item-card' : ''}`}>
+      <div key={`${item.productId}-${item.variantGroupId}-${item.itemId}`} className={`cart-item-card ${item.status === 'WAITLIST' ? 'waitlist-item' : ''}`}>
         <div className="item-image-wrapper" onClick={() => navigate(`/product/${item.productId}`)}>
           <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
         </div>
-        <div className="item-content-wrapper">
-          <div className="item-info-row">
-            <span className="item-main-name">{item.variantGroupName}</span>
-            <button className="item-remove-btn" onClick={() => handleRemoveItem(item)} disabled={isProcessingOrder}><Trash2 size={18} /></button>
+
+        <div className="item-details-wrapper">
+          <div className="item-header">
+            <div className="item-name-group">
+              <span className="item-product-name">{item.variantGroupName}</span>
+              <span className="item-option-name">선택: {item.itemName}</span>
+            </div>
+            <button className="item-remove-btn" onClick={() => handleRemoveItem(item)} disabled={isProcessingOrder}>
+              <Trash2 size={18} />
+            </button>
           </div>
-          <div className="item-details-row">
-            <span className="item-option-name">선택: {item.itemName}</span>
-            <span className="item-pickup-date">
+
+          <div className="item-body">
+            <div className="item-pickup-info">
               <CalendarDays size={14} />
-              {formatPickupDate(item.pickupDate)}
-            </span>
+              <span>픽업: {formatPickupDate(item.pickupDate)}</span>
+            </div>
+            {item.status === 'WAITLIST' && (
+              <div className="waitlist-status-badge">
+                <Info size={14}/>
+                <span>재고 확보 시 자동 예약 전환</span>
+              </div>
+            )}
           </div>
-          <div className="item-actions-row">
+          
+          <div className="item-footer">
             <div className="item-quantity-controls">
-                <button {...decreaseHandlers} disabled={item.quantity <= 1 || isProcessingOrder}><Minus size={16} /></button>
+              <button {...decreaseHandlers} disabled={item.quantity <= 1 || isProcessingOrder}>
+                <Minus size={16} />
+              </button>
               {isEditing ? (
                 <input
                   ref={inputRef}
@@ -185,19 +263,17 @@ const CartPage: React.FC = () => {
                   {item.quantity}
                 </span>
               )}
-                <button {...increaseHandlers} disabled={isProcessingOrder}><Plus size={16} /></button>
+              <button {...increaseHandlers} disabled={isProcessingOrder}>
+                <Plus size={16} />
+              </button>
             </div>
+
             {item.status === 'RESERVATION' && (
-              <div className="item-price-box">
-                <span>{(item.unitPrice * item.quantity).toLocaleString()}</span>원
+              <div className="item-total-price">
+                {(item.unitPrice * item.quantity).toLocaleString()}원
               </div>
             )}
           </div>
-          {item.status === 'WAITLIST' && (
-            <div className="waitlist-item-status">
-              <Info size={14}/><span>재고 확보 시 자동 예약 처리 대상으로, 주문에 포함되지 않습니다.</span>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -212,7 +288,7 @@ const CartPage: React.FC = () => {
             {reservationItems.map(renderCartItemCard)}
           </div>
         ) : (
-          <div className="waitlist-info-box">
+          <div className="info-box">
             <p>장바구니에 담긴 예약 상품이 없습니다.</p>
           </div>
         )}
@@ -225,7 +301,7 @@ const CartPage: React.FC = () => {
             {waitlistItems.map(renderCartItemCard)}
           </div>
         ) : (
-          <div className="waitlist-info-box">
+          <div className="info-box">
             <p>품절 상품에 '대기 신청'을 하면 여기에 표시됩니다.</p>
           </div>
         )}
@@ -246,8 +322,8 @@ const CartPage: React.FC = () => {
             <span className="total-price-value">{cartTotal.toLocaleString()}원</span>
           </div>
           <button className="checkout-btn" onClick={showOrderConfirmation} disabled={isProcessingOrder}>
-            {isProcessingOrder ? '처리 중...' : `${cartItemCount}개 상품 예약 확정하기`}
-            <ArrowRight size={20} />
+            {isProcessingOrder ? '처리 중...' : `총 ${cartItemCount}개 예약 확정하기`}
+            {!isProcessingOrder && <ArrowRight size={20} />}
           </button>
         </div>
       )}

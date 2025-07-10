@@ -5,7 +5,6 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, useParams } from 'react-router-dom';
 import './index.css';
 
-// ✅ Toaster를 여기서 import 합니다.
 import { Toaster } from 'react-hot-toast';
 
 import App from './App';
@@ -13,16 +12,21 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoadingSpinner from './components/LoadingSpinner';
 
 // 페이지 컴포넌트 lazy loading
-import ProductListPage from './pages/customer/ProductListPage';
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminPage = React.lazy(() => import('./pages/admin/AdminPage'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
+const ProductListPage = React.lazy(() => import('./pages/customer/ProductListPage'));
 const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetailPage'));
 const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
+// ✅ [추가] 마이페이지 관련 컴포넌트들을 lazy import 합니다.
+const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
+const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
+const StoreInfoPage = React.lazy(() => import('./pages/customer/StoreInfoPage'));
 
 
 const ProductDetailPageWrapper = () => {
   const { productId } = useParams<{ productId: string }>();
+  // ✅ onClose 로직을 window.history.back()으로 변경하여 모달처럼 동작하게 합니다.
   return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
 };
 
@@ -49,6 +53,29 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <ProductListPage /> },
           { path: "cart", element: <CartPage /> },
+          // ✅ [추가] '/mypage' 와 그 하위 경로들을 설정합니다.
+          {
+            path: "mypage",
+            children: [
+              {
+                index: true, // '/mypage' 경로로 접속 시 MyPage 컴포넌트를 보여줍니다.
+                element: <MyPage />
+              },
+              {
+                path: "history", // '/mypage/history' 경로
+                element: <OrderHistoryPage />
+              },
+              {
+                path: "store-info", // '/mypage/store-info' 경로
+                element: <StoreInfoPage />
+              },
+              // TODO: 픽업 달력 페이지 추가 필요
+              // {
+              //   path: "orders",
+              //   element: <OrderCalendarPage />
+              // }
+            ]
+          }
         ]
       },
       {
@@ -65,7 +92,6 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {/* ✅ Toaster를 RouterProvider 바깥에, 최상단에 위치시킵니다. */}
     <Toaster 
       position="top-center" 
       reverseOrder={false}

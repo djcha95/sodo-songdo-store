@@ -112,7 +112,6 @@ export interface CartItem {
   unitPrice: number;
   stock: number;
   pickupDate: Timestamp;
-  // ✅ [추가] 이 아이템이 '예약'인지 '대기'인지 구분하는 상태
   status: 'RESERVATION' | 'WAITLIST';
 }
 
@@ -121,18 +120,21 @@ export interface CartItem {
  */
 export type OrderItem = Pick<
   CartItem,
-  'productId' | 
-  'roundId' | 
-  'roundName' |
-  'variantGroupId' | 
-  'itemId' | 
-  'productName' |
-  'variantGroupName' | 
-  'itemName' |
-  'imageUrl' | 
-  'unitPrice' | 
-  'quantity'
->;
+  | 'productId'
+  | 'roundId'
+  | 'roundName'
+  | 'variantGroupId'
+  | 'itemId'
+  | 'productName'
+  | 'variantGroupName'
+  | 'itemName'
+  | 'imageUrl'
+  | 'unitPrice'
+  | 'quantity'
+> & {
+  // ✅ [추가] 예약 취소 정책에 사용될 마감일 정보
+  deadlineDate?: Timestamp;
+};
 
 /**
  * @description 사용자의 한 건의 주문 정보를 나타냅니다.
