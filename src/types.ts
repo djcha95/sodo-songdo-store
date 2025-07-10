@@ -12,6 +12,16 @@ export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 
 export type OrderStatus = 'RESERVED' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
+// ✅ Notification 타입 정의
+export interface Notification {
+  id: string;
+  message: string;
+  // ✨ [수정] 'read'를 'isRead'로 변경하여 AuthContext와 타입을 통일합니다.
+  isRead: boolean;
+  timestamp: Timestamp;
+  link?: string;
+}
+
 
 // =================================================================
 // 📌 상품 및 판매 관련 타입
@@ -43,9 +53,6 @@ export interface VariantGroup {
 
 /**
  * @description 대기 명단에 등록된 사용자 정보를 나타냅니다.
- * @param {string} userId - 대기 신청한 사용자의 ID
- * @param {number} quantity - 대기 신청한 수량
- * @param {Timestamp} timestamp - 대기 신청 시각
  */
 export interface WaitlistEntry {
   userId: string;
@@ -110,7 +117,7 @@ export interface CartItem {
   itemName: string;
   quantity: number;
   unitPrice: number;
-  stock: number;
+  stock: number | null;
   pickupDate: Timestamp;
   status: 'RESERVATION' | 'WAITLIST';
 }
@@ -131,9 +138,17 @@ export type OrderItem = Pick<
   | 'imageUrl'
   | 'unitPrice'
   | 'quantity'
+  | 'stock'
 > & {
-  // ✅ [추가] 예약 취소 정책에 사용될 마감일 정보
   deadlineDate?: Timestamp;
+  pickupDate: Timestamp;
+  pickupDeadlineDate?: Timestamp | null;
+  totalQuantity?: number;
+  totalPrice?: number;
+  category?: string;
+  subCategory?: string;
+  arrivalDate?: Timestamp;
+  expirationDate?: Timestamp;
 };
 
 /**
@@ -146,7 +161,7 @@ export interface Order {
   items: OrderItem[];
   totalPrice: number;
   status: OrderStatus;
-  createdAt: Timestamp;
+  createdAt: Timestamp | FieldValue;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp;
   customerInfo: {
@@ -196,9 +211,7 @@ export interface StoreInfo {
   description: string;
 }
 
-// =================================================================
-// 📊 대시보드 관련 타입
-// =================================================================
+// ... 대시보드 관련 타입 생략 ...
 export interface TodayStockItem {
     id: string;
     variantGroupId: string;
@@ -245,8 +258,8 @@ export interface TodayOngoingProductSummary {
 
 export interface WaitlistItem {
   productId: string;
-  productName: string; // variantGroupName을 productName으로 사용
-  itemName: string;    // 옵션 이름
+  productName: string;
+  itemName: string;
   quantity: number;
   imageUrl: string;
   timestamp: Timestamp;

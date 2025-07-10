@@ -1,28 +1,19 @@
 // src/context/AuthContext.tsx
 
-import { createContext, useContext, useState, useEffect } from 'react';
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp, query, collection, where, onSnapshot, orderBy, updateDoc } from "firebase/firestore";
-import { auth, db } from "../firebase"; // src/context/ 에서 src/firebase.ts 로 접근
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { onAuthStateChanged, User } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp, query, collection, where, onSnapshot, orderBy, updateDoc, Timestamp } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
-import type { ReactNode } from 'react';
-import type { User } from "firebase/auth";
-import type { UserDocument } from '@/types'; // [추가] UserDocument 타입 임포트
+// ✨ [수정] UserDocument와 Notification 타입을 types.ts에서 가져옵니다.
+import type { UserDocument, Notification } from '@/types'; 
 
-// [수정] User 타입과 UserDocument 타입을 병합한 새로운 타입을 정의
 export type AuthUser = User & Partial<UserDocument>;
 
-// [수정] NotificationBell과 공유할 타입을 여기서 정의하고 export 합니다.
-export interface Notification {
-  id: string;
-  message: string;
-  isRead: boolean;
-  timestamp: Date;
-  link?: string;
-}
+// ✨ [삭제] 여기서 중복으로 정의했던 Notification 인터페이스를 제거합니다.
 
 interface AppUserContextType {
-  user: AuthUser | null; // [수정] 타입을 AuthUser로 변경
+  user: AuthUser | null;
   isAdmin: boolean;
   loading: boolean;
   notifications: Notification[];
@@ -40,7 +31,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(null); // [수정] 타입을 AuthUser로 변경
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -65,13 +56,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               encoreRequestedProductIds: [],
             });
             setIsAdmin(false);
-            // [수정] Firebase User 객체와 Firestore 데이터를 병합하여 상태 업데이트
             setUser({ ...currentUser, isAdmin: false, encoreRequestedProductIds: [] } as AuthUser);
-            console.log("Firestore에 새 유저 정보를 생성했습니다.");
           } else {
             const userData = userSnap.data() as UserDocument;
             setIsAdmin(userData.isAdmin === true);
-            // [수정] Firebase User 객체와 Firestore 데이터를 병합하여 상태 업데이트
             const updatedUserState: AuthUser = { ...currentUser, ...userData };
             setUser(updatedUserState);
           }
@@ -81,7 +69,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const newNotifications = snapshot.docs.map(d => ({
               id: d.id,
               ...d.data(),
-              timestamp: d.data().createdAt?.toDate() || new Date()
+              // isRead 속성 이름이 일치하므로 별도 매핑이 필요 없습니다.
             }) as Notification);
             setNotifications(newNotifications);
           });
@@ -109,6 +97,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const handleMarkAsRead = async (id: string) => {
     const notifRef = doc(db, "notifications", id);
+    // ✨ [수정] 데이터베이스 필드 이름인 'isRead'로 업데이트합니다.
     await updateDoc(notifRef, { isRead: true });
   };
 
