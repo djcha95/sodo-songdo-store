@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { Flame, Minus, Plus, ChevronRight, Calendar, Hourglass, Check } from 'lucide-react';
+import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
@@ -12,13 +13,43 @@ import type { Product, SalesRound, CartItem, ProductStatus } from '@/types';
 import useLongPress from '@/hooks/useLongPress';
 import './ProductCard.css';
 
+// ✅ [FIX] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수
+const safeToDate = (date: any): Date | null => {
+  if (!date) return null;
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds).toDate();
+  }
+  if (typeof date === 'string') {
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) return parsedDate;
+  }
+  console.warn("Unsupported date format:", date);
+  return null;
+};
+
 // --- Helper Functions ---
 const getDisplayRound = (product: Product): SalesRound | null => {
   if (!product.salesHistory || product.salesHistory.length === 0) return null;
+  
   const activeRounds = product.salesHistory.filter(r => r.status === 'selling' || r.status === 'scheduled');
-  if (activeRounds.length > 0) return activeRounds.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())[0];
+  if (activeRounds.length > 0) {
+    return activeRounds.sort((a, b) => {
+        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
+        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
+        return dateA - dateB;
+    })[0];
+  }
+
   const nonDraftRounds = product.salesHistory.filter(r => r.status !== 'draft');
-  if (nonDraftRounds.length > 0) return nonDraftRounds.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())[0];
+  if (nonDraftRounds.length > 0) {
+    return nonDraftRounds.sort((a, b) => {
+        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
+        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
+        return dateA - dateB;
+    })[0];
+  }
   return null;
 };
 
@@ -121,11 +152,14 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     const isWaitlistAvailable = status === 'ONGOING' && isSoldOut;
     const singleOptionItem = !isMultiOption ? displayRound.variantGroups?.[0]?.items?.[0] : null;
 
+    const pickupDate = safeToDate(displayRound.pickupDate);
+    if (!pickupDate) return null;
+
     return {
       displayRound, isPurchasable, isMultiOption, singleOptionItem, isLimitedStock,
       totalStock, isSoldOut, isWaitlistAvailable,
       price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
-      pickupDateFormatted: dayjs(displayRound.pickupDate.toDate()).locale('ko').format('M/D(ddd)'),
+      pickupDateFormatted: dayjs(pickupDate).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
   }, [product, status]);
@@ -135,6 +169,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     if (!cardData || !cardData.displayRound || !cardData.singleOptionItem || isJustAdded) return;
 
     const { displayRound, singleOptionItem } = cardData;
+
+    const pickupDateObject = displayRound.pickupDate;
+    let finalPickupDate: Timestamp;
+    if (pickupDateObject instanceof Timestamp) {
+        finalPickupDate = pickupDateObject;
+    } else {
+        const parsedDate = safeToDate(pickupDateObject);
+        if (parsedDate) {
+            finalPickupDate = Timestamp.fromDate(parsedDate);
+        } else {
+            toast.error("상품의 픽업 날짜 정보가 올바르지 않습니다.");
+            return;
+        }
+    }
+
     const cartItem: CartItem = {
       productId: product.id,
       productName: product.groupName,
@@ -148,7 +197,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       quantity,
       unitPrice: singleOptionItem.price,
       stock: singleOptionItem.stock,
-      pickupDate: displayRound.pickupDate,
+      pickupDate: finalPickupDate,
       status: 'RESERVATION',
     };
     
@@ -175,6 +224,20 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       return;
     }
 
+    const pickupDateObject = displayRound.pickupDate;
+    let finalPickupDate: Timestamp;
+    if (pickupDateObject instanceof Timestamp) {
+        finalPickupDate = pickupDateObject;
+    } else {
+        const parsedDate = safeToDate(pickupDateObject);
+        if (parsedDate) {
+            finalPickupDate = Timestamp.fromDate(parsedDate);
+        } else {
+            toast.error("상품의 픽업 날짜 정보가 올바르지 않습니다.");
+            return;
+        }
+    }
+
     const waitlistItem: CartItem = {
       productId: product.id,
       productName: product.groupName,
@@ -188,7 +251,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       quantity: quantity,
       unitPrice: singleOptionItem.price,
       stock: singleOptionItem.stock,
-      pickupDate: displayRound.pickupDate,
+      pickupDate: finalPickupDate,
       status: 'WAITLIST',
     };
     
@@ -204,7 +267,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
 
   if (!cardData) return null;
 
-  // ✅ [오류 수정] useMemo로 계산된 값들을 여기서 분해하여 변수로 선언합니다.
   const { isPurchasable, isMultiOption, isSoldOut, isWaitlistAvailable, price, pickupDateFormatted, storageType, totalStock, isLimitedStock } = cardData;
 
   const getStorageTypeInfo = (type: string | undefined) => {
@@ -266,7 +328,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
           </div>
         )}
         <div className="card-image-container">
-          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" fetchpriority="low" />
+          {/* ✅ [FIX] fetchpriority 속성을 제거하여 경고 해결 */}
+          <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" />
           {!isPurchasable && !isWaitlistAvailable && status !== 'PAST' && <div className="card-overlay-badge">{isSoldOut ? '품절' : '마감'}</div>}
         </div>
         <div className="card-content-container">

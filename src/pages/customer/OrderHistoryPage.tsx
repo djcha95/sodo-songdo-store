@@ -1,589 +1,498 @@
 // src/pages/customer/OrderHistoryPage.tsx
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/Header';
-import { getUserOrders } from '../../firebase';
-import { cancelOrder } from '../../firebase/orderService';
-import type { Order, OrderItem, OrderStatus } from '../../types';
-import { Timestamp } from 'firebase/firestore'; // FieldValue import 제거됨
-import "../customer/OrderHistoryPage.css";
-import { motion } from 'framer-motion';
-import { AiOutlineCheckCircle, AiOutlineCloseCircle, AiOutlineExclamationCircle } from 'react-icons/ai';
-import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
-import { FiShoppingBag } from 'react-icons/fi';
-import Collapsible from 'react-collapsible';
-
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { getUserOrders, cancelOrder } from '@/firebase';
+import type { Order, OrderItem, OrderStatus } from '@/types';
+import { Timestamp } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Package,
+  ListOrdered,
+  ChevronDown,
+  Truck,
+  CircleCheck,
+  CircleX,
+  AlertCircle,
+  X,
+  PackageCheck,
+  PackageX,
+  Hourglass,
+  BadgeAlert,
+  CalendarDays,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import './OrderHistoryPage.css';
 
-interface GroupedOrders {
-  [date: string]: Order[];
-}
+// =================================================================
+// 📌 타입 정의 (Type Definitions)
+// =================================================================
 
+/** 픽업일 순으로 집계된 상품 정보 타입 */
 interface AggregatedPickupItem {
-  id: string;
+  id: string; // 상품 ID
   name: string;
-  quantity: number;
-  price: number;
-  totalPrice: number;
-  orderId?: string;
+  totalQuantity: number;
   pickupDate: Timestamp | null;
-  pickupDeadlineDate: Timestamp | null | undefined;
-  status?: OrderStatus;
-  statuses: { [key: string]: number };
-  category?: string;
-  subCategory?: string;
-  deadlineDate?: Timestamp;
-  stock?: number | null;
   imageUrl: string;
+  options: { name: string; quantity: number }[];
 }
 
-const OrderHistoryPage: React.FC = () => {
-  const { user, notifications = [], handleMarkAsRead = () => {} } = useAuth();
+// =================================================================
+// 📌 헬퍼 함수 (Helper Functions)
+// =================================================================
+
+/** 날짜를 'M월 D일 (요일)' 형식으로 변환합니다. */
+const formatOrderDate = (date: Date): string => {
+  return date.toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+};
+
+/** 날짜를 'M/D(요일)' 형식으로 변환합니다. */
+const formatPickupDateWithDay = (date: Date): string => {
+  const week = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = week[date.getDay()];
+  return `${date.getMonth() + 1}/${date.getDate()}(${dayOfWeek})`;
+};
+
+
+// =================================================================
+// 📌 커스텀 훅 (Custom Hooks)
+// =================================================================
+
+/** 사용자의 주문 목록을 가져오는 커스텀 훅 */
+const useUserOrders = (uid?: string) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'orders' | 'pickup'>('orders');
 
   useEffect(() => {
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
     const fetchOrders = async () => {
-      if (!user) {
-        setLoading(false);
-        setError('로그인이 필요합니다.');
-        return;
-      }
       setLoading(true);
       setError(null);
-
       try {
-        const fetchedOrders = await getUserOrders(user.uid);
-        const ordersWithProcessedDates = fetchedOrders.map(order => ({
-          ...order,
-          items: order.items.map(item => ({
-            ...item,
-            // types.ts의 OrderItem에 arrivalDate와 expirationDate가 추가되었다고 가정하고 사용합니다.
-            arrivalDate: item.arrivalDate || (order.createdAt as Timestamp), // 기존 값이 없으면 order.createdAt 사용
-            expirationDate: item.expirationDate || new Timestamp((order.createdAt as Timestamp).seconds + 5 * 24 * 60 * 60, 0), // 기존 값이 없으면 계산
-          })),
-        }));
-        setOrders(ordersWithProcessedDates);
+        const fetchedOrders = await getUserOrders(uid);
+        setOrders(fetchedOrders);
       } catch (err) {
-        console.error("예약 내역 불러오기 오류:", err);
-        setError('예약 내역을 불러오지 못했습니다.');
+        console.error("예약 내역 로딩 오류:", err);
+        setError("예약 내역을 불러오는 데 실패했습니다.");
       } finally {
         setLoading(false);
       }
     };
-
     fetchOrders();
-  }, [user]);
+  }, [uid]);
 
-  const groupedOrders = useMemo(() => {
-    if (!orders.length) return {};
-    const groups: GroupedOrders = {};
-    orders.forEach(order => {
-      const dateKey = (order.createdAt as Timestamp).toDate().toLocaleDateString('ko-KR') || '날짜 미정';
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(order);
-    });
-    return groups;
-  }, [orders]);
-
-  const groupedPickupItems = useMemo(() => {
-    const allItems = orders.flatMap(order =>
-      order.items.map(item => ({
-        ...item,
-        orderStatus: order.status,
-        pickupDate: order.pickupDate,
-        pickupDeadlineDate: order.pickupDeadlineDate,
-      }))
-    );
-
-    const aggregated = allItems.reduce((acc, item) => {
-        const key = `${item.productId}_${item.itemName}`;
-
-        if (!acc[key]) {
-            acc[key] = {
-                id: item.productId,
-                name: item.itemName,
-                imageUrl: item.imageUrl,
-                quantity: 0,
-                price: item.unitPrice,
-                totalPrice: 0,
-                pickupDate: item.pickupDate,
-                pickupDeadlineDate: item.pickupDeadlineDate,
-                statuses: {},
-                category: item.category,
-                subCategory: item.subCategory,
-                deadlineDate: item.deadlineDate,
-                stock: item.stock,
-            };
-        }
-        acc[key].quantity += item.quantity;
-        acc[key].totalPrice += item.unitPrice * item.quantity;
-
-        const currentStatusCount = acc[key].statuses[item.orderStatus] || 0;
-        acc[key].statuses[item.orderStatus] = currentStatusCount + item.quantity;
-
-        return acc;
-    }, {} as { [key: string]: AggregatedPickupItem });
-
-    const finalItems = Object.values(aggregated);
-
-    const groups: { [date: string]: AggregatedPickupItem[] } = {};
-    finalItems.sort((a, b) => (a.pickupDate?.toMillis() || 0) - (b.pickupDate?.toMillis() || 0));
-
-    finalItems.forEach(item => {
-      const dateKey = item.pickupDate?.toDate().toLocaleDateString('ko-KR') || '날짜 미정';
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(item);
-    });
-
-    return groups;
-  }, [orders]);
+  return { orders, loading, error, setOrders };
+};
 
 
-  const getOrderStatusDisplay = (order: Order) => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+// =================================================================
+// 📌 하위 컴포넌트 (Sub-components)
+// =================================================================
 
-    const pickupDeadline = order.pickupDeadlineDate?.toDate();
-    const isPickupDeadlinePassed = pickupDeadline && pickupDeadline.getTime() < now.getTime();
+/** 날짜 헤더 컴포넌트 */
+const DateHeader: React.FC<{ date: Date; type: 'order' | 'pickup' }> = ({ date, type }) => (
+  <h2 className="date-header">
+    <CalendarDays size={20} />
+    <span>{formatOrderDate(date)} {type === 'order' ? '주문' : '픽업'}</span>
+  </h2>
+);
 
-    switch (order.status) {
-      case 'CANCELED':
-        return { text: '예약 취소', className: 'status-cancelled', icon: <AiOutlineCloseCircle /> };
-      case 'PICKED_UP':
-      case 'COMPLETED':
-        return { text: '픽업 완료', className: 'status-delivered', icon: <AiOutlineCheckCircle /> };
-      case 'RESERVED':
-        if (isPickupDeadlinePassed) {
-          return { text: '노쇼', className: 'status-noshow', icon: <AiOutlineExclamationCircle /> };
-        }
-        return { text: '예약됨', className: 'status-reserved', icon: <AiOutlineCheckCircle /> };
-      case 'NO_SHOW':
-        return { text: '노쇼', className: 'status-noshow', icon: <AiOutlineExclamationCircle /> };
-      default:
-        return { text: order.status, className: '', icon: null };
+/** 시간 구분선 헤더 컴포넌트 */
+const TimeSectionHeader: React.FC<{ title: string }> = ({ title }) => (
+    <h3 className="time-section-header">{title}</h3>
+);
+
+
+/** 예약 내역이 없을 때 표시될 UI 컴포넌트 */
+const EmptyHistory: React.FC = () => {
+  const navigate = useNavigate();
+  return (
+    <div className="empty-history-container">
+      <Package size={48} className="empty-icon" />
+      <h3 className="empty-title">아직 예약 내역이 없어요</h3>
+      <p className="empty-description">마음에 드는 상품을 찾아 예약해보세요!</p>
+      <button className="go-to-shop-btn" onClick={() => navigate('/')}>
+        상품 보러 가기
+      </button>
+    </div>
+  );
+};
+
+/** '주문일 순 보기'의 개별 주문 카드 컴포넌트 */
+const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showWarning: boolean) => void }> = React.memo(({ order, onCancel }) => {
+  const { status, items = [], totalPrice, id } = order;
+  const statusIcons: Record<OrderStatus, React.ReactElement> = {
+    RESERVED: <Hourglass size={16} />,
+    PICKED_UP: <PackageCheck size={16} />,
+    COMPLETED: <CircleCheck size={16} />,
+    CANCELED: <PackageX size={16} />,
+    NO_SHOW: <AlertCircle size={16} />,
+  };
+  const statusTexts: Record<OrderStatus, string> = {
+    RESERVED: '예약됨',
+    PICKED_UP: '픽업 완료',
+    COMPLETED: '처리 완료',
+    CANCELED: '예약 취소',
+    NO_SHOW: '노쇼',
+  };
+
+  const getCancellationInfo = useCallback(() => {
+    if (status !== 'RESERVED') {
+      return { cancellable: false, showWarning: false };
     }
-  };
-
-  const getAggregatedItemStatusDisplay = (item: AggregatedPickupItem) => {
-    const mostFrequentStatus = Object.keys(item.statuses).reduce((a, b) => item.statuses[a] > item.statuses[b] ? a : b, '');
-
-    switch (mostFrequentStatus as OrderStatus) {
-        case 'CANCELED':
-            return { text: '일부 취소', className: 'status-cancelled', icon: <AiOutlineCloseCircle /> };
-        case 'PICKED_UP':
-        case 'COMPLETED':
-            return { text: '일부 픽업 완료', className: 'status-delivered', icon: <AiOutlineCheckCircle /> };
-        case 'RESERVED':
-            return { text: '예약됨', className: 'status-reserved', icon: <AiOutlineCheckCircle /> };
-        case 'NO_SHOW':
-            return { text: '일부 노쇼', className: 'status-noshow', icon: <AiOutlineExclamationCircle /> };
-        default:
-            return { text: '혼합 상태', className: '', icon: null };
-    }
-  };
-
-
-  const formatDate = (timestamp?: Timestamp | null) => {
-    if (!timestamp) return '미정';
-    const date = timestamp.toDate();
-    return date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' });
-  };
-
-  const formatDateYYMMDD = (timestamp?: Timestamp | null) => {
-    if (!timestamp) return '미정';
-    const date = timestamp.toDate();
-    const year = date.getFullYear().toString().slice(2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}.${month}.${day}`;
-  };
-
-  const getPickupDeadlineText = (item: AggregatedPickupItem) => {
-    if (!item.pickupDeadlineDate || !(item.pickupDeadlineDate instanceof Timestamp)) {
-        return '날짜 정보 없음';
-    }
-
-    const pickup = item.pickupDate?.toDate();
-    const deadline = item.pickupDeadlineDate.toDate();
-
-    if (pickup &&
-        deadline &&
-        pickup.getFullYear() === deadline.getFullYear() &&
-        pickup.getMonth() === deadline.getMonth() &&
-        pickup.getDate() === deadline.getDate()) {
-      return <span className="pickup-deadline same-day">당일픽업</span>;
-    }
-
-    return formatDateYYMMDD(item.pickupDeadlineDate);
-  };
-
-  const getCancellationInfo = useCallback((order: Order) => {
     const now = new Date();
     const pickupDate = order.pickupDate?.toDate();
 
-    if (order.status !== 'RESERVED') {
-      return { cancellable: false, showWarning: false, reason: '취소/완료된 주문' };
-    }
-
     if (pickupDate && now >= pickupDate) {
-      return { cancellable: false, showWarning: false, reason: '픽업 시작일 경과' };
+      return { cancellable: false, showWarning: false };
     }
-
-    const firstItem = order.items[0];
-    if (!firstItem || !firstItem.deadlineDate) {
-      return { cancellable: true, showWarning: false, reason: '정보 부족' };
+    if (pickupDate && pickupDate.getTime() - now.getTime() < 24 * 60 * 60 * 1000) {
+      return { cancellable: true, showWarning: true };
     }
-
-    const deadline = firstItem.deadlineDate.toDate();
-    const isLimited = firstItem.stock != null;
-
-    const uploadDate = new Date(deadline.getTime() - (24 + 13) * 60 * 60 * 1000);
-    uploadDate.setHours(0, 0, 0, 0);
-
-    if (isLimited) {
-      const freeCancelEnd = new Date(uploadDate.getTime());
-      freeCancelEnd.setHours(22, 0, 0, 0);
-
-      const cautiousCancelEnd = new Date(uploadDate.getTime());
-      cautiousCancelEnd.setDate(cautiousCancelEnd.getDate() + 1);
-      cautiousCancelEnd.setHours(10, 0, 0, 0);
-
-      if (now <= freeCancelEnd) return { cancellable: true, showWarning: false, reason: '자유 취소' };
-      if (now <= cautiousCancelEnd) return { cancellable: true, showWarning: true, reason: '신중 취소' };
-
-    } else {
-      const freeCancelEnd = new Date(uploadDate.getTime());
-      freeCancelEnd.setDate(freeCancelEnd.getDate() + 1);
-      freeCancelEnd.setHours(10, 0, 0, 0);
-
-      const cautiousCancelEnd = new Date(uploadDate.getTime());
-      cautiousCancelEnd.setDate(cautiousCancelEnd.getDate() + 1);
-      cautiousCancelEnd.setHours(13, 0, 0, 0);
-
-      if (now <= freeCancelEnd) return { cancellable: true, showWarning: false, reason: '자유 취소' };
-      if (now <= cautiousCancelEnd) return { cancellable: true, showWarning: true, reason: '신중 취소' };
-    }
-
-    return { cancellable: false, showWarning: false, reason: '취소 기간 만료' };
-  }, []);
-
-  const handleCancelOrder = async (orderId: string) => {
-    if (!user?.uid) {
-      toast.error('로그인 정보가 없어 주문을 취소할 수 없습니다.');
-      return;
-    }
-
-    const orderToCancel = orders.find(order => order.id === orderId);
-    if (!orderToCancel) {
-      toast.error('취소할 주문을 찾을 수 없습니다.');
-      return;
-    }
-    const cancellationInfo = getCancellationInfo(orderToCancel);
-
-    if (cancellationInfo.showWarning) {
-      toast((t) => (
-        <div className="confirmation-toast-simple">
-          <h4>정말 취소하시겠어요?</h4>
-          <p>마감이 임박한 상품의 취소는 재고 운영에 영향을 줄 수 있습니다.</p>
-          <div className="toast-buttons-simple">
-            <button className="toast-cancel-btn-simple" onClick={() => toast.dismiss(t.id)}>
-              유지
-            </button>
-            <button
-              className="toast-confirm-btn-simple danger"
-              onClick={() => {
-                toast.dismiss(t.id);
-                toast.promise(cancelOrder(user.uid, orderId), {
-                  loading: '주문 취소 중...',
-                  success: () => {
-                    setOrders(prevOrders => prevOrders.map(order =>
-                      order.id === orderId ? { ...order, status: 'CANCELED' as OrderStatus } : order
-                    ));
-                    return '예약이 취소되었습니다.';
-                  },
-                  error: (err) => `취소에 실패했습니다. ${err.message || '다시 시도해 주세요.'}`,
-                });
-              }}
-            >
-              취소하기
-            </button>
+    return { cancellable: true, showWarning: false };
+  }, [order.pickupDate, status]);
+  
+  const { cancellable, showWarning } = getCancellationInfo();
+  
+  return (
+    <motion.div className="order-card" layout>
+      <div className="card-header">
+        <span className={`status-badge status-${status.toLowerCase()}`}>
+          {statusIcons[status]} {statusTexts[status]}
+        </span>
+        <span className="order-date">
+          픽업: {order.pickupDate ? formatPickupDateWithDay(order.pickupDate.toDate()) : '미정'}
+        </span>
+      </div>
+      <div className="card-body">
+        {items.map((item, index) => (
+          <div key={index} className="order-item">
+            <div className="item-image-wrapper">
+              <img src={item.imageUrl} alt={item.productName} className="item-image" />
+            </div>
+            <div className="item-details">
+              <span className="item-name">{item.productName} ({item.itemName})</span>
+              <span className="item-quantity-price">
+                {item.quantity}개 / {(item.unitPrice * item.quantity).toLocaleString()}원
+              </span>
+            </div>
           </div>
+        ))}
+      </div>
+      <div className="card-footer">
+        <span className="total-price">총 {totalPrice.toLocaleString()}원</span>
+        {cancellable && (
+          <button 
+            className={`cancel-button ${showWarning ? 'warning' : ''}`} 
+            onClick={() => onCancel(id, showWarning)}
+          >
+            {showWarning ? <BadgeAlert size={16}/> : <X size={16} />}
+            {showWarning ? '신중 취소' : '예약 취소'}
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+});
+
+/** '픽업일 순 보기'의 날짜별 그룹 카드 컴포넌트 */
+const PickupGroupCard: React.FC<{ date: string; items: AggregatedPickupItem[] }> = React.memo(({ date, items }) => {
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <motion.div className="pickup-group-card" layout>
+      <button className="collapsible-trigger" onClick={() => setIsOpen(!isOpen)}>
+        <div className="trigger-content">
+          <Truck size={20} />
+          <h3 className="pickup-group-title">
+            {formatPickupDateWithDay(new Date(date))} 픽업
+          </h3>
         </div>
-      ), { duration: 6000, style: { background: 'transparent', boxShadow: 'none' } });
-    } else {
-      toast.promise(cancelOrder(user.uid, orderId), {
-        loading: '주문 취소 중...',
-        success: () => {
-          setOrders(prevOrders => prevOrders.map(order =>
-            order.id === orderId ? { ...order, status: 'CANCELED' as OrderStatus } : order
-          ));
-          return '예약이 취소되었습니다.';
-        },
-        error: (err) => `취소에 실패했습니다. ${err.message || '다시 시도해 주세요.'}`,
-      });
-    }
-  };
+        <ChevronDown size={24} className={`chevron-icon ${isOpen ? 'open' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="collapsible-content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
+            {items.map((item) => (
+              <div key={item.id} className="pickup-item">
+                <div className="item-image-wrapper">
+                  <img src={item.imageUrl} alt={item.name} className="item-image" />
+                </div>
+                <div className="item-details">
+                  <span className="item-name">{item.name}</span>
+                  <span className="item-total-quantity">총 {item.totalQuantity}개</span>
+                  <div className="item-options-list">
+                    {item.options.map((opt, i) => (
+                      <span key={i} className="option-chip">{opt.name}: {opt.quantity}개</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+});
 
-  /* ───── 렌더링 ───── */
-
-  const OrderView = () => {
-    const dates = Object.keys(groupedOrders).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+/** '픽업일 순 보기'의 기간별 집계 카드 컴포넌트 (지난주, 월별 등) */
+const AggregatedPickupGroupCard: React.FC<{ title: string; dateGroups: {date: string; items: AggregatedPickupItem[]}[] }> = React.memo(({ title, dateGroups }) => {
+    const [isOpen, setIsOpen] = useState(false);
 
     return (
-      <div className="order-history-list">
-        {dates.map((date, index) => (
-          <motion.div
-            key={date}
-            className="order-group-card"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.1 }}
-            viewport={{ once: true, amount: 0.8 }}
-          >
-            <Collapsible
-              triggerTagName="div"
-              trigger={
-                <div className="collapsible-header">
-                  <div className="header-text">
-                    <span className="group-date">{date}</span>
-                    <span className="group-order-count">총 {groupedOrders[date].length}건</span>
-                  </div>
-                  <div className="header-icon-wrapper">
-                    <IoIosArrowDown className="header-icon" />
-                  </div>
+        <motion.div className="pickup-group-card" layout>
+            <button className="collapsible-trigger" onClick={() => setIsOpen(!isOpen)}>
+                <div className="trigger-content">
+                    <CalendarDays size={20} />
+                    <h3 className="pickup-group-title">{title}</h3>
                 </div>
-              }
-              triggerWhenOpen={
-                <div className="collapsible-header">
-                  <div className="header-text">
-                    <span className="group-date">{date}</span>
-                    <span className="group-order-count">총 {groupedOrders[date].length}건</span>
-                  </div>
-                  <div className="header-icon-wrapper">
-                    <IoIosArrowUp className="header-icon" />
-                  </div>
-                </div>
-              }
-              transitionTime={300}
-              easing="ease-in-out"
-            >
-              <div className="collapsible-content">
-                {(groupedOrders[date] || []).map((order: Order) => {
-                  const statusDisplay = getOrderStatusDisplay(order);
-                  const cancellationInfo = getCancellationInfo(order);
-                  return (
-                    <div key={order.id} className="order-card-in-group">
-                      <div className="order-header-section-in-group">
-                        <span className="order-id">주문번호: {order.id.slice(0, 8)}...</span>
-                        <span className={`order-status-badge ${statusDisplay.className}`}>
-                          {statusDisplay.icon}
-                          {statusDisplay.text}
-                        </span>
-                      </div>
-                      <ul className="order-items-detail-list">
-                        {(order.items || []).map((item: OrderItem, idx: number) => (
-                          <li key={idx} className="order-item-detail-row">
-                            <div className="product-main-info">
-                              <span className="product-name-qty">
-                                {item.productName} <span className="product-quantity-display">({item.quantity}개)</span>
-                              </span>
-                              <span className="product-category">
-                                [{item.category || '기타'}]
-                                {item.subCategory && ` (${item.subCategory})`}
-                              </span>
+                <ChevronDown size={24} className={`chevron-icon ${isOpen ? 'open' : ''}`} />
+            </button>
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        className="collapsible-content"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                    >
+                        {dateGroups.map(({ date, items }) => (
+                            <div key={date} className="aggregated-item-group">
+                                <h4 className='aggregated-item-date'>{formatPickupDateWithDay(new Date(date))}</h4>
+                                {items.map(item => (
+                                     <div key={item.id} className="pickup-item">
+                                        <div className="item-image-wrapper">
+                                          <img src={item.imageUrl} alt={item.name} className="item-image" />
+                                        </div>
+                                        <div className="item-details">
+                                        <span className="item-name">{item.name}</span>
+                                        <span className="item-total-quantity">총 {item.totalQuantity}개</span>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <div className="product-sub-info">
-                              <span className="product-price">{(item.unitPrice * item.quantity).toLocaleString()}원</span>
-                              <div className="product-date-info-group">
-                                <span className="product-date-info">
-                                  입고: {formatDate(item.arrivalDate || null)}
-                                </span>
-                                <span className="product-date-info">
-                                  유통: {formatDate(item.expirationDate || null)}
-                                </span>
-                              </div>
-                            </div>
-                          </li>
                         ))}
-                      </ul>
-                      <div className="order-footer-section">
-                        <span className="order-pickup-info">
-                          픽업 예정일: {order.pickupDate?.toDate().toLocaleDateString() || '미정'}
-                          {order.pickupDeadlineDate && ` (마감: ${formatDate(order.pickupDeadlineDate)})`}
-                        </span>
-                        {cancellationInfo.cancellable && (
-                          <button
-                            className={`cancel-order-btn ${cancellationInfo.showWarning ? 'warning' : ''}`}
-                            onClick={() => handleCancelOrder(order.id)}
-                            disabled={!cancellationInfo.cancellable}
-                          >
-                            {cancellationInfo.showWarning ? '신중 취소' : '예약 취소'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Collapsible>
-          </motion.div>
-        ))}
-      </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
     );
-  };
+});
 
-  const PickupView = () => {
-    const dates = Object.keys(groupedPickupItems).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-    return (
-      <div className="pickup-history-list">
-        {dates.map((date, index) => (
-          <motion.div
-            key={date}
-            className="pickup-group-card"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.1 }}
-            viewport={{ once: true, amount: 0.8 }}
-          >
-            <Collapsible
-              triggerTagName="div"
-              trigger={
-                <div className="collapsible-header">
-                  <div className="header-text">
-                    <span className="group-date">픽업일: {date}</span>
-                    <span className="group-order-count">총 {groupedPickupItems[date].length}개 상품</span>
-                  </div>
-                  <div className="header-icon-wrapper">
-                    <IoIosArrowDown className="header-icon" />
-                  </div>
-                </div>
-              }
-              triggerWhenOpen={
-                <div className="collapsible-header">
-                  <div className="header-text">
-                    <span className="group-date">픽업일: {date}</span>
-                    <span className="group-order-count">총 {groupedPickupItems[date].length}개 상품</span>
-                  </div>
-                  <div className="header-icon-wrapper">
-                    <IoIosArrowUp className="header-icon" />
-                  </div>
-                </div>
-              }
-              transitionTime={300}
-              easing="ease-in-out"
-            >
-              <div className="collapsible-content">
-                {groupedPickupItems[date].map((item: AggregatedPickupItem, idx: number) => {
-                  const itemStatusDisplay = getAggregatedItemStatusDisplay(item);
-                  return (
-                    <div key={`${item.id}-${idx}`} className="item-card-in-group aggregated-item-card">
-                      <div className="item-card-header-row">
-                        <span className="item-name">
-                            {item.name} <span className="item-aggregated-quantity">({item.quantity}개)</span>
-                        </span>
-                        <span className={`item-card-status-badge ${itemStatusDisplay.className}`}>
-                          {itemStatusDisplay.icon}
-                          {itemStatusDisplay.text}
-                        </span>
-                      </div>
-                      <div className="item-card-status-row">
-                        <span className="item-category">
-                          [{item.category || '기타'}]
-                          {item.subCategory && ` (${item.subCategory})`}
-                        </span>
-                      </div>
-                      <div className="item-card-bottom-row">
-                        <span className="item-pickup-date">픽업 마감일: {getPickupDeadlineText(item)}</span>
-                        <span className="item-price">{(item.totalPrice || 0).toLocaleString()}원</span>
-                      </div>
-                      {Object.keys(item.statuses).length > 1 && (
-                          <div className="item-detailed-statuses">
-                              {Object.entries(item.statuses).map(([status, count]) => (
-                                  <span key={status} className="detailed-status-badge">
-                                      {getStatusDisplayForDetail(status as OrderStatus).icon}
-                                      {getStatusDisplayForDetail(status as OrderStatus).text}: {count}개
-                                  </span>
-                              ))}
-                          </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Collapsible>
-          </motion.div>
-        ))}
-      </div>
-    );
-  };
+// =================================================================
+// 📌 메인 컴포넌트 (Main Component)
+// =================================================================
 
-  const getStatusDisplayForDetail = (status: OrderStatus) => {
-    switch (status) {
-      case 'CANCELED': return { text: '취소', icon: <AiOutlineCloseCircle /> };
-      case 'PICKED_UP': return { text: '픽업', icon: <AiOutlineCheckCircle /> };
-      case 'COMPLETED': return { text: '완료', icon: <AiOutlineCheckCircle /> };
-      case 'RESERVED': return { text: '예약', icon: <AiOutlineCheckCircle /> };
-      case 'NO_SHOW': return { text: '노쇼', icon: <AiOutlineExclamationCircle /> };
-      default: return { text: status, icon: null };
+const OrderHistoryPage: React.FC = () => {
+  const { user } = useAuth();
+  const { orders, loading, error, setOrders } = useUserOrders(user?.uid);
+  const [viewMode, setViewMode] = useState<'orders' | 'pickup'>('orders');
+
+  const ordersByDate = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      const date = order.createdAt instanceof Timestamp ? order.createdAt.toDate() : new Date();
+      const dateStr = date.toISOString().split('T')[0];
+      if (!acc[dateStr]) acc[dateStr] = [];
+      acc[dateStr].push(order);
+      return acc;
+    }, {} as { [date: string]: Order[] });
+  }, [orders]);
+
+  const aggregatedItemsByPickupDate = useMemo(() => {
+    const aggregated: { [key: string]: AggregatedPickupItem } = {};
+    const filteredOrders = orders.filter(o => o.status === 'RESERVED' || o.status === 'PICKED_UP');
+
+    filteredOrders.forEach(order => {
+        if (!order.pickupDate) return;
+        const dateStr = order.pickupDate.toDate().toISOString().split('T')[0];
+
+        order.items.forEach(item => {
+            const key = `${item.productId}_${dateStr}`;
+            if (!aggregated[key]) {
+                aggregated[key] = {
+                    id: key,
+                    name: item.productName,
+                    pickupDate: order.pickupDate,
+                    totalQuantity: 0,
+                    imageUrl: item.imageUrl,
+                    options: [],
+                };
+            }
+            aggregated[key].totalQuantity += item.quantity;
+            const existingOption = aggregated[key].options.find(opt => opt.name === item.itemName);
+            if (existingOption) {
+                existingOption.quantity += item.quantity;
+            } else {
+                aggregated[key].options.push({ name: item.itemName, quantity: item.quantity });
+            }
+        });
+    });
+    
+    const groupedByDate: { [date: string]: AggregatedPickupItem[] } = {};
+    Object.values(aggregated).forEach(item => {
+      const dateStr = item.pickupDate!.toDate().toISOString().split('T')[0];
+      if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
+      groupedByDate[dateStr].push(item);
+    });
+    return groupedByDate;
+  }, [orders]);
+
+  const groupedPickupItems = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const upcoming: { date: string; items: AggregatedPickupItem[] }[] = [];
+    const pastLast7Days: { date: string; items: AggregatedPickupItem[] }[] = [];
+    const past8to14Days: { date: string; items: AggregatedPickupItem[] }[] = [];
+    const olderByMonth: { [month: string]: { date: string; items: AggregatedPickupItem[] }[] } = {};
+    
+    const sortedDates = Object.keys(aggregatedItemsByPickupDate).sort((a,b) => new Date(b).getTime() - new Date(a).getTime());
+
+    for (const dateStr of sortedDates) {
+        const pickupDate = new Date(dateStr);
+        pickupDate.setUTCHours(0, 0, 0, 0);
+        const data = { date: dateStr, items: aggregatedItemsByPickupDate[dateStr] };
+
+        if (pickupDate >= today) {
+            upcoming.push(data);
+        } else {
+            const diffTime = today.getTime() - pickupDate.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24));
+
+            if (diffDays <= 7) pastLast7Days.push(data);
+            else if (diffDays <= 14) past8to14Days.push(data);
+            else {
+                const monthKey = `${pickupDate.getFullYear()}년 ${pickupDate.getMonth() + 1}월`;
+                if (!olderByMonth[monthKey]) olderByMonth[monthKey] = [];
+                olderByMonth[monthKey].push(data);
+            }
+        }
     }
-  };
+    upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return { upcoming, pastLast7Days, past8to14Days, olderByMonth };
+  }, [aggregatedItemsByPickupDate]);
 
+  /** 주문 취소 핸들러 */
+  const handleCancelOrder = useCallback((orderId: string, showWarning: boolean) => {
+    if (!user) return;
 
-  const Body = () => {
-    if (loading) return <p className="loading-message">예약 내역을 불러오는 중…</p>;
-    if (error) return <p className="error-message">{error}</p>;
+    const performCancellation = async () => {
+      const toastId = toast.loading('예약 취소 처리 중...');
+      try {
+        await cancelOrder(orderId, user.uid);
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELED' } : o));
+        toast.success('예약이 성공적으로 취소되었습니다.', { id: toastId });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`취소 중 오류가 발생했습니다: ${message}`, { id: toastId });
+      }
+    };
 
-    return (orders.length === 0 ?
-      <div className="empty-history-container">
-        <FiShoppingBag className="empty-icon" size={50} />
-        <p className="empty-title">아직 예약 내역이 없어요</p>
-        <p className="empty-description">마음에 드는 상품을 찾아 예약해보세요!</p>
-        <button className="go-to-shop-btn" onClick={() => window.location.href='/'}>상품 보러가기</button>
+    const toastMessage = showWarning 
+      ? "마감이 임박한 상품입니다. 정말 예약을 취소하시겠어요? 취소는 운영에 영향을 줄 수 있습니다."
+      : "예약을 취소하시겠습니까? 취소된 예약은 복구할 수 없습니다.";
+    
+    const toastTitle = showWarning ? "마감 임박" : "예약 취소 확인";
+
+    toast((t) => (
+      <div className="confirmation-toast">
+        <h4>{toastTitle}</h4>
+        <p>{toastMessage}</p>
+        <div className="toast-buttons">
+          <button onClick={() => toast.dismiss(t.id)}>유지</button>
+          <button className="confirm" onClick={() => {
+            toast.dismiss(t.id);
+            performCancellation();
+          }}>
+            취소 확정
+          </button>
+        </div>
       </div>
-      : (
-        <>
-          <div className="view-mode-toggle">
-            <button
-              className={viewMode === 'orders' ? 'active' : ''}
-              onClick={() => setViewMode('orders')}
-            >
-              예약 건별 보기
-            </button>
-            <button
-              className={viewMode === 'pickup' ? 'active' : ''}
-              onClick={() => setViewMode('pickup')}
-            >
-              픽업일 순 보기
-            </button>
-          </div>
-          {viewMode === 'orders' ? <OrderView /> : <PickupView />}
-        </>
-      )
-    );
+    ), { duration: 6000 });
+  }, [user, setOrders]);
+  
+  const renderContent = () => {
+    if (loading) return <div className="loading-spinner-container"><div className="loading-spinner"></div></div>;
+    if (error) return <div className="error-message">{error}</div>;
+    if (orders.length === 0) return <EmptyHistory />;
+
+    if (viewMode === 'orders') {
+      const sortedDates = Object.keys(ordersByDate).sort((a,b) => new Date(b).getTime() - new Date(a).getTime());
+      return (
+        <div className="orders-list">
+          <AnimatePresence>
+            {sortedDates.map(dateStr => (
+              <motion.div key={dateStr} layout>
+                <DateHeader date={new Date(dateStr)} type="order" />
+                {ordersByDate[dateStr].map(order => (
+                  <OrderGroupCard key={order.id} order={order} onCancel={handleCancelOrder} />
+                ))}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      );
+    } else { // pickup view
+      const { upcoming, pastLast7Days, past8to14Days, olderByMonth } = groupedPickupItems;
+      const hasContent = upcoming.length > 0 || pastLast7Days.length > 0 || past8to14Days.length > 0 || Object.keys(olderByMonth).length > 0;
+      if (!hasContent) {
+        return <div className="info-message">픽업 예정 또는 완료된 상품이 없습니다.</div>
+      }
+      return (
+        <div className="pickup-list">
+            {upcoming.length > 0 && <TimeSectionHeader title="예정된 픽업" />}
+            {upcoming.map(({ date, items }) => (
+                <PickupGroupCard key={date} date={date} items={items} />
+            ))}
+
+            {(pastLast7Days.length > 0 || past8to14Days.length > 0 || Object.keys(olderByMonth).length > 0) && (
+                 <TimeSectionHeader title="지난 픽업" />
+            )}
+            {pastLast7Days.map(({ date, items }) => (
+                <PickupGroupCard key={date} date={date} items={items} />
+            ))}
+            {past8to14Days.length > 0 && (
+                <AggregatedPickupGroupCard title="지난 주" dateGroups={past8to14Days} />
+            )}
+            {Object.entries(olderByMonth).map(([month, dateGroups]) => (
+                <AggregatedPickupGroupCard key={month} title={month} dateGroups={dateGroups} />
+            ))}
+        </div>
+      );
+    }
   };
 
   return (
-    <>
-      {/* Header 컴포넌트는 현재 Header.tsx의 로직에 따라 제목을 결정합니다. */}
-      {/* notifications와 onMarkAsRead props는 Header 컴포넌트의 정의가 업데이트되어야 유효합니다. */}
-      <Header
-        title="예약 내역"
-        notifications={notifications}
-        onMarkAsRead={handleMarkAsRead}
-      />
-      <div className="customer-page-container">
-        <Body />
+    <div className="order-history-page">
+      <div className="view-toggle-container">
+        <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => setViewMode('orders')}>
+          <ListOrdered size={18} /> 주문일 순 보기
+        </button>
+        <button className={`toggle-btn ${viewMode === 'pickup' ? 'active' : ''}`} onClick={() => setViewMode('pickup')}>
+          <Truck size={18} /> 픽업일 순 보기
+        </button>
       </div>
-    </>
+      {renderContent()}
+    </div>
   );
 };
 

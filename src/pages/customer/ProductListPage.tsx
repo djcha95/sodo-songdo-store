@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getProducts, getActiveBanners } from '@/firebase';
 import type { Product, Banner, SalesRound } from '@/types';
+import { Timestamp } from 'firebase/firestore'; // Timestamp 타입을 명시적으로 가져옵니다.
 import toast from 'react-hot-toast';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ProductSection from '@/components/customer/ProductSection';
@@ -13,17 +14,57 @@ import dayjs from 'dayjs';
 import './ProductListPage.css';
 import '@/styles/common.css';
 
+// ✅ [FIX] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수
+const safeToDate = (date: any): Date | null => {
+  if (!date) {
+    return null;
+  }
+  // 1. 이미 JavaScript Date 객체인 경우
+  if (date instanceof Date) {
+    return date;
+  }
+  // 2. Firestore Timestamp 객체인 경우
+  if (typeof date.toDate === 'function') {
+    return date.toDate();
+  }
+  // 3. JSON.stringify를 통해 변환된 객체인 경우 (e.g., { seconds: ..., nanoseconds: ... })
+  if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds).toDate();
+  }
+  // 4. 날짜 형식의 문자열인 경우
+  if (typeof date === 'string') {
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) {
+      return parsedDate;
+    }
+  }
+  // 그 외의 경우, 변환 실패
+  console.warn("Unsupported date format:", date);
+  return null;
+};
+
+
 const getDisplayRound = (product: Product): SalesRound | null => {
   if (!product.salesHistory || product.salesHistory.length === 0) {
     return null;
   }
   const activeRounds = product.salesHistory.filter((r: SalesRound) => r.status === 'selling' || r.status === 'scheduled');
   if (activeRounds.length > 0) {
-    return activeRounds.sort((a: SalesRound, b: SalesRound) => b.createdAt.toMillis() - a.createdAt.toMillis())[0];
+    // ✅ [FIX] 날짜 비교 시 safeToDate 헬퍼 함수 사용
+    return activeRounds.sort((a: SalesRound, b: SalesRound) => {
+        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
+        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
+        return dateA - dateB;
+    })[0];
   }
   const nonDraftRounds = product.salesHistory.filter((r: SalesRound) => r.status !== 'draft');
   if (nonDraftRounds.length > 0) {
-    return nonDraftRounds.sort((a: SalesRound, b: SalesRound) => b.createdAt.toMillis() - a.createdAt.toMillis())[0];
+    // ✅ [FIX] 날짜 비교 시 safeToDate 헬퍼 함수 사용
+    return nonDraftRounds.sort((a: SalesRound, b: SalesRound) => {
+        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
+        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
+        return dateA - dateB;
+    })[0];
   }
   return null;
 };
@@ -78,8 +119,15 @@ const ProductListPage: React.FC = () => {
       const round = getDisplayRound(product);
       if (!round) return;
 
-      const deadline = dayjs(round.deadlineDate.toDate());
-      const finalPickupDeadline = dayjs(round.pickupDate.toDate()).hour(13).minute(0).second(0);
+      // ✅ [FIX] .toDate() 대신 safeToDate 헬퍼 함수 사용
+      const deadlineDate = safeToDate(round.deadlineDate);
+      const pickupDate = safeToDate(round.pickupDate);
+
+      // 날짜 변환 실패 시 해당 상품은 처리하지 않음
+      if (!deadlineDate || !pickupDate) return;
+
+      const deadline = dayjs(deadlineDate);
+      const finalPickupDeadline = dayjs(pickupDate).hour(13).minute(0).second(0);
       
       const isTerminalStatus = round.status === 'ended' || round.status === 'sold_out';
       if (isTerminalStatus || now.isAfter(finalPickupDeadline)) {
@@ -117,17 +165,26 @@ const ProductListPage: React.FC = () => {
     });
 
 
-    tempAdditional.sort((a, b) => (getDisplayRound(a)?.pickupDate.toMillis() || 0) - (getDisplayRound(b)?.pickupDate.toMillis() || 0));
+    tempAdditional.sort((a, b) => {
+        const dateA = safeToDate(getDisplayRound(a)?.pickupDate)?.getTime() || 0;
+        const dateB = safeToDate(getDisplayRound(b)?.pickupDate)?.getTime() || 0;
+        return dateA - dateB;
+    });
     
     const oneWeekAgo = dayjs().subtract(7, 'day');
     const filteredPast = tempPast.filter(product => {
-      // ✅ [수정] 오타를 수정했습니다. (getDisplayround -> getDisplayRound)
       const round = getDisplayRound(product);
       if (!round) return false;
-      const pickupDate = dayjs(round.pickupDate.toDate());
-      return pickupDate.isAfter(oneWeekAgo);
+      // ✅ [FIX] .toDate() 대신 safeToDate 헬퍼 함수 사용
+      const pickupDate = safeToDate(round.pickupDate);
+      return pickupDate ? dayjs(pickupDate).isAfter(oneWeekAgo) : false;
     });
-    filteredPast.sort((a, b) => (getDisplayRound(b)?.pickupDate.toMillis() || 0) - (getDisplayRound(a)?.pickupDate.toMillis() || 0));
+    
+    filteredPast.sort((a, b) => {
+        const dateA = safeToDate(getDisplayRound(b)?.pickupDate)?.getTime() || 0;
+        const dateB = safeToDate(getDisplayRound(a)?.pickupDate)?.getTime() || 0;
+        return dateA - dateB;
+    });
 
     return {
       ongoingProducts: tempOngoing,
@@ -138,9 +195,11 @@ const ProductListPage: React.FC = () => {
 
   useEffect(() => {
     if (ongoingProducts.length === 0) { setCountdown(null); return; }
+    
     const deadlines = ongoingProducts
-      .map(p => getDisplayRound(p)?.deadlineDate.toDate().getTime())
-      .filter((d): d is number => d !== undefined);
+      // ✅ [FIX] .toDate() 대신 safeToDate 헬퍼 함수 사용
+      .map(p => safeToDate(getDisplayRound(p)?.deadlineDate)?.getTime())
+      .filter((d): d is number => d !== undefined && d !== null);
 
     if (deadlines.length === 0) return;
     
