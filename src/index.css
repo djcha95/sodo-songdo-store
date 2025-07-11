@@ -1,7 +1,6 @@
 /* src/index.css */
 
-/* Google Fonts - Noto Sans KR */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 
 /* 공통 변수 파일 import */
 @import './styles/variables.css';
@@ -9,35 +8,36 @@
 @import './styles/common.css';
 
 
-/* [수정] 전역 기본 스타일 */
+/* 전역 기본 스타일 */
 html, body, #root {
-  height: 100%; /* 높이를 100%로 설정하여 자식 요소가 vh 단위를 올바르게 계산하도록 함 */
+  height: 100%;
   margin: 0;
   padding: 0;
 }
 
+/* ❗ [추가] html의 기본 폰트 크기를 살짝 키웁니다. */
+html {
+  font-size: 106.25%; /* 기본 폰트 크기를 16px에서 17px로 살짝 키웁니다. */
+}
+
 body {
-  font-family: var(--font-family-sans-serif);
+  font-family: 'Pretendard', var(--font-family-sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-color-gray-soft);
   color: var(--text-color-dark);
-  line-height: 1.0;
+  line-height: 1.6;
 }
-
-/* ... (이하 기존 스타일 유지) ... */
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
 
-/* 모든 요소의 box-sizing을 border-box로 설정 */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
-/* 기본 마진/패딩 초기화 */
 h1, h2, h3, h4, h5, h6, p, ul, ol, li, figure, figcaption, blockquote, dl, dd {
   margin: 0;
   padding: 0;
@@ -49,7 +49,7 @@ ul, ol {
 
 a {
     text-decoration: none;
-    color: inherit; /* 기본 링크 색상을 상속받도록 */
+    color: inherit;
 }
 
 button {
@@ -57,12 +57,11 @@ button {
     background: none;
     padding: 0;
     cursor: pointer;
-    font-family: var(--font-family-sans-serif);
+    font-family: inherit;
 }
 
-/* 기본 이미지 스타일 */
 img {
     max-width: 100%;
     height: auto;
-    display: block; /* 이미지 하단 공백 제거 */
+    display: block;
 }

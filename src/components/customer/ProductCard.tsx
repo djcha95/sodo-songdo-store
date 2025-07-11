@@ -13,7 +13,6 @@ import type { Product, SalesRound, CartItem, ProductStatus } from '@/types';
 import useLongPress from '@/hooks/useLongPress';
 import './ProductCard.css';
 
-// ✅ [FIX] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
@@ -147,7 +146,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     const isSoldOut = totalStock === 0;
-    const isLimitedStock = status === 'ONGOING' && totalStock > 0 && totalStock < Infinity;
+    
+    // ❗ [FIX] '마감 임박' 상태일 때도 한정 수량 뱃지가 표시되도록 조건을 추가합니다.
+    const isLimitedStock = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && totalStock > 0 && totalStock < Infinity;
+    
     const isPurchasable = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && !isSoldOut;
     const isWaitlistAvailable = status === 'ONGOING' && isSoldOut;
     const singleOptionItem = !isMultiOption ? displayRound.variantGroups?.[0]?.items?.[0] : null;
@@ -328,7 +330,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
           </div>
         )}
         <div className="card-image-container">
-          {/* ✅ [FIX] fetchpriority 속성을 제거하여 경고 해결 */}
           <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" />
           {!isPurchasable && !isWaitlistAvailable && status !== 'PAST' && <div className="card-overlay-badge">{isSoldOut ? '품절' : '마감'}</div>}
         </div>

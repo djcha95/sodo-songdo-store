@@ -1,43 +1,84 @@
 /* src/pages/admin/DashboardPage.css */
 
 .dashboard-container {
-    padding: 24px;
-    background-color: #f4f7fa;
+    padding: 24px 32px; /* 좌우 여백 추가 */
+    background-color: #f8f9fa; /* 배경색을 약간 더 부드럽게 */
     min-height: 100vh;
 }
 
 .dashboard-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 24px;
-    color: var(--text-color-dark);
+    padding-bottom: 16px; /* 헤더 하단에 여백과 선 추가 */
+    border-bottom: 1px solid #dee2e6;
+    margin-bottom: 32px;
 }
 
-.dashboard-header h1 {
-    font-size: 1.8rem;
+.header-title-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #212529; /* 텍스트 색상을 더 진하게 */
+}
+
+.header-title-area h1 {
+    font-size: 1.75rem; /* 폰트 크기 미세 조정 */
     font-weight: 700;
     margin: 0;
 }
 
+/* --- ❗ [FIX] 버튼 디자인 수정 --- */
+.bulk-save-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background-color: #28a745; /* 활성 상태 색상 (성공) */
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.bulk-save-button:hover:not(:disabled) {
+    background-color: #218838; /* 더 어두운 녹색 */
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+}
+
+.bulk-save-button:disabled {
+    background-color: #e9ecef; /* 명확한 비활성 회색 */
+    color: #adb5bd; /* 비활성 텍스트 색상 */
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+/* -------------------------------- */
+
+
 .dashboard-group {
     background-color: #ffffff;
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #dee2e6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
     margin-bottom: 32px;
     overflow: hidden;
 }
 
 .group-title {
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     font-weight: 600;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color-light);
-    background-color: #fcfdff;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e9ecef;
+    color: #343a40;
 }
 
 .table-wrapper {
-    overflow-x: auto; /* 테이블이 길 경우 가로 스크롤 생성 */
+    overflow-x: auto;
 }
 
 .dashboard-table {
@@ -49,64 +90,60 @@
 .dashboard-table td {
     padding: 14px 16px;
     text-align: center;
-    border-bottom: 1px solid var(--border-color-light);
+    border-bottom: 1px solid #f1f3f5;
     white-space: nowrap;
     vertical-align: middle;
+    font-size: 0.9rem; /* 테이블 폰트 크기 통일 */
 }
 
 .dashboard-table th {
     background-color: #f8f9fa;
-    font-size: 0.8rem;
     font-weight: 500;
-    color: var(--text-color-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: #495057;
+    text-transform: none; /* 대문자 변환 제거 */
+    letter-spacing: 0px;
 }
 
-.dashboard-table tr:last-child td {
-    border-bottom: none;
+/* ❗ [ADD] 테이블 Zebra-Striping */
+.dashboard-table tbody tr:nth-child(even) {
+    background-color: #fcfcfd;
 }
 
-.dashboard-table tr:hover {
-    background-color: #f8f9fa;
+.dashboard-table tbody tr:hover {
+    background-color: #f1f8ff; /* 호버 색상 변경 */
 }
 
 .product-name-cell {
     text-align: left;
     font-weight: 500;
+    color: #343a40;
     white-space: normal;
-    min-width: 200px;
-}
-
-.option-name {
-    color: var(--text-color-medium);
-    font-size: 0.85rem;
-    font-weight: 400;
+    min-width: 220px;
 }
 
 .quantity-cell {
-    font-family: 'Roboto Mono', monospace;
+    font-family: 'Pretendard', sans-serif; /* 숫자도 Pretendard로 통일 */
     font-weight: 500;
-    font-size: 1rem;
+    font-size: 0.95rem;
 }
 
 .important-cell {
     font-weight: 700;
-    color: var(--primary-color);
+    color: #1971c2; /* 파란색 계열로 변경 */
 }
 
 .unlimited-stock {
-    font-style: italic;
-    color: var(--success-color);
+    font-style: normal;
+    color: #495057;
     font-weight: 500;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .final-stock-input {
-    width: 90px;
+    width: 120px;
     padding: 8px;
-    border: 1px solid var(--border-color-medium);
-    border-radius: var(--border-radius-md);
+    border: 1px solid #ced4da;
+    border-radius: 6px;
     text-align: right;
     font-size: 0.9rem;
     transition: all 0.2s ease;
@@ -114,28 +151,13 @@
 
 .final-stock-input:focus {
     outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px var(--primary-color-light);
-}
-
-.save-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 8px;
-    border-radius: var(--border-radius-md);
-    background-color: var(--primary-color);
-    color: white;
-    transition: background-color 0.2s ease-in-out;
-}
-
-.save-button:hover {
-    background-color: var(--primary-color-dark);
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.25);
 }
 
 .no-data-message {
     text-align: center;
     padding: 60px;
-    color: var(--text-color-medium);
+    color: #868e96;
     font-size: 1.1rem;
 }

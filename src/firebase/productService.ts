@@ -3,14 +3,13 @@
 import { db, storage } from './firebaseConfig';
 import {
   collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
-  writeBatch, increment, arrayUnion, where, orderBy, Timestamp, runTransaction
+  writeBatch,
+  increment, arrayUnion, where, orderBy, Timestamp, runTransaction
 } from 'firebase/firestore';
-// ✅ [개선] Firebase의 타입 정의를 별도로 import합니다.
 import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-// ✅ [개선] WaitlistEntry 타입을 추가로 가져옵니다.
-import type { Product, SalesRound, VariantGroup, ProductItem, WaitlistEntry } from '@/types';
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry } from '@/types';
 
 /**
  * @description 대표 상품을 추가하고 첫 번째 판매 회차를 등록하는 함수
@@ -175,12 +174,7 @@ export const getProducts = async (archived: boolean = false): Promise<Product[]>
 
 
 /**
- * ✅ [개선] 대기 명단에 신규 등록하는 함수. ProductDetailPage 와 연동됩니다.
  * @description 특정 판매 회차의 대기 명단에 사용자를 추가합니다.
- * @param {string} productId - 상품 ID
- * @param {string} roundId - 판매 회차 ID
- * @param {string} userId - 대기 신청하는 사용자 ID
- * @param {number} quantity - 대기 신청 수량
  */
 export const addWaitlistEntry = async (
   productId: string,
@@ -206,7 +200,6 @@ export const addWaitlistEntry = async (
 
     const round = newSalesHistory[roundIndex];
 
-    // 이미 대기 명단에 있는지 확인 (중복 등록 방지)
     const existingEntry = round.waitlist?.find(entry => entry.userId === userId);
     if (existingEntry) {
       throw new Error("이미 대기를 신청한 상품입니다.");
@@ -218,9 +211,7 @@ export const addWaitlistEntry = async (
       timestamp: Timestamp.now(),
     };
     
-    // 대기자 명단에 추가
     round.waitlist = [...(round.waitlist || []), newWaitlistEntry];
-    // ✅ [오류 수정] 대기자 수가 아닌, 총 신청 '수량'으로 waitlistCount를 정확히 계산합니다.
     round.waitlistCount = (round.waitlistCount || 0) + quantity;
 
     newSalesHistory[roundIndex] = round;
@@ -273,7 +264,6 @@ export const updateItemStock = async (
 };
 
 /**
- * ✅ [개선] 상품 재고 확인 함수의 가독성을 높였습니다.
  * @description 상품의 최종 구매 가능 여부를 확인합니다.
  */
 export const checkProductAvailability = async (productId: string, roundId: string, variantGroupId: string, itemId: string): Promise<boolean> => {
@@ -289,21 +279,169 @@ export const checkProductAvailability = async (productId: string, roundId: strin
   const item = variantGroup.items.find((i: ProductItem) => i.id === itemId);
   if (!item) return false;
 
-  // 1. 개별 품목 재고 확인 (가장 기본적인 재고)
-  // 재고가 무제한(-1)이거나, 1개 이상 남아있어야 합니다.
   const hasSufficientItemStock = item.stock === -1 || item.stock > 0;
   if (!hasSufficientItemStock) {
-    return false; // 개별 재고가 없으면 즉시 false 반환
+    return false;
   }
 
-  // 2. 그룹 공유 재고 확인 (박스 재고 등)
-  // totalPhysicalStock이 설정되지 않았거나(null 또는 -1) 무제한이면 통과합니다.
-  // 설정되었다면, 남은 그룹 재고가 현재 아이템이 차감할 양보다 크거나 같아야 합니다.
   const hasSufficientGroupStock = 
     variantGroup.totalPhysicalStock === null || 
     variantGroup.totalPhysicalStock === -1 || 
     variantGroup.totalPhysicalStock >= item.stockDeductionAmount;
   
-  // 그룹 재고까지 충분해야 최종적으로 구매 가능합니다.
   return hasSufficientGroupStock;
+};
+
+
+/**
+ * @description 특정 판매 회차의 특정 하위 그룹 재고(totalPhysicalStock)를 업데이트하는 함수
+ */
+export const updateVariantGroupStock = async (
+    productId: string,
+    roundId: string,
+    variantGroupId: string,
+    newStock: number
+): Promise<void> => {
+    const productRef = doc(db, 'products', productId);
+    
+    await runTransaction(db, async (transaction) => {
+        const productSnap = await transaction.get(productRef);
+        if (!productSnap.exists()) {
+            throw new Error("상품을 찾을 수 없습니다.");
+        }
+        
+        const product = productSnap.data() as Product;
+
+        const newSalesHistory = product.salesHistory.map((round: SalesRound) => {
+            if (round.roundId === roundId) {
+                const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
+                    if (vg.id === variantGroupId) {
+                        return { ...vg, totalPhysicalStock: newStock };
+                    }
+                    return vg;
+                });
+                return { ...round, variantGroups: newVariantGroups };
+            }
+            return round;
+        });
+        
+        transaction.update(productRef, { salesHistory: newSalesHistory });
+    });
+};
+
+/**
+ * @description 여러 개의 하위 그룹 재고를 한 번의 작업으로 업데이트하는 함수
+ */
+export const updateMultipleVariantGroupStocks = async (
+  updates: {
+    productId: string;
+    roundId: string;
+    variantGroupId: string;
+    newStock: number;
+  }[]
+): Promise<void> => {
+  const batch = writeBatch(db);
+
+  const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
+
+  // 여러 업데이트가 동일한 상품을 대상으로 할 수 있으므로, 먼저 모든 상품 문서를 한 번씩만 읽습니다.
+  for (const update of updates) {
+    if (!productsToUpdate.has(update.productId)) {
+      const productRef = doc(db, 'products', update.productId);
+      const productSnap = await getDoc(productRef);
+      if (productSnap.exists()) {
+        productsToUpdate.set(update.productId, {
+          productRef,
+          productData: productSnap.data() as Product,
+        });
+      }
+    }
+  }
+  
+  // 메모리에 로드된 상품 데이터에 모든 변경사항을 적용합니다.
+  for (const update of updates) {
+    const productInfo = productsToUpdate.get(update.productId);
+    if (!productInfo) continue;
+
+    const { productData } = productInfo;
+
+    const newSalesHistory = productData.salesHistory.map((round: SalesRound) => {
+      if (round.roundId === update.roundId) {
+        const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
+          if (vg.id === update.variantGroupId) {
+            return { ...vg, totalPhysicalStock: update.newStock };
+          }
+          return vg;
+        });
+        return { ...round, variantGroups: newVariantGroups };
+      }
+      return round;
+    });
+    
+    // 메모리 내의 데이터를 업데이트하여 동일 상품에 대한 후속 업데이트가 반영되도록 합니다.
+    productData.salesHistory = newSalesHistory; 
+  }
+
+  // 최종적으로 변경된 모든 상품 데이터를 배치에 추가합니다.
+  for (const [productId, { productRef, productData }] of productsToUpdate.entries()) {
+    batch.update(productRef, { salesHistory: productData.salesHistory });
+  }
+
+  await batch.commit();
+};
+
+
+// =================================================================
+// ✨ 여기에 새로운 함수를 추가했습니다.
+// =================================================================
+
+/**
+ * @description 여러 판매 회차의 상태를 일괄적으로 업데이트합니다.
+ * @param updates - { productId, roundId, newStatus } 객체 배열
+ */
+export const updateMultipleRoundStatuses = async (
+  updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
+) => {
+  const batch = writeBatch(db);
+
+  const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
+
+  // 1. 업데이트가 필요한 모든 고유한 상품 문서를 한 번씩만 읽어옵니다.
+  for (const update of updates) {
+    if (!productsToUpdate.has(update.productId)) {
+      const productRef = doc(db, 'products', update.productId);
+      const productSnap = await getDoc(productRef);
+      if (productSnap.exists()) {
+        productsToUpdate.set(update.productId, {
+          productRef,
+          productData: productSnap.data() as Product,
+        });
+      }
+    }
+  }
+  
+  // 2. 메모리에 로드된 상품 데이터에 모든 상태 변경을 적용합니다.
+  for (const update of updates) {
+    const productInfo = productsToUpdate.get(update.productId);
+    if (!productInfo) continue;
+
+    const { productData } = productInfo;
+
+    const newSalesHistory = productData.salesHistory.map(round => {
+      if (round.roundId === update.roundId) {
+        return { ...round, status: update.newStatus };
+      }
+      return round;
+    });
+
+    // 메모리 내 데이터를 업데이트하여 동일 상품에 대한 후속 업데이트가 반영되도록 합니다.
+    productData.salesHistory = newSalesHistory;
+  }
+
+  // 3. 최종적으로 변경된 모든 상품 데이터를 배치에 추가하여 한 번에 씁니다.
+  for (const [productId, { productRef, productData }] of productsToUpdate.entries()) {
+    batch.update(productRef, { salesHistory: productData.salesHistory });
+  }
+
+  await batch.commit();
 };

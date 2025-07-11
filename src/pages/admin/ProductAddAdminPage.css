@@ -13,38 +13,19 @@
 .save-button:disabled, .draft-save-button:disabled { background-color: #ced4da; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* --- 최종 3단 그리드 레이아웃 --- */
-.main-content-grid-3-col-final {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr); /* 1:1:1 비율의 3단 그리드 */
-    gap: 28px; 
-    padding: 28px 32px; 
-    align-items: flex-start;
-    max-width: 1800px;
-    margin: 0 auto;
-}
-/* 화면이 작아지면 2단 -> 1단으로 자동 변경 */
-@media (max-width: 1400px) {
-    .main-content-grid-3-col-final { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 992px) {
-    .main-content-grid-3-col-final { grid-template-columns: 1fr; }
-}
+.main-content-grid-3-col-final { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 28px 32px; align-items: flex-start; max-width: 1800px; margin: 0 auto; }
+@media (max-width: 1400px) { .main-content-grid-3-col-final { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 992px) { .main-content-grid-3-col-final { grid-template-columns: 1fr; } }
 
 .form-section { background-color: white; border: 1px solid #e9ecef; border-radius: 16px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 .sticky-section { position: sticky; top: 95px; }
-
 .form-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px 0; }
 .title-text-group { display: flex; align-items: center; gap: 12px; }
 .title-text-group h3 { font-size: 1.5rem; font-weight: 700; color: #343a40; margin: 0; }
 .section-subtitle { font-size: 0.95rem; color: #868e96; margin: 0 0 28px 0; padding-bottom: 20px; border-bottom: 1px solid #f1f3f5; }
+.icon-color-product { color: #845ef7; } .icon-color-option { color: #ff922b; } .icon-color-settings { color: #228be6; }
 
-.icon-color-product { color: #845ef7; } 
-.icon-color-image { color: #f783ac; } 
-.icon-color-round { color: #51cf66; } 
-.icon-color-option { color: #ff922b; } 
-.icon-color-settings { color: #228be6; }
-
-/* --- 상품 타입 선택 (인라인 토글) --- */
+/* --- 상품 타입 선택 --- */
 .product-type-toggle-inline { display: flex; background-color: #f1f3f5; border-radius: 8px; padding: 4px; }
 .product-type-toggle-inline button { padding: 6px 16px; border: none; background: transparent; font-size: 0.95rem; font-weight: 500; color: #495057; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
 .product-type-toggle-inline button.active { background-color: white; color: var(--primary-color); box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600; }
@@ -58,52 +39,27 @@
 .add-thumbnail-btn:hover { border-color: var(--primary-color); color: var(--primary-color); }
 
 /* --- 판매 옵션 --- */
-.variant-group-card { border-radius: 12px; padding-top: 16px; }
-.variant-group-header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px dashed #dee2e6; position: relative; } /* Added position:relative */
+.variant-group-card { border: 1px solid #f1f3f5; border-radius: 12px; padding: 24px; margin-bottom: 20px; background-color: #fdfdfd; }
+.variant-group-header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px dashed #dee2e6; }
 .variant-group-header .form-group.full-width { flex: 2 1 200px; }
 .variant-group-header .form-group { flex: 1 1 120px; margin-bottom: 0; }
 .stock-input-wrapper { position: relative; }
 .stock-input-wrapper input { padding-right: 55px; }
 .stock-input-wrapper .stock-unit-addon { position: absolute; right: 1px; top: 1px; bottom: 1px; background: #f1f3f5; padding: 0 10px; border-radius: 0 7px 7px 0; display: flex; align-items: center; font-size: 0.95rem; color: #495057; }
-/* .option-item-card 제거 */
-/* .option-item-card { border: 1px solid #f1f3f5; border-radius: 10px; padding: 24px; margin-bottom: 16px; position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); } */
-.option-item-section { margin-bottom: 20px; padding: 20px; border: 1px solid #f1f3f5; border-radius: 10px; position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); } /* New style for option items */
+.option-item-section { margin-bottom: 20px; padding: 20px; border: 1px solid #e9ecef; border-radius: 10px; position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.option-item-section:last-child { margin-bottom: 0; }
 
-/* 최종 2x2 그리드 */
 .option-item-grid-2x2 { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: auto auto; gap: 20px 24px; }
-.option-item-grid-2x2 .item-name { grid-column: 1 / 2; }
-.option-item-grid-2x2 .item-price { grid-column: 2 / 3; }
-.option-item-grid-2x2 .item-limit { grid-column: 1 / 2; }
-.option-item-grid-2x2 .item-deduction { grid-column: 2 / 3; }
-
 .form-group-grid label.tooltip-container { position: relative; display: inline-flex; cursor: help; }
 .tooltip-text { visibility: hidden; width: 240px; background-color: #343a40; color: #fff; text-align: left; border-radius: 6px; padding: 10px 14px; position: absolute; z-index: 1; bottom: 130%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s 0.5s, visibility 0.2s 0.5s; font-size: 0.9rem; line-height: 1.5; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
 .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
 .add-group-btn-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
 
-/* Remove variant group button positioning */
-.remove-variant-group-btn {
-    position: absolute;
-    right: 0; /* Adjust as needed for alignment with other inputs */
-    top: 50%; /* Center vertically within the header if desired, or adjust */
-    transform: translateY(-50%);
-    background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: #868e96;
-    transition: all 0.2s;
-    margin-left: 10px; /* Space between date input and button */
-    top: 8px; /* Adjust this to align with the '유통기한' label */
-    right: 0px; /* Adjust this to align with the '유통기한' label */
-}
-.remove-variant-group-btn:hover { background: #fa5252; color: white; border-color: #fa5252; transform: scale(1.1); }
-
+.remove-variant-group-btn { background: transparent; border: none; cursor: pointer; color: #868e96; transition: all 0.2s; padding: 5px;}
+.remove-variant-group-btn:hover { color: #fa5252; transform: scale(1.1); }
+.variant-group-header .form-group { display: flex; flex-direction: column; }
+.variant-group-header { align-items: flex-end; }
+.variant-group-header .remove-variant-group-btn { margin-bottom: 14px; }
 
 /* --- 발행 및 기간 설정 --- */
 .storage-type-select, .publish-option-buttons { display: flex; border: 1px solid #ced4da; border-radius: 8px; overflow: hidden; }
@@ -117,12 +73,11 @@
 .summary-title { display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 600; margin: 0 0 16px 0; padding-bottom: 12px; border-bottom: 1px solid var(--primary-color-light); color: var(--primary-color-dark); }
 .settings-summary-card ul { list-style: none; padding: 0; margin: 0; font-size: 0.95rem; line-height: 1.7; }
 .settings-summary-card li:last-child { margin-bottom: 0; }
-.settings-summary-card strong { font-weight: 600; color: #343a40; margin-right: 8px; }
 
 /* --- 폼 요소 및 기타 스타일 --- */
-.form-group, .form-group-grid { display: flex; flex-direction: column; }
-.form-group label, .form-group-grid label { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #343a40; }
-.form-group-grid label { font-size: 0.95rem; margin-bottom: 8px; }
+.form-group, .form-group-grid { display: flex; flex-direction: column; gap: 12px; }
+.form-group label, .form-group-grid label { font-size: 1rem; font-weight: 600; color: #343a40; }
+.form-group-grid label { font-size: 0.95rem; margin-bottom: 0px; }
 .form-group input, .form-group-grid input, .form-group textarea, .form-group select { width: 100%; padding: 14px 16px; border: 1px solid #ced4da; border-radius: 8px; font-size: 1rem; }
 .form-group-grid input { padding: 12px 14px; font-size: 0.95rem; }
 .price-input-wrapper { position: relative; }
@@ -132,6 +87,11 @@
 .add-item-btn, .add-group-btn { border: 1px dashed #adb5bd; background-color: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 1rem; color: #495057; cursor: pointer; transition: all 0.2s; text-align: center; width: 100%; font-weight: 500; }
 .add-item-btn { flex: 1; }
 .add-item-btn:hover, .add-group-btn:hover { border-color: #364fc7; color: #364fc7; background-color: #e9ecef; }
-.remove-item-btn { position: absolute; top: 16px; right: 16px; background: white; border: 1px solid #dee2e6; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #868e96; transition: all 0.2s; } /* Removed .remove-variant-group-btn from this selector */
+.remove-item-btn { position: absolute; top: 16px; right: 16px; background: white; border: 1px solid #dee2e6; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #868e96; transition: all 0.2s; }
 .remove-item-btn:hover { background: #fa5252; color: white; border-color: #fa5252; transform: scale(1.1); }
 .category-select-wrapper { display: flex; gap: 10px; margin-bottom: 16px; }
+
+input[placeholder="비우면 무제한"]::placeholder {
+  color: #adb5bd;
+  font-style: italic;
+}

@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// ❗ [FIX 2] 사용하지 않는 updateItemStock 함수 import 제거
-import { getProducts } from '@/firebase/productService';
+import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import toast from 'react-hot-toast';
-import { TrendingUp, Save } from 'lucide-react';
+import { TrendingUp, SaveAll } from 'lucide-react';
 import './DashboardPage.css';
-
-// --- 타입 정의 ---
 
 interface EnrichedGroupItem {
   id: string; 
@@ -31,8 +28,6 @@ const formatDate = (date: Date): string => {
   const day = date.getDate().toString().padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
-
-// --- 메인 컴포넌트 ---
 
 const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -66,10 +61,9 @@ const DashboardPage: React.FC = () => {
             const groupId = vg.id || `${product.id}-${round.roundId}-${vg.groupName}`;
             const groupKey = `${product.id}-${round.roundId}-${groupId}`;
             
-            // ❗ [FIX 1] '설정된 재고' 계산 시 null 타입을 완벽하게 처리하도록 로직 보강
-            const groupStock = vg.totalPhysicalStock ?? -1; // null이면 -1로 변환
+            const groupStock = vg.totalPhysicalStock ?? -1;
             const hasGroupStock = groupStock !== -1;
-            const representativeItemStock = vg.items?.[0]?.stock ?? -1; // 옵셔널 체이닝과 null 병합으로 안정성 확보
+            const representativeItemStock = vg.items?.[0]?.stock ?? -1;
             const finalConfiguredStock = hasGroupStock ? groupStock : representativeItemStock;
 
             allDisplayItems.push({
@@ -120,20 +114,49 @@ const DashboardPage: React.FC = () => {
     setStockInputs(prev => ({ ...prev, [groupId]: value }));
   };
 
-  const handleStockSave = async (item: EnrichedGroupItem) => {
-    const newStockValue = stockInputs[item.id];
-    if (newStockValue === undefined || newStockValue.trim() === '') {
-      toast.error("입력된 최종 재고 값이 없습니다.");
+  const handleBulkSave = async () => {
+    if (Object.keys(stockInputs).length === 0) {
+      toast.error("변경된 내용이 없습니다.");
       return;
     }
-    
-    const newStock = parseInt(newStockValue, 10);
-    if (isNaN(newStock)) {
-      toast.error("재고는 숫자만 입력 가능합니다.");
+
+    const updates = Object.entries(stockInputs)
+      .map(([itemId, newStockValue]) => {
+        const item = Object.values(groupedItems).flat().find(i => i.id === itemId);
+        if (!item || newStockValue.trim() === '') return null;
+        
+        const newStock = parseInt(newStockValue, 10);
+        if (isNaN(newStock)) {
+          toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
+          return 'invalid';
+        }
+        
+        return {
+          productId: item.productId,
+          roundId: item.roundId,
+          variantGroupId: item.variantGroupId,
+          newStock: newStock,
+        };
+      })
+      .filter(u => u !== null);
+
+    if (updates.some(u => u === 'invalid')) return;
+
+    if (updates.length === 0) {
+      toast.error("유효한 변경 내용이 없습니다.");
       return;
     }
-    
-    toast.error("저장 기능은 그룹 재고 업데이트를 위한 백엔드 함수 연결이 필요합니다.");
+
+    const promise = updateMultipleVariantGroupStocks(updates as any);
+
+    await toast.promise(promise, {
+      loading: "모든 변경사항 저장 중...",
+      success: `${updates.length}개의 항목이 성공적으로 업데이트되었습니다!`,
+      error: "업데이트 중 오류가 발생했습니다.",
+    });
+
+    setStockInputs({});
+    fetchData();
   };
 
   if (loading) return <LoadingSpinner />;
@@ -141,8 +164,18 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
-        <TrendingUp size={24} />
-        <h1>통합 판매 현황 대시보드</h1>
+        <div className="header-title-area">
+          <TrendingUp size={28} />
+          <h1>통합 판매 현황 대시보드</h1>
+        </div>
+        <button 
+          className="bulk-save-button" 
+          onClick={handleBulkSave}
+          disabled={Object.keys(stockInputs).length === 0}
+        >
+          <SaveAll size={18} />
+          모든 변경사항 저장
+        </button>
       </div>
 
       {sortedDateKeys.length > 0 ? (
@@ -161,7 +194,6 @@ const DashboardPage: React.FC = () => {
                     <th>남은 수량</th>
                     <th>설정된 재고</th>
                     <th>최종 재고 입력</th>
-                    <th>저장</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -196,15 +228,6 @@ const DashboardPage: React.FC = () => {
                             value={stockInputs[item.id] || ''}
                             onChange={(e) => handleStockInputChange(item.id, e.target.value)}
                           />
-                        </td>
-                        <td>
-                          <button 
-                            className="save-button" 
-                            onClick={() => handleStockSave(item)}
-                            aria-label={`${displayName} 재고 저장`}
-                          >
-                            <Save size={18} />
-                          </button>
                         </td>
                       </tr>
                     );

@@ -1,28 +1,22 @@
 // src/pages/admin/ProductListPageAdmin.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getProducts, getCategories } from '../../firebase';
-import { Timestamp } from 'firebase/firestore'; // ✅ Timestamp import 추가
-import type { Product, SalesRound, Category, SalesRoundStatus } from '../../types';
+import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleRoundStatuses } from '../../firebase';
+import { db } from '@/firebase/firebaseConfig';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
 import toast from 'react-hot-toast';
-import { Plus, History, Archive, Edit, Filter, Search, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import './ProductListPageAdmin.css';
 
-// ✅ [수정] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수 (숫자 및 유효성 검사 추가)
+// =================================================================
+// 헬퍼 함수 및 타입
+// =================================================================
 const safeToDate = (date: any): Date | null => {
     if (!date) return null;
-    if (date instanceof Date) {
-        if (isNaN(date.getTime())) return null;
-        return date;
-    }
-    // 숫자(milliseconds) 형식 지원 추가
-    if (typeof date === 'number') {
-        const d = new Date(date);
-        if (isNaN(d.getTime())) return null;
-        return d;
-    }
+    if (date instanceof Date) return isNaN(date.getTime()) ? null : date;
     if (typeof date.toDate === 'function') return date.toDate();
     if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
       return new Timestamp(date.seconds, date.nanoseconds).toDate();
@@ -31,251 +25,457 @@ const safeToDate = (date: any): Date | null => {
       const parsedDate = new Date(date);
       if (!isNaN(parsedDate.getTime())) return parsedDate;
     }
-    console.warn("Unsupported date format:", date);
     return null;
 };
 
-/**
- * 판매 이력 배열에서 화면에 표시할 가장 최신 회차를 찾습니다.
- */
-const getLatestRound = (salesHistory: SalesRound[] = []): SalesRound | null => {
-  if (!salesHistory || salesHistory.length === 0) return null;
-  return [...salesHistory]
-    .filter(r => r.status !== 'draft')
-    // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜 비교
-    .sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0))[0] || null;
-};
-
-/**
- * 상품의 모든 옵션 중에서 가장 이른 유통기한을 찾아 반환합니다. (정렬용)
- */
-const getEarliestExpirationDate = (product: Product): number => {
-    const latestRound = getLatestRound(product.salesHistory);
-    if (!latestRound) return Infinity;
-    
-    // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜에서 시간(ms) 추출
-    const dates = latestRound.variantGroups
-        .flatMap(vg => vg.items.map(i => safeToDate(i.expirationDate)?.getTime()))
-        .filter((d): d is number => d !== undefined && d !== null);
-        
-    if (dates.length === 0) return Infinity;
-    return Math.min(...dates);
-};
-
-/**
- * 날짜 데이터를 포맷에 맞게 변환합니다.
- */
 const formatDate = (dateInput: any) => {
-    // ✅ [FIX] safeToDate 헬퍼를 사용하여 어떤 형식의 날짜든 처리
     const date = safeToDate(dateInput);
     if (!date) return '–';
     return date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\.$/, '');
 };
 
+const getEarliestExpirationDateForGroup = (variantGroup: VariantGroup): number => {
+    const dates = variantGroup.items.map(i => safeToDate(i.expirationDate)?.getTime()).filter((d): d is number => d !== undefined && d !== null);
+    return dates.length > 0 ? Math.min(...dates) : Infinity;
+};
 
+const translateStatus = (status: SalesRoundStatus): string => {
+    const statusMap: Record<SalesRoundStatus, string> = {
+        selling: '판매중', scheduled: '판매예정', ended: '판매종료',
+        sold_out: '품절', draft: '임시저장'
+    };
+    return statusMap[status] || status;
+};
+
+const translateStorageType = (storageType: StorageType): string => {
+    const typeMap: Record<StorageType, string> = {
+        ROOM: '실온', COLD: '냉장', FROZEN: '냉동'
+    };
+    return typeMap[storageType] || storageType;
+};
+
+const getVariantGroupStatus = (roundStatus: SalesRoundStatus, vg: EnrichedVariantGroup): SalesRoundStatus => {
+    if (roundStatus === 'selling') {
+        const remaining = vg.configuredStock - vg.reservedQuantity;
+        if (vg.configuredStock !== -1 && remaining <= 0) return 'sold_out';
+    }
+    return roundStatus;
+};
+
+interface EnrichedVariantGroup extends VariantGroup {
+    reservedQuantity: number;
+    configuredStock: number;
+    pickedUpQuantity: number;
+}
+
+interface EnrichedRoundItem {
+  productId: string;
+  productName: string;
+  productImage: string;
+  category: string;
+  storageType: StorageType;
+  round: SalesRound;
+  uniqueId: string;
+  enrichedVariantGroups: EnrichedVariantGroup[];
+}
+
+type SortableKeys = 'roundCreatedAt' | 'productName' | 'category';
+
+// =================================================================
+// 커스텀 훅: 상태 저장
+// =================================================================
+function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const storedValue = localStorage.getItem(key);
+      return storedValue ? JSON.parse(storedValue) : defaultValue;
+    } catch (error) { console.warn(`Error reading localStorage key “${key}”:`, error); return defaultValue; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(state)); } catch (error) { console.warn(`Error setting localStorage key “${key}”:`, error); }
+  }, [key, state]);
+  return [state, setState];
+}
+
+
+// =================================================================
+// ✨ Row를 위한 하위 컴포넌트
+// =================================================================
+interface ProductAdminRowProps {
+    item: EnrichedRoundItem;
+    index: number;
+    isExpanded: boolean;
+    isSelected: boolean;
+    editingStockId: string | null;
+    stockInputs: Record<string, string>;
+    onToggleExpansion: (id: string) => void;
+    onSelectionChange: (id: string, checked: boolean) => void;
+    onStockEditStart: (id: string, stock: number) => void;
+    onStockEditSave: (id: string) => void;
+    onSetStockInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}
+
+const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
+    item, index, isExpanded, isSelected, editingStockId, stockInputs,
+    onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs
+}) => {
+    const navigate = useNavigate();
+    const isExpandable = item.enrichedVariantGroups.length > 1;
+    const deadline = safeToDate(item.round.deadlineDate);
+    const deadlinePassed = deadline ? deadline < new Date() : false;
+
+    // 단일 상품 행 렌더링
+    if (!isExpandable) {
+        const vg = item.enrichedVariantGroups[0];
+        const status = getVariantGroupStatus(item.round.status, vg);
+        const vgUniqueId = `${item.productId}_${item.round.roundId}_${vg.id}`;
+        const rowClass = ["master-row", (deadlinePassed && vg.configuredStock === -1) ? "update-needed-warning" : ""].filter(Boolean).join(" ");
+        
+        return (
+          <tr className={rowClass}>
+            <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
+            <td>{index + 1}</td>
+            <td>{formatDate(item.round.createdAt)}</td>
+            <td>{item.category}</td>
+            <td><span className={`storage-badge storage-${item.storageType}`}>{translateStorageType(item.storageType)}</span></td>
+            <td>
+              <div className="product-name-cell-v2">
+                <img src={item.productImage} alt={item.productName} className="product-thumbnail" />
+                <div className="product-name-text">
+                  <span className="product-group-name">{item.productName}</span>
+                  <span className="round-name-text">{item.round.roundName}</span>
+                </div>
+              </div>
+            </td>
+            <td><span className={`status-badge status-${status}`} title={`Status: ${status}`}>{translateStatus(status)}</span></td>
+            <td>{vg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
+            <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
+            <td className="quantity-cell">{`${vg.reservedQuantity} / ${item.round.waitlistCount || 0}`}</td>
+            <td className="quantity-cell">{vg.pickedUpQuantity}</td>
+            <td className="stock-cell">
+              {editingStockId === vgUniqueId ? (
+                  <input type="number" className="stock-input" value={stockInputs[vgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [vgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(vgUniqueId)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(vgUniqueId); if (e.key === 'Escape') onStockEditStart(vgUniqueId, vg.configuredStock); }} />
+              ) : (
+                  <button className="stock-display-button" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정. -1 입력 시 무제한">{vg.configuredStock === -1 ? '∞' : vg.configuredStock}</button>
+              )}
+            </td>
+            <td><button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 정보를 수정합니다."><Edit size={14}/> 수정</button></td>
+          </tr>
+        );
+    }
+
+    // 확장형 상품 행 렌더링
+    return (
+      <React.Fragment>
+        <tr className="master-row expandable">
+          <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
+          <td>
+            <div className="no-and-expander">
+              <span>{index + 1}</span>
+              <button className="expand-button" onClick={() => onToggleExpansion(item.uniqueId)} title={isExpanded ? "하위 항목 접기" : "하위 항목 펼치기"}><ChevronDown size={20} className={`chevron-icon ${isExpanded ? 'expanded' : ''}`} /></button>
+            </div>
+          </td>
+          <td>{formatDate(item.round.createdAt)}</td>
+          <td>{item.category}</td>
+          <td><span className={`storage-badge storage-${item.storageType}`}>{translateStorageType(item.storageType)}</span></td>
+          <td>
+            <div className="product-name-cell-v2">
+              <img src={item.productImage} alt={item.productName} className="product-thumbnail" />
+              <div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div>
+            </div>
+          </td>
+          <td colSpan={6}></td>
+          <td><button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 대표 정보를 수정합니다."><Edit size={14}/> 수정</button></td>
+        </tr>
+        {isExpanded && item.enrichedVariantGroups.map((subVg, vgIndex) => {
+          const subVgUniqueId = `${item.productId}_${item.round.roundId}_${subVg.id}`;
+          const subStatus = getVariantGroupStatus(item.round.status, subVg);
+          const subRowClasses = ["detail-row sub-row", (deadlinePassed && subVg.configuredStock === -1) ? "update-needed-warning" : ""].filter(Boolean).join(" ");
+          return (
+              <tr key={subVgUniqueId} className={subRowClasses}>
+                  <td></td>
+                  <td><span className="sub-row-no">{`${index + 1}-${vgIndex + 1}`}</span></td>
+                  <td></td><td></td><td></td>
+                  <td className="sub-row-name"> └ {subVg.groupName}</td>
+                  <td><span className={`status-badge status-${subStatus}`} title={`Status: ${subStatus}`}>{translateStatus(subStatus)}</span></td>
+                  <td>{subVg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
+                  <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
+                  <td className="quantity-cell">{`${subVg.reservedQuantity} / ${item.round.waitlistCount || 0}`}</td>
+                  <td className="quantity-cell">{subVg.pickedUpQuantity}</td>
+                  <td className="stock-cell">
+                      {editingStockId === subVgUniqueId ? (
+                          <input type="number" className="stock-input" value={stockInputs[subVgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [subVgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(subVgUniqueId)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(subVgUniqueId); if (e.key === 'Escape') onStockEditStart(subVgUniqueId, subVg.configuredStock); }} />
+                      ) : (
+                          <button className="stock-display-button" onClick={() => onStockEditStart(subVgUniqueId, subVg.configuredStock)} title="재고 수량을 클릭하여 수정. -1 입력 시 무제한">{subVg.configuredStock === -1 ? '∞' : subVg.configuredStock}</button>
+                      )}
+                  </td>
+                  <td></td>
+              </tr>
+          );
+        })}
+      </React.Fragment>
+    );
+};
+
+
+// =================================================================
+// 메인 컴포넌트
+// =================================================================
 const ProductListPageAdmin: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-  const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterStatus, setFilterStatus] = useState<SalesRoundStatus | 'all'>('all');
-  const [sortBy, setSortBy] = useState<'createdAt' | 'groupName' | 'expirationDate'>('createdAt');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
+  const [pickedUpQuantitiesMap, setPickedUpQuantitiesMap] = useState<Map<string, number>>(new Map());
+  const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
+  const [editingStockId, setEditingStockId] = useState<string | null>(null);
 
-  const toggleRowExpansion = (productId: string) => {
-    setExpandedProductIds(prev => {
+  const [activeTab, setActiveTab] = usePersistentState<'rounds' | 'analysis'>('adminProductTab', 'rounds');
+  const [searchQuery, setSearchQuery] = usePersistentState('adminProductSearch', '');
+  const [filterCategory, setFilterCategory] = usePersistentState('adminProductCategory', 'all');
+  const [filterStatus, setFilterStatus] = usePersistentState<SalesRoundStatus | 'all'>('adminProductStatus', 'all');
+  const [sortConfig, setSortConfig] = usePersistentState<{key: SortableKeys, direction: 'asc' | 'desc'}>('adminProductSort', { key: 'roundCreatedAt', direction: 'desc' });
+  
+  const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  const navigate = useNavigate();
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [fetchedProducts, fetchedCategories, reservedOrders, pickedUpOrders] = await Promise.all([
+        getProducts(false),
+        getCategories(),
+        getDocs(query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))),
+        getDocs(query(collection(db, 'orders'), where('status', '==', 'PICKED_UP'))),
+      ]);
+
+      setAllProducts(fetchedProducts);
+      setCategories(fetchedCategories);
+
+      const reservedMap = new Map<string, number>();
+      reservedOrders.forEach(doc => {
+        const order = doc.data() as Order;
+        (order.items || []).forEach((item: OrderItem) => {
+          const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+          reservedMap.set(key, (reservedMap.get(key) || 0) + item.quantity);
+        });
+      });
+      setReservedQuantitiesMap(reservedMap);
+
+      const pickedUpMap = new Map<string, number>();
+      pickedUpOrders.forEach(doc => {
+        const order = doc.data() as Order;
+        (order.items || []).forEach((item: OrderItem) => {
+            const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+            pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + item.quantity);
+        });
+      });
+      setPickedUpQuantitiesMap(pickedUpMap);
+
+    } catch (error) { toast.error("데이터를 불러오는 중 오류가 발생했습니다."); } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const enrichedRounds = useMemo<EnrichedRoundItem[]>(() => {
+    let flatRounds: EnrichedRoundItem[] = [];
+    allProducts.forEach(p => {
+        (p.salesHistory || []).forEach(r => {
+            const enrichedVariantGroups: EnrichedVariantGroup[] = r.variantGroups.map(vg => {
+                const key = `${p.id}-${r.roundId}-${vg.id}`;
+                return { 
+                    ...vg, 
+                    reservedQuantity: reservedQuantitiesMap.get(key) || 0,
+                    pickedUpQuantity: pickedUpQuantitiesMap.get(key) || 0,
+                    configuredStock: vg.totalPhysicalStock ?? vg.items[0]?.stock ?? -1
+                };
+            });
+            flatRounds.push({
+                productId: p.id, productName: p.groupName, productImage: p.imageUrls?.[0] || '/placeholder.svg',
+                category: p.category || '미지정', storageType: p.storageType, round: r, uniqueId: `${p.id}-${r.roundId}`, enrichedVariantGroups
+            });
+        });
+    });
+
+    if (searchQuery) flatRounds = flatRounds.filter(item => item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || item.round.roundName.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (filterCategory !== 'all') flatRounds = flatRounds.filter(item => item.category === filterCategory);
+    if (filterStatus !== 'all') flatRounds = flatRounds.filter(item => item.enrichedVariantGroups.some(vg => getVariantGroupStatus(item.round.status, vg) === filterStatus));
+
+    return flatRounds.sort((a, b) => {
+        const key = sortConfig.key;
+        let aVal: any; let bVal: any;
+        if (key === 'roundCreatedAt') { aVal = safeToDate(a.round.createdAt)?.getTime() || 0; bVal = safeToDate(b.round.createdAt)?.getTime() || 0; } 
+        else { aVal = a[key as keyof EnrichedRoundItem] ?? 0; bVal = b[key as keyof EnrichedRoundItem] ?? 0; }
+        if (sortConfig.direction === 'asc') return aVal < bVal ? -1 : 1;
+        return aVal > bVal ? -1 : 1;
+    });
+  }, [allProducts, reservedQuantitiesMap, pickedUpQuantitiesMap, searchQuery, filterCategory, filterStatus, sortConfig]);
+
+  useEffect(() => {
+    const allExpandableIds = new Set(enrichedRounds.map(item => item.uniqueId));
+    setExpandedRoundIds(allExpandableIds);
+  }, [enrichedRounds]);
+  
+  const handleSortChange = (key: SortableKeys) => {
+    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
+  };
+
+  const handleStockEditStart = (vgUniqueId: string, currentStock: number) => {
+    setEditingStockId(vgUniqueId);
+    setStockInputs(prev => ({...prev, [vgUniqueId]: currentStock === -1 ? '-1' : String(currentStock) }));
+  };
+
+  const handleStockEditSave = async (vgUniqueId: string) => {
+    const newStockValue = stockInputs[vgUniqueId];
+    setEditingStockId(null);
+    if (newStockValue === undefined) return;
+
+    const [productId, roundId, variantGroupId] = vgUniqueId.split('_');
+    const newStock = parseInt(newStockValue, 10);
+
+    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) { toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다."); return; }
+
+    const promise = updateMultipleVariantGroupStocks([{ productId, roundId, variantGroupId, newStock }]);
+    await toast.promise(promise, {
+      loading: "재고 정보 업데이트 중...",
+      success: "재고가 성공적으로 업데이트되었습니다!",
+      error: "업데이트 중 오류가 발생했습니다.",
+    });
+
+    // 화면 새로고침 대신 로컬 상태 업데이트
+    setAllProducts(prevProducts => prevProducts.map(p => {
+        if (p.id !== productId) return p;
+        const newSalesHistory = p.salesHistory.map(r => {
+            if (r.roundId !== roundId) return r;
+            const newVariantGroups = r.variantGroups.map(vg => {
+                if (vg.id !== variantGroupId) return vg;
+                return { ...vg, totalPhysicalStock: newStock };
+            });
+            return { ...r, variantGroups: newVariantGroups };
+        });
+        return { ...p, salesHistory: newSalesHistory };
+    }));
+  };
+  
+  const toggleRowExpansion = (roundId: string) => {
+    setExpandedRoundIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(productId)) {
-        newSet.delete(productId);
-      } else {
-        newSet.add(productId);
-      }
+      if (newSet.has(roundId)) newSet.delete(roundId);
+      else newSet.add(roundId);
       return newSet;
     });
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [fetchedProducts, fetchedCategories] = await Promise.all([
-          getProducts(false), 
-          getCategories()
-        ]);
-        setProducts(fetchedProducts);
-        setCategories(fetchedCategories);
-      } catch (error) {
-        toast.error("데이터를 불러오는 중 오류가 발생했습니다.");
-        console.error("Firestore 데이터 조회 오류:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const processedProducts = useMemo(() => {
-    let tempProducts = [...products];
-
-    if (searchQuery) {
-        tempProducts = tempProducts.filter(p => p.groupName.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    if (filterCategory !== 'all') {
-      tempProducts = tempProducts.filter(p => p.category === filterCategory);
-    }
-    if (filterStatus !== 'all') {
-        tempProducts = tempProducts.filter(p => {
-            const latestRound = getLatestRound(p.salesHistory);
-            return latestRound?.status === filterStatus;
-        });
-    }
-    
-    tempProducts.sort((a, b) => {
-        let aVal: string | number;
-        let bVal: string | number;
-
-        switch (sortBy) {
-            case 'groupName': aVal = a.groupName.toLowerCase(); bVal = b.groupName.toLowerCase(); break;
-            case 'expirationDate': aVal = getEarliestExpirationDate(a); bVal = getEarliestExpirationDate(b); break;
-            default:
-                // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜에서 시간(ms) 추출
-                aVal = safeToDate(a.createdAt)?.getTime() || 0;
-                bVal = safeToDate(b.createdAt)?.getTime() || 0;
-                break;
-        }
-
-        if (sortOrder === 'asc') {
-            if (aVal === Infinity) return 1; // Infinity는 항상 뒤로
-            if (bVal === Infinity) return -1;
-            return aVal < bVal ? -1 : 1;
-        } 
-        else { // desc
-            return aVal > bVal ? -1 : 1;
-        }
+  const handleSelectionChange = (id: string, isSelected: boolean) => {
+    setSelectedItems(prev => {
+        const newSet = new Set(prev);
+        if (isSelected) newSet.add(id); else newSet.delete(id);
+        return newSet;
     });
-
-    return tempProducts;
-  }, [products, searchQuery, filterCategory, filterStatus, sortBy, sortOrder]);
-  
-  const handleAddNewRound = (product: Product) => {
-    const latestRound = getLatestRound(product.salesHistory);
-    navigate(`/admin/products/add`, { state: { productId: product.id, productGroupName: product.groupName, lastRound: latestRound } });
-  };
-  
-  const handleSortChange = (newSortBy: typeof sortBy) => {
-    if (sortBy === newSortBy) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(newSortBy);
-      // 유통기한은 오름차순(가까운 날짜순)이 기본
-      setSortOrder(newSortBy === 'expirationDate' ? 'asc' : 'desc');
-    }
   };
 
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) { setSelectedItems(new Set(enrichedRounds.map(item => item.uniqueId))); } 
+    else { setSelectedItems(new Set()); }
+  };
+
+  const handleBulkAction = async (action: 'end_sale') => {
+    if (selectedItems.size === 0) { toast.error("선택된 항목이 없습니다."); return; }
+    const updates = Array.from(selectedItems).map(id => {
+        const [productId, roundId] = id.split('-');
+        return { productId, roundId, newStatus: 'ended' as SalesRoundStatus };
+    });
+    const promise = updateMultipleRoundStatuses(updates);
+    await toast.promise(promise, {
+        loading: `${selectedItems.size}개 항목의 판매를 종료하는 중...`,
+        success: "선택된 항목이 모두 판매 종료 처리되었습니다.",
+        error: "일괄 작업 중 오류가 발생했습니다."
+    });
+    setSelectedItems(new Set());
+    fetchData();
+  };
+
+  const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;
+  
   if (loading) return <LoadingSpinner />;
 
   return (
     <div className="admin-page-container product-list-admin-container">
       <header className="admin-page-header">
-        <h1 className="admin-page-title">대표 상품 관리</h1>
-        <button onClick={() => navigate('/admin/products/add')} className="admin-add-button"><Plus size={18}/> 신규 대표 상품 추가</button>
+        <h1 className="admin-page-title"><PackageOpen size={28} /> 통합 판매 관리</h1>
+        <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="완전히 새로운 대표 상품을 시스템에 등록합니다."><Plus size={18}/> 신규 대표 상품 추가</button>
       </header>
       
-      <div className="product-list-controls-v2">
-        <div className="search-bar-wrapper"><Search size={18} className="search-icon"/><input type="text" placeholder="상품명으로 검색..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="search-input"/></div>
-        <div className="filter-sort-wrapper">
-            <div className="control-group">
-                <Filter size={16} />
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="control-select"><option value="all">모든 카테고리</option>{categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select>
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select"><option value="all">모든 상태</option><option value="selling">판매중</option><option value="scheduled">예정</option><option value="ended">종료</option><option value="sold_out">품절</option></select>
-            </div>
-        </div>
+      <div className="admin-tabs">
+        <button className={`admin-tab-button ${activeTab === 'rounds' ? 'active' : ''}`} onClick={() => setActiveTab('rounds')}><PackageOpen size={16} /> 회차별 관리</button>
+        <button className={`admin-tab-button ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}><BarChart2 size={16} /> 수익 분석</button>
       </div>
-      
-      <div className="admin-product-table-container">
-        <table className="admin-product-table">
-          <thead>
-            <tr>
-              <th style={{width: '40px'}}></th>
-              <th className="sortable-header" onClick={() => handleSortChange('groupName')}>대표 상품명 {sortBy === 'groupName' && <ArrowUpDown size={14}/>}</th>
-              <th>카테고리</th>
-              <th>최신 회차 상태</th>
-              <th>최신 회차 가격</th>
-              <th className="sortable-header" onClick={() => handleSortChange('expirationDate')}>유통기한 {sortBy === 'expirationDate' && <ArrowUpDown size={14}/>}</th>
-              <th className="sortable-header" onClick={() => handleSortChange('createdAt')}>최초 등록일 {sortBy === 'createdAt' && <ArrowUpDown size={14}/>}</th>
-              <th style={{ textAlign: 'center' }}>관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            {processedProducts.length > 0 ? processedProducts.map(product => {
-              const latestRound = getLatestRound(product.salesHistory);
-              const startingPrice = latestRound?.variantGroups[0]?.items[0]?.price.toLocaleString() ?? '정보 없음';
-              const isExpanded = expandedProductIds.has(product.id);
-              const earliestExpiration = getEarliestExpirationDate(product);
-              
-              const handleEditLatestRound = () => {
-                if (latestRound) {
-                  navigate(`/admin/rounds/edit/${product.id}/${latestRound.roundId}`);
-                } else {
-                  toast.error("수정할 판매 회차가 없습니다.");
-                }
-              };
 
-              return (
-                <React.Fragment key={product.id}>
-                  <tr className="master-row">
-                    <td><button className="expand-button" onClick={() => toggleRowExpansion(product.id)}><ChevronDown size={20} className={`chevron-icon ${isExpanded ? 'expanded' : ''}`} /></button></td>
-                    <td><div className="product-name-cell-v2"><img src={product.imageUrls[0] || '/placeholder.svg'} alt={product.groupName} className="product-thumbnail" /><div className="product-name-text"><span className="product-group-name">{product.groupName}</span><span className="product-id-text">ID: {product.id}</span></div></div></td>
-                    <td>{product.category || '미지정'}</td>
-                    <td><span className={`status-badge status-${latestRound?.status || 'unknown'}`}>{latestRound?.status || '이력 없음'}</span></td>
-                    <td><span className="price-text">{startingPrice === '정보 없음' ? '–' : `${startingPrice} 원~`}</span></td>
-                    {/* ✅ [FIX] formatDate에 earliestExpiration 값을 바로 전달 */}
-                    <td>{formatDate(earliestExpiration)}</td>
-                    <td>{formatDate(product.createdAt)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div className="action-buttons">
-                        <button onClick={() => handleAddNewRound(product)} className="admin-action-button primary" title="새 회차 추가"><Plus size={14}/> 새 회차</button>
-                        <div className="secondary-actions">
-                            <button onClick={() => toggleRowExpansion(product.id)} className="admin-action-button-icon" title="판매 이력 보기"><History size={16}/></button>
-                            <button onClick={handleEditLatestRound} disabled={!latestRound} className="admin-action-button-icon" title="최신 회차 수정"><Edit size={16}/></button>
-                            <button className="admin-action-button-icon danger" title="상품 보관(아카이브)"><Archive size={16}/></button>
-                        </div>
-                      </div>
-                    </td>
+      <div className="admin-tab-content">
+        {activeTab === 'rounds' ? (
+           <>
+            <div className="product-list-controls-v2">
+                <div className="search-bar-wrapper"><Search size={18} className="search-icon"/><input type="text" placeholder="상품명 또는 회차명으로 검색..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="search-input"/></div>
+                <div className="filter-sort-wrapper">
+                    <div className="control-group">
+                        <Filter size={16} />
+                        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="control-select"><option value="all">모든 카테고리</option>{categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select>
+                        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select"><option value="all">모든 상태</option><option value="selling">판매중</option><option value="scheduled">판매예정</option><option value="sold_out">품절</option><option value="ended">판매종료</option></select>
+                    </div>
+                </div>
+                <div className="bulk-action-wrapper"><button className="bulk-action-button" onClick={() => handleBulkAction('end_sale')} disabled={selectedItems.size === 0}><Trash2 size={16} /> 선택 항목 판매 종료</button></div>
+            </div>
+            <div className="admin-product-table-container">
+              <table className="admin-product-table unified-table">
+                <thead>
+                  <tr>
+                    <th style={{width: '40px'}}><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
+                    <th style={{width: '60px'}}>No.</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('category')}>카테고리</th>
+                    <th>보관</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('productName')}>상품명 / 회차명</th>
+                    <th>상태</th><th>가격</th>
+                    <th>유통기한</th><th title="예약된 수량 / 전체 대기자 수">예약/대기</th>
+                    <th title="픽업 완료된 수량">픽업</th>
+                    <th title="클릭하여 재고 수정">재고</th>
+                    <th>관리</th>
                   </tr>
-                  {isExpanded && (
-                    <tr className="detail-row">
-                      <td colSpan={8}>
-                        <div className="detail-container">
-                            <h4 className="detail-title">판매 이력 (총 {product.salesHistory.length}회)</h4>
-                            <div className="history-grid">
-                            {product.salesHistory.length > 0 
-                             // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜 비교
-                             ? [...product.salesHistory].sort((a,b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0)).map(round => (
-                                <div key={round.roundId} className="history-card">
-                                    {/* ✅ [FIX] round.name -> round.roundName 으로 수정 */}
-                                    <div className="history-card-header"><h5 className="round-name">{round.roundName}</h5><span className={`status-badge status-${round.status}`}>{round.status}</span></div>
-                                    <div className="history-card-body"><p><strong>판매 기간:</strong> {formatDate(round.publishAt)} ~ {formatDate(round.deadlineDate)}</p><p><strong>옵션 구성:</strong> {round.variantGroups.length}개 그룹, {round.variantGroups.reduce((acc, vg) => acc + vg.items.length, 0)}개 품목</p></div>
-                                    <div className="history-card-footer">
-                                        <button onClick={() => navigate(`/admin/rounds/edit/${product.id}/${round.roundId}`)} className="admin-edit-button"><Edit size={14}/> 이 회차 수정</button>
-                                    </div>
-                                </div>
-                            )) : <p className="no-history-text">판매 이력이 없습니다.</p>}
-                           </div>
-                        </div>
-                      </td>
-                    </tr>
+                </thead>
+                <tbody>
+                  {enrichedRounds.length > 0 ? (
+                    enrichedRounds.map((item, index) => (
+                      <ProductAdminRow 
+                        key={item.uniqueId}
+                        item={item}
+                        index={index}
+                        isExpanded={expandedRoundIds.has(item.uniqueId)}
+                        isSelected={selectedItems.has(item.uniqueId)}
+                        editingStockId={editingStockId}
+                        stockInputs={stockInputs}
+                        onToggleExpansion={toggleRowExpansion}
+                        onSelectionChange={handleSelectionChange}
+                        onStockEditStart={handleStockEditStart}
+                        onStockEditSave={handleStockEditSave}
+                        onSetStockInputs={setStockInputs}
+                      />
+                    ))
+                  ) : (
+                    <tr><td colSpan={13} className="no-products-cell">표시할 판매 회차가 없습니다.</td></tr>
                   )}
-                </React.Fragment>
-              );
-            }) : (
-              <tr><td colSpan={8} className="no-products-cell">표시할 상품이 없습니다.</td></tr>
-            )}
-          </tbody>
-        </table>
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="placeholder-container">
+              <h3>수익 분석 (준비중)</h3>
+              <p>이곳에서 상품별 원가, 판매가, 예약 수량을 기반으로 한 수익 및 수익률 분석 데이터를 볼 수 있습니다.</p>
+              <p>상품 데이터에 '원가(cost)' 필드를 추가하는 작업이 선행되어야 합니다.</p>
+          </div>
+        )}
       </div>
     </div>
   );
