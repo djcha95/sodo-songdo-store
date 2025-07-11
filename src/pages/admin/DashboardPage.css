@@ -1,94 +1,141 @@
 /* src/pages/admin/DashboardPage.css */
 
 .dashboard-container {
-    padding: var(--spacing-lg);
+    padding: 24px;
+    background-color: #f4f7fa;
+    min-height: 100vh;
 }
 
-.dashboard-widget {
-    background-color: #fff;
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--box-shadow-md);
-    overflow: hidden;
-}
-
-.widget-header {
+.dashboard-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color-light);
+    margin-bottom: 24px;
     color: var(--text-color-dark);
 }
 
-.widget-header h2 {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
+.dashboard-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
     margin: 0;
 }
 
-.widget-content {
-    /* 테이블이 너무 커질 경우를 대비해 가로 스크롤을 허용합니다. */
-    overflow-x: auto;
+.dashboard-group {
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 32px;
+    overflow: hidden;
 }
 
-.stock-table {
+.group-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color-light);
+    background-color: #fcfdff;
+}
+
+.table-wrapper {
+    overflow-x: auto; /* 테이블이 길 경우 가로 스크롤 생성 */
+}
+
+.dashboard-table {
     width: 100%;
     border-collapse: collapse;
 }
 
-.stock-table th, 
-.stock-table td {
-    padding: 12px 15px;
-    text-align: left;
+.dashboard-table th,
+.dashboard-table td {
+    padding: 14px 16px;
+    text-align: center;
     border-bottom: 1px solid var(--border-color-light);
-    font-size: 0.9rem;
-    vertical-align: middle;
     white-space: nowrap;
+    vertical-align: middle;
 }
 
-.stock-table th {
+.dashboard-table th {
     background-color: #f8f9fa;
+    font-size: 0.8rem;
     font-weight: 500;
+    color: var(--text-color-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.stock-table td strong {
-    font-weight: bold;
-    color: var(--primary-color);
+.dashboard-table tr:last-child td {
+    border-bottom: none;
+}
+
+.dashboard-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+.product-name-cell {
+    text-align: left;
+    font-weight: 500;
+    white-space: normal;
+    min-width: 200px;
+}
+
+.option-name {
+    color: var(--text-color-medium);
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+.quantity-cell {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 500;
     font-size: 1rem;
 }
 
-.stock-input {
-    width: 80px;
-    padding: 6px 8px;
-    border-radius: var(--border-radius-sm);
-    border: 1px solid var(--border-color-medium);
-    text-align: right;
+.important-cell {
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.unlimited-stock {
+    font-style: italic;
+    color: var(--success-color);
+    font-weight: 500;
     font-size: 0.9rem;
 }
 
-.stock-input:focus {
+.final-stock-input {
+    width: 90px;
+    padding: 8px;
+    border: 1px solid var(--border-color-medium);
+    border-radius: var(--border-radius-md);
+    text-align: right;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.final-stock-input:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--primary-color-light);
+    box-shadow: 0 0 0 3px var(--primary-color-light);
 }
 
-.save-stock-button {
-    display: flex;
+.save-button {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 6px;
-    border-radius: var(--border-radius-sm);
+    padding: 8px;
+    border-radius: var(--border-radius-md);
     background-color: var(--primary-color);
     color: white;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s ease-in-out;
 }
 
-.save-stock-button:hover {
+.save-button:hover {
     background-color: var(--primary-color-dark);
 }
 
 .no-data-message {
-    padding: 40px;
     text-align: center;
+    padding: 60px;
     color: var(--text-color-medium);
+    font-size: 1.1rem;
 }

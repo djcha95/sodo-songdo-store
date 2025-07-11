@@ -3,11 +3,37 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getProducts, getCategories } from '../../firebase';
+import { Timestamp } from 'firebase/firestore'; // ✅ Timestamp import 추가
 import type { Product, SalesRound, Category, SalesRoundStatus } from '../../types';
 import toast from 'react-hot-toast';
 import { Plus, History, Archive, Edit, Filter, Search, ChevronDown, ArrowUpDown } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import './ProductListPageAdmin.css';
+
+// ✅ [수정] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수 (숫자 및 유효성 검사 추가)
+const safeToDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (date instanceof Date) {
+        if (isNaN(date.getTime())) return null;
+        return date;
+    }
+    // 숫자(milliseconds) 형식 지원 추가
+    if (typeof date === 'number') {
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return null;
+        return d;
+    }
+    if (typeof date.toDate === 'function') return date.toDate();
+    if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
+      return new Timestamp(date.seconds, date.nanoseconds).toDate();
+    }
+    if (typeof date === 'string') {
+      const parsedDate = new Date(date);
+      if (!isNaN(parsedDate.getTime())) return parsedDate;
+    }
+    console.warn("Unsupported date format:", date);
+    return null;
+};
 
 /**
  * 판매 이력 배열에서 화면에 표시할 가장 최신 회차를 찾습니다.
@@ -16,7 +42,8 @@ const getLatestRound = (salesHistory: SalesRound[] = []): SalesRound | null => {
   if (!salesHistory || salesHistory.length === 0) return null;
   return [...salesHistory]
     .filter(r => r.status !== 'draft')
-    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())[0] || null;
+    // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜 비교
+    .sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0))[0] || null;
 };
 
 /**
@@ -26,8 +53,9 @@ const getEarliestExpirationDate = (product: Product): number => {
     const latestRound = getLatestRound(product.salesHistory);
     if (!latestRound) return Infinity;
     
+    // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜에서 시간(ms) 추출
     const dates = latestRound.variantGroups
-        .flatMap(vg => vg.items.map(i => i.expirationDate?.toMillis()))
+        .flatMap(vg => vg.items.map(i => safeToDate(i.expirationDate)?.getTime()))
         .filter((d): d is number => d !== undefined && d !== null);
         
     if (dates.length === 0) return Infinity;
@@ -35,13 +63,15 @@ const getEarliestExpirationDate = (product: Product): number => {
 };
 
 /**
- * Firestore Timestamp를 날짜 또는 날짜/시간 문자열로 변환합니다.
+ * 날짜 데이터를 포맷에 맞게 변환합니다.
  */
-const formatDate = (timestamp?: { toDate: () => Date } | null) => {
-    if (!timestamp || typeof timestamp.toDate !== 'function') return '–';
-    const date = timestamp.toDate();
+const formatDate = (dateInput: any) => {
+    // ✅ [FIX] safeToDate 헬퍼를 사용하여 어떤 형식의 날짜든 처리
+    const date = safeToDate(dateInput);
+    if (!date) return '–';
     return date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\.$/, '');
 };
+
 
 const ProductListPageAdmin: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -110,11 +140,21 @@ const ProductListPageAdmin: React.FC = () => {
         switch (sortBy) {
             case 'groupName': aVal = a.groupName.toLowerCase(); bVal = b.groupName.toLowerCase(); break;
             case 'expirationDate': aVal = getEarliestExpirationDate(a); bVal = getEarliestExpirationDate(b); break;
-            default: aVal = a.createdAt.toMillis(); bVal = b.createdAt.toMillis(); break;
+            default:
+                // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜에서 시간(ms) 추출
+                aVal = safeToDate(a.createdAt)?.getTime() || 0;
+                bVal = safeToDate(b.createdAt)?.getTime() || 0;
+                break;
         }
 
-        if (sortOrder === 'asc') { return aVal < bVal ? -1 : 1; } 
-        else { return aVal > bVal ? -1 : 1; }
+        if (sortOrder === 'asc') {
+            if (aVal === Infinity) return 1; // Infinity는 항상 뒤로
+            if (bVal === Infinity) return -1;
+            return aVal < bVal ? -1 : 1;
+        } 
+        else { // desc
+            return aVal > bVal ? -1 : 1;
+        }
     });
 
     return tempProducts;
@@ -126,8 +166,13 @@ const ProductListPageAdmin: React.FC = () => {
   };
   
   const handleSortChange = (newSortBy: typeof sortBy) => {
-    if (sortBy === newSortBy) { setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); } 
-    else { setSortBy(newSortBy); setSortOrder('desc'); }
+    if (sortBy === newSortBy) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(newSortBy);
+      // 유통기한은 오름차순(가까운 날짜순)이 기본
+      setSortOrder(newSortBy === 'expirationDate' ? 'asc' : 'desc');
+    }
   };
 
   if (loading) return <LoadingSpinner />;
@@ -187,14 +232,14 @@ const ProductListPageAdmin: React.FC = () => {
                     <td>{product.category || '미지정'}</td>
                     <td><span className={`status-badge status-${latestRound?.status || 'unknown'}`}>{latestRound?.status || '이력 없음'}</span></td>
                     <td><span className="price-text">{startingPrice === '정보 없음' ? '–' : `${startingPrice} 원~`}</span></td>
-                    <td>{earliestExpiration === Infinity ? '–' : formatDate({ toDate: () => new Date(earliestExpiration) })}</td>
+                    {/* ✅ [FIX] formatDate에 earliestExpiration 값을 바로 전달 */}
+                    <td>{formatDate(earliestExpiration)}</td>
                     <td>{formatDate(product.createdAt)}</td>
                     <td style={{ textAlign: 'center' }}>
                       <div className="action-buttons">
                         <button onClick={() => handleAddNewRound(product)} className="admin-action-button primary" title="새 회차 추가"><Plus size={14}/> 새 회차</button>
                         <div className="secondary-actions">
                             <button onClick={() => toggleRowExpansion(product.id)} className="admin-action-button-icon" title="판매 이력 보기"><History size={16}/></button>
-                            {/* --- ✅ 대표 정보 수정 버튼 기능 강화 --- */}
                             <button onClick={handleEditLatestRound} disabled={!latestRound} className="admin-action-button-icon" title="최신 회차 수정"><Edit size={16}/></button>
                             <button className="admin-action-button-icon danger" title="상품 보관(아카이브)"><Archive size={16}/></button>
                         </div>
@@ -208,12 +253,13 @@ const ProductListPageAdmin: React.FC = () => {
                             <h4 className="detail-title">판매 이력 (총 {product.salesHistory.length}회)</h4>
                             <div className="history-grid">
                             {product.salesHistory.length > 0 
-                             ? [...product.salesHistory].sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()).map(round => (
+                             // ✅ [FIX] safeToDate 헬퍼를 사용하여 안전하게 날짜 비교
+                             ? [...product.salesHistory].sort((a,b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0)).map(round => (
                                 <div key={round.roundId} className="history-card">
+                                    {/* ✅ [FIX] round.name -> round.roundName 으로 수정 */}
                                     <div className="history-card-header"><h5 className="round-name">{round.roundName}</h5><span className={`status-badge status-${round.status}`}>{round.status}</span></div>
                                     <div className="history-card-body"><p><strong>판매 기간:</strong> {formatDate(round.publishAt)} ~ {formatDate(round.deadlineDate)}</p><p><strong>옵션 구성:</strong> {round.variantGroups.length}개 그룹, {round.variantGroups.reduce((acc, vg) => acc + vg.items.length, 0)}개 품목</p></div>
                                     <div className="history-card-footer">
-                                        {/* --- ✅ '이 회차 수정' 버튼 경로 수정 --- */}
                                         <button onClick={() => navigate(`/admin/rounds/edit/${product.id}/${round.roundId}`)} className="admin-edit-button"><Edit size={14}/> 이 회차 수정</button>
                                     </div>
                                 </div>
