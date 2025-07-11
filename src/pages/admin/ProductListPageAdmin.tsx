@@ -14,9 +14,19 @@ import './ProductListPageAdmin.css';
 // =================================================================
 // 헬퍼 함수 및 타입
 // =================================================================
+// ✅ [수정] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수 (숫자 및 유효성 검사 추가)
 const safeToDate = (date: any): Date | null => {
     if (!date) return null;
-    if (date instanceof Date) return isNaN(date.getTime()) ? null : date;
+    if (date instanceof Date) {
+        if (isNaN(date.getTime())) return null;
+        return date;
+    }
+    // 숫자(milliseconds) 형식 지원 추가
+    if (typeof date === 'number') {
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return null;
+        return d;
+    }
     if (typeof date.toDate === 'function') return date.toDate();
     if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
       return new Timestamp(date.seconds, date.nanoseconds).toDate();
@@ -79,7 +89,8 @@ interface EnrichedRoundItem {
   enrichedVariantGroups: EnrichedVariantGroup[];
 }
 
-type SortableKeys = 'roundCreatedAt' | 'productName' | 'category';
+// ✅ [수정] 정렬 가능한 키에 'expirationDate' 추가
+type SortableKeys = 'roundCreatedAt' | 'productName' | 'category' | 'expirationDate';
 
 // =================================================================
 // 커스텀 훅: 상태 저장
@@ -234,6 +245,7 @@ const ProductListPageAdmin: React.FC = () => {
   const [searchQuery, setSearchQuery] = usePersistentState('adminProductSearch', '');
   const [filterCategory, setFilterCategory] = usePersistentState('adminProductCategory', 'all');
   const [filterStatus, setFilterStatus] = usePersistentState<SalesRoundStatus | 'all'>('adminProductStatus', 'all');
+  // ✅ [수정] 정렬 기본 키에 'roundCreatedAt' 유지
   const [sortConfig, setSortConfig] = usePersistentState<{key: SortableKeys, direction: 'asc' | 'desc'}>('adminProductSort', { key: 'roundCreatedAt', direction: 'desc' });
   
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
@@ -307,19 +319,35 @@ const ProductListPageAdmin: React.FC = () => {
         const key = sortConfig.key;
         let aVal: any; let bVal: any;
         if (key === 'roundCreatedAt') { aVal = safeToDate(a.round.createdAt)?.getTime() || 0; bVal = safeToDate(b.round.createdAt)?.getTime() || 0; } 
+        // ✅ [추가] 유통기한 정렬 로직
+        else if (key === 'expirationDate') { 
+            const aEarliestExp = a.enrichedVariantGroups.length > 0 ? Math.min(...a.enrichedVariantGroups.map(vg => getEarliestExpirationDateForGroup(vg))) : Infinity;
+            const bEarliestExp = b.enrichedVariantGroups.length > 0 ? Math.min(...b.enrichedVariantGroups.map(vg => getEarliestExpirationDateForGroup(vg))) : Infinity;
+            aVal = aEarliestExp;
+            bVal = bEarliestExp;
+            // Infinity 값 처리 (Infinity는 항상 뒤로)
+            if (aVal === Infinity && bVal !== Infinity) return 1;
+            if (bVal === Infinity && aVal !== Infinity) return -1;
+            if (aVal === Infinity && bVal === Infinity) return 0;
+        }
         else { aVal = a[key as keyof EnrichedRoundItem] ?? 0; bVal = b[key as keyof EnrichedRoundItem] ?? 0; }
+        
         if (sortConfig.direction === 'asc') return aVal < bVal ? -1 : 1;
         return aVal > bVal ? -1 : 1;
     });
   }, [allProducts, reservedQuantitiesMap, pickedUpQuantitiesMap, searchQuery, filterCategory, filterStatus, sortConfig]);
 
   useEffect(() => {
+    // 모든 라운드 ID를 확장 상태로 설정 (초기 로드 시)
     const allExpandableIds = new Set(enrichedRounds.map(item => item.uniqueId));
     setExpandedRoundIds(allExpandableIds);
-  }, [enrichedRounds]);
-  
+  }, [enrichedRounds]); // enrichedRounds가 변경될 때마다 다시 설정
+
   const handleSortChange = (key: SortableKeys) => {
-    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
+    setSortConfig(prev => ({ 
+      key, 
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' 
+    }));
   };
 
   const handleStockEditStart = (vgUniqueId: string, currentStock: number) => {
@@ -394,7 +422,7 @@ const ProductListPageAdmin: React.FC = () => {
         error: "일괄 작업 중 오류가 발생했습니다."
     });
     setSelectedItems(new Set());
-    fetchData();
+    fetchData(); // 변경사항 반영을 위해 데이터 다시 불러오기
   };
 
   const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;
@@ -433,12 +461,13 @@ const ProductListPageAdmin: React.FC = () => {
                   <tr>
                     <th style={{width: '40px'}}><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
                     <th style={{width: '60px'}}>No.</th>
-                    <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일</th>
-                    <th className="sortable-header" onClick={() => handleSortChange('category')}>카테고리</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일 {sortConfig.key === 'roundCreatedAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('category')}>카테고리 {sortConfig.key === 'category' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th>보관</th>
-                    <th className="sortable-header" onClick={() => handleSortChange('productName')}>상품명 / 회차명</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('productName')}>상품명 / 회차명 {sortConfig.key === 'productName' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th>상태</th><th>가격</th>
-                    <th>유통기한</th><th title="예약된 수량 / 전체 대기자 수">예약/대기</th>
+                    <th className="sortable-header" onClick={() => handleSortChange('expirationDate')}>유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
+                    <th title="예약된 수량 / 전체 대기자 수">예약/대기</th>
                     <th title="픽업 완료된 수량">픽업</th>
                     <th title="클릭하여 재고 수정">재고</th>
                     <th>관리</th>
