@@ -1,0 +1,261 @@
+/* src/pages/admin/OrderManagementPage.css */
+
+/* ✅ 엑셀 스타일 테이블 */
+.admin-table.excel-style {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--font-size-sm); /* 테이블 전체 폰트 크기 조정 */
+}
+.admin-table.excel-style th,
+.admin-table.excel-style td {
+    border: 1px solid var(--border-color-light);
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap; /* 내용이 길어져도 줄바꿈 방지 */
+}
+.admin-table.excel-style th {
+    background-color: var(--bg-color-light);
+    font-weight: var(--font-weight-semibold);
+}
+.admin-table.excel-style tbody tr:hover {
+    background-color: #f8f9fa; /* 연한 회색으로 변경 */
+}
+
+
+/* 고객 정보 셀 */
+.customer-info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.customer-name {
+    font-weight: var(--font-weight-medium);
+}
+.customer-phone {
+    color: var(--text-color-light);
+    font-size: 0.8rem; /* 폰트 크기 미세 조정 */
+}
+
+.price-cell {
+    font-weight: var(--font-weight-medium);
+    text-align: right;
+    font-family: monospace;
+}
+
+/* --- Status Select Dropdown Styles --- */
+.status-select {
+    width: 100%;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    border: 1px solid transparent; /* 기본 테두리는 투명하게 */
+    font-weight: var(--font-weight-semibold);
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+.status-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+}
+
+.status-reserved { background-color: #e6f7ff; color: #0056b3; }
+.status-prepaid { background-color: #f9f0ff; color: #531dab; }
+.status-picked_up { background-color: #f6ffed; color: #389e0d; }
+.status-canceled { background-color: #fff1f0; color: #cf1322; }
+.status-no_show { background-color: #58181F; color: var(--bg-color-white); }
+
+
+/* 작업 버튼 셀 */
+.action-cell {
+    text-align: center;
+}
+.action-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-circle);
+    color: var(--text-color-light);
+    transition: background-color 0.2s, color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.action-button.delete-button:hover {
+    background-color: var(--danger-color-light);
+    color: var(--danger-color-dark);
+}
+
+/* --- 이 코드 블록을 OrderManagementPage.css 파일 맨 아래에 추가 --- */
+
+/* ✅ react-hot-toast 확인 버튼 스타일 */
+.toast-buttons {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.toast-button-confirm,
+.toast-button-cancel {
+    border: 1px solid var(--border-color-light);
+    padding: 6px 12px;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.toast-button-confirm {
+    background-color: var(--danger-color-light);
+    color: var(--danger-color-dark);
+    border-color: var(--danger-color);
+}
+.toast-button-confirm:hover {
+    background-color: var(--danger-color);
+    color: var(--text-color-white);
+}
+
+.toast-button-cancel {
+    background-color: var(--bg-color-white);
+    color: var(--text-color-primary);
+}
+.toast-button-cancel:hover {
+    background-color: var(--bg-color-light);
+}
+
+/* 북마크된 행 스타일 (기존에 있을 수 있음) */
+.bookmarked-row {
+    background-color: #fffbe6 !important; /* 연한 노란색 배경 */
+}
+.bookmarked-row:hover {
+    background-color: #fff3cd !important; /* 호버 시 약간 더 진한 노란색 */
+}
+
+/* 북마크 버튼 활성화 스타일 */
+.bookmark-button.bookmarked {
+    color: #ffc107; /* 채워진 별 색상 */
+}
+
+/* 비고란 텍스트 영역 */
+.notes-textarea {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--primary-color);
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-xs);
+    font-family: inherit;
+    font-size: inherit;
+    resize: vertical;
+}
+
+.notes-display {
+    cursor: pointer;
+    min-height: 24px;
+    width: 100%;
+    display: block;
+}
+
+.notes-placeholder {
+    color: var(--text-color-light);
+    font-style: italic;
+}
+
+/* --- 이 코드 블록을 OrderManagementPage.css 파일 맨 아래에 추가 --- */
+
+/* ✅ 전화번호 링크 스타일 */
+.phone-link {
+    color: var(--primary-color, #007bff); /* 기본 링크 색상 */
+    text-decoration: none;
+    font-weight: 500;
+    padding: 2px 4px;
+    border-radius: var(--border-radius-sm);
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.phone-link:hover {
+    color: var(--primary-color-dark, #0056b3);
+    text-decoration: underline;
+    background-color: var(--primary-color-light, #e6f2ff);
+}
+
+
+/* ✅ react-hot-toast 확인 버튼 스타일 */
+.toast-buttons {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.toast-button-confirm,
+.toast-button-cancel {
+    border: 1px solid var(--border-color-light);
+    padding: 6px 12px;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.toast-button-confirm {
+    background-color: var(--danger-color-light);
+    color: var(--danger-color-dark);
+    border-color: var(--danger-color);
+}
+.toast-button-confirm:hover {
+    background-color: var(--danger-color);
+    color: var(--text-color-white);
+}
+
+.toast-button-cancel {
+    background-color: var(--bg-color-white);
+    color: var(--text-color-primary);
+}
+.toast-button-cancel:hover {
+    background-color: var(--bg-color-light);
+}
+
+/* 북마크된 행 스타일 (기존에 있을 수 있음) */
+.bookmarked-row {
+    background-color: #fffbe6 !important; /* 연한 노란색 배경 */
+}
+.bookmarked-row:hover {
+    background-color: #fff3cd !important; /* 호버 시 약간 더 진한 노란색 */
+}
+
+/* 북마크 버튼 활성화 스타일 */
+.bookmark-button.bookmarked {
+    color: #ffc107; /* 채워진 별 색상 */
+}
+
+/* 비고란 텍스트 영역 */
+.notes-textarea {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--primary-color);
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-xs);
+    font-family: inherit;
+    font-size: inherit;
+    resize: vertical;
+}
+
+.notes-display {
+    cursor: pointer;
+    min-height: 24px;
+    width: 100%;
+    display: block;
+}
+
+.notes-placeholder {
+    color: var(--text-color-light);
+    font-style: italic;
+}

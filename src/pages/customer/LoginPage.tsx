@@ -89,8 +89,8 @@ const LoginPage: React.FC = () => {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h2 className="title">차도몰</h2>
-        <p className="subtitle">차도몰에 오신 것을 환영합니다!</p>
+        <h2 className="title">소도몰</h2>
+        <p className="subtitle">소비자도!</p>
         <div className="social-login-options">
           {/* 5. 기존 오류 메시지 p 태그 제거 */}
           <button onClick={handleKakaoLogin} className="kakao-login-button" disabled={isButtonDisabled}>

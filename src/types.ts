@@ -9,14 +9,14 @@ import type { Timestamp, FieldValue } from 'firebase/firestore';
 export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
 export type ProductStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
-export type OrderStatus = 'RESERVED' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
+// ✅ 'PREPAID' 상태 추가
+export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
 // ✅ Notification 타입 정의
 export interface Notification {
   id: string;
   message: string;
-  // ✨ [수정] 'read'를 'isRead'로 변경하여 AuthContext와 타입을 통일합니다.
   isRead: boolean;
   timestamp: Timestamp;
   link?: string;
@@ -168,6 +168,9 @@ export interface Order {
     name: string;
     phone: string;
   };
+  pickedUpAt?: Timestamp;   // 픽업 완료 시각
+  notes?: string;           // 관리자 비고
+  isBookmarked?: boolean;     // 북마크 여부
 }
 
 
@@ -178,6 +181,7 @@ export interface UserDocument {
   uid: string;
   email: string | null;
   displayName: string | null;
+  phone?: string | null; // ✅ 전화번호 필드 추가
   photoURL?: string | null;
   isAdmin: boolean;
   encoreRequestedProductIds?: string[];
@@ -211,7 +215,7 @@ export interface StoreInfo {
   description: string;
 }
 
-// ... 대시보드 관련 타입 생략 ...
+// ... 대시보드 관련 타입 ...
 export interface TodayStockItem {
     id: string;
     variantGroupId: string;

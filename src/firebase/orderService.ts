@@ -11,13 +11,15 @@ import {
   orderBy,
   runTransaction,
   serverTimestamp,
-  Timestamp,
+  deleteDoc,
 } from 'firebase/firestore';
+// ✅ FieldValue 타입을 firebase/firestore에서 직접 가져오도록 수정
+import type { FieldValue } from 'firebase/firestore';
+// ✅ 로컬 타입에서는 FieldValue를 제거
 import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistItem } from '@/types';
 
 /**
  * @description 주문을 생성하고 재고를 차감하는 트랜잭션.
- * 주문 생성과 상품 재고 차감을 하나의 원자적 트랜잭션으로 묶어 처리합니다.
  */
 export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
@@ -123,31 +125,24 @@ export const submitOrder = async (
 };
 
 /**
- * @description ✅ [FIX] 사용자의 예약을 취소하고, 상품 재고를 복구하는 함수 (트랜잭션 오류 해결)
+ * @description 사용자의 예약을 취소하고, 상품 재고를 복구하는 함수
  */
 export const cancelOrder = async (orderId: string, userId: string): Promise<void> => {
   const orderRef = doc(db, 'orders', orderId);
 
   await runTransaction(db, async (transaction) => {
     // --- 1. READ PHASE ---
-    // 모든 읽기 작업을 쓰기 작업 전에 수행합니다.
     const orderDoc = await transaction.get(orderRef);
-    if (!orderDoc.exists()) {
-      throw new Error("주문 정보를 찾을 수 없습니다.");
-    }
+    if (!orderDoc.exists()) throw new Error("주문 정보를 찾을 수 없습니다.");
     const order = orderDoc.data() as Order;
 
-    // 유효성 검사
     if (order.userId !== userId) throw new Error("본인의 주문만 취소할 수 있습니다.");
     if (order.status !== 'RESERVED') throw new Error("예약 확정 상태의 주문만 취소할 수 있습니다.");
     
     const now = new Date();
     const pickupDate = order.pickupDate?.toDate();
-    if (pickupDate && now >= pickupDate) {
-      throw new Error("픽업이 시작된 주문은 취소할 수 없습니다.");
-    }
+    if (pickupDate && now >= pickupDate) throw new Error("픽업이 시작된 주문은 취소할 수 없습니다.");
 
-    // 재고를 복구할 상품들의 참조와 데이터를 미리 읽어옵니다.
     const productRefs = [...new Set(order.items.map(item => item.productId))].map(id => doc(db, 'products', id));
     const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
     
@@ -159,12 +154,8 @@ export const cancelOrder = async (orderId: string, userId: string): Promise<void
     }
 
     // --- 2. WRITE PHASE ---
-    // 모든 쓰기 작업을 읽기 작업 후에 수행합니다.
-
-    // 주문 상태를 'CANCELED'로 변경
     transaction.update(orderRef, { status: 'CANCELED' });
 
-    // 각 상품의 재고를 복구
     for (const item of order.items) {
         const productData = productDataMap.get(item.productId);
         if (!productData) continue;
@@ -211,6 +202,18 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
 };
 
 /**
+ * @description 관리자를 위해 모든 주문 내역을 가져옵니다.
+ */
+export const getAllOrdersForAdmin = async (): Promise<Order[]> => {
+  const q = query(
+    collection(db, 'orders'),
+    orderBy('createdAt', 'desc')
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+};
+
+/**
  * @description 전화번호 뒷자리로 주문을 검색합니다. (주로 관리자용)
  */
 export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Order[]> => {
@@ -224,10 +227,45 @@ export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Or
 };
 
 /**
- * @description 특정 주문의 상태를 업데이트합니다. (주로 관리자용)
+ * @description 특정 주문의 상태를 업데이트하고, 픽업 시각을 기록합니다.
+ * @param orderId - 주문 ID
+ * @param status - 새로운 주문 상태
  */
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
-  await updateDoc(doc(db, 'orders', orderId), { status });
+  const updateData: { status: OrderStatus; pickedUpAt?: FieldValue } = { status };
+  
+  // ✅ 상태가 'PICKED_UP'일 때만 픽업 시각을 서버 타임스탬프로 기록
+  if (status === 'PICKED_UP') {
+    updateData.pickedUpAt = serverTimestamp();
+  }
+
+  await updateDoc(doc(db, 'orders', orderId), updateData);
+};
+
+/**
+ * @description (신규) 주문에 대한 관리자 비고를 업데이트합니다.
+ * @param orderId - 주문 ID
+ * @param notes - 저장할 비고 내용
+ */
+export const updateOrderNotes = async (orderId: string, notes: string): Promise<void> => {
+    await updateDoc(doc(db, 'orders', orderId), { notes });
+};
+
+/**
+ * @description (신규) 주문의 북마크 상태를 토글합니다.
+ * @param orderId - 주문 ID
+ * @param isBookmarked - 새로운 북마크 상태 (true/false)
+ */
+export const toggleOrderBookmark = async (orderId: string, isBookmarked: boolean): Promise<void> => {
+    await updateDoc(doc(db, 'orders', orderId), { isBookmarked });
+};
+
+/**
+ * @description 특정 주문을 데이터베이스에서 영구적으로 삭제합니다.
+ */
+export const deleteOrder = async (orderId: string): Promise<void> => {
+  const orderRef = doc(db, 'orders', orderId);
+  await deleteDoc(orderRef);
 };
 
 /**

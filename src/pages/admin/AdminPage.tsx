@@ -6,16 +6,15 @@ import AdminSidebar from '../../components/admin/AdminSidebar';
 import './AdminPage.css';
 import { Home } from 'lucide-react';
 
-const LoadingSpinner = () => <div className="loading-spinner">로딩 중...</div>;
+const LoadingSpinner = () => <div className="admin-loading-spinner">페이지를 불러오는 중...</div>;
 
 // --- 페이지 컴포넌트 Lazy Loading ---
 const DashboardPage = React.lazy(() => import('./DashboardPage'));
 const ProductListPageAdmin = React.lazy(() => import('./ProductListPageAdmin'));
 const ProductAddAdminPage = React.lazy(() => import('./ProductAddAdminPage'));
-// ✅ 새로운 통합 수정 페이지만 남깁니다.
 const SalesRoundEditPage = React.lazy(() => import('./SalesRoundEditPage'));
 const CategoryManagementPage = React.lazy(() => import('./CategoryManagementPage'));
-const OrderListPage = React.lazy(() => import('./OrderListPage'));
+const OrderManagementPage = React.lazy(() => import('./OrderManagementPage')); // ✅ 새로 추가
 const PickupProcessingPage = React.lazy(() => import('./PickupProcessingPage'));
 const UserListPage = React.lazy(() => import('./UserListPage'));
 const UserDetailPage = React.lazy(() => import('./UserDetailPage'));
@@ -27,10 +26,10 @@ const adminRoutes = [
   { path: 'products', handle: { title: '상품 목록' }, element: <ProductListPageAdmin /> },
   { path: 'products/add', handle: { title: '신규 상품 등록' }, element: <ProductAddAdminPage /> },
   { path: 'rounds/add', handle: { title: '새 회차 추가' }, element: <ProductAddAdminPage /> },
-  // ✅ '/rounds/edit/...' 경로만 사용하도록 통일합니다.
   { path: 'rounds/edit/:productId/:roundId', handle: { title: '판매 회차 수정' }, element: <SalesRoundEditPage /> },
   { path: 'categories', handle: { title: '카테고리 관리' }, element: <CategoryManagementPage /> },
-  { path: 'orders', handle: { title: '주문 목록' }, element: <OrderListPage /> },
+  // ✅ '/admin/orders' 경로의 element를 OrderManagementPage로 교체합니다.
+  { path: 'orders', handle: { title: '주문 통합 관리' }, element: <OrderManagementPage /> },
   { path: 'pickup', handle: { title: '픽업 처리' }, element: <PickupProcessingPage /> },
   { path: 'users', handle: { title: '고객 목록' }, element: <UserListPage /> },
   { path: 'users/:userId', handle: { title: '고객 상세 정보' }, element: <UserDetailPage /> },

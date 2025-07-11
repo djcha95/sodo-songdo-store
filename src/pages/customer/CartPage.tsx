@@ -100,18 +100,19 @@ const CartPage: React.FC = () => {
   };
 
   const handleConfirmReservation = async () => {
-    if (!user || !user.uid) { 
-      toast.error('로그인 정보가 유효하지 않습니다.'); 
+    if (!user || !user.uid || !user.phone) { // ✅ user.phone이 있는지 추가로 확인
+      toast.error('전화번호 정보가 없습니다. 다시 로그인 해주세요.'); 
       navigate('/login', { state: { from: location }, replace: true }); 
       return; 
     }
     if (isProcessingOrder || reservationItems.length === 0) return;
     
+    // ✅ [수정] customerInfo.phone을 user.phone으로 변경
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'> = {
         userId: user.uid,
         items: reservationItems,
         totalPrice: cartTotal,
-        customerInfo: { name: user.displayName || '미상', phone: user.phoneNumber || '' },
+        customerInfo: { name: user.displayName || '미상', phone: user.phone },
         pickupDate: reservationItems[0].pickupDate,
     };
 
