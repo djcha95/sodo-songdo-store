@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { getUserOrders, cancelOrder } from '@/firebase';
-import type { Order, OrderItem, OrderStatus } from '@/types';
+import type { Order, OrderStatus } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Truck,
   CircleCheck,
-  CircleX,
   AlertCircle,
   X,
   PackageCheck,
@@ -21,6 +20,7 @@ import {
   Hourglass,
   BadgeAlert,
   CalendarDays,
+  CreditCard, // ✅ [추가] 결제 아이콘 import
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import './OrderHistoryPage.css';
@@ -131,15 +131,21 @@ const EmptyHistory: React.FC = () => {
 /** '주문일 순 보기'의 개별 주문 카드 컴포넌트 */
 const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showWarning: boolean) => void }> = React.memo(({ order, onCancel }) => {
   const { status, items = [], totalPrice, id } = order;
+  
+  // ✅ [수정] PREPAID 상태 아이콘 추가
   const statusIcons: Record<OrderStatus, React.ReactElement> = {
     RESERVED: <Hourglass size={16} />,
+    PREPAID: <CreditCard size={16} />,
     PICKED_UP: <PackageCheck size={16} />,
     COMPLETED: <CircleCheck size={16} />,
     CANCELED: <PackageX size={16} />,
     NO_SHOW: <AlertCircle size={16} />,
   };
+  
+  // ✅ [수정] PREPAID 상태 텍스트 추가
   const statusTexts: Record<OrderStatus, string> = {
     RESERVED: '예약됨',
+    PREPAID: '결제 완료',
     PICKED_UP: '픽업 완료',
     COMPLETED: '처리 완료',
     CANCELED: '예약 취소',
@@ -147,7 +153,8 @@ const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showW
   };
 
   const getCancellationInfo = useCallback(() => {
-    if (status !== 'RESERVED') {
+    // 예약 또는 결제 완료 상태일 때만 취소 가능
+    if (status !== 'RESERVED' && status !== 'PREPAID') {
       return { cancellable: false, showWarning: false };
     }
     const now = new Date();
@@ -205,6 +212,7 @@ const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showW
   );
 });
 
+// ... (이하 나머지 컴포넌트들은 그대로 유지)
 /** '픽업일 순 보기'의 날짜별 그룹 카드 컴포넌트 */
 const PickupGroupCard: React.FC<{ date: string; items: AggregatedPickupItem[] }> = React.memo(({ date, items }) => {
   const [isOpen, setIsOpen] = useState(true);
@@ -319,7 +327,7 @@ const OrderHistoryPage: React.FC = () => {
 
   const aggregatedItemsByPickupDate = useMemo(() => {
     const aggregated: { [key: string]: AggregatedPickupItem } = {};
-    const filteredOrders = orders.filter(o => o.status === 'RESERVED' || o.status === 'PICKED_UP');
+    const filteredOrders = orders.filter(o => o.status === 'RESERVED' || o.status === 'PICKED_UP' || o.status === 'PREPAID');
 
     filteredOrders.forEach(order => {
         if (!order.pickupDate) return;

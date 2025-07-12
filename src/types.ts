@@ -7,13 +7,10 @@ import type { Timestamp, FieldValue } from 'firebase/firestore';
 // =================================================================
 
 export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
-export type ProductStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
-// ✅ 'PREPAID' 상태 추가
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
-// ✅ Notification 타입 정의
 export interface Notification {
   id: string;
   message: string;
@@ -27,9 +24,6 @@ export interface Notification {
 // 📌 상품 및 판매 관련 타입
 // =================================================================
 
-/**
- * @description 상품의 개별 옵션 또는 단위를 나타냅니다. (예: '500g', '매운맛')
- */
 export interface ProductItem {
   id: string;
   name: string;
@@ -40,9 +34,6 @@ export interface ProductItem {
   expirationDate?: Timestamp | null;
 }
 
-/**
- * @description 상품 내 옵션 그룹을 나타냅니다. (예: '용량', '맛')
- */
 export interface VariantGroup {
   id: string;
   groupName: string;
@@ -51,18 +42,12 @@ export interface VariantGroup {
   stockUnitType: string;
 }
 
-/**
- * @description 대기 명단에 등록된 사용자 정보를 나타냅니다.
- */
 export interface WaitlistEntry {
   userId: string;
   quantity: number;
   timestamp: Timestamp;
 }
 
-/**
- * @description 하나의 상품에 대한 개별 판매 회차 정보를 담습니다.
- */
 export interface SalesRound {
   roundId: string;
   roundName:string;
@@ -72,15 +57,12 @@ export interface SalesRound {
   deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
-  arrivalDate?: Timestamp; // ❗ [추가] 상품 입고일
+  arrivalDate?: Timestamp;
   createdAt: Timestamp;
   waitlist: WaitlistEntry[];
   waitlistCount: number;
 }
 
-/**
- * @description 대표 상품의 고유 정보를 담는 최상위 객체입니다.
- */
 export interface Product {
   id: string;
   groupName: string;
@@ -89,8 +71,7 @@ export interface Product {
   storageType: StorageType;
   salesHistory: SalesRound[];
   isArchived: boolean;
-  category?: string;
-  subCategory?: string;
+  category?: string; // ✅ 하위 카테고리 제거됨
   encoreCount?: number;
   encoreRequesterIds?: string[];
   createdAt: Timestamp;
@@ -103,9 +84,6 @@ export interface Product {
 // 🛒 장바구니 및 주문 관련 타입
 // =================================================================
 
-/**
- * @description 장바구니에 담긴 개별 상품 항목을 나타냅니다.
- */
 export interface CartItem {
   productId: string;
   productName: string;
@@ -123,9 +101,6 @@ export interface CartItem {
   status: 'RESERVATION' | 'WAITLIST';
 }
 
-/**
- * @description 주문 내역에 포함될 상품 정보. CartItem의 일부 속성을 사용합니다.
- */
 export type OrderItem = Pick<
   CartItem,
   | 'productId'
@@ -146,15 +121,11 @@ export type OrderItem = Pick<
   pickupDeadlineDate?: Timestamp | null;
   totalQuantity?: number;
   totalPrice?: number;
-  category?: string;
-  subCategory?: string;
+  category?: string; // ✅ 하위 카테고리 제거됨
   arrivalDate?: Timestamp;
   expirationDate?: Timestamp;
 };
 
-/**
- * @description 사용자의 한 건의 주문 정보를 나타냅니다.
- */
 export interface Order {
   id: string;
   userId: string;
@@ -169,9 +140,9 @@ export interface Order {
     name: string;
     phone: string;
   };
-  pickedUpAt?: Timestamp;   // 픽업 완료 시각
-  notes?: string;           // 관리자 비고
-  isBookmarked?: boolean;     // 북마크 여부
+  pickedUpAt?: Timestamp;
+  notes?: string;
+  isBookmarked?: boolean;
 }
 
 
@@ -182,10 +153,9 @@ export interface UserDocument {
   uid: string;
   email: string | null;
   displayName: string | null;
-  phone?: string | null; // ✅ 전화번호 필드 추가
+  phone?: string | null;
   photoURL?: string | null;
-  isAdmin: boolean;
-  role?: 'admin' | 'customer'; // ❗ [추가] 관리자 권한 확인용
+  role: 'admin' | 'customer'; // ✅ isAdmin을 role로 통일
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
 }
@@ -203,16 +173,15 @@ export interface Banner {
 export interface Category {
   id: string;
   name: string;
-  subCategories: string[];
-  order: number; // ✅ [추가] 순서 저장을 위한 필드
+  order: number; // ✅ subCategories 필드 제거됨
 }
 
-// ❗ [추가] 고객센터 페이지에서 동적으로 관리할 타입들
 export interface GuideItem {
   id: string;
   title: string;
   content: string;
 }
+
 export interface FaqItem {
   id: string;
   question: string;
@@ -228,13 +197,14 @@ export interface StoreInfo {
   email: string;
   operatingHours: string[];
   description: string;
-  // ❗ [추가] 관리자가 수정할 수 있는 동적 필드들을 StoreInfo 타입에 포함시킵니다.
   kakaotalkChannelId?: string;
   usageGuide?: GuideItem[];
   faq?: FaqItem[];
 }
 
-// ... 대시보드 관련 타입 ...
+// =================================================================
+// 📊 대시보드 관련 타입
+// =================================================================
 export interface TodayStockItem {
     id: string;
     variantGroupId: string;

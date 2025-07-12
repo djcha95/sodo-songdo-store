@@ -5,7 +5,7 @@ import { getStoreInfo, updateStoreInfo } from '@/firebase';
 import { useAuth } from '@/context/AuthContext';
 import type { StoreInfo, GuideItem, FaqItem } from '@/types';
 import './StoreInfoPage.css';
-import { Phone, MessageCircle, AlertTriangle, MapPin, ChevronDown, BookOpen, HelpCircle, Edit, Save, PlusCircle, XCircle, X } from 'lucide-react';
+import { AlertTriangle, MapPin, ChevronDown, BookOpen, HelpCircle, Edit, Save, PlusCircle, XCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -133,12 +133,20 @@ const StoreInfoPage: React.FC = () => {
     setEditableInfo(prev => prev ? { ...prev, [field]: value } : null);
   };
   
-  const updateArrayItem = <T extends GuideItem | FaqItem>(index: number, field: keyof T, value: string, arrayName: 'usageGuide' | 'faq') => {
+  // [수정] 타입스크립트 오류 해결을 위해 함수 오버로딩 적용
+  type UpdateArrayItem = {
+    (index: number, field: keyof GuideItem, value: string, arrayName: 'usageGuide'): void;
+    (index: number, field: keyof FaqItem, value: string, arrayName: 'faq'): void;
+  };
+
+  const updateArrayItem: UpdateArrayItem = (index: number, field: any, value: string, arrayName: 'usageGuide' | 'faq') => {
     setEditableInfo(prev => {
         if (!prev) return null;
         const currentArray = prev[arrayName] || [];
         const newArray = [...currentArray];
-        newArray[index] = { ...newArray[index], [field]: value };
+        if (newArray[index]) {
+            newArray[index] = { ...newArray[index], [field]: value };
+        }
         return { ...prev, [arrayName]: newArray };
     });
   };
@@ -179,14 +187,6 @@ const StoreInfoPage: React.FC = () => {
     setEditableInfo(JSON.parse(JSON.stringify(storeInfo)));
     setHasChanges(false);
   }
-
-  // --- 헬퍼 함수 ---
-  const formatPhoneNumberForCall = (phoneNumber?: string) => (phoneNumber || '').replace(/[^0-9]/g, '');
-  const createKakaoMapLink = (address?: string) => `https://map.kakao.com/link/search/${encodeURIComponent(address || '')}`;
-  const createKakaoTalkChatLink = (channelId?: string) => {
-    if (!channelId || channelId === "YOUR_KAKAO_CHANNEL_ID") return '#';
-    return `https://pf.kakao.com/_${channelId}/chat`;
-  };
 
   if (loading) return <div className="customer-service-container centered-message"><p>고객센터 정보를 불러오는 중...</p></div>;
   if (error || !storeInfo || !editableInfo) return <div className="customer-service-container centered-message"><div className="info-error-card"><AlertTriangle size={40} className="error-icon" /><p>{error || '정보를 불러올 수 없습니다.'}</p></div></div>;

@@ -13,9 +13,8 @@ import {
   writeBatch,
   addDoc,
   updateDoc,
-  deleteDoc,
+  
 } from 'firebase/firestore';
-// ❗ [수정] 사용되지 않는 CollectionReference 타입을 제거합니다.
 import type { DocumentData, Query, DocumentReference } from 'firebase/firestore';
 import {
   ref,
@@ -24,7 +23,7 @@ import {
 } from 'firebase/storage';
 import type { StorageReference } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
-import type { Banner, StoreInfo, Category } from '@/types'; 
+import type { Banner, StoreInfo, Category, Product } from '@/types'; 
 
 // --- Helper Functions ---
 export const uploadImages = async (files: File[], path: string): Promise<string[]> => {
@@ -67,9 +66,41 @@ export const updateCategoriesOrder = async (categories: Category[]) => {
     await batch.commit();
 };
 
-export const deleteCategory = async (categoryId: string) => {
-    const categoryRef: DocumentReference<DocumentData> = doc(db, 'categories', categoryId);
-    await deleteDoc(categoryRef);
+// ✅ [수정] 카테고리 삭제 시, 해당 상품들의 카테고리 정보를 초기화하는 로직 추가
+export const deleteCategory = async (categoryId: string, categoryName: string) => {
+    const batch = writeBatch(db);
+
+    const categoryRef = doc(db, 'categories', categoryId);
+    batch.delete(categoryRef);
+
+    const productsToUpdateQuery = query(
+        collection(db, "products"),
+        where("category", "==", categoryName)
+    );
+
+    const productSnapshots = await getDocs(productsToUpdateQuery);
+    productSnapshots.forEach((productDoc) => {
+        const productRef = doc(db, 'products', productDoc.id);
+        batch.update(productRef, { category: "" });
+    });
+
+    await batch.commit();
+};
+
+// ✅ [추가] getProductsCountByCategory 함수 추가
+export const getProductsCountByCategory = async (): Promise<Record<string, number>> => {
+  const productsQuery = query(collection(db, 'products'), where('isArchived', '==', false));
+  const snapshot = await getDocs(productsQuery);
+  
+  const mainCategoryCounts: Record<string, number> = {};
+
+  snapshot.docs.forEach(doc => {
+    const product = doc.data() as Product;
+    const categoryName = product.category || '__UNASSIGNED__'; 
+    mainCategoryCounts[categoryName] = (mainCategoryCounts[categoryName] || 0) + 1;
+  });
+
+  return mainCategoryCounts;
 };
 
 

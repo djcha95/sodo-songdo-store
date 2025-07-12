@@ -1,117 +1,57 @@
-/* src/pages/admin/ProductCategoryBatchPage.css */
+/* src/pages/customer/OnsiteSalePage.css */
 
-.product-category-batch-page {
-  padding: 20px;
-  background-color: #f9fafb;
-}
-
-.product-category-batch-page h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.product-category-batch-page p {
-  font-size: 0.9rem;
-  color: #6b7280;
-  margin-bottom: 24px;
-}
-
-.batch-page-loading, .batch-page-error {
+.onsite-sale-container {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  align-items: center;
-  height: 200px;
+  text-align: center;
+  min-height: calc(100vh - 200px); /* 헤더, 네비게이션 바 높이를 제외한 높이 */
+  padding: 20px;
+  background-color: #f8f9fa; /* 부드러운 배경색 */
+}
+
+.development-notice {
+  padding: 40px;
+  border-radius: 12px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  max-width: 500px;
+  width: 100%;
+}
+
+.notice-icon {
+  color: #f39c12; /* 주황색 아이콘 */
+  margin-bottom: 20px;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-20px);
+  }
+  60% {
+    transform: translateY(-10px);
+  }
+}
+
+.notice-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #34495e;
+  margin-bottom: 10px;
+}
+
+.notice-message {
   font-size: 1.1rem;
-  color: #6b7280;
-  background-color: #fff;
-  border-radius: 8px;
+  color: #7f8c8d;
+  margin-bottom: 25px;
 }
 
-.batch-page-error {
-  color: #ef4444;
-}
-
-.table-container {
-  overflow-x: auto;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-thead {
-  background-color: #f3f4f6;
-}
-
-th, td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid #e5e7eb;
-  white-space: nowrap; /* 글자 줄바꿈 방지 */
-}
-
-th {
-  font-weight: 600;
-  color: #374151;
-}
-
-tbody tr:hover {
-  background-color: #f9fafb;
-}
-
-td select {
-  width: 100%;
-  min-width: 150px; /* 드롭다운 최소 너비 */
-  padding: 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background-color: #ffffff;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-td select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
-}
-
-td select:disabled {
-  background-color: #f3f4f6;
-  cursor: not-allowed;
-  color: #9ca3af;
-}
-
-.save-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  background-color: #10b981;
-  color: white;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.save-btn:hover:enabled {
-  background-color: #059669;
-}
-
-.save-btn:disabled {
-  background-color: #d1d5db;
-  cursor: not-allowed;
-}
-
-.save-btn span {
-  display: inline-block;
-  vertical-align: middle;
+.notice-subtext {
+  font-size: 0.9rem;
+  color: #95a5a6;
 }

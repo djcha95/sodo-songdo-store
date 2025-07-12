@@ -12,11 +12,11 @@ import {
   runTransaction,
   serverTimestamp,
   deleteDoc,
+  writeBatch,
 } from 'firebase/firestore';
-// ✅ FieldValue 타입을 firebase/firestore에서 직접 가져오도록 수정
 import type { FieldValue } from 'firebase/firestore';
-// ✅ 로컬 타입에서는 FieldValue를 제거
-import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistItem } from '@/types';
+// ✅ [수정] 사용하지 않는 WaitlistItem 타입 제거
+import type { Order, OrderStatus, OrderItem, Product, SalesRound } from '@/types';
 
 /**
  * @description 주문을 생성하고 재고를 차감하는 트랜잭션.
@@ -25,13 +25,11 @@ export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
 ): Promise<{ 
   reservedCount: number; 
-  waitlistedItems: WaitlistItem[];
   orderId?: string 
 }> => {
   
   let reservedItemCount = 0;
   let newOrderId: string | undefined = undefined;
-  const detailedWaitlistedItems: WaitlistItem[] = [];
 
   await runTransaction(db, async (transaction) => {
     const itemsToReserve: OrderItem[] = [];
@@ -119,7 +117,6 @@ export const submitOrder = async (
 
   return { 
     reservedCount: reservedItemCount, 
-    waitlistedItems: detailedWaitlistedItems,
     orderId: newOrderId 
   };
 };
@@ -137,7 +134,9 @@ export const cancelOrder = async (orderId: string, userId: string): Promise<void
     const order = orderDoc.data() as Order;
 
     if (order.userId !== userId) throw new Error("본인의 주문만 취소할 수 있습니다.");
-    if (order.status !== 'RESERVED') throw new Error("예약 확정 상태의 주문만 취소할 수 있습니다.");
+    if (order.status !== 'RESERVED' && order.status !== 'PREPAID') {
+        throw new Error("예약 또는 결제 완료 상태의 주문만 취소할 수 있습니다.");
+    }
     
     const now = new Date();
     const pickupDate = order.pickupDate?.toDate();
@@ -213,6 +212,7 @@ export const getAllOrdersForAdmin = async (): Promise<Order[]> => {
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
 
+
 /**
  * @description 전화번호 뒷자리로 주문을 검색합니다. (주로 관리자용)
  */
@@ -234,13 +234,28 @@ export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Or
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
   const updateData: { status: OrderStatus; pickedUpAt?: FieldValue } = { status };
   
-  // ✅ 상태가 'PICKED_UP'일 때만 픽업 시각을 서버 타임스탬프로 기록
   if (status === 'PICKED_UP') {
     updateData.pickedUpAt = serverTimestamp();
   }
 
   await updateDoc(doc(db, 'orders', orderId), updateData);
 };
+
+export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
+    const batch = writeBatch(db);
+    
+    orderIds.forEach(orderId => {
+        const orderRef = doc(db, 'orders', orderId);
+        const updateData: { status: OrderStatus; pickedUpAt?: FieldValue } = { status };
+
+        if (status === 'PICKED_UP') {
+            updateData.pickedUpAt = serverTimestamp();
+        }
+        batch.update(orderRef, updateData);
+    });
+
+    await batch.commit();
+}
 
 /**
  * @description (신규) 주문에 대한 관리자 비고를 업데이트합니다.

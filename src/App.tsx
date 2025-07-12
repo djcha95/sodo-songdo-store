@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast'; // react-hot-toast의 Toaster 임포트
+// ✅ [수정] 사용하지 않는 Toaster import 제거
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WaitlistProvider } from './context/WaitlistContext';
@@ -24,12 +24,7 @@ const App: React.FC = () => {
         <WaitlistProvider>
           <SelectionProvider>
             <EncoreRequestProvider>
-              {/* Toaster 컴포넌트는 Context Provider 바깥에 두어 전역에서 접근 가능하게 합니다.
-                  그러나 main.tsx에서 이미 Toaster가 설정되어 있으므로, 여기서는 제거하거나
-                  main.tsx에서 제거하고 여기에만 두는 것을 선택해야 합니다.
-                  가장 일반적인 패턴은 최상위 컴포넌트(App) 또는 최상위 렌더링 로직(main.tsx) 중 한 곳에만 두는 것입니다.
-                  main.tsx에 이미 있으므로 여기서는 제거합니다. */}
-              {/* <Toaster /> */}
+              {/* Toaster 컴포넌트는 main.tsx에 이미 있으므로 여기서는 제거합니다. */}
               <Outlet /> {/* 라우트된 자식 컴포넌트들이 이 위치에 렌더링됩니다 */}
             </EncoreRequestProvider>
           </SelectionProvider>
