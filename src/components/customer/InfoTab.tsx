@@ -1,0 +1,75 @@
+// src/components/customer/InfoTab.tsx
+
+import React from 'react';
+import type { StoreInfo } from '@/types';
+import { EditableField } from '@/pages/customer/StoreInfoPage';
+import KakaoMap from './KakaoMap';
+import { Phone, Mail, Building, User, Info, Clock, MessageSquare } from 'lucide-react';
+
+interface InfoTabProps {
+  editableInfo: StoreInfo;
+  updateField: (field: keyof StoreInfo, value: any) => void;
+  isAdmin: boolean;
+}
+
+const InfoTab: React.FC<InfoTabProps> = ({ editableInfo, updateField, isAdmin }) => {
+  return (
+    <section className="service-section">
+      <div className="info-item">
+        <span className="info-label"><Building size={14} /> 상호</span>
+        <EditableField value={editableInfo.name} onSave={(v) => updateField('name', v)} isAdmin={isAdmin} className="info-value"/>
+      </div>
+      <div className="info-item">
+        <span className="info-label"><Info size={14} /> 한 줄 설명</span>
+        <EditableField value={editableInfo.description} onSave={(v) => updateField('description', v)} isAdmin={isAdmin} as="textarea" className="info-value"/>
+      </div>
+       <div className="info-item">
+        <span className="info-label"><User size={14} /> 대표자명</span>
+        <EditableField value={editableInfo.representative} onSave={(v) => updateField('representative', v)} isAdmin={isAdmin} className="info-value"/>
+      </div>
+       <div className="info-item">
+        <span className="info-label"><Info size={14} /> 사업자등록번호</span>
+        <EditableField value={editableInfo.businessNumber} onSave={(v) => updateField('businessNumber', v)} isAdmin={isAdmin} className="info-value"/>
+      </div>
+      <div className="info-item">
+        <span className="info-label"><Phone size={14} /> 연락처</span>
+        {isAdmin ? (
+          <EditableField value={editableInfo.phoneNumber} onSave={(v) => updateField('phoneNumber', v)} isAdmin={isAdmin} className="info-value"/>
+        ) : (
+          <a href={`tel:${editableInfo.phoneNumber}`} className="info-value link-value">{editableInfo.phoneNumber}</a>
+        )}
+      </div>
+      <div className="info-item">
+        <span className="info-label"><Mail size={14} /> 이메일</span>
+         {isAdmin ? (
+          <EditableField value={editableInfo.email} onSave={(v) => updateField('email', v)} isAdmin={isAdmin} className="info-value"/>
+         ) : (
+          <a href={`mailto:${editableInfo.email}`} className="info-value link-value">{editableInfo.email}</a>
+         )}
+      </div>
+       <div className="info-item">
+        <span className="info-label"><MessageSquare size={14} /> 카카오톡 채널 ID</span>
+        <EditableField value={editableInfo.kakaotalkChannelId || ''} onSave={(v) => updateField('kakaotalkChannelId', v)} isAdmin={isAdmin} className="info-value"/>
+      </div>
+      {/* ✅ [제거] 채널톡 링크, 실시간 채팅 링크 필드를 화면에서 제거합니다. */}
+      <div className="info-item">
+        <span className="info-label"><Clock size={14} /> 운영 시간</span>
+        <EditableField value={editableInfo.operatingHours.join('\n')} onSave={(v) => updateField('operatingHours', v.split('\n'))} isAdmin={isAdmin} as="textarea" className="info-value operating-hours-list"/>
+      </div>
+      <div className="info-item">
+        <span className="info-label">주소</span>
+        <EditableField value={editableInfo.address} onSave={(v) => updateField('address', v)} isAdmin={isAdmin} className="info-value"/>
+      </div>
+      <div className="map-container">
+        {/* 주소값이 있을 때만 KakaoMap을 렌더링합니다. */}
+        {editableInfo.address ? (
+          <KakaoMap address={editableInfo.address} storeName={editableInfo.name} />
+        ) : (
+          <div className="map-placeholder">매장 주소를 입력하면 지도가 표시됩니다.</div>
+        )}
+      </div>
+    </section>
+  );
+};
+
+export default InfoTab;

@@ -1,16 +1,16 @@
-// src/App.tsx (수정본)
+// src/App.tsx (수정 제안)
 
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-// ✅ [수정] 사용하지 않는 Toaster import 제거
-import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext'; // useAuth 훅을 가져옵니다.
 import { CartProvider } from './context/CartContext';
 import { WaitlistProvider } from './context/WaitlistContext';
 import { SelectionProvider } from './context/SelectionContext';
 import { EncoreRequestProvider } from './context/EncoreRequestContext';
-import './App.css'; // 전역 스타일시트
-import './styles/variables.css'; // 전역 CSS 변수 파일 임포트
-import './styles/common.css'; // 공통 스타일 파일 임포트
+import './App.css'; 
+import './styles/variables.css'; 
+import './styles/common.css'; 
+import LoadingSpinner from './components/LoadingSpinner'; // 로딩 스피너 임포트
 
 /**
  * 최상위 앱 컴포넌트
@@ -18,19 +18,26 @@ import './styles/common.css'; // 공통 스타일 파일 임포트
  * BrowserRouter는 main.tsx에서 담당하므로 여기서는 제거합니다.
  */
 const App: React.FC = () => {
+  const { loading } = useAuth(); // AuthContext의 loading 상태를 가져옵니다.
+
+  // AuthContext 로딩 중이라면 로딩 스피너를 보여줍니다.
+  // 이렇게 하면 하위 컨텍스트와 라우트 컴포넌트들이 AuthContext의 user 정보가 완전히 로드된 후에야 마운트됩니다.
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
   return (
-    <AuthProvider>
-      <CartProvider>
-        <WaitlistProvider>
-          <SelectionProvider>
-            <EncoreRequestProvider>
-              {/* Toaster 컴포넌트는 main.tsx에 이미 있으므로 여기서는 제거합니다. */}
-              <Outlet /> {/* 라우트된 자식 컴포넌트들이 이 위치에 렌더링됩니다 */}
-            </EncoreRequestProvider>
-          </SelectionProvider>
-        </WaitlistProvider>
-      </CartProvider>
-    </AuthProvider>
+    // AuthProvider는 main.tsx에서 RouterProvider를 감싸고 있으므로 여기서는 제거합니다.
+    // 나머지 컨텍스트들은 AuthContext가 로딩된 후에 안전하게 렌더링됩니다.
+    <CartProvider>
+      <WaitlistProvider>
+        <SelectionProvider>
+          <EncoreRequestProvider>
+            <Outlet /> 
+          </EncoreRequestProvider>
+        </SelectionProvider>
+      </WaitlistProvider>
+    </CartProvider>
   );
 };
 

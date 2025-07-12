@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleRoundStatuses } from '../../firebase';
+// ✅ [수정] 함수 이름 오타를 수정합니다.
+import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses } from '../../firebase';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
@@ -246,7 +247,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
 const ProductListPageAdmin: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>([] );
   const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
   const [pickedUpQuantitiesMap, setPickedUpQuantitiesMap] = useState<Map<string, number>>(new Map());
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
@@ -346,9 +347,10 @@ const ProductListPageAdmin: React.FC = () => {
   }, [allProducts, reservedQuantitiesMap, pickedUpQuantitiesMap, searchQuery, filterCategory, filterStatus, sortConfig]);
 
   useEffect(() => {
+    // 모든 확장 가능한 라운드의 ID를 초기화 시 확장된 상태로 만듭니다.
     const allExpandableIds = new Set(enrichedRounds.filter(item => item.enrichedVariantGroups.length > 1).map(item => item.uniqueId));
     setExpandedRoundIds(allExpandableIds);
-  }, [allProducts]); 
+  }, [allProducts]); // allProducts가 변경될 때마다 재실행
 
   const handleSortChange = (key: SortableKeys) => {
     setSortConfig(prev => ({ 
@@ -364,13 +366,18 @@ const ProductListPageAdmin: React.FC = () => {
 
   const handleStockEditSave = async (vgUniqueId: string) => {
     const newStockValue = stockInputs[vgUniqueId];
-    setEditingStockId(null);
+    setEditingStockId(null); // 편집 모드 종료
     if (newStockValue === undefined) return;
 
+    // uniqueId에서 productId, roundId, variantGroupId 추출
     const [productId, roundId, variantGroupId] = vgUniqueId.split('_');
     const newStock = parseInt(newStockValue, 10);
 
-    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) { toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다."); return; }
+    // 유효성 검사
+    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
+      toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다.");
+      return;
+    }
 
     const promise = updateMultipleVariantGroupStocks([{ productId, roundId, variantGroupId, newStock }]);
     await toast.promise(promise, {
@@ -379,6 +386,7 @@ const ProductListPageAdmin: React.FC = () => {
       error: "업데이트 중 오류가 발생했습니다.",
     });
 
+    // 성공적으로 업데이트되면 UI 상태 즉시 반영
     setAllProducts(prevProducts => prevProducts.map(p => {
         if (p.id !== productId) return p;
         const newSalesHistory = p.salesHistory.map(r => {
@@ -405,31 +413,43 @@ const ProductListPageAdmin: React.FC = () => {
   const handleSelectionChange = (id: string, isSelected: boolean) => {
     setSelectedItems(prev => {
         const newSet = new Set(prev);
-        if (isSelected) newSet.add(id); else newSet.delete(id);
+        if (isSelected) newSet.add(id);
+        else newSet.delete(id);
         return newSet;
     });
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) { setSelectedItems(new Set(enrichedRounds.map(item => item.uniqueId))); } 
-    else { setSelectedItems(new Set()); }
+    if (e.target.checked) {
+        setSelectedItems(new Set(enrichedRounds.map(item => item.uniqueId)));
+    } else {
+        setSelectedItems(new Set());
+    }
   };
 
-  // ✅ [수정] 사용하지 않는 'action' 파라미터 제거
   const handleBulkAction = async () => {
-    if (selectedItems.size === 0) { toast.error("선택된 항목이 없습니다."); return; }
+    if (selectedItems.size === 0) {
+      toast.error("선택된 항목이 없습니다.");
+      return;
+    }
+
+    // 선택된 각 uniqueId에서 productId와 roundId를 추출하여 업데이트 페이로드 생성
     const updates = Array.from(selectedItems).map(id => {
-        const [productId, roundId] = id.split('-');
-        return { productId, roundId, newStatus: 'ended' as SalesRoundStatus };
+        const [productId, roundId] = id.split('-'); // uniqueId는 productId-roundId 형태
+        return { productId, roundId, newStatus: 'ended' as SalesRoundStatus }; // 판매 종료 상태로 변경
     });
-    const promise = updateMultipleRoundStatuses(updates);
+    
+    // updateMultipleSalesRoundStatuses 함수 호출
+    const promise = updateMultipleSalesRoundStatuses(updates);
+
     await toast.promise(promise, {
         loading: `${selectedItems.size}개 항목의 판매를 종료하는 중...`,
         success: "선택된 항목이 모두 판매 종료 처리되었습니다.",
         error: "일괄 작업 중 오류가 발생했습니다."
     });
-    setSelectedItems(new Set());
-    fetchData(); 
+
+    setSelectedItems(new Set()); // 선택 초기화
+    fetchData(); // 데이터 새로고침
   };
 
   const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;

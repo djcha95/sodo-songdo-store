@@ -5,9 +5,11 @@ import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp, query, collection, where, onSnapshot, orderBy, updateDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
+// ✅ [수정] types에서 UserDocument와 Notification을 가져옵니다.
 import type { UserDocument, Notification } from '@/types'; 
 
-// ✅ phone 필드가 추가된 UserDocument를 AuthUser에 반영
+// AuthUser 타입은 Firebase User와 UserDocument의 부분집합을 결합합니다.
+// UserDocument에 이미 phone이 옵셔널하게 정의되어 있으므로 여기서는 Partial<UserDocument>만 사용합니다.
 export type AuthUser = User & Partial<UserDocument>;
 
 interface AppUserContextType {
@@ -43,39 +45,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           const userSnap = await getDoc(userRef);
 
-          // ✅ [추가] 카카오 프로필에서 전화번호를 가져오는 로직
-          // Firebase의 currentUser.providerData에서 'oidc.kakao' 공급자 정보를 찾습니다.
           const kakaoProviderData = currentUser.providerData.find(p => p.providerId === 'oidc.kakao');
-          // 카카오에서 제공하는 phoneNumber 정보를 추출합니다. 없으면 null로 설정합니다.
           const phoneNumber = kakaoProviderData?.phoneNumber || null;
 
           if (!userSnap.exists()) {
-            // ✅ [수정] 새 사용자 문서 생성 시, 추출한 전화번호를 함께 저장합니다.
+            // ✅ [수정] 새로운 사용자 문서 생성 시 'role' 필드를 'customer'로 설정합니다.
             const newUserDoc: UserDocument = {
               uid: currentUser.uid,
               email: currentUser.email,
               displayName: currentUser.displayName,
               photoURL: currentUser.photoURL,
-              phone: phoneNumber, // 전화번호 저장
+              phone: phoneNumber,
               createdAt: serverTimestamp(),
-              isAdmin: false,
+              role: 'customer', // 'isAdmin' 대신 'role' 사용
               encoreRequestedProductIds: [],
             };
             await setDoc(userRef, newUserDoc);
             
-            setIsAdmin(false);
+            setIsAdmin(false); // 새로 가입한 사용자는 관리자가 아님
             setUser({ ...currentUser, ...newUserDoc });
 
           } else {
             const userData = userSnap.data() as UserDocument;
 
-            // ✅ [추가] 기존 사용자의 DB에 전화번호가 없지만, 카카오에서 제공된 경우 업데이트합니다.
+            // 기존 사용자의 DB에 전화번호가 없지만, 카카오에서 제공된 경우 업데이트합니다.
+            // UserDocument의 phone 필드가 이미 옵셔널이므로 !userData.phone? 로 체크하는게 더 정확할 수 있습니다.
             if (phoneNumber && !userData.phone) {
               await updateDoc(userRef, { phone: phoneNumber });
               userData.phone = phoneNumber; // 로컬 상태에도 반영
             }
             
-            setIsAdmin(userData.isAdmin === true);
+            // ✅ [수정] role 필드를 기반으로 isAdmin 상태를 설정합니다.
+            setIsAdmin(userData.role === 'admin'); 
             const updatedUserState: AuthUser = { ...currentUser, ...userData };
             setUser(updatedUserState);
           }

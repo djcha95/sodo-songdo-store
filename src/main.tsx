@@ -11,6 +11,10 @@ import App from './App';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingSpinner from './components/LoadingSpinner';
 
+// Context import (AuthContext의 loading 상태를 사용하기 위함)
+import { AuthProvider, useAuth } from './context/AuthContext';
+
+
 // --- 페이지 컴포넌트 lazy loading ---
 
 // 레이아웃 컴포넌트
@@ -46,7 +50,6 @@ const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage')
 const OrderListPage = React.lazy(() => import('@/pages/admin/OrderListPage'));
 const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
 const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
-// ✅ [추가] '카테고리 일괄 변경' 페이지 import
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 
 
@@ -54,6 +57,20 @@ const ProductDetailPageWrapper = () => {
   const { productId } = useParams<{ productId: string }>();
   return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
 };
+
+// AuthContext의 loading 상태에 따라 RouterProvider 렌더링을 제어할 컴포넌트
+const RouterWrapper = () => {
+  const { loading } = useAuth(); // AuthContext에서 loading 상태를 가져옵니다.
+
+  if (loading) {
+    // 인증 정보 로딩 중에는 로딩 스피너를 보여줍니다.
+    return <LoadingSpinner />;
+  }
+
+  // 인증 정보 로딩이 완료되면 RouterProvider를 렌더링합니다.
+  return <RouterProvider router={router} />;
+};
+
 
 const router = createBrowserRouter([
   {
@@ -79,7 +96,6 @@ const router = createBrowserRouter([
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
               { path: 'products/edit/:productId', element: <SalesRoundEditPage /> },
-              // ✅ [추가] '카테고리 일괄 변경' 페이지 경로 추가
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'encore-requests', element: <EncoreAdminPage /> },
@@ -157,6 +173,9 @@ createRoot(document.getElementById('root')!).render(
         error: { duration: 4000 },
       }}
     />
-    <RouterProvider router={router} />
+    {/* AuthProvider로 RouterWrapper를 감싸서 AuthContext의 loading 상태를 사용할 수 있게 합니다. */}
+    <AuthProvider> 
+      <RouterWrapper />
+    </AuthProvider>
   </>
 );

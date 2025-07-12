@@ -31,6 +31,7 @@
 }
 .header-right {
     justify-content: flex-end;
+    gap: 16px; /* 내부 요소 간격 */
 }
 .header-center {
     flex-shrink: 0;
@@ -60,6 +61,7 @@
     flex-direction: column;
     align-items: center;
     line-height: 1.1;
+    text-decoration: none; /* Link 컴포넌트의 밑줄 제거 */
 }
 .brand-name {
     font-size: 1.5rem;
@@ -72,22 +74,9 @@
     font-weight: 500;
 }
 
-/* 우측 인사말 */
-.greeting-message {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end; /* 우측 정렬 */
-    line-height: 1.3;
-}
-.greeting-message span:first-child {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #212529;
-}
-.greeting-subtext {
-    font-size: 0.85rem;
-    color: #868e96;
-}
+/* ❗ [삭제] 기존 인사말 스타일 제거
+.greeting-message { ... }
+*/
 
 /* 뒤로가기 버튼 등 기타 */
 .header-page-title {
@@ -110,50 +99,78 @@
 .header-back-button:hover { background-color: #f1f3f5; }
 .header-back-button svg { color: #495057; }
 
-/* src/components/Header.css */
 
-/* ... 기존 Header.css 내용 ... */
-
-
-/* ✅ [추가] 알림 기능 관련 스타일 */
-.header-right {
-  /* 자식 요소들을 정렬하기 위해 flex 추가 */
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
+/* ✅ [수정] 알림 기능 관련 스타일 */
 .notification-container {
   position: relative;
 }
 
-.notification-button {
+/* ✅ [추가] 새로운 알림 버튼 스타일 */
+.new-notification-button {
   position: relative;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-color-dark);
-  padding: 8px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
+  gap: 6px;
+  background-color: transparent;
+  border: 1px solid var(--border-color-light, #e9ecef);
+  padding: 6px 12px;
+  border-radius: var(--border-radius-lg, 8px);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color-dark, #343a40);
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
-.notification-button:hover {
-  background-color: var(--bg-color-medium);
+.new-notification-button:hover {
+  background-color: var(--bg-color-light, #f8f9fa);
+  border-color: var(--border-color-medium, #dee2e6);
+}
+
+.new-notification-button svg {
+  color: var(--text-color-medium, #495057);
+}
+
+/* ✅ [추가] 오늘 픽업 알림 '!' 표시 스타일 */
+.pickup-indicator {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--danger-color, #e03131);
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  animation: bounce 1.5s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+  60% {
+    transform: translateY(-2px);
+  }
 }
 
 .notification-badge {
   position: absolute;
   top: 4px;
   right: 4px;
-  background-color: var(--danger-color);
+  background-color: var(--primary-color);
   color: white;
   border-radius: 50%;
-  width: 18px;
+  min-width: 18px;
   height: 18px;
+  padding: 0 4px;
   font-size: 11px;
   font-weight: bold;
   display: flex;
@@ -171,7 +188,7 @@
   background-color: var(--bg-color-white);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--box-shadow-lg);
-  width: 300px;
+  width: 320px; /* 너비 약간 증가 */
   max-height: 400px;
   overflow-y: auto;
   z-index: 1000;

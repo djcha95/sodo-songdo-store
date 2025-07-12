@@ -11,12 +11,23 @@ export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
+// ✅ [추가] 헤더에서 사용할 알림의 종류를 명확하게 정의합니다.
+export type NotificationType =
+  | 'GENERAL'             // 일반 알림
+  | 'WAITLIST_CONFIRMED'  // 대기 예약 확정
+  | 'PICKUP_REMINDER'     // 픽업 D-1 등 미리 알림
+  | 'PICKUP_TODAY'        // 픽업 당일 알림
+  | 'NEW_INTERACTION';    // 찜, 댓글 등 (미래 확장용)
+
+
 export interface Notification {
   id: string;
   message: string;
   isRead: boolean;
   timestamp: Timestamp;
   link?: string;
+  // ✅ [추가] 알림 종류를 구분하기 위한 type 속성
+  type: NotificationType;
 }
 
 
@@ -197,7 +208,7 @@ export interface StoreInfo {
   email: string;
   operatingHours: string[];
   description: string;
-  kakaotalkChannelId?: string;
+  kakaotalkChannelId?: string; // ✅ 이 필드를 사용하여 채팅 링크를 생성합니다.
   usageGuide?: GuideItem[];
   faq?: FaqItem[];
 }
