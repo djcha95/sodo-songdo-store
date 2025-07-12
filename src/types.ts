@@ -202,6 +202,7 @@ export interface Category {
   id: string;
   name: string;
   subCategories: string[];
+  order: number; // ✅ [추가] 순서 저장을 위한 필드
 }
 
 export interface StoreInfo {

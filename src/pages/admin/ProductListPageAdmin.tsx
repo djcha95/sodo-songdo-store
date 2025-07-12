@@ -14,14 +14,12 @@ import './ProductListPageAdmin.css';
 // =================================================================
 // 헬퍼 함수 및 타입
 // =================================================================
-// ✅ [수정] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수 (숫자 및 유효성 검사 추가)
 const safeToDate = (date: any): Date | null => {
     if (!date) return null;
     if (date instanceof Date) {
         if (isNaN(date.getTime())) return null;
         return date;
     }
-    // 숫자(milliseconds) 형식 지원 추가
     if (typeof date === 'number') {
         const d = new Date(date);
         if (isNaN(d.getTime())) return null;
@@ -40,7 +38,7 @@ const safeToDate = (date: any): Date | null => {
 
 const formatDate = (dateInput: any) => {
     const date = safeToDate(dateInput);
-    if (!date) return '–';
+    if (!date || !isFinite(date.getTime())) return '–';
     return date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\.$/, '');
 };
 
@@ -89,7 +87,6 @@ interface EnrichedRoundItem {
   enrichedVariantGroups: EnrichedVariantGroup[];
 }
 
-// ✅ [수정] 정렬 가능한 키에 'expirationDate' 추가
 type SortableKeys = 'roundCreatedAt' | 'productName' | 'category' | 'expirationDate';
 
 // =================================================================
@@ -159,7 +156,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
               </div>
             </td>
             <td><span className={`status-badge status-${status}`} title={`Status: ${status}`}>{translateStatus(status)}</span></td>
-            <td>{vg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
+            <td style={{textAlign: 'right'}}>{vg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
             <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
             <td className="quantity-cell">{`${vg.reservedQuantity} / ${item.round.waitlistCount || 0}`}</td>
             <td className="quantity-cell">{vg.pickedUpQuantity}</td>
@@ -170,10 +167,18 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <button className="stock-display-button" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정. -1 입력 시 무제한">{vg.configuredStock === -1 ? '∞' : vg.configuredStock}</button>
               )}
             </td>
-            <td><button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 정보를 수정합니다."><Edit size={14}/> 수정</button></td>
+            <td><button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 정보를 수정합니다."><Edit size={16}/></button></td>
           </tr>
         );
     }
+    
+    // ❗ [수정] 그룹 상품의 마스터 행 로직 개선
+    // 그룹 상품의 대표 상태와 가장 임박한 유통기한을 계산합니다.
+    const earliestOverallExpiration = useMemo(() => {
+        const allDates = item.enrichedVariantGroups.flatMap(vg => vg.items.map(i => safeToDate(i.expirationDate)?.getTime()).filter(Boolean) as number[]);
+        return allDates.length > 0 ? Math.min(...allDates) : Infinity;
+    }, [item.enrichedVariantGroups]);
+    const roundStatus = item.round.status;
 
     // 확장형 상품 행 렌더링
     return (
@@ -195,8 +200,20 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
               <div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div>
             </div>
           </td>
-          <td colSpan={6}></td>
-          <td><button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 대표 정보를 수정합니다."><Edit size={14}/> 수정</button></td>
+
+          {/* ❗ [수정] colSpan 대신 개별 셀을 렌더링하여 정렬 문제 해결 및 대표 정보 표시 */}
+          <td><span className={`status-badge status-${roundStatus}`} title={`Round Status: ${roundStatus}`}>{translateStatus(roundStatus)}</span></td>
+          <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
+          <td>{formatDate(earliestOverallExpiration)}</td>
+          <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
+          <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
+          <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
+
+          <td>
+              <button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 대표 정보를 수정합니다.">
+                  <Edit size={16}/>
+              </button>
+          </td>
         </tr>
         {isExpanded && item.enrichedVariantGroups.map((subVg, vgIndex) => {
           const subVgUniqueId = `${item.productId}_${item.round.roundId}_${subVg.id}`;
@@ -209,7 +226,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <td></td><td></td><td></td>
                   <td className="sub-row-name"> └ {subVg.groupName}</td>
                   <td><span className={`status-badge status-${subStatus}`} title={`Status: ${subStatus}`}>{translateStatus(subStatus)}</span></td>
-                  <td>{subVg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
+                  <td style={{textAlign: 'right'}}>{subVg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
                   <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
                   <td className="quantity-cell">{`${subVg.reservedQuantity} / ${item.round.waitlistCount || 0}`}</td>
                   <td className="quantity-cell">{subVg.pickedUpQuantity}</td>
@@ -245,7 +262,6 @@ const ProductListPageAdmin: React.FC = () => {
   const [searchQuery, setSearchQuery] = usePersistentState('adminProductSearch', '');
   const [filterCategory, setFilterCategory] = usePersistentState('adminProductCategory', 'all');
   const [filterStatus, setFilterStatus] = usePersistentState<SalesRoundStatus | 'all'>('adminProductStatus', 'all');
-  // ✅ [수정] 정렬 기본 키에 'roundCreatedAt' 유지
   const [sortConfig, setSortConfig] = usePersistentState<{key: SortableKeys, direction: 'asc' | 'desc'}>('adminProductSort', { key: 'roundCreatedAt', direction: 'desc' });
   
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
@@ -319,13 +335,11 @@ const ProductListPageAdmin: React.FC = () => {
         const key = sortConfig.key;
         let aVal: any; let bVal: any;
         if (key === 'roundCreatedAt') { aVal = safeToDate(a.round.createdAt)?.getTime() || 0; bVal = safeToDate(b.round.createdAt)?.getTime() || 0; } 
-        // ✅ [추가] 유통기한 정렬 로직
         else if (key === 'expirationDate') { 
             const aEarliestExp = a.enrichedVariantGroups.length > 0 ? Math.min(...a.enrichedVariantGroups.map(vg => getEarliestExpirationDateForGroup(vg))) : Infinity;
             const bEarliestExp = b.enrichedVariantGroups.length > 0 ? Math.min(...b.enrichedVariantGroups.map(vg => getEarliestExpirationDateForGroup(vg))) : Infinity;
             aVal = aEarliestExp;
             bVal = bEarliestExp;
-            // Infinity 값 처리 (Infinity는 항상 뒤로)
             if (aVal === Infinity && bVal !== Infinity) return 1;
             if (bVal === Infinity && aVal !== Infinity) return -1;
             if (aVal === Infinity && bVal === Infinity) return 0;
@@ -338,10 +352,9 @@ const ProductListPageAdmin: React.FC = () => {
   }, [allProducts, reservedQuantitiesMap, pickedUpQuantitiesMap, searchQuery, filterCategory, filterStatus, sortConfig]);
 
   useEffect(() => {
-    // 모든 라운드 ID를 확장 상태로 설정 (초기 로드 시)
-    const allExpandableIds = new Set(enrichedRounds.map(item => item.uniqueId));
+    const allExpandableIds = new Set(enrichedRounds.filter(item => item.enrichedVariantGroups.length > 1).map(item => item.uniqueId));
     setExpandedRoundIds(allExpandableIds);
-  }, [enrichedRounds]); // enrichedRounds가 변경될 때마다 다시 설정
+  }, [allProducts]); 
 
   const handleSortChange = (key: SortableKeys) => {
     setSortConfig(prev => ({ 
@@ -372,7 +385,6 @@ const ProductListPageAdmin: React.FC = () => {
       error: "업데이트 중 오류가 발생했습니다.",
     });
 
-    // 화면 새로고침 대신 로컬 상태 업데이트
     setAllProducts(prevProducts => prevProducts.map(p => {
         if (p.id !== productId) return p;
         const newSalesHistory = p.salesHistory.map(r => {
@@ -422,7 +434,7 @@ const ProductListPageAdmin: React.FC = () => {
         error: "일괄 작업 중 오류가 발생했습니다."
     });
     setSelectedItems(new Set());
-    fetchData(); // 변경사항 반영을 위해 데이터 다시 불러오기
+    fetchData(); 
   };
 
   const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;
@@ -456,16 +468,17 @@ const ProductListPageAdmin: React.FC = () => {
                 <div className="bulk-action-wrapper"><button className="bulk-action-button" onClick={() => handleBulkAction('end_sale')} disabled={selectedItems.size === 0}><Trash2 size={16} /> 선택 항목 판매 종료</button></div>
             </div>
             <div className="admin-product-table-container">
-              <table className="admin-product-table unified-table">
+              <table className="admin-product-table">
                 <thead>
                   <tr>
-                    <th style={{width: '40px'}}><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
-                    <th style={{width: '60px'}}>No.</th>
+                    <th><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
+                    <th>No.</th>
                     <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일 {sortConfig.key === 'roundCreatedAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th className="sortable-header" onClick={() => handleSortChange('category')}>카테고리 {sortConfig.key === 'category' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th>보관</th>
                     <th className="sortable-header" onClick={() => handleSortChange('productName')}>상품명 / 회차명 {sortConfig.key === 'productName' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
-                    <th>상태</th><th>가격</th>
+                    <th>상태</th>
+                    <th>가격</th>
                     <th className="sortable-header" onClick={() => handleSortChange('expirationDate')}>유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th title="예약된 수량 / 전체 대기자 수">예약/대기</th>
                     <th title="픽업 완료된 수량">픽업</th>

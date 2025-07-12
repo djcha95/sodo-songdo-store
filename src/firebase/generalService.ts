@@ -13,6 +13,7 @@ import {
   getDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import type { DocumentData, CollectionReference, Query, DocumentReference } from 'firebase/firestore';
 import {
@@ -38,9 +39,23 @@ export const uploadImages = async (files: File[], path: string): Promise<string[
 
 // --- Category Functions ---
 export const getCategories = async (): Promise<Category[]> => {
-    const q: Query<DocumentData> = query(collection(db, 'categories'), orderBy('name'));
+    // ✅ [수정] Firestore에서 정렬 규칙을 제거하고 모든 문서를 가져옵니다.
+    const q: Query<DocumentData> = query(collection(db, 'categories'));
+    
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+    const categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+    
+    // ✅ [수정] 클라이언트 측에서 order 필드가 없는 경우까지 고려하여 안전하게 정렬합니다.
+    return categories.sort((a, b) => {
+        const orderA = a.order ?? Infinity; // order 필드가 없으면 맨 뒤로
+        const orderB = b.order ?? Infinity;
+
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+        // order 값이 같거나 둘 다 없을 경우 이름순으로 2차 정렬
+        return a.name.localeCompare(b.name);
+    });
 };
 
 export const addCategory = async (categoryData: Omit<Category, 'id'>) => {
@@ -52,10 +67,20 @@ export const updateCategory = async (categoryId: string, categoryData: Partial<C
     await updateDoc(categoryRef, categoryData);
 };
 
+export const updateCategoriesOrder = async (categories: Category[]) => {
+    const batch = writeBatch(db);
+    categories.forEach((category, index) => {
+        const categoryRef = doc(db, 'categories', category.id);
+        batch.update(categoryRef, { order: index });
+    });
+    await batch.commit();
+};
+
 export const deleteCategory = async (categoryId: string) => {
     const categoryRef: DocumentReference<DocumentData> = doc(db, 'categories', categoryId);
     await deleteDoc(categoryRef);
 };
+
 
 // --- Banner Functions ---
 export const getActiveBanners = async (): Promise<Banner[]> => {
@@ -68,6 +93,7 @@ export const getActiveBanners = async (): Promise<Banner[]> => {
 export const getStoreInfo = async (): Promise<StoreInfo | null> => {
     const docRef = doc(db, 'storeInfo', 'main');
     const docSnap = await getDoc(docRef);
+
     return docSnap.exists() ? docSnap.data() as StoreInfo : null;
 };
 
@@ -143,8 +169,8 @@ export async function getDailyDashboardData(): Promise<{
     (order.items || []).forEach((item: OrderItem) => {
       todayPrepaidOrders.push({
         id: docSnap.id,
-        customerName: order.customerName,
-        productName: `${item.name} - ${item.variantGroupName} - ${item.itemName}`, 
+        customerName: order.customerInfo.name,
+        productName: `${item.productName} - ${item.variantGroupName} - ${item.itemName}`, 
         quantity: item.quantity,
         status: order.status,
       });

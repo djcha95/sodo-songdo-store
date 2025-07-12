@@ -78,8 +78,9 @@
     background-color: #f9f9f9;
     border: 1px solid #eee;
     border-radius: 6px;
-    padding: 15px;
+    padding: 10px 15px;
     margin-bottom: 10px;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .category-item.selected {
@@ -88,13 +89,39 @@
     background-color: #e7f1ff;
 }
 
+/* ✅ [추가] 드래그 중인 항목 스타일 */
+.category-item.dragging {
+    background-color: #d6eaff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
 .category-main-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-/* [수정] 대분류 이름 클릭 영역 스타일 */
+/* ✅ [추가] 드래그 핸들 스타일 */
+.drag-handle {
+    cursor: grab;
+    color: #aaa;
+    margin-right: 10px;
+    padding: 5px;
+}
+.drag-handle:hover {
+    color: #333;
+}
+.drag-handle-sub {
+    cursor: grab;
+    color: #ccc;
+    margin-right: 5px;
+    padding: 3px;
+}
+.drag-handle-sub:hover {
+    color: #555;
+}
+
+
 .category-name-display {
     font-size: 1.1em;
     font-weight: bold;
@@ -121,7 +148,6 @@
     color: #dc3545;
 }
 
-/* [추가] 인라인 편집 폼 스타일 */
 .inline-edit-form {
     display: flex;
     align-items: center;
@@ -145,11 +171,7 @@
 .inline-edit-form button:hover {
     opacity: 0.7;
 }
-.inline-edit-form .cancel-btn {
-    color: #dc3545;
-}
 
-/* [추가] 하위 카테고리 추가 폼 스타일 */
 .add-subcategory-form-wrapper {
     margin-top: 15px;
     padding-top: 15px;
@@ -173,11 +195,12 @@
 
 
 .subcategory-list {
-    list-style: none; /* 점 리스트 제거 (아이콘으로 대체 가능) */
-    padding-left: 0;
+    list-style: none;
+    padding-left: 20px; /* 드래그 핸들 공간 확보 */
     margin-top: 10px;
     border-top: 1px dashed #eee;
     padding-top: 10px;
+    min-height: 10px; /* 드롭 영역 확보 */
 }
 
 .subcategory-item {
@@ -187,24 +210,17 @@
     padding: 5px 0;
     font-size: 0.95em;
     color: #555;
-    padding-left: 10px; /* 들여쓰기 */
     position: relative;
+    border-radius: 4px;
 }
-.subcategory-item::before {
-    content: '-'; /* 들여쓰기 점 대신 - 사용 */
-    position: absolute;
-    left: 0;
-    color: #888;
-}
-
-.subcategory-item .trash-btn {
-    padding: 3px;
+.subcategory-item.dragging {
+    background-color: #f0f0f0;
+    border: 1px dashed #ccc;
 }
 
-/* [추가] 하위 카테고리 인라인 편집 폼 */
+
 .subcategory-inline-edit {
     flex-grow: 1;
-    margin-left: 10px; /* 기존 텍스트 위치와 맞춤 */
 }
 .subcategory-name-display {
     cursor: pointer;
@@ -216,21 +232,32 @@
 
 
 .loading-overlay {
-    position: absolute;
+    position: fixed; /* 전체 화면을 덮도록 수정 */
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background-color: rgba(255, 255, 255, 0.8);
     display: flex;
+    flex-direction: column; /* 아이콘과 텍스트를 세로로 배치 */
     justify-content: center;
     align-items: center;
     z-index: 1000;
-    border-radius: 8px; 
+}
+
+.loading-overlay p {
+    margin-top: 10px;
+    font-weight: bold;
+    color: #333;
 }
 
 .loading-overlay .spin {
     animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .error-message-banner {

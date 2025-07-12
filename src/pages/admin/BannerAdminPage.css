@@ -1,16 +1,17 @@
 /* src/pages/admin/BannerAdminPage.css (기존 파일 전체를 아래 내용으로 교체) */
 
-/* Admin Page Base Layout */
+/* Admin Page Base Layout (AdminPage.css의 .admin-content 내부에서 동작하도록 수정) */
 .banner-admin-page-container {
-    padding: var(--spacing-xxl, 32px);
-    max-width: 1400px; /* 더 넓게 확장 */
-    margin: 0 auto;
+    padding: 0; /* AdminPage.css의 .admin-content가 이미 padding을 가지고 있으므로 여기서는 0 */
+    max-width: 100%; /* .admin-content의 100%를 사용 */
+    margin: 0; /* .admin-content 내부이므로 margin 0 */
 }
 
 .banner-admin-page-container h1 {
     font-size: var(--font-size-xxxl, 2.25rem);
     font-weight: var(--font-weight-bold, 700);
     color: var(--text-color-dark, #1f2937);
+    margin-top: 0; /* 상단 헤더 제거로 인한 조정 */
     margin-bottom: var(--spacing-xxl, 32px);
     border-bottom: 2px solid var(--border-color-medium, #e5e7eb);
     padding-bottom: var(--spacing-md, 16px);
@@ -105,8 +106,8 @@
 
 .image-preview-wrapper img {
     width: 100%;
-    height: auto;
-    display: block;
+    height: 100%; /* 높이를 100%로 설정하여 부모의 높이에 맞춤 */
+    object-fit: cover;
 }
 
 .image-preview-wrapper p {

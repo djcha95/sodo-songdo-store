@@ -9,7 +9,8 @@ import {
 import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry } from '@/types';
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, Category } from '@/types';
+
 
 /**
  * @description 대표 상품을 추가하고 첫 번째 판매 회차를 등록하는 함수
@@ -382,8 +383,9 @@ export const updateMultipleVariantGroupStocks = async (
     productData.salesHistory = newSalesHistory; 
   }
 
+  // ✅ [수정] productId를 사용하지 않으므로 .values()를 사용해 더 간결하게 만듭니다.
   // 최종적으로 변경된 모든 상품 데이터를 배치에 추가합니다.
-  for (const [productId, { productRef, productData }] of productsToUpdate.entries()) {
+  for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
 
@@ -391,19 +393,13 @@ export const updateMultipleVariantGroupStocks = async (
 };
 
 
-// =================================================================
-// ✨ 여기에 새로운 함수를 추가했습니다.
-// =================================================================
-
 /**
  * @description 여러 판매 회차의 상태를 일괄적으로 업데이트합니다.
- * @param updates - { productId, roundId, newStatus } 객체 배열
  */
 export const updateMultipleRoundStatuses = async (
   updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
 ) => {
   const batch = writeBatch(db);
-
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
   // 1. 업데이트가 필요한 모든 고유한 상품 문서를 한 번씩만 읽어옵니다.
@@ -438,10 +434,65 @@ export const updateMultipleRoundStatuses = async (
     productData.salesHistory = newSalesHistory;
   }
 
+  // ✅ [수정] productId를 사용하지 않으므로 .values()를 사용해 더 간결하게 만듭니다.
   // 3. 최종적으로 변경된 모든 상품 데이터를 배치에 추가하여 한 번에 씁니다.
-  for (const [productId, { productRef, productData }] of productsToUpdate.entries()) {
+  for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
 
   await batch.commit();
+};
+
+/**
+ * @description 각 카테고리 및 하위 카테고리에 속한 상품의 개수를 정확하게 계산합니다.
+ * @returns { mainCategoryCounts, subCategoryCounts } 객체
+ */
+export const getProductsCountByCategory = async (): Promise<{
+  mainCategoryCounts: Record<string, number>;
+  subCategoryCounts: Record<string, number>;
+}> => {
+  // 1. 모든 카테고리와 모든 상품 정보를 동시에 가져옵니다.
+  const categoriesQuery = query(collection(db, 'categories'));
+  const productsQuery = query(collection(db, 'products'), where('isArchived', '==', false));
+  
+  const [categoriesSnapshot, productsSnapshot] = await Promise.all([
+    getDocs(categoriesQuery),
+    getDocs(productsQuery)
+  ]);
+
+  // 2. 카테고리 이름과 ID를 매핑하는 '지도'를 만듭니다.
+  const categoryNameToIdMap = new Map<string, string>();
+  categoriesSnapshot.docs.forEach(doc => {
+    const category = doc.data() as Category;
+    categoryNameToIdMap.set(category.name, doc.id);
+  });
+
+  const mainCategoryCounts: Record<string, number> = {};
+  const subCategoryCounts: Record<string, number> = {};
+
+  // 3. 모든 상품을 순회하며 개수를 집계합니다.
+  productsSnapshot.docs.forEach(doc => {
+    const product = doc.data() as Product;
+    
+    // 4. 상품의 카테고리 '이름'으로 카테고리 'ID'를 찾습니다.
+    if (product.category) {
+      const categoryId = categoryNameToIdMap.get(product.category);
+      if (categoryId) {
+        // ID를 키로 사용하여 개수를 올립니다.
+        mainCategoryCounts[categoryId] = (mainCategoryCounts[categoryId] || 0) + 1;
+      }
+    }
+    
+    // 5. 하위 카테고리도 동일하게 처리합니다.
+    if (product.category && product.subCategory) {
+      const categoryId = categoryNameToIdMap.get(product.category);
+      if (categoryId) {
+        // '대분류ID_하위분류이름' 형식의 고유 키를 사용합니다.
+        const subCategoryKey = `${categoryId}_${product.subCategory}`;
+        subCategoryCounts[subCategoryKey] = (subCategoryCounts[subCategoryKey] || 0) + 1;
+      }
+    }
+  });
+
+  return { mainCategoryCounts, subCategoryCounts };
 };

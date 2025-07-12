@@ -1,69 +1,64 @@
-/* src/components/admin/AdminLayout.css */
+/* src/components/admin/AdminLayout.css (개선된 최종본) */
 
 .admin-layout {
   display: flex;
   min-height: 100vh;
+  background-color: var(--bg-color-gray-soft, #f8f9fa);
+  overflow-x: hidden;
+  position: relative; /* fixed 요소의 기준점 */
 }
 
+/* 사이드바가 접혔을 때 메인 콘텐츠의 너비 조정 */
+.admin-layout.sidebar-collapsed .admin-main-content {
+  /* ❗ [수정] 좌우 여백을 더 줄여서 페이지를 더 넓게 사용하도록 조정 */
+  padding-left: calc(var(--admin-sidebar-collapsed-width, 60px) + 2rem); /* 접힌 사이드바 너비 + 여백 */
+}
+
+/* AdminSidebar 컴포넌트의 스타일은 AdminSidebar.css에서 관리됩니다. */
 .admin-sidebar {
-  width: var(--admin-sidebar-width, 240px); /* 240px */
-  background-color: var(--admin-sidebar-dark-bg); /* #111827 */
-  color: var(--text-color-light); /* #d1d5db */
-  padding: var(--spacing-xl); /* 24px */
+  box-shadow: var(--box-shadow-md);
+}
+
+/* 메인 콘텐츠 영역 (Outlet이 렌더링되는 곳) */
+.admin-main-content {
+  flex-grow: 1; /* 남은 공간 모두 차지 */
   display: flex;
   flex-direction: column;
+  /* ❗ [수정] 콘텐츠 영역의 좌우 여백을 추가로 줄여서 페이지를 더 넓게 사용하도록 조정 */
+  padding: 1.5rem 2rem;
+  padding-left: calc(var(--admin-sidebar-width, 256px) + 2rem); /* 사이드바 너비 + 여백 */
+  box-sizing: border-box;
+  transition: padding-left var(--transition-speed-normal) ease-in-out; /* 패딩 변화에 애니메이션 */
+  margin-top: 0;
 }
 
-.admin-title {
-  font-size: var(--font-size-xl); /* 1.5rem */
-  font-weight: var(--font-weight-bold);
-  color: var(--bg-color-white); /* #ffffff */
-  margin-bottom: var(--spacing-xl); /* 2rem */
-  padding-left: var(--spacing-md); /* 10px */
-}
 
-.admin-nav {
+/* 로딩 스피너 스타일 (AdminPage.tsx에서 사용) */
+.loading-spinner {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem; /* 하드코딩된 값 유지 */
-  flex-grow: 1;
-}
-
-.admin-nav-link {
-  color: var(--text-color-light); /* #d1d5db */
-  text-decoration: none;
-  padding: var(--spacing-md) 15px; /* 12px 15px (15px 하드코딩) */
-  border-radius: var(--border-radius-sm); /* 6px */
-  transition: background-color var(--transition-speed-normal), color var(--transition-speed-normal);
-  display: flex;
+  justify-content: center;
   align-items: center;
-  gap: var(--spacing-md); /* 12px */
+  height: 100%;
+  min-height: 200px;
+  font-size: var(--font-size-md);
+  color: var(--text-color-light);
+  background-color: var(--bg-color-white);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--box-shadow-md);
 }
 
-.admin-nav-link:hover {
-  background-color: var(--admin-sidebar-hover-bg); /* #374151 */
-  color: var(--bg-color-white); /* #ffffff */
-}
+/* --- 반응형 디자인 (모바일/태블릿 최적화) --- */
+@media (max-width: 768px) {
+  .admin-layout {
+    flex-direction: column;
+    min-height: auto;
+  }
 
-.admin-nav-link.active {
-  background-color: var(--admin-sidebar-active-bg); /* #4f46e5 */
-  color: var(--bg-color-white); /* #ffffff */
-  font-weight: var(--font-weight-semibold);
-}
-
-/* [추가] 하위 메뉴 스타일 */
-.sub-link {
-  font-size: 0.9em; /* 하드코딩된 값 유지 */
-  padding: 10px 15px; /* 하드코딩된 값 유지 */
-  color: var(--admin-sidebar-light-text); /* #9ca3af */
-}
-
-.sub-link.active {
-  color: var(--bg-color-white); /* #ffffff */
-  background-color: #4338ca; /* 하드코딩된 값 유지 (활성 하위 메뉴는 좀 더 어둡게) */
-}
-
-/* [추가] 사이드바 하단 (쇼핑몰로 돌아가기) */
-.admin-footer {
-  margin-top: auto;
+  .admin-main-content {
+    width: 100%;
+    padding: 1rem;
+    padding-left: 1rem; /* 모바일에서는 좌측 패딩 최소화 */
+    height: auto; /* 모바일에서는 높이 자동 조절 */
+    margin-top: 0;
+  }
 }

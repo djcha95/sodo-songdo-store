@@ -1,21 +1,71 @@
 /* src/components/admin/AdminSidebar.css (개선된 최종본) */
 
+/* CSS 변수 정의 (일관된 스타일링을 위해 variables.css에 정의되어야 함) */
+:root {
+  --admin-sidebar-width: 256px;
+  --admin-sidebar-collapsed-width: 60px; /* 아이콘만 남았을 때 너비 */
+  --admin-sidebar-dark-bg: #1a202c; /* 더 진한 다크 블루 그레이 */
+  --admin-sidebar-light-text: #e2e8f0; /* 밝은 회색 텍스트 */
+  --admin-sidebar-hover-bg: #2d3748; /* 약간 더 밝은 다크 그레이 */
+  --admin-sidebar-active-bg: #4c51bf; /* 세련된 파란색 (활성 상태) */
+  --primary-color-dark: #2a4365; /* 진한 파란색 (고객 페이지 링크 텍스트) */
+  --primary-color-light: #e0e7ff; /* 연한 파란색 (고객 페이지 링크 배경) */
+  --bg-color-white: #ffffff;
+  --text-color-light: #cbd5e0;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.5rem;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --spacing-xxs: 2px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --border-radius-sm: 6px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --box-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --box-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --transition-speed-fast: 0.15s;
+  --transition-speed-normal: 0.3s;
+}
+
+
 .admin-sidebar {
-  width: 256px; /* 너비 조정 */
-  flex-shrink: 0; /* flex 컨테이너 내에서 너비가 줄어들지 않도록 설정 */
+  width: var(--admin-sidebar-width);
+  flex-shrink: 0;
   background-color: var(--admin-sidebar-dark-bg);
   color: var(--admin-sidebar-light-text);
   display: flex;
   flex-direction: column;
-  height: 100vh; /* 화면 전체 높이 사용 */
-  overflow-y: auto; /* 내용이 길어지면 스크롤 */
+  height: 100vh; /* 뷰포트 높이 전체 차지 */
+  overflow-y: auto; /* 내용이 길어지면 사이드바 내부에서 스크롤 */
   box-shadow: var(--box-shadow-md);
   padding: var(--spacing-md);
   box-sizing: border-box;
-  transition: width var(--transition-speed-normal) ease-in-out;
+  transition: width var(--transition-speed-normal) ease-in-out,
+              padding var(--transition-speed-normal) ease-in-out;
+  /* 사이드바를 화면에 고정 */
+  position: fixed; /* fixed 유지 */
+  top: 0;
+  left: 0;
+  z-index: 200; /* 다른 요소보다 위에 오도록 높은 z-index */
 }
 
-/* 스크롤바 숨기기 (선택 사항) */
+/* 사이드바 접힘 상태 */
+.admin-sidebar.collapsed {
+  width: var(--admin-sidebar-collapsed-width); /* 접혔을 때 너비 */
+  align-items: center; /* 아이콘 중앙 정렬 */
+  padding: var(--spacing-md) var(--spacing-xxs); /* 패딩 줄임 */
+  overflow-x: hidden; /* 텍스트 숨김 */
+}
+
+/* 스크롤바 숨기기 (깔끔함을 위해) */
 .admin-sidebar::-webkit-scrollbar {
   display: none;
 }
@@ -27,27 +77,76 @@
 .sidebar-header {
   display: flex;
   align-items: center;
+  /* 햄버거 버튼과 제목의 정렬 */
+  justify-content: space-between; /* 양 끝 정렬 */
   padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-lg);
   border-bottom: 1px solid var(--admin-sidebar-hover-bg);
   margin-bottom: var(--spacing-md);
+  position: relative; /* 자식 요소의 absolute 위치 기준 */
 }
 
-.sidebar-logo {
-  width: 32px;
-  height: 32px;
-  margin-right: var(--spacing-md);
+.admin-sidebar.collapsed .sidebar-header {
+  padding: var(--spacing-md) var(--spacing-xxs) var(--spacing-lg);
+  flex-direction: column; /* 아이콘 아래로 */
+  gap: var(--spacing-sm);
+  align-items: center;
+  justify-content: center; /* 가운데 정렬 */
 }
 
+/* 사이드바 토글 버튼 (사이드바 내부에 위치) */
+.sidebar-toggle-btn {
+  background-color: transparent;
+  border: none;
+  color: var(--admin-sidebar-light-text);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  border-radius: var(--border-radius-sm);
+  transition: background-color var(--transition-speed-fast), color var(--transition-speed-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 사이드바 헤더 내에서 위치 조정 */
+  position: static; /* 부모 flex 컨테이너에 따라 배치 */
+  margin-right: var(--spacing-md); /* 제목과 간격 */
+  /* transform: none; */ /* 필요 없음 */
+}
+
+.admin-sidebar.collapsed .sidebar-toggle-btn {
+  margin-right: 0; /* 접혔을 때 마진 제거 */
+  margin-bottom: var(--spacing-sm); /* 아이콘 아래로 여백 */
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: var(--admin-sidebar-hover-bg);
+  color: var(--bg-color-white);
+}
+
+/* '관리자페이지' 제목 */
 .sidebar-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   color: var(--bg-color-white);
   margin: 0;
-  white-space: nowrap; /* 너비가 줄어들 때 줄바꿈 방지 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--transition-speed-normal) ease-in-out;
+  flex-grow: 1; /* 남은 공간 차지 */
+  text-align: right; /* 우측 정렬 */
+  padding-right: var(--spacing-sm); /* 우측 패딩 */
 }
 
+.admin-sidebar.collapsed .sidebar-title {
+  opacity: 0;
+  width: 0;
+  padding-right: 0;
+  display: none; /* 완전히 숨김 */
+}
+
+/* sidebar-current-page-info 섹션은 제거되었으므로 관련 CSS도 제거됨 */
+
 .sidebar-nav {
-  flex-grow: 1; /* 남는 공간을 모두 차지하여 메뉴를 채움 */
+  flex-grow: 1;
 }
 
 .sidebar-nav ul {
@@ -59,15 +158,29 @@
 .menu-group-title {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  color: var(--admin-sidebar-light-text);
+  color: var(--admin-sidebar-light-text, #9ca3af);
   text-transform: uppercase;
   padding: var(--spacing-lg) var(--spacing-sm) var(--spacing-xs);
   white-space: nowrap;
+  letter-spacing: 0.05em;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+  margin-bottom: var(--spacing-sm);
+  transition: opacity var(--transition-speed-normal) ease-in-out;
 }
 
-/* '기타' 메뉴 그룹 상단 여백 */
+.admin-sidebar.collapsed .menu-group-title {
+  opacity: 0;
+  height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
 .menu-group-spacer {
   margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px dashed rgba(255, 255, 255, 0.05);
 }
 
 .menu-item a {
@@ -79,10 +192,18 @@
   color: var(--admin-sidebar-light-text);
   text-decoration: none;
   border-radius: var(--border-radius-md);
-  transition: background-color var(--transition-speed-normal), color var(--transition-speed-normal);
+  transition: background-color var(--transition-speed-fast), color var(--transition-speed-fast), padding var(--transition-speed-fast), justify-content var(--transition-speed-fast);
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-sm);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-sidebar.collapsed .menu-item a {
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-xs);
+  gap: 0;
 }
 
 .menu-item a:hover {
@@ -94,13 +215,57 @@
   background-color: var(--admin-sidebar-active-bg);
   color: var(--bg-color-white);
   font-weight: var(--font-weight-semibold);
+  box-shadow: var(--box-shadow-sm);
 }
 
 /* 아이콘 스타일 */
 .menu-item svg {
-  flex-shrink: 0; /* 아이콘이 찌그러지지 않도록 설정 */
+  flex-shrink: 0;
 }
 
+/* 사이드바 푸터 (고객 페이지 바로가기 링크 포함) */
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--spacing-md) var(--spacing-xs);
+  border-top: 1px solid var(--admin-sidebar-hover-bg);
+  transition: padding var(--transition-speed-normal) ease-in-out;
+}
+
+.admin-sidebar.collapsed .sidebar-footer {
+  padding: var(--spacing-md) var(--spacing-xxs);
+}
+
+.customer-page-quick-link {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--bg-color-white);
+    color: var(--primary-color-dark);
+    border-radius: var(--border-radius-md);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    transition: background-color var(--transition-speed-fast), color var(--transition-speed-fast);
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: var(--box-shadow-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-sidebar.collapsed .customer-page-quick-link {
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-xs);
+  gap: 0;
+  width: auto;
+}
+
+.customer-page-quick-link:hover {
+    background-color: var(--primary-color-light);
+    color: var(--primary-color-dark);
+}
 
 /* --- 반응형 디자인 (모바일/태블릿) --- */
 @media (max-width: 768px) {
@@ -112,40 +277,64 @@
     overflow-x: auto;
     overflow-y: hidden;
     padding: var(--spacing-sm);
-    border-bottom: 1px solid var(--border-color-dark);
+    border-bottom: 1px solid var(--admin-sidebar-hover-bg);
+    box-shadow: var(--box-shadow-sm);
+    position: static; /* 모바일에서는 fixed 해제 */
   }
 
-  /* 모바일에서는 헤더 숨기기 */
-  .sidebar-header {
-    display: none;
+  .admin-sidebar.collapsed {
+    width: 100%;
+    align-items: center;
+    padding: var(--spacing-sm);
   }
-  
+
+  .sidebar-header {
+    display: none; /* 모바일에서는 헤더 (햄버거 버튼과 제목) 숨김 */
+  }
+
   .sidebar-nav {
     flex-grow: 1;
+    width: fit-content;
   }
 
   .sidebar-nav ul {
     display: flex;
-    justify-content: flex-start; /* 좌측 정렬 */
+    justify-content: flex-start;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-xs);
     width: 100%;
   }
 
-  /* 모바일에서는 메뉴 그룹 제목 숨기기 */
   .menu-group-title {
     display: none;
   }
-  
+
+  .menu-group-spacer {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
   .menu-item a {
-    flex-direction: column; /* 아이콘과 텍스트를 세로로 배치 */
+    flex-direction: column;
     gap: var(--spacing-xs);
-    padding: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-xs);
     margin: 0;
     font-size: var(--font-size-xs);
+    min-width: 55px;
+    text-align: center;
+    white-space: normal;
+    text-overflow: clip;
+    word-break: keep-all;
   }
 
   .menu-item span {
-    display: block; /* 모바일에서 텍스트가 보이도록 */
+    display: block;
+    font-size: 0.7em;
+    margin-top: var(--spacing-xs);
+  }
+
+  .sidebar-footer {
+    display: none;
   }
 }
