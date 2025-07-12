@@ -1,4 +1,4 @@
-// src/main.tsx (수정본)
+// src/main.tsx
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -13,7 +13,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 
 // Context import (AuthContext의 loading 상태를 사용하기 위함)
 import { AuthProvider, useAuth } from './context/AuthContext';
-
+import './styles/toast-styles.css';
 
 // --- 페이지 컴포넌트 lazy loading ---
 
@@ -160,20 +160,16 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <>
+    {/* ✅ [수정 완료] 커스텀 토스트와 충돌을 피하기 위해 toastOptions의 기본 스타일을 제거합니다. */}
     <Toaster
       position="top-center"
       reverseOrder={false}
       toastOptions={{
-        style: {
-          borderRadius: '8px',
-          background: 'var(--toast-bg-dark, #333)',
-          color: 'var(--toast-text-light, #fff)',
-        },
+        // 전역 성공/에러 메시지 지속 시간만 설정
         success: { duration: 2000 },
         error: { duration: 4000 },
       }}
     />
-    {/* AuthProvider로 RouterWrapper를 감싸서 AuthContext의 loading 상태를 사용할 수 있게 합니다. */}
     <AuthProvider> 
       <RouterWrapper />
     </AuthProvider>

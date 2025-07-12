@@ -14,15 +14,15 @@
 .cart-summary-card {
   border: 1px solid var(--border-color-light);
   border-radius: var(--border-radius-lg);
-  padding: 24px;
+  padding: 18px 24px; /* ✅ 상하 패딩 조정 */
   background-color: var(--bg-color-white);
 }
 .summary-title {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-color-dark);
-  margin: 0 0 20px;
-  padding-bottom: 16px;
+  margin: 0 0 16px; /* ✅ 마진 조정 */
+  padding-bottom: 12px; /* ✅ 패딩 조정 */
   border-bottom: 1px solid var(--border-color-light);
 }
 
@@ -79,6 +79,11 @@
   gap: 12px;
 }
 
+/* ✅ 대기 상품 섹션 상단 여백 추가 */
+.waitlist-section {
+  margin-top: 40px; /* 예약 상품 섹션과의 간격 */
+}
+
 /* ✅ [수정] 선택 삭제 버튼 스타일 */
 .bulk-remove-btn {
   display: inline-flex;
@@ -93,30 +98,12 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-left: auto; /* ✅ 오른쪽 정렬 */
 }
 .bulk-remove-btn:hover {
   background-color: var(--danger-color); /* 호버 시 배경색 조정 */
   color: var(--bg-color-white);
 }
-
-/* ✅ [수정] 전체 선택 버튼 스타일 */
-.select-all-btn {
-  background: none;
-  border: 1px solid var(--border-color-medium);
-  color: var(--text-color-medium);
-  padding: 6px 12px;
-  border-radius: var(--border-radius-md);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  /* margin-right: 8px; */ /* bulk-remove-btn과의 간격 - 필요에 따라 레이아웃에서 관리 */
-}
-.select-all-btn:hover {
-  background-color: var(--border-color-medium); /* 호버 시 배경색 조정 */
-  color: var(--bg-color-white); /* 호버 시 글자색 조정 */
-}
-
 
 /* --- ✅ [수정] 상품 카드 전체 스타일 --- */
 .cart-item-card {
@@ -183,9 +170,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-color-light);
+  font-size: 0.85rem; /* ✅ 글자 크기 약간 키움 */
+  font-weight: 600; /* ✅ 글자 더 진하게 */
+  color: var(--text-color-dark); /* ✅ 색상 변경 */
   text-align: right;
   flex-shrink: 0;
 }
@@ -207,11 +194,11 @@
   align-items: center;
   border: 1px solid var(--border-color-medium);
   border-radius: var(--border-radius-full);
-  height: 42px;
+  height: 38px; /* ✅ 높이 조정 */
   background: white;
 }
 .item-quantity-controls button {
-  padding: 8px 14px;
+  padding: 0 8px; /* ✅ 패딩 조정 (0 12px -> 0 8px) */
   background: none;
   border: none;
   cursor: pointer;
@@ -233,8 +220,8 @@
   border-bottom-right-radius: var(--border-radius-full);
 }
 .quantity-display, .quantity-input {
-  font-size: 1.1rem;
-  min-width: 44px;
+  font-size: 1rem; /* ✅ 글자 크기 조정 */
+  min-width: 32px; /* ✅ 너비 조정 (36px -> 32px) */
   height: 100%;
   display: flex;
   align-items: center;
@@ -278,31 +265,31 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 16px;
+  margin-bottom: 12px; /* ✅ 마진 조정 */
 }
 .total-label {
-  font-size: 1rem;
+  font-size: 0.95rem; /* ✅ 글자 크기 조정 */
   font-weight: 600;
   color: var(--text-color-medium);
 }
 .total-item-count {
-  font-size: 1.1rem;
+  font-size: 1rem; /* ✅ 글자 크기 조정 */
   font-weight: 700;
   color: var(--text-color-dark);
 }
 .total-price-value {
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: var(--accent-color);
+  font-size: 1.2rem; /* ✅ 글자 크기 조정 */
+  font-weight: 700; /* ✅ 폰트 굵기 조정 (강조 줄임) */
+  color: var(--text-color-dark); /* ✅ 색상 변경 (강조 줄임) */
 }
 .checkout-btn {
   width: 100%;
-  padding: 16px;
+  padding: 14px; /* ✅ 패딩 조정 */
   background-color: var(--accent-color);
   color: var(--bg-color-white);
   border: none;
   border-radius: var(--border-radius-lg);
-  font-size: 1.1rem;
+  font-size: 1rem; /* ✅ 글자 크기 조정 */
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;

@@ -1,11 +1,11 @@
 // src/pages/customer/CartPage.tsx
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // useLocation 제거
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import type { CartItem, Order } from '@/types';
-import { submitOrder, getLiveStockForItems } from '@/firebase'; 
+import { submitOrder, getLiveStockForItems } from '@/firebase';
 import type { Timestamp } from 'firebase/firestore';
 import { ShoppingCart as CartIcon, ArrowRight, Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -20,7 +20,7 @@ interface CartItemCardProps {
   item: CartItem;
   isSelected: boolean;
   onSelect: (itemKey: string) => void;
-  onImageClick: (e: React.MouseEvent, productId: string) => void; 
+  onImageClick: (e: React.MouseEvent, productId: string) => void;
 }
 
 const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect, onImageClick }) => {
@@ -29,52 +29,68 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
   const [inputValue, setInputValue] = useState(item.quantity.toString());
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 재고가 null이거나 -1이면 무한대 (999)로 간주, 아니면 실제 재고 사용
   const stockLimit = useMemo(() => item.stock === null || item.stock === -1 ? 999 : item.stock, [item.stock]);
 
   useEffect(() => {
+    // 수량 변경 모드가 아닐 때만 실제 수량으로 입력 값 동기화
     if (!isEditing) setInputValue(item.quantity.toString());
   }, [item.quantity, isEditing]);
 
   useEffect(() => {
+    // 편집 모드 진입 시 입력 필드에 포커스
     if (isEditing && inputRef.current) inputRef.current.focus();
   }, [isEditing]);
 
   const handleQuantityClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // 카드 선택 이벤트 방지
     setIsEditing(true);
   };
 
   const handleQuantityUpdate = useCallback(() => {
     const newQuantity = parseInt(inputValue, 10);
+    // 입력된 값이 유효하지 않거나 0 이하일 경우 1로 설정, 재고 제한 초과 시 재고 제한으로 설정
     const finalQuantity = !isNaN(newQuantity) && newQuantity > 0 ? Math.min(newQuantity, stockLimit) : 1;
-    updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, finalQuantity);
-    if (newQuantity > stockLimit) toast.error(`최대 ${stockLimit}개까지만 구매 가능합니다.`);
-    setIsEditing(false);
+
+    // 수량이 변경될 경우에만 업데이트
+    if (finalQuantity !== item.quantity) {
+      updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, finalQuantity);
+      if (newQuantity > stockLimit) {
+        toast.error(`최대 ${stockLimit}개까지만 구매 가능합니다.`);
+      } else if (newQuantity < 1) {
+        toast.error('최소 1개 이상 구매해야 합니다.');
+      }
+    }
+    setIsEditing(false); // 편집 모드 종료
   }, [inputValue, item, stockLimit, updateCartItemQuantity]);
-  
+
   const handleInputKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter') handleQuantityUpdate();
+    if (event.key === 'Enter') {
+      handleQuantityUpdate(); // Enter 키 입력 시 수량 업데이트
+    }
   };
 
+  // 수량 증감 버튼을 위한 long-press 훅
   const createQuantityHandlers = useCallback((change: number) => {
     const performUpdate = () => {
-      // 이제 cartItems 대신 item prop을 직접 사용
       const newQuantity = item.quantity + change;
+      // 수량이 1 미만이거나 재고 제한을 초과하면 업데이트하지 않음
       if (newQuantity < 1 || newQuantity > stockLimit) return;
       updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, newQuantity);
     };
-    return useLongPress(performUpdate, performUpdate);
-  }, [item, stockLimit, updateCartItemQuantity]); 
-  
+    return useLongPress(performUpdate, performUpdate, { delay: 100 }); // ✅ 오류 수정: { delay: 100 } 객체 전달
+  }, [item, stockLimit, updateCartItemQuantity]);
+
   const decreaseHandlers = createQuantityHandlers(-1);
   const increaseHandlers = createQuantityHandlers(1);
 
-  const formatPickupDate = (timestamp: Timestamp) => format(timestamp.toDate(), 'M/d(EEE)', { locale: ko });
+  // 픽업 날짜 포맷 변경: 'M/d(EEE) 픽업' (예: 7/17(목) 픽업)
+  const formatPickupDate = (timestamp: Timestamp) => format(timestamp.toDate(), 'M/d(EEE)', { locale: ko }) + ' 픽업';
   const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
 
   return (
     <div className={`cart-item-card ${isSelected ? 'selected' : ''}`} onClick={() => onSelect(itemKey)}>
-      <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}> 
+      <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
         <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
       </div>
       <div className="item-details-wrapper">
@@ -85,16 +101,17 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
             </div>
             <div className="item-pickup-info">
                 <CalendarDays size={14} />
-                <span>픽업: {formatPickupDate(item.pickupDate)}</span>
+                <span>{formatPickupDate(item.pickupDate)}</span> {/* 픽업일 형식 변경 */}
             </div>
         </div>
         <div className="item-footer">
-            {item.status === 'WAITLIST' ? ( 
+            {item.status === 'WAITLIST' ? (
               <div className="waitlist-status-badge"><Info size={14}/><span>재고 확보 시 자동 예약 전환</span></div>
             ) : (
-              <div className="item-total-price">{(item.unitPrice * item.quantity).toLocaleString()}원</div>
+              // ✅ 수정: 수량에 관계없이 개당 단가를 표시
+              <div className="item-total-price">{item.unitPrice.toLocaleString()}원  </div>
             )}
-            <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}> 
+            <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}> {/* 수량 조절 시 카드 선택 방지 */}
               <button {...decreaseHandlers} disabled={item.quantity <= 1}><Minus size={18} /></button>
               {isEditing ? (
                 <input ref={inputRef} type="number" className="quantity-input" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onBlur={handleQuantityUpdate} onKeyDown={handleInputKeyDown} />
@@ -115,20 +132,20 @@ const CartPage: React.FC = () => {
   const { user } = useAuth();
   const { cartItems, removeItems, removeReservedItems, updateItemsStatus } = useCart();
   const navigate = useNavigate();
-  const location = useLocation(); 
-  
+  // const location = useLocation(); // ✅ useLocation 제거
+
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isWaitlistProcessing, setIsWaitlistProcessing] = useState(false);
   const [selectedReservationKeys, setSelectedReservationKeys] = useState<Set<string>>(new Set());
-  const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set()); 
+  const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
 
   // 예약 상품과 대기 상품 분리
-  const reservationItems = useMemo(() => 
-    cartItems.filter(item => item.status === 'RESERVATION').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()), 
+  const reservationItems = useMemo(() =>
+    cartItems.filter(item => item.status === 'RESERVATION').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
     [cartItems]
   );
-  const waitlistItems = useMemo(() => 
-    cartItems.filter(item => item.status === 'WAITLIST').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()), 
+  const waitlistItems = useMemo(() =>
+    cartItems.filter(item => item.status === 'WAITLIST').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
     [cartItems]
   );
 
@@ -155,7 +172,8 @@ const CartPage: React.FC = () => {
         waitlistItemsToCheck.forEach(item => {
           const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
           const pickupDate = item.pickupDate.toDate();
-          const pickupDeadlineTime = new Date(pickupDate.getFullYear(), pickupDate.getMonth(), pickupDate.getDate(), 13, 0, 0); // 픽업일 당일 13시 마감
+          // 픽업일 당일 13시 마감
+          const pickupDeadlineTime = new Date(pickupDate.getFullYear(), pickupDate.getMonth(), pickupDate.getDate(), 13, 0, 0);
 
           if (now > pickupDeadlineTime) {
             itemsToRemove.push({ key: uniqueId, name: item.productName });
@@ -211,28 +229,11 @@ const CartPage: React.FC = () => {
     }
   }, []);
 
-  // 전체 선택/선택 해제 핸들러
-  const handleSelectAll = useCallback((type: 'reservation' | 'waitlist') => {
-    if (type === 'reservation') {
-      if (selectedReservationKeys.size === reservationItems.length) {
-        setSelectedReservationKeys(new Set());
-      } else {
-        setSelectedReservationKeys(new Set(reservationItems.map(item => `${item.productId}-${item.variantGroupId}-${item.itemId}`)));
-      }
-    } else { // waitlist
-      if (selectedWaitlistKeys.size === waitlistItems.length) {
-        setSelectedWaitlistKeys(new Set());
-      } else {
-        setSelectedWaitlistKeys(new Set(waitlistItems.map(item => `${item.productId}-${item.variantGroupId}-${item.itemId}`)));
-      }
-    }
-  }, [selectedReservationKeys, selectedWaitlistKeys, reservationItems, waitlistItems]);
-
   // 선택된 아이템 일괄 삭제 핸들러
   const handleBulkRemove = useCallback((type: 'reservation' | 'waitlist') => {
     const keysToRemove = type === 'reservation' ? selectedReservationKeys : selectedWaitlistKeys;
     if (keysToRemove.size === 0) {
-      toast('삭제할 상품을 선택해주세요.', { icon: 'ℹ️' }); 
+      toast('삭제할 상품을 선택해주세요.', { icon: 'ℹ️' });
       return;
     }
 
@@ -242,8 +243,8 @@ const CartPage: React.FC = () => {
         <p>{keysToRemove.size}개의 상품이 장바구니에서 삭제됩니다.</p>
         <div className="toast-buttons-simple">
           <button className="toast-cancel-btn-simple" onClick={() => toast.dismiss(t.id)}>취소</button>
-          <button className="toast-confirm-btn-simple" onClick={() => { 
-            toast.dismiss(t.id); 
+          <button className="toast-confirm-btn-simple" onClick={() => {
+            toast.dismiss(t.id);
             removeItems(Array.from(keysToRemove));
             if (type === 'reservation') setSelectedReservationKeys(new Set());
             else setSelectedWaitlistKeys(new Set());
@@ -256,32 +257,33 @@ const CartPage: React.FC = () => {
 
   // 이미지 클릭 시 상품 상세 페이지로 이동
   const handleImageClick = useCallback((e: React.MouseEvent, productId: string) => {
-    e.stopPropagation(); 
+    e.stopPropagation(); // 카드 선택 이벤트 방지
     navigate(`/product/${productId}`);
   }, [navigate]);
 
   // 예약 확정 핸들러
   const handleConfirmReservation = async () => {
     if (!user || !user.uid || !user.phone) {
-      toast.error('전화번호 정보가 없습니다. 다시 로그인 해주세요.'); 
-      navigate('/login', { state: { from: '/cart' }, replace: true }); 
-      return; 
+      toast.error('전화번호 정보가 없습니다. 다시 로그인 해주세요.');
+      navigate('/login', { state: { from: '/cart' }, replace: true });
+      return;
     }
     if (isProcessingOrder || reservationItems.length === 0) return;
-    
+
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'> = {
         userId: user.uid,
         items: reservationItems,
         totalPrice: cartTotal,
         customerInfo: { name: user.displayName || '미상', phone: user.phone },
-        pickupDate: reservationItems[0].pickupDate, 
+        // 예약 상품들은 이미 픽업일이 같다고 가정
+        pickupDate: reservationItems[0].pickupDate,
     };
     setIsProcessingOrder(true);
     const promise = submitOrder(orderPayload);
     toast.promise(promise, {
       loading: '예약을 확정하는 중입니다...',
       success: () => {
-        removeReservedItems(); 
+        removeReservedItems(); // 예약 확정 후 예약된 상품들을 장바구니에서 제거
         navigate('/mypage/history');
         return '예약이 성공적으로 완료되었습니다!';
       },
@@ -300,7 +302,7 @@ const CartPage: React.FC = () => {
     toast((t) => (
       <div className="confirmation-toast-simple">
         <h4>예약을 확정하시겠습니까?</h4>
-        <p>예약 상품만 주문되며, 대기 상품은 포함되지 않습니다.</p> 
+        <p>예약 상품만 주문되며, 대기 상품은 포함되지 않습니다.</p>
         <div className="toast-buttons-simple">
           <button className="toast-cancel-btn-simple" onClick={() => toast.dismiss(t.id)}>취소</button>
           <button className="toast-confirm-btn-simple" onClick={() => { toast.dismiss(t.id); handleConfirmReservation(); }}>확인</button>
@@ -317,11 +319,7 @@ const CartPage: React.FC = () => {
           <div className="cart-items-column">
             <div className="cart-section-header">
               <h2 className="cart-section-title">🛒 예약 상품 ({reservationItems.length})</h2>
-              {reservationItems.length > 0 && (
-                <button className="select-all-btn" onClick={() => handleSelectAll('reservation')}>
-                  {selectedReservationKeys.size === reservationItems.length ? '전체 해제' : '전체 선택'}
-                </button>
-              )}
+              {/* 선택 삭제 버튼은 선택된 아이템이 있을 때만 표시 */}
               {selectedReservationKeys.size > 0 && (
                 <button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}>
                   <XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})
@@ -333,12 +331,12 @@ const CartPage: React.FC = () => {
                 {reservationItems.map(item => {
                   const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
                   return (
-                    <CartItemCard 
-                      key={itemKey} 
-                      item={item} 
+                    <CartItemCard
+                      key={itemKey}
+                      item={item}
                       isSelected={selectedReservationKeys.has(itemKey)}
                       onSelect={(key) => handleItemSelect(key, 'reservation')}
-                      onImageClick={handleImageClick} 
+                      onImageClick={handleImageClick}
                     />
                   );
                 })}
@@ -347,41 +345,40 @@ const CartPage: React.FC = () => {
               <div className="info-box"><p>장바구니에 담긴 예약 상품이 없습니다.</p></div>
             )}
 
-            <div className="cart-section-header waitlist-header"> 
-              <h2 className="cart-section-title">
-                <Hourglass size={18}/> 대기 상품 ({waitlistItems.length})
-                {isWaitlistProcessing && <RefreshCw size={18} className="spin-icon" />}
-              </h2>
-              {waitlistItems.length > 0 && (
-                <button className="select-all-btn" onClick={() => handleSelectAll('waitlist')}>
-                  {selectedWaitlistKeys.size === waitlistItems.length ? '전체 해제' : '전체 선택'}
-                </button>
-              )}
-              {selectedWaitlistKeys.size > 0 && (
-                <button className="bulk-remove-btn" onClick={() => handleBulkRemove('waitlist')}>
-                  <XCircle size={16} /> 선택 삭제 ({selectedWaitlistKeys.size})
-                </button>
+            {/* 대기 상품 섹션 */}
+            <div className="waitlist-section"> {/* 대기 상품 섹션 간격 조절을 위한 div 추가 */}
+              <div className="cart-section-header waitlist-header">
+                <h2 className="cart-section-title">
+                  <Hourglass size={18}/> 대기 상품 ({waitlistItems.length})
+                  {isWaitlistProcessing && <RefreshCw size={18} className="spin-icon" />}
+                </h2>
+                {/* 선택 삭제 버튼은 선택된 아이템이 있을 때만 표시 */}
+                {selectedWaitlistKeys.size > 0 && (
+                  <button className="bulk-remove-btn" onClick={() => handleBulkRemove('waitlist')}>
+                    <XCircle size={16} /> 선택 삭제 ({selectedWaitlistKeys.size})
+                  </button>
+                )}
+              </div>
+              {waitlistItems.length > 0 ? (
+                <div className="cart-items-list">
+                  {waitlistItems.map(item => {
+                    const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+                    return (
+                      <CartItemCard
+                        key={itemKey}
+                        item={item}
+                        isSelected={selectedWaitlistKeys.has(itemKey)}
+                        onSelect={(key) => handleItemSelect(key, 'waitlist')}
+                        onImageClick={handleImageClick}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="info-box"><p>품절 상품에 '대기 신청'을 하면 여기에 표시됩니다.</p></div>
               )}
             </div>
-            {waitlistItems.length > 0 ? (
-              <div className="cart-items-list">
-                {waitlistItems.map(item => {
-                  const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
-                  return (
-                    <CartItemCard 
-                      key={itemKey} 
-                      item={item}
-                      isSelected={selectedWaitlistKeys.has(itemKey)}
-                      onSelect={(key) => handleItemSelect(key, 'waitlist')}
-                      onImageClick={handleImageClick} 
-                    />
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="info-box"><p>품절 상품에 '대기 신청'을 하면 여기에 표시됩니다.</p></div>
-            )}
-            
+
             {cartItems.length === 0 && (
               <div className="empty-cart-message">
                 <CartIcon size={64} className="empty-cart-icon" />

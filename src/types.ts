@@ -179,6 +179,7 @@ export interface Banner {
   createdAt: Timestamp;
   isActive: boolean;
   productId?: string;
+  // ✅ [되돌리기] 텍스트 관련 필드를 다시 제거합니다.
 }
 
 export interface Category {
@@ -208,9 +209,12 @@ export interface StoreInfo {
   email: string;
   operatingHours: string[];
   description: string;
-  kakaotalkChannelId?: string; // ✅ 이 필드를 사용하여 채팅 링크를 생성합니다.
+  kakaotalkChannelId?: string;
   usageGuide?: GuideItem[];
   faq?: FaqItem[];
+  // ✅ [추가] 위도와 경도 필드를 추가합니다 (타입은 number).
+  latitude?: number;
+  longitude?: number;
 }
 
 // =================================================================
@@ -224,7 +228,7 @@ export interface TodayStockItem {
     unitType: string;
 }
 export interface TodayOrderItem {
-    id: string;
+    id:string;
     customerName: string;
     productName: string;
     quantity: number;
