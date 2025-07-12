@@ -72,6 +72,7 @@ export interface SalesRound {
   deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
+  arrivalDate?: Timestamp; // ❗ [추가] 상품 입고일
   createdAt: Timestamp;
   waitlist: WaitlistEntry[];
   waitlistCount: number;
@@ -184,6 +185,7 @@ export interface UserDocument {
   phone?: string | null; // ✅ 전화번호 필드 추가
   photoURL?: string | null;
   isAdmin: boolean;
+  role?: 'admin' | 'customer'; // ❗ [추가] 관리자 권한 확인용
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
 }
@@ -205,6 +207,18 @@ export interface Category {
   order: number; // ✅ [추가] 순서 저장을 위한 필드
 }
 
+// ❗ [추가] 고객센터 페이지에서 동적으로 관리할 타입들
+export interface GuideItem {
+  id: string;
+  title: string;
+  content: string;
+}
+export interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface StoreInfo {
   name: string;
   businessNumber: string;
@@ -214,6 +228,10 @@ export interface StoreInfo {
   email: string;
   operatingHours: string[];
   description: string;
+  // ❗ [추가] 관리자가 수정할 수 있는 동적 필드들을 StoreInfo 타입에 포함시킵니다.
+  kakaotalkChannelId?: string;
+  usageGuide?: GuideItem[];
+  faq?: FaqItem[];
 }
 
 // ... 대시보드 관련 타입 ...

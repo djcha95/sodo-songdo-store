@@ -12,6 +12,7 @@ import { uploadImages } from './generalService';
 import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, Category } from '@/types';
 
 
+// ... addProductWithFirstRound 부터 updateMultipleRoundStatuses 까지 기존 함수들은 그대로 둡니다 ...
 /**
  * @description 대표 상품을 추가하고 첫 번째 판매 회차를 등록하는 함수
  */
@@ -345,7 +346,6 @@ export const updateMultipleVariantGroupStocks = async (
 
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
-  // 여러 업데이트가 동일한 상품을 대상으로 할 수 있으므로, 먼저 모든 상품 문서를 한 번씩만 읽습니다.
   for (const update of updates) {
     if (!productsToUpdate.has(update.productId)) {
       const productRef = doc(db, 'products', update.productId);
@@ -359,7 +359,6 @@ export const updateMultipleVariantGroupStocks = async (
     }
   }
   
-  // 메모리에 로드된 상품 데이터에 모든 변경사항을 적용합니다.
   for (const update of updates) {
     const productInfo = productsToUpdate.get(update.productId);
     if (!productInfo) continue;
@@ -379,12 +378,9 @@ export const updateMultipleVariantGroupStocks = async (
       return round;
     });
     
-    // 메모리 내의 데이터를 업데이트하여 동일 상품에 대한 후속 업데이트가 반영되도록 합니다.
     productData.salesHistory = newSalesHistory; 
   }
 
-  // ✅ [수정] productId를 사용하지 않으므로 .values()를 사용해 더 간결하게 만듭니다.
-  // 최종적으로 변경된 모든 상품 데이터를 배치에 추가합니다.
   for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
@@ -402,7 +398,6 @@ export const updateMultipleRoundStatuses = async (
   const batch = writeBatch(db);
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
-  // 1. 업데이트가 필요한 모든 고유한 상품 문서를 한 번씩만 읽어옵니다.
   for (const update of updates) {
     if (!productsToUpdate.has(update.productId)) {
       const productRef = doc(db, 'products', update.productId);
@@ -416,7 +411,6 @@ export const updateMultipleRoundStatuses = async (
     }
   }
   
-  // 2. 메모리에 로드된 상품 데이터에 모든 상태 변경을 적용합니다.
   for (const update of updates) {
     const productInfo = productsToUpdate.get(update.productId);
     if (!productInfo) continue;
@@ -430,12 +424,9 @@ export const updateMultipleRoundStatuses = async (
       return round;
     });
 
-    // 메모리 내 데이터를 업데이트하여 동일 상품에 대한 후속 업데이트가 반영되도록 합니다.
     productData.salesHistory = newSalesHistory;
   }
 
-  // ✅ [수정] productId를 사용하지 않으므로 .values()를 사용해 더 간결하게 만듭니다.
-  // 3. 최종적으로 변경된 모든 상품 데이터를 배치에 추가하여 한 번에 씁니다.
   for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
@@ -443,56 +434,76 @@ export const updateMultipleRoundStatuses = async (
   await batch.commit();
 };
 
+
 /**
- * @description 각 카테고리 및 하위 카테고리에 속한 상품의 개수를 정확하게 계산합니다.
- * @returns { mainCategoryCounts, subCategoryCounts } 객체
+ * @description 입고일(arrivalDate)이 지정된 모든 판매 회차 목록을 가져와 달력에 표시하기 좋은 형태로 반환합니다.
  */
-export const getProductsCountByCategory = async (): Promise<{
-  mainCategoryCounts: Record<string, number>;
-  subCategoryCounts: Record<string, number>;
-}> => {
-  // 1. 모든 카테고리와 모든 상품 정보를 동시에 가져옵니다.
-  const categoriesQuery = query(collection(db, 'categories'));
-  const productsQuery = query(collection(db, 'products'), where('isArchived', '==', false));
-  
-  const [categoriesSnapshot, productsSnapshot] = await Promise.all([
-    getDocs(categoriesQuery),
-    getDocs(productsQuery)
-  ]);
+interface ArrivalInfo {
+  productId: string;
+  productName: string;
+  roundId: string;
+  roundName: string;
+  arrivalDate: Timestamp;
+}
 
-  // 2. 카테고리 이름과 ID를 매핑하는 '지도'를 만듭니다.
-  const categoryNameToIdMap = new Map<string, string>();
-  categoriesSnapshot.docs.forEach(doc => {
-    const category = doc.data() as Category;
-    categoryNameToIdMap.set(category.name, doc.id);
+export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
+  const products = await getProducts(false);
+
+  const arrivals: ArrivalInfo[] = [];
+
+  products.forEach(product => {
+    product.salesHistory.forEach(round => {
+      if (round.arrivalDate) {
+        arrivals.push({
+          productId: product.id,
+          productName: product.groupName,
+          roundId: round.roundId,
+          roundName: round.roundName,
+          arrivalDate: round.arrivalDate,
+        });
+      }
+    });
   });
 
-  const mainCategoryCounts: Record<string, number> = {};
-  const subCategoryCounts: Record<string, number> = {};
+  return arrivals;
+};
 
-  // 3. 모든 상품을 순회하며 개수를 집계합니다.
-  productsSnapshot.docs.forEach(doc => {
-    const product = doc.data() as Product;
-    
-    // 4. 상품의 카테고리 '이름'으로 카테고리 'ID'를 찾습니다.
-    if (product.category) {
-      const categoryId = categoryNameToIdMap.get(product.category);
-      if (categoryId) {
-        // ID를 키로 사용하여 개수를 올립니다.
-        mainCategoryCounts[categoryId] = (mainCategoryCounts[categoryId] || 0) + 1;
-      }
-    }
-    
-    // 5. 하위 카테고리도 동일하게 처리합니다.
-    if (product.category && product.subCategory) {
-      const categoryId = categoryNameToIdMap.get(product.category);
-      if (categoryId) {
-        // '대분류ID_하위분류이름' 형식의 고유 키를 사용합니다.
-        const subCategoryKey = `${categoryId}_${product.subCategory}`;
-        subCategoryCounts[subCategoryKey] = (subCategoryCounts[subCategoryKey] || 0) + 1;
-      }
-    }
+// ✅ [신규 추가] 특정 카테고리에 속한 상품 목록을 가져오는 함수
+/**
+ * @description 특정 카테고리 이름으로 상품 목록을 조회합니다.
+ * @param categoryName - 조회할 카테고리 이름. 'null' 전달 시 분류 없는 상품 조회.
+ */
+export const getProductsByCategory = async (categoryName: string | null): Promise<Product[]> => {
+  let q: Query;
+  const productsRef = collection(db, 'products');
+
+  if (categoryName === null) {
+    // 카테고리 필드가 없거나 빈 문자열인 경우 (분류 없는 상품)
+    q = query(productsRef, where('category', 'in', ['', null]), where('isArchived', '==', false));
+  } else {
+    // 특정 카테고리 이름으로 조회
+    q = query(productsRef, where('category', '==', categoryName), where('isArchived', '==', false));
+  }
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+
+// ✅ [신규 추가] 여러 상품의 카테고리를 한 번에 업데이트하는 함수
+/**
+ * @description 여러 상품들의 카테고리를 특정 카테고리로 일괄 변경합니다.
+ * @param productIds - 카테고리를 변경할 상품 ID 배열
+ * @param targetCategoryName - 새로 지정할 카테고리 이름
+ */
+export const moveProductsToCategory = async (productIds: string[], targetCategoryName: string): Promise<void> => {
+  const batch = writeBatch(db);
+
+  productIds.forEach(productId => {
+    const productRef = doc(db, 'products', productId);
+    // 하위 분류는 사용하지 않으므로 빈 문자열로 설정
+    batch.update(productRef, { category: targetCategoryName, subCategory: '' });
   });
 
-  return { mainCategoryCounts, subCategoryCounts };
+  await batch.commit();
 };

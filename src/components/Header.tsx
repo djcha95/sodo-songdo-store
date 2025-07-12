@@ -1,7 +1,7 @@
 // src/components/Header.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom'; // ✅ Link 추가
 import { ChevronLeft, CalendarDays, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -9,7 +9,6 @@ import { useAuth } from '@/context/AuthContext';
 import './Header.css';
 import type { Notification } from '@/types';
 
-// Header 컴포넌트의 props에서 알림 관련 props 제거
 interface HeaderProps {
   title?: string;
   showBackButton?: boolean;
@@ -29,7 +28,6 @@ const Header: React.FC<HeaderProps> = ({
   const location = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ✅ [수정] useAuth에서 알림 관련 상태와 함수를 직접 가져옵니다.
   const { user, notifications = [], handleMarkAsRead = () => {} } = useAuth();
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -37,7 +35,6 @@ const Header: React.FC<HeaderProps> = ({
     const today = new Date();
     setCurrentDate(format(today, 'M/d(EEE)', { locale: ko }));
 
-    // 드롭다운 외부 클릭 감지
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
@@ -56,13 +53,12 @@ const Header: React.FC<HeaderProps> = ({
         return { title: '장바구니', showBackButton: true, showDate: false, showLogo: false };
       case '/mypage':
         return { title: '마이페이지', showBackButton: false, showDate: false, showLogo: false };
-      // ✅ [수정] 예약 내역 페이지 경로 확인
       case '/mypage/history':
         return { title: '예약 내역', showBackButton: true, showDate: false, showLogo: false };
-      case '/mypage/store-info':
-        return { title: '매장 정보', showBackButton: true, showDate: false, showLogo: false };
+      // ❗ [수정] /store-info 경로에 대한 헤더 설정 추가
+      case '/store-info':
+        return { title: '고객센터', showBackButton: false, showDate: false, showLogo: false };
       default:
-        // 상세 페이지 등 다른 페이지는 뒤로가기 버튼만 표시
         if (pathname.startsWith('/product/')) {
             return { title: '상품 상세', showBackButton: true };
         }
@@ -111,22 +107,23 @@ const Header: React.FC<HeaderProps> = ({
       <div className="header-center">
         {config.title && <h1 className="header-page-title">{config.title}</h1>}
         {config.showLogo && (
-          <div className="brand-text-logo-container" onClick={() => navigate('/')}>
+          // ❗ [수정] 로고 클릭 시 홈으로 이동하도록 Link 컴포넌트로 감쌉니다.
+          <Link to="/" className="brand-text-logo-container">
             <span className="brand-name">소도몰</span>
             <span className="store-name">송도랜드마크점</span>
-          </div>
+          </Link>
         )}
       </div>
 
       <div className="header-right">
         {user?.displayName && (
-          <div className="greeting-message">
+          // ❗ [수정] 사용자 이름 클릭 시 마이페이지로 이동하도록 Link 컴포넌트로 감쌉니다.
+          <Link to="/mypage" className="greeting-message">
             <span>{user.displayName}님</span>
             <span className="greeting-subtext">안녕하세요!</span>
-          </div>
+          </Link>
         )}
         
-        {/* ✅ [수정] 알림 기능 활성화 */}
         <div className="notification-container" ref={dropdownRef}>
           <button 
             className="notification-button"

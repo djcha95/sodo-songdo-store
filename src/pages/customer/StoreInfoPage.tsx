@@ -1,138 +1,253 @@
 // src/pages/customer/StoreInfoPage.tsx
 
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Header from '../../components/Header';
-import { getStoreInfo } from '../../firebase'; // FIX: import 경로 수정
-import type { StoreInfo } from '../../types';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { getStoreInfo, updateStoreInfo } from '@/firebase';
+import { useAuth } from '@/context/AuthContext';
+import type { StoreInfo, GuideItem, FaqItem } from '@/types';
 import './StoreInfoPage.css';
+import { Phone, MessageCircle, AlertTriangle, MapPin, ChevronDown, BookOpen, HelpCircle, Edit, Save, PlusCircle, XCircle, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { v4 as uuidv4 } from 'uuid';
 
-const StoreInfoPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// --- 하위 컴포넌트: 즉시 수정을 위한 컴포넌트 ---
+interface EditableFieldProps {
+  value: string;
+  onSave: (newValue: string) => void;
+  isAdmin: boolean;
+  as?: 'input' | 'textarea';
+  className?: string;
+}
+
+const EditableField: React.FC<EditableFieldProps> = ({ value, onSave, isAdmin, as = 'input', className = '' }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentValue, setCurrentValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const fetchStoreInformation = async () => {
-      try {
-        const fetchedInfo = await getStoreInfo();
-        if (fetchedInfo) {
-          setStoreInfo(fetchedInfo);
-        } else {
-          setError("매장 정보를 찾을 수 없습니다. (Firestore에 'settings/storeInfo' 문서가 없거나 비어있습니다.)");
-        }
-      } catch (err) {
-        console.error("매장 정보 불러오기 오류:", err);
-        setError("매장 정보를 불러오는 데 실패했습니다.");
-      } finally {
-        setLoading(false);
-      }
+    setCurrentValue(value);
+  }, [value]);
+  
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    if (currentValue !== value) {
+      onSave(currentValue);
+    }
+    setIsEditing(false);
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && as === 'input') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setCurrentValue(value);
+      setIsEditing(false);
+    }
+  };
+  
+  if (!isAdmin) {
+    return <span className={className}>{value}</span>;
+  }
+  
+  if (isEditing) {
+    const commonProps = {
+      ref: inputRef as any,
+      value: currentValue,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setCurrentValue(e.target.value),
+      onBlur: handleSave,
+      onKeyDown: handleKeyDown,
+      className: "inline-edit-input"
     };
-    fetchStoreInformation();
+    return as === 'textarea' 
+      ? <textarea {...commonProps} rows={3} /> 
+      : <input {...commonProps} />;
+  }
+  
+  return (
+    <span className={`${className} editable`} onClick={() => setIsEditing(true)}>
+      {value || '(내용 없음)'}
+      <Edit size={12} className="edit-pencil-icon"/>
+    </span>
+  );
+};
+
+// --- 하위 컴포넌트: FAQ (보기 전용) ---
+interface FaqItemViewProps { question: string; answer: React.ReactNode; }
+const FaqItemView: React.FC<FaqItemViewProps> = ({ question, answer }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className={`faq-item ${isOpen ? 'open' : ''}`}>
+      <button className="faq-question" onClick={() => setIsOpen(!isOpen)}>
+        <span>{question}</span>
+        <ChevronDown className="faq-icon" size={20} />
+      </button>
+      {isOpen && <div className="faq-answer">{answer}</div>}
+    </div>
+  );
+};
+
+
+// --- 메인 컴포넌트 ---
+const StoreInfoPage: React.FC = () => {
+  const { isAdmin } = useAuth();
+  const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
+  const [editableInfo, setEditableInfo] = useState<StoreInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('info');
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const fetchStoreInformation = useCallback(async () => {
+    setLoading(true);
+    try {
+      const fetchedInfo = await getStoreInfo();
+      const initialInfo = fetchedInfo || { 
+        name: '', businessNumber: '', representative: '', address: '', phoneNumber: '', email: '',
+        operatingHours: [], description: '', kakaotalkChannelId: '', usageGuide: [], faq: [],
+      };
+      setStoreInfo(initialInfo);
+      setEditableInfo(JSON.parse(JSON.stringify(initialInfo)));
+    } catch (err) {
+      console.error("매장 정보 불러오기 오류:", err);
+      setError("매장 정보를 불러오는 데 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const handleBack = () => {
-    navigate(-1); // 이전 페이지로 돌아가기
+  useEffect(() => {
+    fetchStoreInformation();
+  }, [fetchStoreInformation]);
+  
+  // 변경사항이 있는지 확인
+  useEffect(() => {
+    setHasChanges(JSON.stringify(storeInfo) !== JSON.stringify(editableInfo));
+  }, [storeInfo, editableInfo]);
+
+
+  const updateField = (field: keyof StoreInfo, value: any) => {
+    setEditableInfo(prev => prev ? { ...prev, [field]: value } : null);
+  };
+  
+  const updateArrayItem = <T extends GuideItem | FaqItem>(index: number, field: keyof T, value: string, arrayName: 'usageGuide' | 'faq') => {
+    setEditableInfo(prev => {
+        if (!prev) return null;
+        const currentArray = prev[arrayName] || [];
+        const newArray = [...currentArray];
+        newArray[index] = { ...newArray[index], [field]: value };
+        return { ...prev, [arrayName]: newArray };
+    });
+  };
+  
+  const addArrayItem = (arrayName: 'usageGuide' | 'faq') => {
+    setEditableInfo(prev => {
+      if (!prev) return null;
+      const newItem = arrayName === 'usageGuide' 
+        ? { id: uuidv4(), title: '새로운 안내', content: '내용을 입력하세요.' }
+        : { id: uuidv4(), question: '새로운 질문', answer: '답변을 입력하세요.' };
+      const newArray = [...(prev[arrayName] || []), newItem];
+      return { ...prev, [arrayName]: newArray };
+    });
   };
 
-  const formatPhoneNumberForCall = (phoneNumber: string) => {
-    return phoneNumber.replace(/[^0-9]/g, '');
+  const removeArrayItem = (id: string, arrayName: 'usageGuide' | 'faq') => {
+    setEditableInfo(prev => {
+      if (!prev) return null;
+      const currentArray = prev[arrayName] || [];
+      const newArray = currentArray.filter(item => item.id !== id);
+      return { ...prev, [arrayName]: newArray };
+    });
   };
 
-  const createKakaoMapLink = (address: string) => {
-    return `https://map.kakao.com/link/search/${encodeURIComponent(address)}`;
+  const handleSave = async () => {
+    if (!editableInfo) return;
+    const promise = updateStoreInfo(editableInfo);
+    await toast.promise(promise, {
+      loading: '정보를 저장하는 중...',
+      success: '성공적으로 저장되었습니다!',
+      error: '저장 중 오류가 발생했습니다.',
+    });
+    setStoreInfo(JSON.parse(JSON.stringify(editableInfo)));
+    setHasChanges(false);
   };
+  
+  const handleCancel = () => {
+    setEditableInfo(JSON.parse(JSON.stringify(storeInfo)));
+    setHasChanges(false);
+  }
 
-  const createKakaoTalkChatLink = (channelId: string) => {
+  // --- 헬퍼 함수 ---
+  const formatPhoneNumberForCall = (phoneNumber?: string) => (phoneNumber || '').replace(/[^0-9]/g, '');
+  const createKakaoMapLink = (address?: string) => `https://map.kakao.com/link/search/${encodeURIComponent(address || '')}`;
+  const createKakaoTalkChatLink = (channelId?: string) => {
+    if (!channelId || channelId === "YOUR_KAKAO_CHANNEL_ID") return '#';
     return `https://pf.kakao.com/_${channelId}/chat`;
   };
 
-
-  if (loading) {
-    return (
-      <>
-        <Header title="매장 정보" onBack={handleBack} />
-        <div className="store-info-container">
-          <div className="loading-message">매장 정보를 불러오는 중...</div>
-        </div>
-      </>
-    );
-  }
-
-  if (error || !storeInfo) {
-    return (
-      <>
-        <Header title="매장 정보" onBack={handleBack} />
-        <div className="store-info-container">
-          <div className="error-message">{error || "매장 정보를 찾을 수 없습니다."}</div>
-          <p className="error-tip">관리자 페이지에서 매장 정보를 설정해 주세요.</p>
-        </div>
-      </>
-    );
-  }
+  if (loading) return <div className="customer-service-container centered-message"><p>고객센터 정보를 불러오는 중...</p></div>;
+  if (error || !storeInfo || !editableInfo) return <div className="customer-service-container centered-message"><div className="info-error-card"><AlertTriangle size={40} className="error-icon" /><p>{error || '정보를 불러올 수 없습니다.'}</p></div></div>;
+  
 
   return (
-    <>
-      <Header
-        title="매장 정보"
-        onBack={handleBack}
-      />
-      <div className="store-info-container">
-        <section className="store-section about">
-          <h2 className="section-title">{storeInfo.name}</h2>
-          <p className="store-description">{storeInfo.description}</p>
-        </section>
+    <div className="customer-service-container">
+        {isAdmin && hasChanges && (
+            <div className="admin-edit-controls floating">
+                <button className="admin-action-btn cancel" onClick={handleCancel}><X size={16}/> 취소</button>
+                <button className="admin-action-btn save" onClick={handleSave}><Save size={16}/> 변경사항 저장</button>
+            </div>
+        )}
 
-        <section className="store-section details">
-          <h2 className="section-title">상세 정보</h2>
-          <div className="info-item">
-            <span className="info-label">상호</span>
-            <span className="info-value">{storeInfo.name}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">사업자번호</span>
-            <span className="info-value">{storeInfo.businessNumber}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">대표</span>
-            <span className="info-value">{storeInfo.representative}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">주소</span>
-            <a href={createKakaoMapLink(storeInfo.address)} target="_blank" rel="noopener noreferrer" className="info-value link-value">
-              {storeInfo.address}
-            </a>
-          </div>
-          <div className="info-item">
-            <span className="info-label">연락처</span>
-            <a href={`tel:${formatPhoneNumberForCall(storeInfo.phoneNumber)}`} className="info-value link-value">
-              {storeInfo.phoneNumber}
-            </a>
-          </div>
-          <div className="info-item">
-            <span className="info-label">이메일</span>
-            <a href={`mailto:${storeInfo.email}`} className="info-value link-value">
-              {storeInfo.email}
-            </a>
-          </div>
-        </section>
-
-        <section className="store-section hours">
-          <h2 className="section-title">운영 시간</h2>
-          <ul className="operating-hours-list">
-            {storeInfo.operatingHours.map((hour: string, index: number) => ( // FIX: hour 및 index에 타입 명시
-              <li key={index}>{hour}</li>
-            ))}
-          </ul>
-        </section>
-
-        <div className="contact-buttons">
-          <a href={`tel:${formatPhoneNumberForCall(storeInfo.phoneNumber)}`} className="contact-button primary">전화 문의</a>
-          <a href={createKakaoTalkChatLink('YOUR_KAKAO_CHANNEL_ID')} target="_blank" rel="noopener noreferrer" className="contact-button secondary">카카오톡 문의</a>
-        </div>
+      <div className="service-tabs">
+        <button onClick={() => setActiveTab('info')} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16}/> 매장 정보</button>
+        <button onClick={() => setActiveTab('guide')} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16}/> 이용 안내</button>
+        <button onClick={() => setActiveTab('faq')} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16}/> 자주 묻는 질문</button>
       </div>
-    </>
+
+      <div className="service-content">
+        {activeTab === 'info' && (
+          <section className="service-section">
+            <div className="info-item"><span className="info-label">상호</span><EditableField value={editableInfo.name} onSave={(v) => updateField('name', v)} isAdmin={isAdmin} className="info-value"/></div>
+            <div className="info-item"><span className="info-label">한 줄 설명</span><EditableField value={editableInfo.description} onSave={(v) => updateField('description', v)} isAdmin={isAdmin} as="textarea" className="info-value"/></div>
+            <div className="info-item"><span className="info-label">주소</span><EditableField value={editableInfo.address} onSave={(v) => updateField('address', v)} isAdmin={isAdmin} className="info-value"/></div>
+            <div className="info-item"><span className="info-label">연락처</span><EditableField value={editableInfo.phoneNumber} onSave={(v) => updateField('phoneNumber', v)} isAdmin={isAdmin} className="info-value"/></div>
+            <div className="info-item"><span className="info-label">이메일</span><EditableField value={editableInfo.email} onSave={(v) => updateField('email', v)} isAdmin={isAdmin} className="info-value"/></div>
+            <div className="info-item"><span className="info-label">카카오톡 채널 ID</span><EditableField value={editableInfo.kakaotalkChannelId || ''} onSave={(v) => updateField('kakaotalkChannelId', v)} isAdmin={isAdmin} className="info-value"/></div>
+            <div className="info-item"><span className="info-label">운영 시간</span><EditableField value={editableInfo.operatingHours.join('\n')} onSave={(v) => updateField('operatingHours', v.split('\n'))} isAdmin={isAdmin} as="textarea" className="info-value operating-hours-list"/></div>
+          </section>
+        )}
+        {activeTab === 'guide' && (
+          <section className="service-section text-content-section">
+            {editableInfo.usageGuide?.map((guide, index) => (
+                <div key={guide.id} className="editable-list-item">
+                    {isAdmin && <button className="delete-item-btn" onClick={() => removeArrayItem(guide.id, 'usageGuide')}><XCircle size={18}/></button>}
+                    <EditableField value={guide.title} onSave={(v) => updateArrayItem(index, 'title', v, 'usageGuide')} isAdmin={isAdmin} className="editable-list-title"/>
+                    <EditableField value={guide.content} onSave={(v) => updateArrayItem(index, 'content', v, 'usageGuide')} isAdmin={isAdmin} as="textarea" className="editable-list-content"/>
+                </div>
+            ))}
+            {isAdmin && <button className="add-array-item-btn" onClick={() => addArrayItem('usageGuide')}><PlusCircle size={16}/> 이용 안내 추가</button>}
+          </section>
+        )}
+        {activeTab === 'faq' && (
+          <section className="service-section faq-section">
+            {isAdmin 
+              ? editableInfo.faq?.map((item, index) => (
+                  <div key={item.id} className="editable-list-item">
+                      {isAdmin && <button className="delete-item-btn" onClick={() => removeArrayItem(item.id, 'faq')}><XCircle size={18}/></button>}
+                      <EditableField value={item.question} onSave={(v) => updateArrayItem(index, 'question', v, 'faq')} isAdmin={isAdmin} className="editable-list-title"/>
+                      <EditableField value={item.answer} onSave={(v) => updateArrayItem(index, 'answer', v, 'faq')} isAdmin={isAdmin} as="textarea" className="editable-list-content"/>
+                  </div>
+                ))
+              : storeInfo.faq?.map(item => <FaqItemView key={item.id} question={item.question} answer={item.answer} />)
+            }
+            {isAdmin && <button className="add-array-item-btn" onClick={() => addArrayItem('faq')}><PlusCircle size={16}/> FAQ 추가</button>}
+          </section>
+        )}
+      </div>
+    </div>
   );
 };
 

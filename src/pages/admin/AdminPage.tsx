@@ -1,10 +1,8 @@
 // src/pages/admin/AdminPage.tsx
-// AdminPage는 이제 AdminRoute의 자식으로 렌더링되며, AdminLayout 내에서 메인 콘텐츠를 담당합니다.
-// AdminLayout에서 사이드바를 렌더링하므로, AdminPage에서는 사이드바를 제거하고 Outlet 대신 Routes를 직접 사용합니다.
 
 import React, { Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom'; // useLocation, matchPath 제거
-import './AdminPage.css'; // AdminPage의 메인 콘텐츠 영역 스타일
+import { Routes, Route, Navigate } from 'react-router-dom';
+import './AdminPage.css';
 
 const LoadingSpinner = () => <div className="loading-spinner">콘텐츠 로딩 중...</div>;
 
@@ -25,16 +23,17 @@ const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage')
 const OrderListPage = React.lazy(() => import('@/pages/admin/OrderListPage'));
 const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
 const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
+// ✅ [추가] 새로 만들 페이지를 lazy import 합니다.
+const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 
 
-// 라우트 정보를 배열로 관리하여 제목을 동적으로 처리
-// AdminLayout.tsx로 이동하여 AdminLayout에서 currentPageTitle을 결정하도록 변경되었습니다.
-// 여기서는 라우트 설정 자체만 유지합니다.
 const adminRoutes = [
-  { path: 'dashboard', element: <DashboardPage /> }, // '/admin/' 접두사 제외
+  { path: 'dashboard', element: <DashboardPage /> },
   { path: 'products', element: <ProductListPageAdmin /> },
   { path: 'products/add', element: <ProductAddAdminPage /> },
   { path: 'products/edit/:productId', element: <SalesRoundEditPage /> },
+  // ✅ [추가] 상품 관리 하위에 새 페이지 경로를 추가합니다.
+  { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
   { path: 'categories', element: <CategoryManagementPage /> },
   { path: 'encore-requests', element: <EncoreAdminPage /> },
   { path: 'ai-product', element: <AiProductPage /> },
@@ -50,15 +49,11 @@ const adminRoutes = [
 ];
 
 const AdminPage = () => {
-  // useLocation, matchPath는 더 이상 필요하지 않으므로 제거
   return (
     <div className="admin-content">
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
-          {/* 기본 경로는 대시보드로 리디렉션 */}
           <Route index element={<Navigate to="dashboard" replace />} />
-
-          {/* 배열에 정의된 라우트를 동적으로 생성 */}
           {adminRoutes.map(route => (
             <Route key={route.path} path={route.path} element={route.element} />
           ))}

@@ -1,151 +1,117 @@
-/* src/pages/customer/OnsiteSalePage.css */
+/* src/pages/admin/ProductCategoryBatchPage.css */
 
-/* 모든 스타일이 .onsite-sale-page-container 내부에서만 작동하도록 수정 */
-.onsite-sale-page-container {
-    padding: 1.5rem 1rem;
-    background-color: var(--bg-color-main, #f8f9fa);
-    min-height: calc(100vh - 60px); /* BottomNav 높이 제외 */
+.product-category-batch-page {
+  padding: 20px;
+  background-color: #f9fafb;
 }
 
-.onsite-sale-page-container .page-header {
-    text-align: center;
-    margin-bottom: 2rem;
+.product-category-batch-page h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
-.onsite-sale-page-container .page-title {
-    font-size: var(--font-size-2xl, 2rem);
-    font-weight: var(--font-weight-bold, 700);
-    color: var(--text-color-dark, #212529);
-    margin: 0 0 0.5rem 0;
+.product-category-batch-page p {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 24px;
 }
 
-.onsite-sale-page-container .page-description {
-    font-size: var(--font-size-default, 1rem);
-    color: var(--text-color-secondary, #6c757d);
-    line-height: 1.5;
+.batch-page-loading, .batch-page-error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  font-size: 1.1rem;
+  color: #6b7280;
+  background-color: #fff;
+  border-radius: 8px;
 }
 
-.onsite-sale-page-container .category-filters {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
+.batch-page-error {
+  color: #ef4444;
 }
 
-.onsite-sale-page-container .filter-button {
-    padding: 0.5rem 1rem;
-    font-size: var(--font-size-sm, 0.9rem);
-    font-weight: var(--font-weight-medium, 500);
-    color: var(--text-color-primary, #495057);
-    background-color: var(--bg-color-white, #fff);
-    border: 1px solid var(--border-color-light, #ced4da);
-    border-radius: var(--border-radius-full, 999px);
-    cursor: pointer;
-    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+.table-container {
+  overflow-x: auto;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.onsite-sale-page-container .filter-button:hover {
-    background-color: var(--bg-color-hover, #e9ecef);
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
 }
 
-.onsite-sale-page-container .filter-button.active {
-    background-color: var(--primary-color, #007bff);
-    color: var(--bg-color-white, #fff);
-    border-color: var(--primary-color, #007bff);
-    font-weight: var(--font-weight-semibold, 600);
+thead {
+  background-color: #f3f4f6;
 }
 
-.onsite-sale-page-container .product-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 1rem;
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap; /* 글자 줄바꿈 방지 */
 }
 
-.onsite-sale-page-container .product-card-link {
-    text-decoration: none;
-    color: inherit;
+th {
+  font-weight: 600;
+  color: #374151;
 }
 
-.onsite-sale-page-container .product-card {
-    background-color: var(--bg-color-white, #ffffff);
-    border-radius: var(--border-radius-lg, 8px);
-    box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
-    overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    display: flex;
-    flex-direction: column;
+tbody tr:hover {
+  background-color: #f9fafb;
 }
 
-.onsite-sale-page-container .product-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.1));
+td select {
+  width: 100%;
+  min-width: 150px; /* 드롭다운 최소 너비 */
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.2s;
 }
 
-.onsite-sale-page-container .product-image-wrapper {
-    position: relative;
-    width: 100%;
-    padding-top: 100%; /* 1:1 Aspect Ratio */
+td select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
 }
 
-.onsite-sale-page-container .product-image {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+td select:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  color: #9ca3af;
 }
 
-.onsite-sale-page-container .sold-out-badge, 
-.onsite-sale-page-container .low-stock-badge {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    padding: 0.3rem 0.6rem;
-    border-radius: var(--border-radius-md, 6px);
-    font-size: var(--font-size-xs, 0.75rem);
-    font-weight: var(--font-weight-bold, 700);
-    color: white;
+.save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: #10b981;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-.onsite-sale-page-container .sold-out-badge {
-    background-color: rgba(0, 0, 0, 0.6);
+.save-btn:hover:enabled {
+  background-color: #059669;
 }
 
-.onsite-sale-page-container .low-stock-badge {
-    background-color: var(--danger-color, #dc3545);
+.save-btn:disabled {
+  background-color: #d1d5db;
+  cursor: not-allowed;
 }
 
-.onsite-sale-page-container .product-info {
-    padding: 0.75rem;
-}
-
-.onsite-sale-page-container .product-name {
-    font-size: var(--font-size-default, 1rem);
-    font-weight: var(--font-weight-semibold, 600);
-    margin: 0 0 0.25rem 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.onsite-sale-page-container .product-price {
-    font-size: var(--font-size-sm, 0.9rem);
-    color: var(--text-color-primary, #495057);
-    margin: 0;
-}
-
-.onsite-sale-page-container .no-products-message {
-    grid-column: 1 / -1; /* Grid의 전체 너비를 차지하도록 설정 */
-    text-align: center;
-    padding: 3rem;
-    color: var(--text-color-secondary, #6c757d);
-}
-
-.onsite-sale-page-container .error-message {
-    text-align: center;
-    padding: 3rem;
-    color: var(--text-color-error, #dc3545);
-    font-weight: bold;
+.save-btn span {
+  display: inline-block;
+  vertical-align: middle;
 }

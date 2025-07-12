@@ -3,18 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import './ProductArrivalCalendar.css'; // 경로 수정
-import { getProductArrivals } from '../../firebase';
-import type { Product } from '../../types';
-import Header from '../Header'; // Header 컴포넌트는 공통이므로 경로는 그대로 유지
-import toast from 'react-hot-toast'; // [추가] react-hot-toast 임포트
+import './ProductArrivalCalendar.css';
+// ❗ [수정] 상대 경로 대신 절대 경로 별칭을 사용하여 import 안정성을 높입니다.
+import { getProductArrivals } from '@/firebase'; 
+import Header from '../Header';
+import toast from 'react-hot-toast';
 
 type ValuePiece = Date | null;
 type Value = ValuePiece | [ValuePiece, ValuePiece];
 
 interface ArrivalItem {
-  id: string;
-  name: string;
+  id: string; // roundId를 고유 ID로 사용
+  name: string; // "상품명 (회차명)" 형식
   arrivalDate: Date;
 }
 
@@ -29,15 +29,18 @@ const ProductArrivalCalendar: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const products = await getProductArrivals();
-        const arrivals = products.map((product: Product) => ({
-          id: product.id,
-          name: product.name,
-          arrivalDate: product.arrivalDate?.toDate() || new Date(0),
-        })).filter((item: ArrivalItem) => item.arrivalDate.getTime() > 0);
+        // ❗ [수정] 새로운 getProductArrivals 함수는 ArrivalInfo[] 타입을 반환합니다.
+        const arrivalInfoList = await getProductArrivals();
+
+        // ❗ [수정] 반환된 데이터를 컴포넌트의 상태에 맞게 변환합니다.
+        const arrivals = arrivalInfoList.map(info => ({
+          id: info.roundId, // 고유 키로 roundId 사용
+          name: `${info.productName} (${info.roundName})`, // 상품명과 회차명을 함께 표시
+          arrivalDate: info.arrivalDate.toDate(), // Timestamp를 Date 객체로 변환
+        }));
 
         setProductArrivals(arrivals);
-        // [수정] toast.info 대신 toast(message, { icon: 'ℹ️' }) 사용
+
         if (arrivals.length === 0) {
           toast('예정된 상품 입고가 없습니다.', { icon: 'ℹ️' });
         }
@@ -66,12 +69,13 @@ const ProductArrivalCalendar: React.FC = () => {
     return null;
   };
 
-  const selectedDateArrivals = Array.isArray(value) && value[0]
+  const selectedDate = Array.isArray(value) ? value[0] : value;
+
+  const selectedDateArrivals = selectedDate
     ? productArrivals.filter((item: ArrivalItem) => {
-        const selectedSingleDate = value[0] as Date;
-        return item.arrivalDate.getFullYear() === selectedSingleDate.getFullYear() &&
-               item.arrivalDate.getMonth() === selectedSingleDate.getMonth() &&
-               item.arrivalDate.getDate() === selectedSingleDate.getDate();
+        return item.arrivalDate.getFullYear() === selectedDate.getFullYear() &&
+               item.arrivalDate.getMonth() === selectedDate.getMonth() &&
+               item.arrivalDate.getDate() === selectedDate.getDate();
       })
     : [];
 
@@ -91,12 +95,12 @@ const ProductArrivalCalendar: React.FC = () => {
                 value={value}
                 locale="ko-KR"
                 tileContent={tileContent}
-                formatDay={(_locale: string | undefined, date: Date) => date.getDate().toString()}
+                formatDay={(_locale, date) => date.getDate().toString()}
               />
             </div>
 
             <div className="arrival-list-section">
-              <h3>{Array.isArray(value) && value[0] ? (value[0] as Date).toLocaleDateString() : '날짜를 선택하세요'} 입고 예정 상품</h3>
+              <h3>{selectedDate ? selectedDate.toLocaleDateString() : '날짜를 선택하세요'} 입고 예정 상품</h3>
               {selectedDateArrivals.length > 0 ? (
                 <ul className="arrival-list">
                   {selectedDateArrivals.map((item: ArrivalItem) => (

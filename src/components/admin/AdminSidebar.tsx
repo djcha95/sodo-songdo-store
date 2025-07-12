@@ -1,19 +1,18 @@
 // src/components/admin/AdminSidebar.tsx
 
 import { NavLink, Link } from 'react-router-dom';
-import React, { useState, useEffect } from 'react'; // useState, useEffect 사용
+// ✅ [수정] 사용하지 않는 useState, useEffect 제거
+import React from 'react';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Truck, Users, Star, Bot,
   ClipboardList, Gift, Image as ImageIcon, MessageSquare, TestTube2,
-  ExternalLink, Menu // 햄버거 아이콘 사용
+  ExternalLink, Menu, SlidersHorizontal
 } from 'lucide-react';
 
 interface AdminSidebarProps {
-  // AdminLayout에서 isSidebarOpen 상태를 관리하고, 이를 AdminSidebar에 prop으로 전달합니다.
-  // AdminLayout은 이 상태를 이용해 main 콘텐츠의 padding-left를 조절합니다.
   isSidebarOpen: boolean;
-  toggleSidebar: () => void; // AdminLayout에서 전달받는 토글 함수
+  toggleSidebar: () => void;
 }
 
 const MenuItem = ({ to, icon, text, isSidebarOpen }: { to: string; icon: React.ReactNode; text: string; isSidebarOpen: boolean; }) => (
@@ -36,22 +35,19 @@ const MenuGroupTitle = ({ title, spacer = false, isSidebarOpen }: { title: strin
 );
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSidebar }) => {
-  // 마우스 오버에 의한 자동 펼침/접힘 로직 (isHovered)은 제거
-  // isSidebarOpen 상태는 prop으로 받아오므로, 내부에서 useState로 관리하지 않습니다.
 
   return (
     <aside className={`admin-sidebar ${!isSidebarOpen ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        {/* 햄버거 버튼과 '관리자페이지' 제목을 사이드바 내부에 배치 */}
         <button
-          className="sidebar-toggle-btn" // 기존 fixed-toggle-btn 대신 사이드바 내 버튼
+          className="sidebar-toggle-btn"
           onClick={toggleSidebar}
           aria-label={isSidebarOpen ? "메뉴 닫기" : "메뉴 펼치기"}
           title={isSidebarOpen ? "메뉴 닫기" : "메뉴 펼치기"}
         >
           <Menu size={24} />
         </button>
-        {isSidebarOpen && <h1 className="sidebar-title">관리자페이지</h1>} {/* '관리자페이지' 제목 */}
+        {isSidebarOpen && <h1 className="sidebar-title">관리자페이지</h1>}
       </div>
 
       <nav className="sidebar-nav">
@@ -66,6 +62,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
           <MenuGroupTitle title="상품 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products" icon={<Package size={18} />} text="상품 목록" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products/add" icon={<Package size={18} />} text="새 상품 등록" isSidebarOpen={isSidebarOpen} />
+          <MenuItem to="/admin/products/batch-category" icon={<SlidersHorizontal size={18} />} text="카테고리 일괄 변경" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/categories" icon={<ClipboardList size={18} />} text="카테고리 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/encore-requests" icon={<Star size={18} />} text="앙코르 요청" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/ai-product" icon={<Bot size={18} />} text="AI 상품 추천" isSidebarOpen={isSidebarOpen} />

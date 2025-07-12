@@ -2,8 +2,8 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-// FiMessageSquare를 FiShoppingBag으로 교체합니다.
-import { FiHome, FiShoppingBag, FiShoppingCart, FiUser, FiSettings } from 'react-icons/fi';
+// ❗ [수정] 고객센터 아이콘 추가
+import { FiHome, FiShoppingBag, FiShoppingCart, FiUser, FiSettings, FiMessageSquare } from 'react-icons/fi';
 import './BottomNav.css';
 
 const BottomNav = () => {
@@ -20,10 +20,9 @@ const BottomNav = () => {
         <FiHome />
         <span>홈</span>
       </NavLink>
-      {/* '공구 요청'에서 '현장 판매'로 변경 */}
-      <NavLink to="/board" className={getNavLinkClass}>
-        <FiShoppingBag /> {/* 아이콘 변경 */}
-        <span>현장 판매</span> {/* 텍스트 변경 */}
+      <NavLink to="/onsite-sale" className={getNavLinkClass}>
+        <FiShoppingBag />
+        <span>현장 판매</span>
       </NavLink>
       <NavLink to="/cart" className={getNavLinkClass}>
         <div className="cart-icon-wrapper">
@@ -33,6 +32,11 @@ const BottomNav = () => {
           )}
         </div>
         <span>장바구니</span>
+      </NavLink>
+      {/* ❗ [추가] '고객센터' 메뉴를 추가하고 /store-info 경로로 연결합니다. */}
+      <NavLink to="/store-info" className={getNavLinkClass}>
+        <FiMessageSquare />
+        <span>고객센터</span>
       </NavLink>
       <NavLink to="/mypage" className={getNavLinkClass}>
         <FiUser />
