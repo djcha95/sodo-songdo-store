@@ -1,71 +1,95 @@
 /* src/styles/common.css */
+/* =============================================== */
+/* ========== Reusable Button System =========== */
+/* =============================================== */
 
-/* --- Common Buttons --- */
+/* 모든 버튼의 기본 뼈대 스타일 */
 .common-button {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--border-radius-sm);
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-    transition: background-color var(--transition-speed-normal) var(--transition-timing-function),
-                border-color var(--transition-speed-normal) var(--transition-timing-function),
-                color var(--transition-speed-normal) var(--transition-timing-function);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-xs);
-    text-decoration: none;
-    line-height: 1; /* 텍스트 높이 일관성 */
-    white-space: nowrap; /* 버튼 텍스트 줄바꿈 방지 */
-}
-
-.common-button.primary {
-    background-color: var(--primary-color);
-    color: var(--bg-color-white);
-    border: 1px solid var(--primary-color);
-}
-.common-button.primary:hover:not(:disabled) {
-    background-color: #0056b3; /* Primary dark */
-    border-color: #0056b3;
-}
-
-.common-button.secondary {
-    background-color: var(--bg-color-white);
-    color: var(--text-color-medium);
-    border: 1px solid var(--border-color-medium);
-}
-.common-button.secondary:hover:not(:disabled) {
-    background-color: var(--bg-color-medium);
-    border-color: var(--secondary-color);
-}
-
-.common-button.accent {
-    background-color: var(--accent-color);
-    color: var(--bg-color-white);
-    border: 1px solid var(--accent-color);
-}
-.common-button.accent:hover:not(:disabled) {
-    background-color: #218838; /* Accent dark */
-    border-color: #218838;
-}
-
-.common-button.danger {
-    background-color: var(--danger-color);
-    color: var(--bg-color-white);
-    border: 1px solid var(--danger-color);
-}
-.common-button.danger:hover:not(:disabled) {
-    background-color: #c82333; /* Danger dark */
-    border-color: #c82333;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: var(--font-weight-semibold, 600);
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-md, 8px);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  user-select: none; /* 텍스트 드래그 방지 */
+  white-space: nowrap; /* 줄바꿈 방지 */
+  text-decoration: none; /* a 태그 등에 사용될 경우 밑줄 제거 */
 }
 
 .common-button:disabled {
-    background-color: var(--bg-color-dark);
-    color: var(--text-color-light);
-    border-color: var(--border-color-medium);
-    cursor: not-allowed;
-    opacity: 0.7;
-    box-shadow: none;
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* --- 버튼 사이즈 --- */
+.button-large {
+  font-size: var(--font-size-md, 1rem);
+  padding: 12px 24px;
+}
+.button-medium {
+  font-size: var(--font-size-sm, 0.9rem);
+  padding: 10px 20px;
+}
+.button-small {
+  font-size: var(--font-size-xs, 0.8rem);
+  padding: 6px 12px;
+  border-radius: var(--border-radius-sm, 6px);
+}
+
+
+/* --- 버튼 색상/종류 --- */
+
+/* Primary (핵심 액션, 저장) */
+.button-primary {
+  background-color: var(--primary-color, #3b82f6);
+  color: white;
+}
+.button-primary:hover:not(:disabled) {
+  background-color: #2563eb;
+  box-shadow: var(--box-shadow-md);
+}
+
+/* Secondary (보조 액션, 취소) */
+.button-secondary {
+  background-color: var(--bg-color-medium, #e9ecef);
+  color: var(--text-color-dark, #333);
+  border-color: #ced4da;
+}
+.button-secondary:hover:not(:disabled) {
+  background-color: #d3d9df;
+}
+
+/* Danger (삭제, 위험 액션) */
+.button-danger {
+  background-color: var(--danger-color, #dc3545);
+  color: white;
+}
+.button-danger:hover:not(:disabled) {
+  background-color: #c82333;
+  box-shadow: var(--box-shadow-md);
+}
+
+/* Accent (긍정, 완료 액션) */
+.button-accent {
+    background-color: var(--accent-color, #28a745);
+    color: white;
+}
+.button-accent:hover:not(:disabled) {
+    background-color: #218838;
+}
+
+/* Ghost (테두리만 있는 버튼) */
+.button-ghost {
+    background-color: transparent;
+    color: var(--primary-color, #3b82f6);
+    border-color: var(--primary-color, #3b82f6);
+}
+.button-ghost:hover:not(:disabled) {
+    background-color: rgba(59, 130, 246, 0.1);
 }
 
 /* --- Form Elements --- */
@@ -249,3 +273,4 @@
 .status-sold_out { background-color: #c92a2a; } /* 품절 (빨강색) */
 .status-draft { background-color: #495057; } /* 임시저장 (진한회색) */
 .status-unknown { background-color: #ced4da; color: #495057; }
+

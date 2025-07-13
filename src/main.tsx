@@ -1,4 +1,4 @@
-// src/main.tsx (수정본)
+// src/main.tsx
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -10,6 +10,10 @@ import './index.css';
 import App from './App';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingSpinner from './components/LoadingSpinner';
+
+// Context import (AuthContext의 loading 상태를 사용하기 위함)
+import { AuthProvider, useAuth } from './context/AuthContext';
+import './styles/toast-styles.css';
 
 // --- 페이지 컴포넌트 lazy loading ---
 
@@ -46,7 +50,6 @@ const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage')
 const OrderListPage = React.lazy(() => import('@/pages/admin/OrderListPage'));
 const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
 const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
-// ✅ [추가] '카테고리 일괄 변경' 페이지 import
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 
 
@@ -54,6 +57,20 @@ const ProductDetailPageWrapper = () => {
   const { productId } = useParams<{ productId: string }>();
   return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
 };
+
+// AuthContext의 loading 상태에 따라 RouterProvider 렌더링을 제어할 컴포넌트
+const RouterWrapper = () => {
+  const { loading } = useAuth(); // AuthContext에서 loading 상태를 가져옵니다.
+
+  if (loading) {
+    // 인증 정보 로딩 중에는 로딩 스피너를 보여줍니다.
+    return <LoadingSpinner />;
+  }
+
+  // 인증 정보 로딩이 완료되면 RouterProvider를 렌더링합니다.
+  return <RouterProvider router={router} />;
+};
+
 
 const router = createBrowserRouter([
   {
@@ -79,7 +96,6 @@ const router = createBrowserRouter([
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
               { path: 'products/edit/:productId', element: <SalesRoundEditPage /> },
-              // ✅ [추가] '카테고리 일괄 변경' 페이지 경로 추가
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'encore-requests', element: <EncoreAdminPage /> },
@@ -144,19 +160,18 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <>
+    {/* ✅ [수정 완료] 커스텀 토스트와 충돌을 피하기 위해 toastOptions의 기본 스타일을 제거합니다. */}
     <Toaster
       position="top-center"
       reverseOrder={false}
       toastOptions={{
-        style: {
-          borderRadius: '8px',
-          background: 'var(--toast-bg-dark, #333)',
-          color: 'var(--toast-text-light, #fff)',
-        },
+        // 전역 성공/에러 메시지 지속 시간만 설정
         success: { duration: 2000 },
         error: { duration: 4000 },
       }}
     />
-    <RouterProvider router={router} />
+    <AuthProvider> 
+      <RouterWrapper />
+    </AuthProvider>
   </>
 );

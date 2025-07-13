@@ -4,15 +4,15 @@ import { db, storage } from './firebaseConfig';
 import {
   collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
   writeBatch,
-  increment, arrayUnion, where, orderBy, Timestamp, runTransaction
+  increment, arrayUnion, where, orderBy, Timestamp, runTransaction,
+  startAfter, limit, getCountFromServer
 } from 'firebase/firestore';
 import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, Category } from '@/types';
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem } from '@/types';
 
 
-// ... addProductWithFirstRound 부터 updateMultipleRoundStatuses 까지 기존 함수들은 그대로 둡니다 ...
 /**
  * @description 대표 상품을 추가하고 첫 번째 판매 회차를 등록하는 함수
  */
@@ -115,10 +115,10 @@ export const updateProductCoreInfo = async (
   const deletePromises = imageUrlsToDelete.map(url => {
     try {
       const imageRef = ref(storage, url);
-      return deleteObject(imageRef);
+      return Promise.resolve(deleteObject(imageRef)); // Promise.resolve()로 감싸서 항상 Promise를 반환하도록 함
     } catch (e) {
       console.warn(`이미지 삭제 실패 (URL: ${url}):`, e);
-      return Promise.resolve(); 
+      return Promise.resolve(); // 오류 발생 시에도 Promise.all이 실패하지 않도록 resolve
     }
   });
   await Promise.all(deletePromises);
@@ -172,6 +172,71 @@ export const getProducts = async (archived: boolean = false): Promise<Product[]>
   
   const snapshot = await getDocs(productsQuery);
   return snapshot.docs.map((doc: DocumentData) => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+
+/**
+ * @description 여러 개의 하위 그룹 재고를 한 번의 작업으로 업데이트하는 함수
+ * 이 함수는 대시보드에서 여러 품목의 재고를 일괄적으로 변경할 때 유용합니다.
+ */
+export const updateMultipleVariantGroupStocks = async (
+  updates: {
+    productId: string;
+    roundId: string;
+    variantGroupId: string;
+    newStock: number;
+  }[]
+): Promise<void> => {
+  const batch = writeBatch(db);
+
+  // 업데이트가 필요한 모든 상품 문서를 한 번씩만 읽기 위해 Map을 사용합니다.
+  const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
+
+  // 먼저 필요한 모든 상품 데이터를 가져와 메모리에 로드합니다.
+  for (const update of updates) {
+    if (!productsToUpdate.has(update.productId)) {
+      const productRef = doc(db, 'products', update.productId);
+      const productSnap = await getDoc(productRef);
+      if (productSnap.exists()) {
+        productsToUpdate.set(update.productId, {
+          productRef,
+          productData: productSnap.data() as Product,
+        });
+      }
+    }
+  }
+  
+  // 메모리에 로드된 상품 데이터에 모든 변경사항을 적용합니다.
+  for (const update of updates) {
+    const productInfo = productsToUpdate.get(update.productId);
+    if (!productInfo) continue;
+
+    const { productData } = productInfo;
+
+    const newSalesHistory = productData.salesHistory.map((round: SalesRound) => {
+      if (round.roundId === update.roundId) {
+        const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
+          if (vg.id === update.variantGroupId) {
+            // totalPhysicalStock을 업데이트합니다.
+            return { ...vg, totalPhysicalStock: update.newStock };
+          }
+          return vg;
+        });
+        return { ...round, variantGroups: newVariantGroups };
+      }
+      return round;
+    });
+    
+    // 메모리에 있는 productData를 업데이트합니다.
+    productData.salesHistory = newSalesHistory; 
+  }
+
+  // 최종적으로 변경된 모든 상품 데이터를 배치에 추가합니다.
+  for (const { productRef, productData } of productsToUpdate.values()) {
+    batch.update(productRef, { salesHistory: productData.salesHistory });
+  }
+
+  await batch.commit();
 };
 
 
@@ -294,58 +359,132 @@ export const checkProductAvailability = async (productId: string, roundId: strin
   return hasSufficientGroupStock;
 };
 
-
 /**
- * @description 특정 판매 회차의 특정 하위 그룹 재고(totalPhysicalStock)를 업데이트하는 함수
+ * @description 특정 카테고리 이름으로 상품 목록을 페이지 단위로 가져옵니다.
  */
-export const updateVariantGroupStock = async (
-    productId: string,
-    roundId: string,
-    variantGroupId: string,
-    newStock: number
-): Promise<void> => {
-    const productRef = doc(db, 'products', productId);
-    
-    await runTransaction(db, async (transaction) => {
-        const productSnap = await transaction.get(productRef);
-        if (!productSnap.exists()) {
-            throw new Error("상품을 찾을 수 없습니다.");
-        }
-        
-        const product = productSnap.data() as Product;
+export const getProductsByCategory = async (
+    categoryName: string | null,
+    pageSize: number,
+    lastVisible: DocumentData | null = null
+): Promise<{ products: Product[], lastDoc: DocumentData | null, totalCount: number }> => {
+    const productsRef = collection(db, 'products');
+    let baseQuery: Query;
 
-        const newSalesHistory = product.salesHistory.map((round: SalesRound) => {
-            if (round.roundId === roundId) {
-                const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
-                    if (vg.id === variantGroupId) {
-                        return { ...vg, totalPhysicalStock: newStock };
-                    }
-                    return vg;
-                });
-                return { ...round, variantGroups: newVariantGroups };
-            }
-            return round;
-        });
-        
-        transaction.update(productRef, { salesHistory: newSalesHistory });
-    });
+    if (categoryName === null) {
+        baseQuery = query(productsRef, where('category', 'in', ['', null]), where('isArchived', '==', false));
+    } else {
+        baseQuery = query(productsRef, where('category', '==', categoryName), where('isArchived', '==', false));
+    }
+
+    const countSnapshot = await getCountFromServer(baseQuery);
+    const totalCount = countSnapshot.data().count;
+
+    let paginatedQuery = query(baseQuery, orderBy('groupName'), limit(pageSize));
+    if (lastVisible) {
+        paginatedQuery = query(baseQuery, orderBy('groupName'), startAfter(lastVisible), limit(pageSize));
+    }
+    
+    const documentSnapshots = await getDocs(paginatedQuery);
+    const products = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+    const lastDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1] || null;
+
+    return { products, lastDoc, totalCount };
 };
 
 /**
- * @description 여러 개의 하위 그룹 재고를 한 번의 작업으로 업데이트하는 함수
+ * @description 여러 상품들의 카테고리를 특정 카테고리로 일괄 변경합니다.
  */
-export const updateMultipleVariantGroupStocks = async (
-  updates: {
-    productId: string;
-    roundId: string;
-    variantGroupId: string;
-    newStock: number;
-  }[]
+export const moveProductsToCategory = async (productIds: string[], targetCategoryName: string | null): Promise<void> => {
+  const batch = writeBatch(db);
+  const newCategory = targetCategoryName === null ? '' : targetCategoryName;
+
+  productIds.forEach(productId => {
+    const productRef = doc(db, 'products', productId);
+    batch.update(productRef, { category: newCategory });
+  });
+
+  await batch.commit();
+};
+
+/**
+ * @description 여러 CartItem의 실시간 재고 정보를 한 번에 가져옵니다.
+ */
+export const getLiveStockForItems = async (
+  items: CartItem[]
+): Promise<Record<string, { itemStock: number; groupStock: number | null }>> => {
+  if (items.length === 0) return {};
+
+  const productIds = [...new Set(items.map(item => item.productId))];
+  const productSnapshots = await Promise.all(
+    productIds.map(id => getDoc(doc(db, 'products', id)))
+  );
+
+  const productsMap = new Map<string, Product>();
+  productSnapshots.forEach(snap => {
+    if (snap.exists()) {
+      productsMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+    }
+  });
+
+  const stockInfo: Record<string, { itemStock: number; groupStock: number | null }> = {};
+
+  items.forEach(item => {
+    const product = productsMap.get(item.productId);
+    const round = product?.salesHistory.find(r => r.roundId === item.roundId);
+    const group = round?.variantGroups.find(vg => vg.id === item.variantGroupId);
+    const productItem = group?.items.find(i => i.id === item.itemId);
+
+    if (productItem && group) {
+      const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+      stockInfo[uniqueId] = {
+        itemStock: productItem.stock,
+        groupStock: group.totalPhysicalStock,
+      };
+    }
+  });
+
+  return stockInfo;
+};
+
+/**
+ * @description 특정 판매 회차의 'status'를 업데이트하는 함수
+ */
+export const updateSalesRoundStatus = async (
+  productId: string,
+  roundId: string,
+  newStatus: SalesRound['status'] 
+): Promise<void> => {
+  const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
+
+  await runTransaction(db, async (transaction) => {
+    const productSnap = await transaction.get(productRef);
+    if (!productSnap.exists()) {
+      throw new Error("상품을 찾을 수 없습니다.");
+    }
+
+    const product = productSnap.data() as Product;
+    const newSalesHistory = product.salesHistory.map(round => {
+      if (round.roundId === roundId) {
+        return { ...round, status: newStatus };
+      }
+      return round;
+    });
+
+    transaction.update(productRef, { salesHistory: newSalesHistory });
+  });
+};
+
+/**
+ * @description 여러 판매 회차의 'status'를 한 번에 업데이트하는 함수
+ * @param updates - { productId, roundId, newStatus } 객체 배열
+ */
+export const updateMultipleSalesRoundStatuses = async (
+  updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
 ): Promise<void> => {
   const batch = writeBatch(db);
-
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
+  // 필요한 모든 상품 문서를 한 번씩 읽어 메모리에 로드
   for (const update of updates) {
     if (!productsToUpdate.has(update.productId)) {
       const productRef = doc(db, 'products', update.productId);
@@ -358,7 +497,8 @@ export const updateMultipleVariantGroupStocks = async (
       }
     }
   }
-  
+
+  // 메모리에 로드된 상품 데이터에 모든 변경사항 적용
   for (const update of updates) {
     const productInfo = productsToUpdate.get(update.productId);
     if (!productInfo) continue;
@@ -367,66 +507,16 @@ export const updateMultipleVariantGroupStocks = async (
 
     const newSalesHistory = productData.salesHistory.map((round: SalesRound) => {
       if (round.roundId === update.roundId) {
-        const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
-          if (vg.id === update.variantGroupId) {
-            return { ...vg, totalPhysicalStock: update.newStock };
-          }
-          return vg;
-        });
-        return { ...round, variantGroups: newVariantGroups };
-      }
-      return round;
-    });
-    
-    productData.salesHistory = newSalesHistory; 
-  }
-
-  for (const { productRef, productData } of productsToUpdate.values()) {
-    batch.update(productRef, { salesHistory: productData.salesHistory });
-  }
-
-  await batch.commit();
-};
-
-
-/**
- * @description 여러 판매 회차의 상태를 일괄적으로 업데이트합니다.
- */
-export const updateMultipleRoundStatuses = async (
-  updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
-) => {
-  const batch = writeBatch(db);
-  const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
-
-  for (const update of updates) {
-    if (!productsToUpdate.has(update.productId)) {
-      const productRef = doc(db, 'products', update.productId);
-      const productSnap = await getDoc(productRef);
-      if (productSnap.exists()) {
-        productsToUpdate.set(update.productId, {
-          productRef,
-          productData: productSnap.data() as Product,
-        });
-      }
-    }
-  }
-  
-  for (const update of updates) {
-    const productInfo = productsToUpdate.get(update.productId);
-    if (!productInfo) continue;
-
-    const { productData } = productInfo;
-
-    const newSalesHistory = productData.salesHistory.map(round => {
-      if (round.roundId === update.roundId) {
         return { ...round, status: update.newStatus };
       }
       return round;
     });
-
-    productData.salesHistory = newSalesHistory;
+    
+    // 메모리에 있는 productData를 업데이트
+    productData.salesHistory = newSalesHistory; 
   }
 
+  // 최종적으로 변경된 모든 상품 데이터를 배치에 추가
   for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
@@ -436,7 +526,7 @@ export const updateMultipleRoundStatuses = async (
 
 
 /**
- * @description 입고일(arrivalDate)이 지정된 모든 판매 회차 목록을 가져와 달력에 표시하기 좋은 형태로 반환합니다.
+ * @description 입고일(arrivalDate)이 지정된 모든 판매 회차 목록을 가져옵니다.
  */
 interface ArrivalInfo {
   productId: string;
@@ -447,12 +537,12 @@ interface ArrivalInfo {
 }
 
 export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
-  const products = await getProducts(false);
-
+  const products = await getProducts(false); // isArchived가 false인 상품만 가져옴
   const arrivals: ArrivalInfo[] = [];
 
   products.forEach(product => {
     product.salesHistory.forEach(round => {
+      // arrivalDate가 존재하는 경우에만 추가
       if (round.arrivalDate) {
         arrivals.push({
           productId: product.id,
@@ -466,44 +556,4 @@ export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
   });
 
   return arrivals;
-};
-
-// ✅ [신규 추가] 특정 카테고리에 속한 상품 목록을 가져오는 함수
-/**
- * @description 특정 카테고리 이름으로 상품 목록을 조회합니다.
- * @param categoryName - 조회할 카테고리 이름. 'null' 전달 시 분류 없는 상품 조회.
- */
-export const getProductsByCategory = async (categoryName: string | null): Promise<Product[]> => {
-  let q: Query;
-  const productsRef = collection(db, 'products');
-
-  if (categoryName === null) {
-    // 카테고리 필드가 없거나 빈 문자열인 경우 (분류 없는 상품)
-    q = query(productsRef, where('category', 'in', ['', null]), where('isArchived', '==', false));
-  } else {
-    // 특정 카테고리 이름으로 조회
-    q = query(productsRef, where('category', '==', categoryName), where('isArchived', '==', false));
-  }
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-};
-
-
-// ✅ [신규 추가] 여러 상품의 카테고리를 한 번에 업데이트하는 함수
-/**
- * @description 여러 상품들의 카테고리를 특정 카테고리로 일괄 변경합니다.
- * @param productIds - 카테고리를 변경할 상품 ID 배열
- * @param targetCategoryName - 새로 지정할 카테고리 이름
- */
-export const moveProductsToCategory = async (productIds: string[], targetCategoryName: string): Promise<void> => {
-  const batch = writeBatch(db);
-
-  productIds.forEach(productId => {
-    const productRef = doc(db, 'products', productId);
-    // 하위 분류는 사용하지 않으므로 빈 문자열로 설정
-    batch.update(productRef, { category: targetCategoryName, subCategory: '' });
-  });
-
-  await batch.commit();
 };

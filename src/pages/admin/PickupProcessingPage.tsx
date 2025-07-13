@@ -1,8 +1,9 @@
 // src/pages/admin/PickupProcessingPage.tsx
 
 import React, { useState } from 'react';
-import { searchOrdersByPhoneNumber, updateOrderStatus } from '../../firebase';
-import type { Order, OrderItem } from '../../types';
+// ✅ [수정] updateMultipleOrderStatuses 함수 import
+import { searchOrdersByPhoneNumber, updateMultipleOrderStatuses } from '../../firebase';
+import type { Order, OrderItem, OrderStatus } from '../../types';
 import { Search, Phone, CheckCircle, XCircle, DollarSign, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -19,7 +20,8 @@ const OrderItemDisplay: React.FC<OrderItemDisplayProps> = ({ item }) => {
       padding: '8px 0',
       borderBottom: '1px dashed #eee'
     }}>
-      <span>{item.name}</span>
+      {/* ✅ [수정] item.name -> item.productName 으로 변경 */}
+      <span>{item.productName} ({item.itemName})</span>
       <span>{item.quantity}개</span>
     </div>
   );
@@ -36,29 +38,32 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
   const {
     id,
     status,
-    orderDate,
-    customerName,
+    createdAt, // ✅ [수정] orderDate -> createdAt
+    customerInfo, // ✅ [수정] customerName -> customerInfo
     pickupDate,
     items = [],
     totalPrice
   } = order;
-
-  const statusColor = (statusValue: string) => {
+  
+  // ✅ [수정] status 값을 OrderStatus 타입에 맞게 변경
+  const statusColor = (statusValue: OrderStatus) => {
     switch (statusValue) {
-      case 'paid': return '#fffbe6';
-      case 'pending': return '#e3f2fd';
-      case 'delivered': return '#e8f5e9';
-      case 'cancelled': return '#ffebee';
+      case 'PREPAID': return '#fffbe6';
+      case 'RESERVED': return '#e3f2fd';
+      case 'PICKED_UP': return '#e8f5e9';
+      case 'CANCELED': return '#ffebee';
+      case 'NO_SHOW': return '#fce4ec';
       default: return 'white';
     }
   };
 
-  const statusText = (statusValue: string) => {
+  const statusText = (statusValue: OrderStatus) => {
     switch (statusValue) {
-      case 'paid': return '선입금';
-      case 'pending': return '예약';
-      case 'delivered': return '픽업완료';
-      case 'cancelled': return '노쇼/취소';
+      case 'PREPAID': return '결제 완료';
+      case 'RESERVED': return '예약';
+      case 'PICKED_UP': return '픽업 완료';
+      case 'CANCELED': return '취소';
+      case 'NO_SHOW': return '노쇼';
       default: return '알 수 없음';
     }
   };
@@ -86,16 +91,19 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
     >
       <div style={{ marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', color: '#333' }}>
-          <span>주문일: {orderDate ? new Date(orderDate.seconds * 1000).toLocaleDateString() : '날짜 없음'}</span>
+          {/* ✅ [수정] createdAt으로 날짜 표시 */}
+          <span>주문일: {createdAt ? new Date((createdAt as any).seconds * 1000).toLocaleDateString() : '날짜 없음'}</span>
           <span style={{ fontWeight: 'bold', color: '#007bff' }}>{statusText(status)}</span>
         </div>
-        <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '10px 0 5px' }}>{customerName} 님</h3>
+        {/* ✅ [수정] customerInfo.name으로 이름 표시 */}
+        <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '10px 0 5px' }}>{customerInfo.name} 님</h3>
         <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '10px' }}>
           픽업 예정일: {pickupDate ? new Date(pickupDate.seconds * 1000).toLocaleDateString() : '미정'}
         </div>
         <div style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
+           {/* ✅ [수정] item.id -> item.itemId 로 키 변경 */}
           {items.map((item: OrderItem, index: number) => (
-            <OrderItemDisplay key={item.id || index} item={item} />
+            <OrderItemDisplay key={item.itemId || index} item={item} />
           ))}
         </div>
       </div>
@@ -147,8 +155,9 @@ const PickupProcessingPage: React.FC = () => {
         : [...prev, orderId]
     );
   };
-
-  const handleStatusUpdate = async (status: 'delivered' | 'cancelled' | 'paid') => {
+  
+  // ✅ [수정] 여러 주문을 한 번에 업데이트하는 로직으로 변경
+  const handleStatusUpdate = async (status: OrderStatus) => {
     if (selectedOrderIds.length === 0) {
       toast.error('처리할 주문을 선택해주세요.');
       return;
@@ -156,7 +165,7 @@ const PickupProcessingPage: React.FC = () => {
 
     const updatePromise = new Promise<void>(async (resolve, reject) => {
       try {
-        await updateOrderStatus(selectedOrderIds, status);
+        await updateMultipleOrderStatuses(selectedOrderIds, status);
         const results = await searchOrdersByPhoneNumber(phoneNumberLast4);
         setSearchResults(results);
         setSelectedOrderIds([]);
@@ -166,9 +175,13 @@ const PickupProcessingPage: React.FC = () => {
       }
     });
 
+    const statusTextMap = { 'PICKED_UP': '픽업 완료', 'CANCELED': '취소', 'PREPAID': '결제 완료' };
+    const successText = `${selectedOrderIds.length}개 주문이 '${statusTextMap[status] || status}' 처리되었습니다!`;
+
+
     toast.promise(updatePromise, {
       loading: '주문 상태 변경 중...',
-      success: `${selectedOrderIds.length}개 주문이 ${status === 'delivered' ? '픽업 완료' : status === 'cancelled' ? '노쇼 처리' : '선입금'} 처리되었습니다!`,
+      success: successText,
       error: '주문 상태 변경 중 오류가 발생했습니다. 다시 시도해주세요.',
     });
   };
@@ -262,24 +275,25 @@ const PickupProcessingPage: React.FC = () => {
               총 {totalPrice.toLocaleString()}원
             </span>
             <div style={{ display: 'flex', flexGrow: 1, gap: '5px' }}>
+              {/* ✅ [수정] status 값을 OrderStatus 타입에 맞게 변경 */}
               <button
-                onClick={() => handleStatusUpdate('paid')}
+                onClick={() => handleStatusUpdate('PREPAID')}
                 style={{ backgroundColor: '#ffc107', color: 'white', height: '50px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', flexGrow: 1, cursor: 'pointer', border: 'none' }}
                 disabled={selectedOrderIds.length === 0 || isLoading}
               >
                 <DollarSign size={20} style={{ verticalAlign: 'middle', marginRight: '5px' }} />
-                선입금
+                결제 완료
               </button>
               <button
-                onClick={() => handleStatusUpdate('cancelled')}
+                onClick={() => handleStatusUpdate('CANCELED')}
                 style={{ backgroundColor: '#dc3545', color: 'white', height: '50px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', flexGrow: 1, cursor: 'pointer', border: 'none' }}
                 disabled={selectedOrderIds.length === 0 || isLoading}
               >
                 <XCircle size={20} style={{ verticalAlign: 'middle', marginRight: '5px' }} />
-                노쇼 처리
+                취소 처리
               </button>
               <button
-                onClick={() => handleStatusUpdate('delivered')}
+                onClick={() => handleStatusUpdate('PICKED_UP')}
                 style={{ backgroundColor: '#007bff', color: 'white', height: '50px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', flexGrow: 1, cursor: 'pointer', border: 'none' }}
                 disabled={selectedOrderIds.length === 0 || isLoading}
               >

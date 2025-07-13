@@ -1,12 +1,13 @@
 // src/components/Header.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom'; // ✅ Link 추가
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, CalendarDays, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 import './Header.css';
+// ✅ [수정] 사용하지 않는 NotificationType 임포트 제거
 import type { Notification } from '@/types';
 
 interface HeaderProps {
@@ -27,9 +28,14 @@ const Header: React.FC<HeaderProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  const isHomePage = location.pathname === '/';
 
   const { user, notifications = [], handleMarkAsRead = () => {} } = useAuth();
+
+  const hasPickupToday = notifications.some(n => n.type === 'PICKUP_TODAY' && !n.isRead);
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
 
   useEffect(() => {
     const today = new Date();
@@ -55,7 +61,6 @@ const Header: React.FC<HeaderProps> = ({
         return { title: '마이페이지', showBackButton: false, showDate: false, showLogo: false };
       case '/mypage/history':
         return { title: '예약 내역', showBackButton: true, showDate: false, showLogo: false };
-      // ❗ [수정] /store-info 경로에 대한 헤더 설정 추가
       case '/store-info':
         return { title: '고객센터', showBackButton: false, showDate: false, showLogo: false };
       default:
@@ -106,56 +111,57 @@ const Header: React.FC<HeaderProps> = ({
 
       <div className="header-center">
         {config.title && <h1 className="header-page-title">{config.title}</h1>}
-        {config.showLogo && (
-          // ❗ [수정] 로고 클릭 시 홈으로 이동하도록 Link 컴포넌트로 감쌉니다.
-          <Link to="/" className="brand-text-logo-container">
-            <span className="brand-name">소도몰</span>
-            <span className="store-name">송도랜드마크점</span>
-          </Link>
-        )}
+        {config.showLogo &&
+          (isHomePage ? (
+            <div className="brand-text-logo-container">
+              <span className="brand-name">소도몰</span>
+              <span className="store-name">송도랜드마크점</span>
+            </div>
+          ) : (
+            <Link to="/" className="brand-text-logo-container">
+              <span className="brand-name">소도몰</span>
+              <span className="store-name">송도랜드마크점</span>
+            </Link>
+          ))}
       </div>
 
       <div className="header-right">
-        {user?.displayName && (
-          // ❗ [수정] 사용자 이름 클릭 시 마이페이지로 이동하도록 Link 컴포넌트로 감쌉니다.
-          <Link to="/mypage" className="greeting-message">
-            <span>{user.displayName}님</span>
-            <span className="greeting-subtext">안녕하세요!</span>
-          </Link>
-        )}
-        
-        <div className="notification-container" ref={dropdownRef}>
-          <button 
-            className="notification-button"
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            aria-label={`알림 ${unreadCount}개`}
-          >
-            <Bell size={22} />
-            {unreadCount > 0 && (
-              <span className="notification-badge">{unreadCount}</span>
-            )}
-          </button>
-          
-          {isDropdownOpen && (
-            <div className="notification-dropdown">
-              {notifications.length > 0 ? (
-                notifications.map(n => (
-                  <div 
-                    key={n.id} 
-                    className={`notification-item ${n.isRead ? 'read' : ''}`}
-                    onClick={() => onNotificationClick(n)}
-                  >
-                    {n.message}
-                  </div>
-                ))
-              ) : (
-                <div className="notification-item no-notifications">
-                  알림이 없습니다.
-                </div>
+        {user && (
+          <div className="notification-container" ref={dropdownRef}>
+            <button 
+              className="new-notification-button"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              aria-label={`알림 ${unreadCount}개`}
+            >
+              <Bell size={22} />
+              <span>알림</span>
+              {hasPickupToday && <span className="pickup-indicator">!</span>}
+              {unreadCount > 0 && !hasPickupToday && (
+                <span className="notification-badge">{unreadCount}</span>
               )}
-            </div>
-          )}
-        </div>
+            </button>
+            
+            {isDropdownOpen && (
+              <div className="notification-dropdown">
+                {notifications.length > 0 ? (
+                  notifications.map(n => (
+                    <div 
+                      key={n.id} 
+                      className={`notification-item ${n.isRead ? 'read' : ''}`}
+                      onClick={() => onNotificationClick(n)}
+                    >
+                      {n.message}
+                    </div>
+                  ))
+                ) : (
+                  <div className="notification-item no-notifications">
+                    새로운 알림이 없습니다.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );
