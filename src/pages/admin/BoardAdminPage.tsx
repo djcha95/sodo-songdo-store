@@ -1,6 +1,7 @@
 // src/pages/admin/BoardAdminPage.tsx
 
 import { useState, useEffect } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -26,6 +27,8 @@ const LoadingSpinner = () => (
 );
 
 const BoardAdminPage = () => {
+  useDocumentTitle('게시판 관리'); // ✅ [추가]
+
   const [posts, setPosts] = useState<RequestPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

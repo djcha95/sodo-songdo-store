@@ -1,7 +1,7 @@
 // src/pages/customer/ProductDetailPage.tsx
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom'; // ✅ useLocation 제거
 import toast from 'react-hot-toast';
 import type { Product, ProductItem, CartItem, StorageType, VariantGroup, SalesRound } from '@/types';
 import { Timestamp } from 'firebase/firestore';
@@ -9,7 +9,8 @@ import { getProductById, checkProductAvailability, addWaitlistEntry } from '@/fi
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
-import { useWaitlist } from '@/context/WaitlistContext';
+// ❗ [삭제] WaitlistContext import 제거
+// import { useWaitlist } from '@/context/WaitlistContext';
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
   Tag, AlertCircle, Loader2
@@ -58,11 +59,11 @@ interface ProductDetailPageProps {
 
 const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen, onClose }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { addToCart } = useCart();
   const { user } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
-  const { addToWaitlist: addItemsToWaitlistContext } = useWaitlist();
+  // ❗ [삭제] useWaitlist 훅 호출 제거
+  // const { addToWaitlist: addItemsToWaitlistContext } = useWaitlist();
 
   // --- 상태(State) 선언 ---
   const [product, setProduct] = useState<Product | null>(null);
@@ -127,7 +128,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           return;
         }
 
-        // 😊 수정 후: 조건문 없이 항상 최신 데이터로 상태를 설정합니다.
         setProduct(productData);
         setDisplayRound(latestRound);
 
@@ -208,7 +208,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
   const handleQuantityInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value);
-    // 😊 수정 후: value >= 0 을 value > 0 으로 변경합니다.
     if (!isNaN(value) && value > 0 && (!selectedItem?.limitQuantity || value <= selectedItem.limitQuantity)) {
       setQuantity(value);
     }
@@ -250,55 +249,82 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     addToCart(itemToAdd);
     toast.success(`${product.groupName} ${quantity}개를 장바구니에 담았습니다.`);
     onClose();
-  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, location]); // location 추가
+  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose]);
 
   const handleEncoreRequest = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
     if (!product) return;
     if (userAlreadyRequestedEncore) { toast('이미 앵콜을 요청한 상품입니다.', { icon: '👏' }); return; }
 
-    const promise = requestEncore(product.id).then(() => {
-    });
+    const promise = requestEncore(product.id);
 
     toast.promise(promise, {
       loading: '앵콜 요청 중...',
       success: '앵콜 요청이 접수되었습니다!',
       error: '앵콜 요청에 실패했습니다.',
     });
-  }, [product, user, userAlreadyRequestedEncore, requestEncore, navigate, onClose, location]); // location 추가
+  }, [product, user, userAlreadyRequestedEncore, requestEncore, navigate, onClose]);
 
   const handleAddToWaitlist = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
-    if (!product || !displayRound || !selectedItem) return;
+    if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
     if (userAlreadyWaitlisted) { toast.error('이미 대기 신청한 상품입니다.'); return; }
+    
     setWaitlistLoading(true);
 
-    const promise = addWaitlistEntry(product.id, displayRound.roundId, user.uid, quantity)
-      .then(() => {
-        const waitlistItem = {
-          productId: product.id,
-          productName: selectedVariantGroup?.groupName || product.groupName,
-          itemName: selectedItem.name,
-          quantity: quantity,
-          imageUrl: product.imageUrls?.[0] ?? '',
-          timestamp: Timestamp.now(),
-        };
-        addItemsToWaitlistContext([waitlistItem]);
-        setDisplayRound(prev => prev ? ({
-          ...prev,
-          waitlist: [...(prev.waitlist || []), { userId: user.uid, quantity, timestamp: Timestamp.now() }],
-          waitlistCount: (prev.waitlistCount || 0) + quantity
-        }) : null);
-      });
+    try {
+      // ✅ [수정 1] addWaitlistEntry 함수에 마지막 두 인자(variantGroupId, itemId)를 추가합니다.
+      await addWaitlistEntry(
+        product.id,
+        displayRound.roundId,
+        user.uid,
+        quantity,
+        selectedVariantGroup.id,
+        selectedItem.id
+      );
+      
+      const itemToWaitlist: CartItem = {
+        productId: product.id,
+        productName: product.groupName,
+        imageUrl: product.imageUrls?.[0] ?? '',
+        roundId: displayRound.roundId,
+        roundName: displayRound.roundName,
+        variantGroupId: selectedVariantGroup.id,
+        variantGroupName: selectedVariantGroup.groupName,
+        itemId: selectedItem.id,
+        itemName: selectedItem.name,
+        quantity: quantity,
+        unitPrice: selectedItem.price,
+        stock: selectedItem.stock,
+        pickupDate: displayRound.pickupDate,
+        status: 'WAITLIST',
+      };
 
-    toast.promise(promise, {
-      loading: '대기 명단 등록 중...',
-      success: '대기 신청이 완료되었습니다!',
-      error: (err) => (err as Error).message || '대기 신청에 실패했습니다.',
-    }).finally(() => {
+      addToCart(itemToWaitlist);
+      
+      // ✅ [수정 2] UI 즉시 업데이트 로직에도 variantGroupId와 itemId를 추가합니다.
+      setDisplayRound(prev => prev ? ({
+        ...prev,
+        waitlist: [...(prev.waitlist || []), { 
+          userId: user.uid, 
+          quantity, 
+          timestamp: Timestamp.now(),
+          variantGroupId: selectedVariantGroup.id, // 이 필드 추가
+          itemId: selectedItem.id,             // 이 필드 추가
+        }],
+        waitlistCount: (prev.waitlistCount || 0) + quantity
+      }) : null);
+
+      toast.success('대기 신청이 완료되었습니다!');
+      onClose();
+    } catch (error) {
+      const err = error as Error;
+      toast.error(err.message || '대기 신청에 실패했습니다.');
+    } finally {
       setWaitlistLoading(false);
-    });
-  }, [product, displayRound, user, quantity, userAlreadyWaitlisted, addItemsToWaitlistContext, navigate, onClose, selectedItem, selectedVariantGroup, location]); // location 추가
+    }
+}, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, user, userAlreadyWaitlisted, navigate, onClose]);
+
 
   const changeImage = useCallback((direction: 'prev' | 'next') => {
     if (!product?.imageUrls) return;
@@ -389,16 +415,11 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
   return (
     <div className="product-detail-modal-overlay" onClick={onClose}>
-      {/* 1. 모달 컨텐츠가 전체 레이아웃을 담당합니다. */}
       <div className="product-detail-modal-content" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn-top" onClick={onClose}><X size={20} /></button>
-
-        {/* 2. 스크롤이 필요한 부분만 별도의 div로 감싸줍니다. */}
         <div className="modal-scroll-area">
           {renderContent()}
         </div>
-
-        {/* 3. 하단 구매 영역을 스크롤 영역과 형제 레벨로 배치합니다. */}
         {displayRound && (
           <div className="product-purchase-footer">
             {allAvailableOptions.length > 0 && (
@@ -435,9 +456,9 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                   <span className="footer-total-price-fixed">{formatPrice(currentTotalPrice)}</span>
 
                   {availableForPurchase ? (
-<button className="add-to-cart-btn-fixed" onClick={handleAddToCart}>
-  <ShoppingCart size={18} />
-</button>
+                    <button className="add-to-cart-btn-fixed" onClick={handleAddToCart}>
+                      <ShoppingCart size={18} />
+                    </button>
                   ) : (
                     <button className="waitlist-btn-fixed" onClick={handleAddToWaitlist} disabled={userAlreadyWaitlisted || waitlistLoading}>
                       {waitlistLoading ? <Loader2 className="spinner-icon-small" /> : userAlreadyWaitlisted ? '대기 완료' : '대기 신청'}
@@ -458,7 +479,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         )}
       </div>
 
-      {/* 이미지 라이트박스는 그대로 둡니다 */}
       {isImageModalOpen && product && (
          <div className="image-lightbox-overlay" onClick={closeImageModal}>
             <button className="modal-close-btn-lightbox" onClick={closeImageModal}><X size={28} /></button>

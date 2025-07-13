@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import type { FaqItem } from '@/types';
-import { EditableField } from '@/pages/customer/StoreInfoPage';
+import { EditableField } from '@/pages/customer/CustomerCenterPage';
 import { ChevronDown, PlusCircle, XCircle } from 'lucide-react';
 
 interface FaqTabProps {

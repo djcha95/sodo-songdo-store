@@ -1,10 +1,10 @@
-// src/pages/customer/StoreInfoPage.tsx
+// src/pages/customer/CustomerCenterPage.tsx
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { getStoreInfo, updateStoreInfo } from '@/firebase'; 
 import { useAuth } from '@/context/AuthContext';
 import type { StoreInfo, GuideItem, FaqItem } from '@/types'; 
-import './StoreInfoPage.css';
+import './CustomerCenterPage.css';
 import { AlertTriangle, MapPin, BookOpen, HelpCircle, Edit, Save, X, MessageSquare } from 'lucide-react'; // MessageCircle 제거
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
@@ -77,7 +77,7 @@ export const EditableField: React.FC<EditableFieldProps> = ({ value, onSave, isA
   );
 };
 
-const StoreInfoPage: React.FC = () => {
+const CustomerCenterPage: React.FC = () => {
   const { isAdmin } = useAuth();
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
   const [editableInfo, setEditableInfo] = useState<StoreInfo | null>(null);
@@ -218,4 +218,4 @@ const StoreInfoPage: React.FC = () => {
   );
 };
 
-export default StoreInfoPage;
+export default CustomerCenterPage;

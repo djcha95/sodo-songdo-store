@@ -1,33 +1,14 @@
 // src/pages/admin/UserDetailPage.tsx
 
 import { useState, useEffect, useCallback } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useParams, Link } from 'react-router-dom';
 import { collection, query, where, orderBy, doc, Timestamp, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { Loader, User, Crown } from 'lucide-react'; // 아이콘 추가
-import type { DocumentData } from 'firebase/firestore'; // 타입 분리
+import { Loader, User, Crown } from 'lucide-react';
 import './UserDetailPage.css';
-import toast from 'react-hot-toast'; // [추가] react-hot-toast 임포트
-
-// 타입 정의
-interface AppUser extends DocumentData {
-    uid: string;
-    email: string;
-    displayName: string;
-    role?: 'admin' | 'customer';
-    noShowCount?: number;
-    isRestricted?: boolean;
-}
-
-interface Order extends DocumentData {
-    id: string;
-    userId: string;
-    orderDate: Timestamp;
-    items?: { productName: string; quantity: number; price: number; }[];
-    totalPrice: number;
-    status: 'pending' | 'picked_up' | 'cancelled';
-    pickupDate?: Timestamp;
-}
+import toast from 'react-hot-toast';
+import type { UserDocument, Order } from '../../types'; // ✅ [수정] DocumentData 및 OrderStatus 제거
 
 // 공통 로딩 스피너 컴포넌트
 const LoadingSpinner = () => (
@@ -38,15 +19,18 @@ const LoadingSpinner = () => (
 );
 
 const UserDetailPage = () => {
+    useDocumentTitle('고객 상세 정보');
+
     const { userId } = useParams<{ userId: string }>();
-    const [user, setUser] = useState<AppUser | null>(null);
+    const [user, setUser] = useState<UserDocument | null>(null);
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
 
     // 주문 통계 계산 (실시간 데이터 기반)
     const totalOrders = orders.length;
-    const pickedUpOrders = orders.filter(order => order.status === 'picked_up' || order.pickupDate).length;
+    // PICKED_UP 또는 COMPLETED 상태의 주문만 픽업 완료로 간주
+    const pickedUpOrders = orders.filter(order => order.status === 'PICKED_UP' || order.status === 'COMPLETED').length;
     const pickupRate = totalOrders > 0 ? ((pickedUpOrders / totalOrders) * 100).toFixed(1) : '0';
 
     useEffect(() => {
@@ -63,7 +47,7 @@ const UserDetailPage = () => {
         const userRef = doc(db, 'users', userId);
         const unsubscribeUser = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
-                setUser({ uid: docSnap.id, ...docSnap.data() } as AppUser);
+                setUser({ uid: docSnap.id, ...docSnap.data() } as UserDocument);
             } else {
                 setUser(null);
             }
@@ -72,34 +56,26 @@ const UserDetailPage = () => {
             console.error("사용자 정보 실시간 로딩 오류:", error);
             setIsLoading(false);
             setUser(null);
-            toast.error("사용자 정보를 불러오는 데 실패했습니다."); // [추가] toast 알림
+            toast.error("사용자 정보를 불러오는 데 실패했습니다.");
         });
 
         // 주문 내역 실시간 감지
         const ordersQuery = query(
             collection(db, 'orders'),
             where('userId', '==', userId),
-            orderBy('orderDate', 'desc')
+            orderBy('createdAt', 'desc') // createdAt 기준으로 정렬
         );
 
         const unsubscribeOrders = onSnapshot(ordersQuery, (querySnapshot) => {
-            const ordersData = querySnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    userId: data.userId as string,
-                    orderDate: data.orderDate as Timestamp,
-                    items: data.items as { productName: string; quantity: number; price: number; }[] || [],
-                    totalPrice: data.totalPrice as number,
-                    status: data.status as 'pending' | 'picked_up' | 'cancelled',
-                    pickupDate: data.pickupDate as Timestamp | undefined,
-                };
-            });
+            const ordersData = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as Order));
             setOrders(ordersData);
         }, (error) => {
             console.error("주문 내역 실시간 로딩 오류:", error);
             setOrders([]);
-            toast.error("주문 내역을 불러오는 데 실패했습니다."); // [추가] toast 알림
+            toast.error("주문 내역을 불러오는 데 실패했습니다.");
         });
 
         return () => {
@@ -115,10 +91,10 @@ const UserDetailPage = () => {
         const userRef = doc(db, 'users', user.uid);
         try {
             await updateDoc(userRef, { isRestricted: !user.isRestricted });
-            toast.success(`사용자 "${user.displayName}"님의 이용 제한 상태가 ${user.isRestricted ? '해제' : '설정'}되었습니다.`); // [수정] toast 알림
+            toast.success(`사용자 ${user.displayName}님의 이용 제한 상태가 ${user.isRestricted ? '해제' : '설정'}되었습니다.`);
         } catch (error) {
             console.error("이용 제한 상태 변경 실패:", error);
-            toast.error("이용 제한 상태 변경에 실패했습니다. 다시 시도해주세요."); // [수정] toast 알림
+            toast.error("상태 변경에 실패했습니다. 다시 시도해주세요.");
         } finally {
             setIsUpdating(false);
         }
@@ -132,10 +108,10 @@ const UserDetailPage = () => {
         const newRole = user.role === 'admin' ? 'customer' : 'admin';
         try {
             await updateDoc(userRef, { role: newRole });
-            toast.success(`사용자 "${user.displayName}"님의 권한이 ${newRole === 'admin' ? '관리자' : '고객'}으로 변경되었습니다.`); // [수정] toast 알림
+            toast.success(`사용자 ${user.displayName}님의 권한이 ${newRole}으로 변경되었습니다.`);
         } catch (error) {
             console.error("관리자 권한 변경 실패:", error);
-            toast.error("관리자 권한 변경에 실패했습니다. 다시 시도해주세요."); // [수정] toast 알림
+            toast.error("권한 변경에 실패했습니다. 다시 시도해주세요.");
         } finally {
             setIsUpdating(false);
         }
@@ -227,14 +203,28 @@ const UserDetailPage = () => {
                         <tbody>
                             {orders.map(order => (
                                 <tr key={order.id}>
-                                    <td>{order.orderDate.toDate().toLocaleDateString('ko-KR')}</td>
-                                    <td>{order.items?.map(item => `${item.productName} (${item.quantity})`).join(', ') || '상품 정보 없음'}</td>
+                                    {/* orderDate -> createdAt */}
+                                    <td>{order.createdAt instanceof Timestamp ? order.createdAt.toDate().toLocaleDateString('ko-KR') : '날짜 없음'}</td>
                                     <td>
-                                        <span className={`status-badge status-${order.status || 'pending'}`}>
-                                            {order.status === 'picked_up' ? '픽업 완료' : order.status === 'cancelled' ? '취소됨' : '대기중'}
+                                        {order.items?.map(item => `${item.productName} (${item.quantity})`).join(', ') || '상품 정보 없음'}
+                                    </td>
+                                    <td>
+                                        {/* status 값에 맞게 텍스트 수정 */}
+                                        <span className={`status-badge status-${order.status.toLowerCase()}`}>
+                                            {
+                                                {
+                                                    'RESERVED': '예약됨',
+                                                    'PREPAID': '선입금',
+                                                    'PICKED_UP': '픽업 완료',
+                                                    'COMPLETED': '처리 완료',
+                                                    'CANCELED': '취소됨',
+                                                    'NO_SHOW': '노쇼'
+                                                }[order.status] || '알 수 없음'
+                                            }
                                         </span>
                                     </td>
-                                    <td>{order.pickupDate ? order.pickupDate.toDate().toLocaleDateString('ko-KR') : '-'}</td>
+                                    {/* pickupDate -> pickedUpAt */}
+                                    <td>{order.pickedUpAt ? (order.pickedUpAt as Timestamp).toDate().toLocaleDateString('ko-KR') : '-'}</td>
                                     <td className="text-right">{order.totalPrice.toLocaleString()}원</td>
                                 </tr>
                             ))}

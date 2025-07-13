@@ -1,6 +1,7 @@
 // src/pages/admin/UserListPage.tsx
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
@@ -45,6 +46,7 @@ const LoadingSpinner = () => (
 );
 
 const UserListPage = () => {
+    useDocumentTitle('전체 고객 관리'); // ✅ [추가]
     const [allUsers, setAllUsers] = useState<AppUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');

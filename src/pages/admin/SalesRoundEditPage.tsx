@@ -1,6 +1,7 @@
 // src/pages/admin/SalesRoundEditPage.tsx
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { useNavigate, useParams } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById, updateSalesRound, getCategories, updateProductCoreInfo } from '../../firebase';
@@ -27,6 +28,7 @@ const storageTypeOptions: { key: StorageType; name:string; className: string }[]
 
 // --- 메인 컴포넌트 ---
 const SalesRoundEditPage: React.FC = () => {
+    useDocumentTitle('상품 수정'); // ✅ [추가]
     const { productId, roundId } = useParams<{ productId: string; roundId: string }>();
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement>(null);

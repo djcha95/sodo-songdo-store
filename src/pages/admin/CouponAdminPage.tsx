@@ -1,6 +1,7 @@
 // src/pages/admin/CouponAdminPage.tsx
 
 import React, { useState, useEffect } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { collection, addDoc, getDocs, query } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -15,6 +16,7 @@ interface Coupon {
 }
 
 const CouponAdminPage = () => {
+  useDocumentTitle('쿠폰 관리'); // ✅ [추가]
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [code, setCode] = useState('');
   const [type, setType] = useState<'fixed' | 'percent'>('fixed');

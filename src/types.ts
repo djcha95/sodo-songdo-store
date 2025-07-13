@@ -10,6 +10,19 @@ export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
+export type ProductStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
+
+// ✅ [추가] 신뢰도 등급 타입
+export type LoyaltyTier = '조약돌' | '수정' | '에메랄드' | '다이아몬드';
+
+// ✅ [추가] 포인트 내역 타입
+export interface PointLog {
+  id: string;
+  amount: number;
+  reason: string;
+  createdAt: Timestamp;
+  expiresAt: Timestamp; // 소멸 예정일
+}
 
 // ✅ [추가] 헤더에서 사용할 알림의 종류를 명확하게 정의합니다.
 export type NotificationType =
@@ -18,7 +31,6 @@ export type NotificationType =
   | 'PICKUP_REMINDER'     // 픽업 D-1 등 미리 알림
   | 'PICKUP_TODAY'        // 픽업 당일 알림
   | 'NEW_INTERACTION';    // 찜, 댓글 등 (미래 확장용)
-
 
 export interface Notification {
   id: string;
@@ -57,6 +69,9 @@ export interface WaitlistEntry {
   userId: string;
   quantity: number;
   timestamp: Timestamp;
+    variantGroupId: string;
+  itemId: string;
+  
 }
 
 export interface SalesRound {
@@ -127,7 +142,8 @@ export type OrderItem = Pick<
   | 'quantity'
   | 'stock'
 > & {
-  deadlineDate?: Timestamp;
+  // ✅ [수정] deadlineDate를 필수로 변경하여 예약 마감 후 취소 로직에 사용
+  deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
   totalQuantity?: number;
@@ -152,6 +168,7 @@ export interface Order {
     phone: string;
   };
   pickedUpAt?: Timestamp;
+  prepaidAt?: Timestamp; // ✅ [추가] 선입금 처리 시각
   notes?: string;
   isBookmarked?: boolean;
 }
@@ -166,9 +183,16 @@ export interface UserDocument {
   displayName: string | null;
   phone?: string | null;
   photoURL?: string | null;
-  role: 'admin' | 'customer'; // ✅ isAdmin을 role로 통일
+  role: 'admin' | 'customer';
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
+
+  // ✅ [수정] 신뢰도 시스템 관련 필드
+  loyaltyPoints: number;      // 현재 신뢰도 점수
+  pickupCount: number;        // 누적 픽업 횟수
+  noShowCount: number;        // 누적 노쇼 횟수
+  lastLoginDate: string;      // 마지막 로그인 날짜 (YYYY-MM-DD 형식)
+  isRestricted?: boolean;     // 이용 제한 여부
 }
 
 export interface Banner {

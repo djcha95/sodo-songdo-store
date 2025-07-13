@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { getUserOrders, cancelOrder } from '@/firebase';
+import { getUserOrders, updateOrderStatusAndLoyalty } from '@/firebase';
 import type { Order, OrderStatus } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +20,7 @@ import {
   Hourglass,
   BadgeAlert,
   CalendarDays,
-  CreditCard, // ✅ [추가] 결제 아이콘 import
+  CreditCard,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import './OrderHistoryPage.css';
@@ -129,8 +129,8 @@ const EmptyHistory: React.FC = () => {
 };
 
 /** '주문일 순 보기'의 개별 주문 카드 컴포넌트 */
-const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showWarning: boolean) => void }> = React.memo(({ order, onCancel }) => {
-  const { status, items = [], totalPrice, id } = order;
+const OrderGroupCard: React.FC<{ order: Order; onCancel: (order: Order, isLateCancel: boolean) => void }> = React.memo(({ order, onCancel }) => {
+  const { status, items = [], totalPrice } = order;
   
   // ✅ [수정] PREPAID 상태 아이콘 추가
   const statusIcons: Record<OrderStatus, React.ReactElement> = {
@@ -152,24 +152,29 @@ const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showW
     NO_SHOW: '노쇼',
   };
 
+  // 취소 가능 여부와 페널티 여부 계산
   const getCancellationInfo = useCallback(() => {
-    // 예약 또는 결제 완료 상태일 때만 취소 가능
     if (status !== 'RESERVED' && status !== 'PREPAID') {
-      return { cancellable: false, showWarning: false };
+      return { cancellable: false, isLateCancel: false };
     }
     const now = new Date();
-    const pickupDate = order.pickupDate?.toDate();
+    // 주문의 첫 번째 아이템에서 deadlineDate를 가져옴 (모든 아이템이 동일하다고 가정)
+    const deadlineDate = order.items?.[0]?.deadlineDate?.toDate();
 
-    if (pickupDate && now >= pickupDate) {
-      return { cancellable: false, showWarning: false };
+    if (!deadlineDate) { // 마감일 정보가 없으면 취소 불가
+        return { cancellable: false, isLateCancel: false };
     }
-    if (pickupDate && pickupDate.getTime() - now.getTime() < 24 * 60 * 60 * 1000) {
-      return { cancellable: true, showWarning: true };
+
+    // 이미 마감일이 지났다면 '마감 후 취소'
+    if (now > deadlineDate) {
+      return { cancellable: true, isLateCancel: true };
     }
-    return { cancellable: true, showWarning: false };
-  }, [order.pickupDate, status]);
+    
+    // 마감일 전에는 페널티 없는 '일반 취소'
+    return { cancellable: true, isLateCancel: false };
+  }, [order.items, status]);
   
-  const { cancellable, showWarning } = getCancellationInfo();
+  const { cancellable, isLateCancel } = getCancellationInfo();
   
   return (
     <motion.div className="order-card" layout>
@@ -200,11 +205,11 @@ const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showW
         <span className="total-price">총 {totalPrice.toLocaleString()}원</span>
         {cancellable && (
           <button 
-            className={`cancel-button ${showWarning ? 'warning' : ''}`} 
-            onClick={() => onCancel(id, showWarning)}
+            className={`cancel-button ${isLateCancel ? 'warning' : ''}`} 
+            onClick={() => onCancel(order, isLateCancel)}
           >
-            {showWarning ? <BadgeAlert size={16}/> : <X size={16} />}
-            {showWarning ? '신중 취소' : '예약 취소'}
+            {isLateCancel ? <BadgeAlert size={16}/> : <X size={16} />}
+            {isLateCancel ? '마감 후 취소' : '예약 취소'}
           </button>
         )}
       </div>
@@ -212,7 +217,6 @@ const OrderGroupCard: React.FC<{ order: Order; onCancel: (orderId: string, showW
   );
 });
 
-// ... (이하 나머지 컴포넌트들은 그대로 유지)
 /** '픽업일 순 보기'의 날짜별 그룹 카드 컴포넌트 */
 const PickupGroupCard: React.FC<{ date: string; items: AggregatedPickupItem[] }> = React.memo(({ date, items }) => {
   const [isOpen, setIsOpen] = useState(true);
@@ -399,27 +403,32 @@ const OrderHistoryPage: React.FC = () => {
     return { upcoming, pastLast7Days, past8to14Days, olderByMonth };
   }, [aggregatedItemsByPickupDate]);
 
-  /** 주문 취소 핸들러 */
-  const handleCancelOrder = useCallback((orderId: string, showWarning: boolean) => {
-    if (!user) return;
-
+  /** ✅ [수정] 주문 취소 핸들러 (페널티 로직 추가) */
+  const handleCancelOrder = useCallback((order: Order, isLateCancel: boolean) => {
     const performCancellation = async () => {
       const toastId = toast.loading('예약 취소 처리 중...');
       try {
-        await cancelOrder(orderId, user.uid);
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELED' } : o));
+        const pointChange = isLateCancel ? -10 : 0;
+        const reason = isLateCancel ? '예약 마감 후 취소' : '일반 예약 취소';
+        
+        await updateOrderStatusAndLoyalty(order, 'CANCELED', pointChange, reason);
+
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'CANCELED' } : o));
         toast.success('예약이 성공적으로 취소되었습니다.', { id: toastId });
+        if(isLateCancel) {
+            toast.error('마감 후 취소로 신뢰도 점수 10점이 차감되었습니다.', { duration: 4000 });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         toast.error(`취소 중 오류가 발생했습니다: ${message}`, { id: toastId });
       }
     };
 
-    const toastMessage = showWarning 
-      ? "마감이 임박한 상품입니다. 정말 예약을 취소하시겠어요? 취소는 운영에 영향을 줄 수 있습니다."
+    const toastMessage = isLateCancel 
+      ? "예약 마감일이 지난 상품입니다. 지금 취소하면 신뢰도 점수 10점이 차감됩니다. 정말 취소하시겠어요?"
       : "예약을 취소하시겠습니까? 취소된 예약은 복구할 수 없습니다.";
     
-    const toastTitle = showWarning ? "마감 임박" : "예약 취소 확인";
+    const toastTitle = isLateCancel ? "마감 후 취소" : "예약 취소 확인";
 
     toast((t) => (
       <div className="confirmation-toast">
@@ -436,7 +445,7 @@ const OrderHistoryPage: React.FC = () => {
         </div>
       </div>
     ), { duration: 6000 });
-  }, [user, setOrders]);
+  }, [setOrders]);
   
   const renderContent = () => {
     if (loading) return <div className="loading-spinner-container"><div className="loading-spinner"></div></div>;

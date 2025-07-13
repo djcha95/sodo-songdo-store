@@ -4,7 +4,6 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from './context/AuthContext'; // useAuth 훅을 가져옵니다.
 import { CartProvider } from './context/CartContext';
-import { WaitlistProvider } from './context/WaitlistContext';
 import { SelectionProvider } from './context/SelectionContext';
 import { EncoreRequestProvider } from './context/EncoreRequestContext';
 import './App.css'; 
@@ -30,13 +29,11 @@ const App: React.FC = () => {
     // AuthProvider는 main.tsx에서 RouterProvider를 감싸고 있으므로 여기서는 제거합니다.
     // 나머지 컨텍스트들은 AuthContext가 로딩된 후에 안전하게 렌더링됩니다.
     <CartProvider>
-      <WaitlistProvider>
         <SelectionProvider>
           <EncoreRequestProvider>
             <Outlet /> 
           </EncoreRequestProvider>
         </SelectionProvider>
-      </WaitlistProvider>
     </CartProvider>
   );
 };

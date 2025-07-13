@@ -1,12 +1,13 @@
 // src/pages/admin/ProductListPageAdmin.tsx
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate } from 'react-router-dom';
-// ✅ [수정] 함수 이름 오타를 수정합니다.
-import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses } from '../../firebase';
+import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, addStockAndProcessWaitlist } from '../../firebase';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
+import type { WaitlistInfo } from '../../firebase'; // 타입 import 추가
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -41,6 +42,19 @@ const formatDate = (dateInput: any) => {
     const date = safeToDate(dateInput);
     if (!date || !isFinite(date.getTime())) return '–';
     return date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\.$/, '');
+};
+
+const formatTimestamp = (timestamp: Timestamp) => {
+  const date = timestamp.toDate();
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 };
 
 const getEarliestExpirationDateForGroup = (variantGroup: VariantGroup): number => {
@@ -122,11 +136,12 @@ interface ProductAdminRowProps {
     onStockEditStart: (id: string, stock: number) => void;
     onStockEditSave: (id: string) => void;
     onSetStockInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    onOpenWaitlistModal: (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string) => void; // 추가
 }
 
 const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
     item, index, isExpanded, isSelected, editingStockId, stockInputs,
-    onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs
+    onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs, onOpenWaitlistModal // 추가
 }) => {
     const navigate = useNavigate();
     const isExpandable = item.enrichedVariantGroups.length > 1;
@@ -159,7 +174,16 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
             <td><span className={`status-badge status-${status}`} title={`Status: ${status}`}>{translateStatus(status)}</span></td>
             <td style={{textAlign: 'right'}}>{vg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
             <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
-            <td className="quantity-cell">{`${vg.reservedQuantity} / ${item.round.waitlistCount || 0}`}</td>
+            <td className="quantity-cell">
+              {`${vg.reservedQuantity} / `}
+              {item.round.waitlistCount > 0 ? (
+                <button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName)}>
+                  {item.round.waitlistCount || 0}
+                </button>
+              ) : (
+                item.round.waitlistCount || 0
+              )}
+            </td>
             <td className="quantity-cell">{vg.pickedUpQuantity}</td>
             <td className="stock-cell">
               {editingStockId === vgUniqueId ? (
@@ -223,7 +247,16 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <td><span className={`status-badge status-${subStatus}`} title={`Status: ${subStatus}`}>{translateStatus(subStatus)}</span></td>
                   <td style={{textAlign: 'right'}}>{subVg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
                   <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
-                  <td className="quantity-cell">{`${subVg.reservedQuantity} / ${item.round.waitlistCount || 0}`}</td>
+                  <td className="quantity-cell">
+                    {`${subVg.reservedQuantity} / `}
+                    {item.round.waitlistCount > 0 ? (
+                      <button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName)}>
+                        {item.round.waitlistCount || 0}
+                      </button>
+                    ) : (
+                      item.round.waitlistCount || 0
+                    )}
+                  </td>
                   <td className="quantity-cell">{subVg.pickedUpQuantity}</td>
                   <td className="stock-cell">
                       {editingStockId === subVgUniqueId ? (
@@ -242,9 +275,98 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
 
 
 // =================================================================
+// ✨ 대기자 명단 모달 컴포넌트
+// =================================================================
+const WaitlistModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    data: { productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; } | null;
+    onSuccess: () => void;
+}> = ({ isOpen, onClose, data, onSuccess }) => {
+    const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [stockToAdd, setStockToAdd] = useState('');
+
+    useEffect(() => {
+        if (isOpen && data) {
+            setLoading(true);
+            setError('');
+            getWaitlistForRound(data.productId, data.roundId)
+                .then(setWaitlist)
+                .catch(() => setError('대기자 명단을 불러오는데 실패했습니다.'))
+                .finally(() => setLoading(false));
+        }
+    }, [isOpen, data]);
+
+    const handleConfirm = async () => {
+        const stock = parseInt(stockToAdd, 10);
+        if (!data || isNaN(stock) || stock <= 0) {
+            toast.error('유효한 재고 수량을 입력하세요.');
+            return;
+        }
+
+        const promise = addStockAndProcessWaitlist(data.productId, data.roundId, data.variantGroupId, stock);
+        
+        toast.promise(promise, {
+            loading: '대기자 예약 전환 처리 중...',
+            success: (result) => {
+                onSuccess(); // 부모 컴포넌트 데이터 새로고침
+                onClose();   // 모달 닫기
+                return `${result.convertedCount}명이 예약으로 전환되었습니다.`;
+            },
+            error: '처리 중 오류가 발생했습니다.'
+        });
+    };
+    
+    if (!isOpen || !data) return null;
+
+    return (
+        <div className="waitlist-modal-overlay" onClick={onClose}>
+            <div className="waitlist-modal-content" onClick={e => e.stopPropagation()}>
+                <div className="waitlist-modal-header">
+                    <h3>"{data.productName}" 대기자 명단</h3>
+                    <span>({data.roundName})</span>
+                    <button onClick={onClose} className="modal-close-button">&times;</button>
+                </div>
+                <div className="waitlist-modal-body">
+                    {loading && <p>로딩 중...</p>}
+                    {error && <p className="error-text">{error}</p>}
+                    {!loading && !error && (
+                        waitlist.length > 0 ? (
+                            <table>
+                                <thead>
+                                    <tr><th>순번</th><th>신청자</th><th>신청수량</th><th>신청일시</th></tr>
+                                </thead>
+                                <tbody>
+                                    {waitlist.map((entry, index) => (
+                                        <tr key={entry.userId}>
+                                            <td>{index + 1}</td>
+                                            <td>{entry.userName}</td>
+                                            <td>{entry.quantity}</td>
+                                            <td>{formatTimestamp(entry.timestamp)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : <p>이 판매 회차의 대기자가 없습니다.</p>
+                    )}
+                </div>
+                <div className="waitlist-modal-footer">
+                    <input type="number" value={stockToAdd} onChange={e => setStockToAdd(e.target.value)} placeholder="추가할 재고 수량" className="stock-add-input"/>
+                    <button onClick={handleConfirm} className="stock-add-confirm-btn">재고 추가 및 자동 전환</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// =================================================================
 // 메인 컴포넌트
 // =================================================================
 const ProductListPageAdmin: React.FC = () => {
+  useDocumentTitle('상품 목록 관리');
   const [loading, setLoading] = useState(true);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([] );
@@ -261,6 +383,17 @@ const ProductListPageAdmin: React.FC = () => {
   
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  // 대기자 명단 모달 관련 상태
+  const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [currentWaitlistData, setCurrentWaitlistData] = useState<{
+    productId: string;
+    roundId: string;
+    variantGroupId: string;
+    productName: string;
+    roundName: string;
+  } | null>(null);
+
 
   const navigate = useNavigate();
 
@@ -452,6 +585,22 @@ const ProductListPageAdmin: React.FC = () => {
     fetchData(); // 데이터 새로고침
   };
 
+  // 대기자 명단 모달 핸들러
+  const handleOpenWaitlistModal = (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string) => {
+    setCurrentWaitlistData({ productId, roundId, variantGroupId, productName, roundName });
+    setIsWaitlistModalOpen(true);
+  };
+
+  const handleCloseWaitlistModal = () => {
+    setIsWaitlistModalOpen(false);
+    setCurrentWaitlistData(null);
+  };
+
+  const handleWaitlistSuccess = () => {
+    // 대기자 처리 성공 시 데이터 새로고침
+    fetchData();
+  };
+
   const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;
   
   if (loading) return <LoadingSpinner />;
@@ -480,7 +629,6 @@ const ProductListPageAdmin: React.FC = () => {
                         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select"><option value="all">모든 상태</option><option value="selling">판매중</option><option value="scheduled">판매예정</option><option value="sold_out">품절</option><option value="ended">판매종료</option></select>
                     </div>
                 </div>
-                {/* ✅ [수정] onClick 핸들러 변경 */}
                 <div className="bulk-action-wrapper"><button className="bulk-action-button" onClick={handleBulkAction} disabled={selectedItems.size === 0}><Trash2 size={16} /> 선택 항목 판매 종료</button></div>
             </div>
             <div className="admin-product-table-container">
@@ -518,6 +666,7 @@ const ProductListPageAdmin: React.FC = () => {
                         onStockEditStart={handleStockEditStart}
                         onStockEditSave={handleStockEditSave}
                         onSetStockInputs={setStockInputs}
+                        onOpenWaitlistModal={handleOpenWaitlistModal} // prop 전달
                       />
                     ))
                   ) : (
@@ -535,6 +684,13 @@ const ProductListPageAdmin: React.FC = () => {
           </div>
         )}
       </div>
+
+      <WaitlistModal 
+        isOpen={isWaitlistModalOpen} 
+        onClose={handleCloseWaitlistModal} 
+        data={currentWaitlistData}
+        onSuccess={handleWaitlistSuccess}
+      />
     </div>
   );
 };

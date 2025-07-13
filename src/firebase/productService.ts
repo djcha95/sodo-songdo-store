@@ -11,6 +11,8 @@ import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebas
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
 import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem } from '@/types';
+import { getUserDocById } from './userService'; // userService에서 사용자 정보 조회를 위해 import
+import { submitOrderFromWaitlist } from './orderService'; // orderService에서 import
 
 
 /**
@@ -247,7 +249,9 @@ export const addWaitlistEntry = async (
   productId: string,
   roundId: string,
   userId: string,
-  quantity: number
+  quantity: number, // ❗이곳에 쉼표(,)를 추가했습니다.
+  variantGroupId: string,
+  itemId: string
 ): Promise<void> => {
   const productRef = doc(db, 'products', productId);
 
@@ -267,7 +271,7 @@ export const addWaitlistEntry = async (
 
     const round = newSalesHistory[roundIndex];
 
-    const existingEntry = round.waitlist?.find(entry => entry.userId === userId);
+    const existingEntry = round.waitlist?.find(entry => entry.userId === userId && entry.itemId === itemId);
     if (existingEntry) {
       throw new Error("이미 대기를 신청한 상품입니다.");
     }
@@ -276,6 +280,8 @@ export const addWaitlistEntry = async (
       userId,
       quantity,
       timestamp: Timestamp.now(),
+      variantGroupId,
+      itemId,
     };
     
     round.waitlist = [...(round.waitlist || []), newWaitlistEntry];
@@ -288,7 +294,6 @@ export const addWaitlistEntry = async (
     });
   });
 };
-
 
 /**
  * @description 특정 판매 회차의 특정 품목 재고를 업데이트하는 함수
@@ -556,4 +561,149 @@ export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
   });
 
   return arrivals;
+};
+
+export interface WaitlistInfo {
+  productId: string;
+  productName: string;
+  roundId: string;
+  roundName: string;
+  userId: string;
+  userName: string; // 사용자 이름 추가
+  quantity: number;
+  timestamp: Timestamp;
+}
+
+/**
+ * @description 모든 판매 회차의 대기 명단 정보를 가져옵니다.
+ */
+export const getAllWaitlists = async (): Promise<WaitlistInfo[]> => {
+  const products = await getProducts(false); // 보관처리되지 않은 상품만 조회
+  const allWaitlists: WaitlistInfo[] = [];
+
+  for (const product of products) {
+    for (const round of product.salesHistory) {
+      if (round.waitlist && round.waitlist.length > 0) {
+        for (const entry of round.waitlist) {
+          const userDoc = await getUserDocById(entry.userId);
+          allWaitlists.push({
+            productId: product.id,
+            productName: product.groupName,
+            roundId: round.roundId,
+            roundName: round.roundName,
+            userName: userDoc?.displayName || '알 수 없음', // 사용자 이름 추가
+            ...entry
+          });
+        }
+      }
+    }
+  }
+
+  // 최신순으로 정렬
+  allWaitlists.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+  
+  return allWaitlists;
+};
+
+/**
+ * @description 특정 판매 회차의 대기 명단 정보를 사용자 이름과 함께 가져옵니다.
+ */
+export const getWaitlistForRound = async (productId: string, roundId: string): Promise<WaitlistInfo[]> => {
+  const product = await getProductById(productId);
+  if (!product) {
+    throw new Error("상품 정보를 찾을 수 없습니다.");
+  }
+
+  const round = product.salesHistory.find(r => r.roundId === roundId);
+  if (!round || !round.waitlist) {
+    return [];
+  }
+
+  // 대기 시간순으로 정렬 (선착순)
+  const sortedWaitlist = round.waitlist.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+
+  // 각 대기 항목에 사용자 이름을 추가
+  const detailedWaitlist = await Promise.all(
+    sortedWaitlist.map(async (entry) => {
+      const userDoc = await getUserDocById(entry.userId);
+      return {
+        productId: product.id,
+        productName: product.groupName,
+        roundId: round.roundId,
+        roundName: round.roundName,
+        userName: userDoc?.displayName || '알 수 없음',
+        ...entry,
+      };
+    })
+  );
+
+  return detailedWaitlist;
+};
+
+/**
+ * @description 재고를 추가하고, 대기자 명단을 선착순으로 예약 전환 처리합니다.
+ */
+export const addStockAndProcessWaitlist = async (
+  productId: string,
+  roundId: string,
+  variantGroupId: string, // 어떤 옵션의 재고를 추가할지 명시
+  additionalStock: number
+): Promise<{ convertedCount: number; failedCount: number; }> => {
+  let availableStock = additionalStock;
+  let convertedCount = 0;
+  let failedCount = 0;
+
+  const productRef = doc(db, 'products', productId);
+
+  return runTransaction(db, async (transaction) => {
+    const productDoc = await transaction.get(productRef);
+    if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
+
+    const product = productDoc.data() as Product;
+    const salesHistory = [...product.salesHistory];
+    const roundIndex = salesHistory.findIndex(r => r.roundId === roundId);
+    if (roundIndex === -1) throw new Error("판매 회차를 찾을 수 없습니다.");
+    
+    const round = salesHistory[roundIndex];
+    if (!round.waitlist || round.waitlist.length === 0) return { convertedCount: 0, failedCount: 0 };
+
+    // 선착순으로 대기 목록 정렬
+    const sortedWaitlist = round.waitlist.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+    const remainingWaitlist: WaitlistEntry[] = [];
+    
+    // 재고 업데이트
+    const groupIndex = round.variantGroups.findIndex(vg => vg.id === variantGroupId);
+    if (groupIndex === -1) throw new Error("상품 옵션을 찾을 수 없습니다.");
+    
+    const originalStock = round.variantGroups[groupIndex].totalPhysicalStock;
+    if (originalStock !== null && originalStock !== -1) {
+        round.variantGroups[groupIndex].totalPhysicalStock = originalStock + additionalStock;
+    }
+    
+    for (const entry of sortedWaitlist) {
+      if (entry.quantity <= availableStock) {
+        try {
+          // 재고 차감 및 주문 생성 (orderService에 새 함수 필요)
+          await submitOrderFromWaitlist(transaction, entry, product, round);
+          availableStock -= entry.quantity;
+          convertedCount++;
+        } catch (e) {
+            console.error(`주문 전환 실패 (사용자: ${entry.userId}):`, e);
+            failedCount++;
+            remainingWaitlist.push(entry); // 실패 시 다시 대기 목록에 포함
+        }
+      } else {
+        remainingWaitlist.push(entry);
+      }
+    }
+    
+    // 대기 목록에서 성공적으로 전환된 사용자들 제거
+    round.waitlist = remainingWaitlist;
+    round.waitlistCount = remainingWaitlist.reduce((sum, entry) => sum + entry.quantity, 0);
+    salesHistory[roundIndex] = round;
+    
+    transaction.update(productRef, { salesHistory });
+
+    return { convertedCount, failedCount };
+  });
 };

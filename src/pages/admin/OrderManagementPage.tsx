@@ -1,61 +1,73 @@
+// src/pages/admin/OrderManagementPage.tsx
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import toast from 'react-hot-toast';
 import {
     getAllOrdersForAdmin,
-    updateOrderStatus,
     deleteOrder,
     updateOrderNotes,
-    toggleOrderBookmark
+    toggleOrderBookmark,
+    updateOrderStatusAndLoyalty
 } from '../../firebase';
-import type { Order, OrderStatus, OrderItem } from '../../types';
+import type { Order, OrderStatus } from '../../types';
 import { Timestamp } from 'firebase/firestore';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { Filter, Search, Trash2, Star, ArrowUpDown, Layers } from 'lucide-react';
+import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck } from 'lucide-react';
 import './OrderManagementPage.css';
 
 // --- Helper Functions ---
 const formatTimestamp = (timestamp: any): string => {
   if (!timestamp || typeof timestamp.toDate !== 'function') return '-';
-  return timestamp.toDate().toLocaleString('ko-KR', {
-    year: '2-digit', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  }).replace(/\. /g, '.');
+  const date = timestamp.toDate();
+  const year = String(date.getFullYear()).slice(-2);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}.${month}.${day} ${hours}:${minutes}`;
 };
 
-const formatPickupDate = (timestamp: any): string => {
-    if (!timestamp || typeof timestamp.toDate !== 'function') return '-';
-    const date = timestamp.toDate();
-    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} (${dayNames[date.getDay()]})`;
+const formatDateWithDay = (timestamp: any): string => {
+  if (!timestamp || !timestamp.toDate) return '-';
+  const date = timestamp.toDate();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+  return `${month}/${day} (${dayOfWeek})`;
 };
 
 const formatCurrency = (amount: number): string => `${amount.toLocaleString('ko-KR')}원`;
 
-const summarizeOrderItems = (items: OrderItem[] = []): string => {
-  if (items.length === 0) return '주문 상품 없음';
-  const firstItemName = `${items[0].productName} [${items[0].itemName}]`;
-  if (items.length > 1) {
-    return `${firstItemName} 외 ${items.length - 1}건`;
-  }
-  return firstItemName;
+// --- Status Configuration ---
+const ORDER_STATUS_CONFIG: Record<OrderStatus, { label: string; icon: React.ReactNode; className: string; sortOrder: number }> = {
+    PICKED_UP: { label: '픽업 완료', icon: <PackageCheck size={14} />, className: 'status-picked-up', sortOrder: 0 },
+    PREPAID: { label: '선입금', icon: <DollarSign size={14} />, className: 'status-prepaid', sortOrder: 1 },
+    CANCELED: { label: '예약 취소', icon: <PackageX size={14} />, className: 'status-canceled', sortOrder: 2 },
+    RESERVED: { label: '예약 확정', icon: <Clock size={14} />, className: 'status-reserved', sortOrder: 3 },
+    NO_SHOW: { label: '노쇼', icon: <UserX size={14} />, className: 'status-no-show', sortOrder: 4 },
+    COMPLETED: { label: '처리 완료', icon: <PackageCheck size={14} />, className: 'status-completed', sortOrder: 5 }, // Legacy or manual
 };
 
-const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
-    { value: 'RESERVED', label: '예약 확정' },
-    { value: 'PREPAID', label: '선입금' },
-    { value: 'PICKED_UP', label: '픽업 완료' },
-    { value: 'CANCELED', label: '주문 취소' },
-    { value: 'NO_SHOW', label: '미수령(노쇼)' },
-];
-
-const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
-    PICKED_UP: 0,
-    PREPAID: 1,
-    NO_SHOW: 2,
-    RESERVED: 3,
-    CANCELED: 4,
-    COMPLETED: 5,
+const getDisplayStatusInfo = (order: Order) => {
+    const now = new Date();
+    // 늦은 픽업: 픽업 완료 상태이고, 픽업 시간이 마감일보다 늦었을 때
+    if (order.status === 'PICKED_UP' && order.pickedUpAt && order.pickupDeadlineDate && order.pickedUpAt.toDate() > order.pickupDeadlineDate.toDate()) {
+        return {
+            ...ORDER_STATUS_CONFIG.PICKED_UP,
+            badge: <span className="status-extra-badge late-pickup"><BadgeCheck size={12} /> 늦은 픽업</span>
+        };
+    }
+    // 미수령(노쇼) 상태: DB상태가 예약/선입금이고, 픽업 마감일이 지났을 때
+    if ((order.status === 'RESERVED' || order.status === 'PREPAID') && order.pickupDeadlineDate && order.pickupDeadlineDate.toDate() < now) {
+        return {
+           ...ORDER_STATUS_CONFIG.NO_SHOW,
+            badge: <span className="status-extra-badge no-show-pending"><AlertTriangle size={12} /> 미수령</span>
+        };
+    }
+    return { ...ORDER_STATUS_CONFIG[order.status], badge: null };
 };
+
 
 // --- Editable Notes Component ---
 const EditableNote: React.FC<{ order: Order; onSave: (id: string, notes: string) => void }> = ({ order, onSave }) => {
@@ -69,32 +81,31 @@ const EditableNote: React.FC<{ order: Order; onSave: (id: string, notes: string)
         setIsEditing(false);
     };
 
-    if (isEditing) {
-        return (
-            <textarea
-                className="notes-textarea"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                onBlur={handleSave}
-                autoFocus
-            />
-        );
-    }
-
     return (
         <div className="notes-display" onClick={() => setIsEditing(true)}>
-            {order.notes || <span className="notes-placeholder">비고 입력...</span>}
+            {isEditing ? (
+                <textarea
+                    className="notes-textarea"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    onBlur={handleSave}
+                    autoFocus
+                />
+            ) : (
+                order.notes || <span className="notes-placeholder">비고 입력...</span>
+            )}
         </div>
     );
 };
 
 
+// --- Main Component ---
 const OrderManagementPage: React.FC = () => {
+    useDocumentTitle('주문 통합 관리');
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({ status: 'all', searchQuery: '', showBookmarkedOnly: false });
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdAt', direction: 'desc' });
-    const [isGrouped, setIsGrouped] = useState(false);
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -129,168 +140,182 @@ const OrderManagementPage: React.FC = () => {
         }
         setSortConfig({ key, direction });
     };
-
-    const handleStatusChange = useCallback(async (orderId: string, newStatus: OrderStatus) => {
-        const originalOrders = [...orders];
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, pickedUpAt: newStatus === 'PICKED_UP' ? Timestamp.now() : o.pickedUpAt } : o));
-        
-        try {
-            await toast.promise(updateOrderStatus(orderId, newStatus), {
-                loading: '주문 상태 변경 중...',
-                success: '주문 상태가 변경되었습니다.',
-                error: '상태 변경에 실패했습니다.'
-            });
-        } catch (error) {
-            setOrders(originalOrders);
-        }
-    }, [orders]);
     
+    const handleStatusChange = useCallback(async (order: Order, newStatus: OrderStatus) => {
+        if (order.status === newStatus) return;
+
+        let pointChange = 0;
+        let reason = '';
+        let newPrepaidAt: Timestamp | null = null;
+        
+        if (newStatus === 'PREPAID' && order.status !== 'PREPAID') {
+            newPrepaidAt = Timestamp.now();
+        }
+
+        const originalOrderState = { ...order };
+        // Optimistic UI update - prepaidAt은 UI상에서만 임시로 반영
+        const updatedOrder = { ...order, status: newStatus, prepaidAt: newPrepaidAt || order.prepaidAt };
+        setOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
+
+        const toastId = toast.loading(`${order.customerInfo.name}님의 주문 처리 중...`);
+        try {
+            // ❗ [수정] DB 함수 정의에 맞춰 5번째 인자(newPrepaidAt)를 제거하고 4개만 전달
+            await updateOrderStatusAndLoyalty(order, newStatus, pointChange, reason);
+            toast.success('성공적으로 처리되었습니다.', { id: toastId });
+        } catch (error) {
+            console.error("상태 변경 실패:", error);
+            setOrders(prev => prev.map(o => o.id === order.id ? originalOrderState : o));
+            toast.error('처리 중 오류가 발생했습니다.', { id: toastId });
+        }
+    }, []);
+
     const handleDeleteOrder = useCallback((orderId: string, customerName: string) => {
         toast((t) => (
-            <span>
-                <b>{customerName}</b>님의 주문을 정말 삭제하시겠습니까?
-                <div className="toast-buttons">
+            <div className="custom-toast-container">
+                <p className="toast-message"><b>{customerName}</b>님의 주문을<br/>정말 삭제하시겠습니까?</p>
+                <div className="toast-button-group">
                     <button
-                        className="toast-button-confirm"
+                        className="toast-button toast-button-cancel"
+                        onClick={() => toast.dismiss(t.id)}
+                    >
+                        취소
+                    </button>
+                    <button
+                        className="toast-button toast-button-confirm"
                         onClick={() => {
                             toast.dismiss(t.id);
-                            const deleteAction = async () => {
-                                await deleteOrder(orderId);
-                                setOrders(prev => prev.filter(o => o.id !== orderId));
-                            };
+                            const deleteAction = async () => await deleteOrder(orderId);
                             toast.promise(deleteAction(), {
-                                loading: '삭제 중...',
-                                success: '주문이 삭제되었습니다.',
-                                error: '삭제 중 오류가 발생했습니다.',
+                                loading: '주문 삭제 중...',
+                                success: () => {
+                                    setOrders(prev => prev.filter(o => o.id !== orderId));
+                                    return '주문이 성공적으로 삭제되었습니다.';
+                                },
+                                error: (err: any) => {
+                                    console.error("주문 삭제 오류:", err);
+                                    return `주문 삭제에 실패했습니다.`;
+                                },
                             });
                         }}
                     >
                         삭제
                     </button>
-                    <button className="toast-button-cancel" onClick={() => toast.dismiss(t.id)}>
-                        취소
-                    </button>
                 </div>
-            </span>
-        ), { duration: 6000 });
+            </div>
+        ), { duration: 6000, position: 'top-center' });
     }, []);
 
     const handleSaveNote = useCallback(async (orderId: string, notes: string) => {
-        const originalOrders = [...orders];
+        const originalNotes = orders.find(o => o.id === orderId)?.notes || '';
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, notes } : o));
-        
         try {
             await toast.promise(updateOrderNotes(orderId, notes), {
-                loading: '비고 저장 중...',
-                success: '비고가 저장되었습니다.',
-                error: '비고 저장에 실패했습니다.'
+                loading: '메모 저장 중...',
+                success: '메모가 저장되었습니다.',
+                error: '메모 저장에 실패했습니다.'
             });
         } catch (error) {
-            setOrders(originalOrders);
+            console.error("메모 저장 실패:", error);
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, notes: originalNotes } : o));
         }
     }, [orders]);
 
     const handleToggleBookmark = useCallback(async (order: Order) => {
         const newIsBookmarked = !order.isBookmarked;
-        const originalOrders = [...orders];
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, isBookmarked: newIsBookmarked } : o));
-        
         try {
-            await toast.promise(toggleOrderBookmark(order.id, newIsBookmarked), {
-                loading: '북마크 변경 중...',
-                success: newIsBookmarked ? '북마크에 추가했습니다.' : '북마크에서 제거했습니다.',
-                error: '북마크 변경에 실패했습니다.'
-            });
+            await toggleOrderBookmark(order.id, newIsBookmarked)
         } catch (error) {
-            setOrders(originalOrders);
+            console.error("북마크 업데이트 실패:", error);
+            toast.error("북마크 변경에 실패했습니다.")
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, isBookmarked: !newIsBookmarked } : o)); // Rollback
         }
-    }, [orders]);
-    
-    const processedData = useMemo(() => {
+    }, []);
+
+    const filteredOrders = useMemo(() => {
         let filtered = orders.filter(order => {
             const statusMatch = filters.status === 'all' || order.status === filters.status;
             const searchMatch = filters.searchQuery === '' ||
                 order.customerInfo.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
-                order.customerInfo.phone.includes(filters.searchQuery);
+                (order.customerInfo.phone && order.customerInfo.phone.includes(filters.searchQuery));
             const bookmarkMatch = !filters.showBookmarkedOnly || order.isBookmarked;
             return statusMatch && searchMatch && bookmarkMatch;
         });
 
-        if (sortConfig !== null && !isGrouped) {
+        if (sortConfig !== null) {
             filtered.sort((a, b) => {
                 let aValue: any;
                 let bValue: any;
+                const { key, direction } = sortConfig;
 
-                if (sortConfig.key === 'status') {
-                    aValue = STATUS_SORT_ORDER[a.status] ?? 99;
-                    bValue = STATUS_SORT_ORDER[b.status] ?? 99;
-                } else if (sortConfig.key === 'customerInfo.name') {
+                if (key === 'status') {
+                    aValue = ORDER_STATUS_CONFIG[a.status]?.sortOrder ?? 99;
+                    bValue = ORDER_STATUS_CONFIG[b.status]?.sortOrder ?? 99;
+                } else if (key === 'customerInfo.name') {
                     aValue = a.customerInfo.name;
                     bValue = b.customerInfo.name;
+                } else if (['createdAt', 'pickupDate', 'pickedUpAt', 'prepaidAt'].includes(key)) {
+                    aValue = (a[key as keyof Order] as Timestamp)?.toMillis() || 0;
+                    bValue = (b[key as keyof Order] as Timestamp)?.toMillis() || 0;
                 } else {
-                    aValue = a[sortConfig.key as keyof Order];
-                    bValue = b[sortConfig.key as keyof Order];
+                    aValue = a[key as keyof Order];
+                    bValue = b[key as keyof Order];
                 }
-                
-                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+
+                if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
-
-        if (isGrouped) {
-            const grouped = filtered.reduce((acc, order) => {
-                const pickupDateStr = formatPickupDate(order.pickupDate);
-                if (!acc[pickupDateStr]) acc[pickupDateStr] = [];
-                acc[pickupDateStr].push(order);
-                return acc;
-            }, {} as Record<string, Order[]>);
-
-            Object.keys(grouped).forEach(date => {
-                grouped[date].sort((a, b) => a.customerInfo.name.localeCompare(b.customerInfo.name));
-            });
-            
-            return grouped;
-        }
-
         return filtered;
-    }, [orders, filters, sortConfig, isGrouped]);
+    }, [orders, filters, sortConfig]);
 
-    // ✅ 전화번호를 클릭 가능한 링크로 수정
-    const renderOrderRow = (order: Order, index: number) => (
-        <tr key={order.id} className={order.isBookmarked ? 'bookmarked-row' : ''}>
-            <td>{index}</td>
-            <td>{formatTimestamp(order.createdAt)}</td>
-            <td>{order.customerInfo.name}</td>
-            <td>
-                <a href={`tel:${order.customerInfo.phone}`} className="phone-link">
-                    {order.customerInfo.phone}
-                </a>
-            </td>
-            <td title={order.items.map(i => `${i.productName} [${i.itemName}] x ${i.quantity}`).join('\n')}>
-                {summarizeOrderItems(order.items)}
-            </td>
-            <td className="price-cell">{formatCurrency(order.totalPrice)}</td>
-            <td>{formatPickupDate(order.pickupDate)}</td>
-            <td>{order.pickedUpAt ? formatTimestamp(order.pickedUpAt) : '-'}</td>
-            <td>
-                <select value={order.status} onChange={(e) => handleStatusChange(order.id, e.target.value as OrderStatus)} className={`status-select status-${order.status.toLowerCase()}`}>
-                    {ORDER_STATUS_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                </select>
-            </td>
-            <td><EditableNote order={order} onSave={handleSaveNote} /></td>
-            <td className="action-cell">
-                <button onClick={() => handleToggleBookmark(order)} className={`action-button bookmark-button ${order.isBookmarked ? 'bookmarked' : ''}`} title="북마크">
-                    <Star size={16} />
-                </button>
-            </td>
-            <td className="action-cell">
-                <button onClick={() => handleDeleteOrder(order.id, order.customerInfo.name)} className="action-button delete-button" title="주문 삭제">
-                    <Trash2 size={16} />
-                </button>
-            </td>
-        </tr>
-    );
+    const renderOrderRow = (order: Order, index: number) => {
+        const displayStatus = getDisplayStatusInfo(order);
+        const totalQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
+
+        return (
+            <tr key={order.id} className={order.isBookmarked ? 'bookmarked-row' : ''}>
+                <td className="cell-center">{index}</td>
+                <td>{formatTimestamp(order.createdAt)}</td>
+                <td>{order.customerInfo.name}</td>
+                <td><a href={`tel:${order.customerInfo.phone}`} className="phone-link">{order.customerInfo.phone}</a></td>
+                <td title={order.items.map(i => `${i.productName} (${i.itemName})`).join(', ')}>
+                    {order.items.map(item => `${item.productName} (${item.itemName})`).join(', ')}
+                </td>
+                <td className="cell-center">{totalQuantity}</td>
+                <td className="price-cell">{formatCurrency(order.totalPrice)}</td>
+                <td>{formatDateWithDay(order.pickupDate)}</td>
+                <td>{formatTimestamp(order.pickedUpAt)}</td>
+                <td>{formatTimestamp(order.prepaidAt)}</td>
+                <td>
+                    <div className="status-cell-content">
+                        <select
+                            value={order.status}
+                            onChange={(e) => handleStatusChange(order, e.target.value as OrderStatus)}
+                            className={`status-select ${ORDER_STATUS_CONFIG[order.status].className}`}
+                        >
+                            {Object.entries(ORDER_STATUS_CONFIG).map(([statusKey, { label }]) => (
+                                <option key={statusKey} value={statusKey}>
+                                    {label}
+                                </option>
+                            ))}
+                        </select>
+                        {displayStatus.badge}
+                    </div>
+                </td>
+                <td><EditableNote order={order} onSave={handleSaveNote} /></td>
+                <td className="action-cell">
+                    <button onClick={() => handleToggleBookmark(order)} className={`action-button bookmark-button ${order.isBookmarked ? 'bookmarked' : ''}`} title="북마크">
+                        <Star size={16} fill={order.isBookmarked ? 'currentColor' : 'none'}/>
+                    </button>
+                    <button onClick={() => handleDeleteOrder(order.id, order.customerInfo.name)} className="action-button delete-button" title="주문 삭제">
+                        <Trash2 size={16} />
+                    </button>
+                </td>
+            </tr>
+        );
+    };
 
     if (loading) return <LoadingSpinner />;
 
@@ -310,18 +335,16 @@ const OrderManagementPage: React.FC = () => {
                         <Filter size={16} />
                         <select name="status" value={filters.status} onChange={handleFilterChange} className="control-select-v2">
                             <option value="all">모든 상태</option>
-                            {ORDER_STATUS_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                            {Object.entries(ORDER_STATUS_CONFIG).map(([status, { label }]) => (
+                                <option key={status} value={status}>{label}</option>
+                            ))}
                         </select>
                     </div>
                     <label className="bookmark-filter-label">
                         <input type="checkbox" name="showBookmarkedOnly" checked={filters.showBookmarkedOnly} onChange={handleFilterChange} />
-                        <Star size={14} className="bookmark-icon-label" />
+                        <Star size={14} className="bookmark-icon-label" fill={filters.showBookmarkedOnly ? 'currentColor' : 'none'}/>
                         북마크만
                     </label>
-                    <button onClick={() => setIsGrouped(!isGrouped)} className={`group-toggle-button ${isGrouped ? 'active' : ''}`}>
-                        <Layers size={14} />
-                        픽업일별 묶기
-                    </button>
                 </div>
             </div>
 
@@ -329,44 +352,53 @@ const OrderManagementPage: React.FC = () => {
                 <table className="admin-table excel-style">
                     <thead>
                         <tr>
-                            <th style={{ width: '40px' }}>번호</th>
-                            <th className="sortable-header" onClick={() => handleSort('createdAt')}>주문일시 <ArrowUpDown size={12} /></th>
-                            <th className="sortable-header" onClick={() => handleSort('customerInfo.name')}>고객명 <ArrowUpDown size={12} /></th>
-                            <th>전화번호</th>
-                            <th>주문내역</th>
-                            <th className="sortable-header" onClick={() => handleSort('totalPrice')}>결제금액 <ArrowUpDown size={12} /></th>
-                            <th className="sortable-header" onClick={() => handleSort('pickupDate')}>픽업일 <ArrowUpDown size={12} /></th>
-                            <th>완료시각</th>
-                            <th className="sortable-header" onClick={() => handleSort('status')} style={{ width: '150px' }}>상태 <ArrowUpDown size={12} /></th>
-                            <th style={{ minWidth: '200px' }}>비고</th>
-                            <th style={{ width: '50px' }}>★</th>
-                            <th style={{ width: '60px' }}>작업</th>
+                            <th className="cell-center" style={{ width: 'var(--table-col-번호-width)' }}>번호</th>
+                            <th style={{ width: 'var(--table-col-주문일시-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('createdAt')}>
+                                    <span>주문일시</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-고객명-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('customerInfo.name')}>
+                                    <span>고객명</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-전화번호-width)' }}>전화번호</th>
+                            <th style={{ width: 'var(--table-col-품목-width)' }}>품목</th>
+                            <th className="cell-center" style={{ width: 'var(--table-col-수량-width)' }}>수량</th>
+                            <th style={{ width: 'var(--table-col-합계-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('totalPrice')}>
+                                    <span>합계</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-픽업일-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('pickupDate')}>
+                                    <span>픽업일</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-완료시각-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('pickedUpAt')}>
+                                    <span>완료시각</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-선입금-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('prepaidAt')}>
+                                    <span>선입금 처리</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-상태-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('status')}>
+                                    <span>상태</span><ArrowUpDown size={12} />
+                                </div>
+                            </th>
+                            <th style={{ width: 'var(--table-col-비고-width)' }}>비고</th>
+                            <th className="cell-center" style={{ width: 'var(--table-col-관리-width)' }}>관리</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {isGrouped 
-                            ? (() => {
-                                let rowIndex = 0;
-                                const sortedDates = Object.keys(processedData).sort((a, b) => new Date(a.split(' ')[0]).getTime() - new Date(b.split(' ')[0]).getTime());
-                                
-                                return sortedDates.flatMap(date => {
-                                    const ordersInGroup = (processedData as Record<string, Order[]>)[date];
-                                    return [
-                                        <tr key={date} className="group-header-row">
-                                            <td colSpan={12}>
-                                                <div className="group-header-content">
-                                                    {date}
-                                                    <span className="group-count">{ordersInGroup.length}건</span>
-                                                </div>
-                                            </td>
-                                        </tr>,
-                                        ...ordersInGroup.map(order => renderOrderRow(order, ++rowIndex))
-                                    ];
-                                });
-                            })()
-                            : (processedData as Order[]).length > 0
-                                ? (processedData as Order[]).map((order, index) => renderOrderRow(order, index + 1))
-                                : <tr><td colSpan={12} className="no-results-cell">표시할 주문이 없습니다.</td></tr>
+                        {filteredOrders.length > 0
+                            ? filteredOrders.map((order, index) => renderOrderRow(order, index + 1))
+                            : <tr><td colSpan={13} className="no-results-cell">표시할 주문이 없습니다.</td></tr>
                         }
                     </tbody>
                 </table>

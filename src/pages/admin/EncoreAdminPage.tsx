@@ -1,6 +1,7 @@
 // src/pages/admin/EncoreAdminPage.tsx
 
 import { useState, useEffect } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase';
 import toast from 'react-hot-toast'; // [추가] react-hot-toast 임포트
@@ -14,6 +15,7 @@ interface Product {
 }
 
 const EncoreAdminPage = () => {
+   useDocumentTitle('앙코르 요청 관리'); // ✅ [추가]
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

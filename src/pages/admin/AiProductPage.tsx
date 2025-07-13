@@ -1,15 +1,19 @@
 // src/pages/admin/AiProductPage.tsx
-// 'React' is declared but its value is never read. 오류 해결을 위해 import React from 'react' 제거
-const AiProductPage = () => {
+
+import React from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import ComingSoon from '@/components/admin/ComingSoon'; // ComingSoon 컴포넌트를 가져옵니다.
+import { Bot } from 'lucide-react';
+
+const AiProductPage: React.FC = () => {
+  useDocumentTitle('AI 상품 추천'); // ✅ [추가]
+
   return (
-    <div>
-      <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold' }}>
-        AI 상품 자동 등록 (구현 예정)
-      </h1>
-      <p style={{ marginTop: '1rem' }}>
-        이 페이지에서 AI를 사용하여 상품 등록을 자동화할 예정입니다.
-      </p>
-    </div>
+    <ComingSoon
+      title="AI 상품 추천"
+      description="준비 중인 기능입니다. AI가 판매 데이터와 트렌드를 분석하여 새로운 공동구매 상품 아이디어를 제안해 드릴 예정입니다."
+      icon={<Bot size={48} />}
+    />
   );
 };
 

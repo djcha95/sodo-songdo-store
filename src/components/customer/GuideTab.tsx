@@ -2,7 +2,7 @@
 
 import React from 'react';
 import type { GuideItem } from '@/types';
-import { EditableField } from '@/pages/customer/StoreInfoPage';
+import { EditableField } from '@/pages/customer/CustomerCenterPage';
 import { PlusCircle, XCircle } from 'lucide-react';
 
 interface GuideTabProps {

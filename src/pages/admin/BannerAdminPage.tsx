@@ -1,6 +1,7 @@
 // src/pages/admin/BannerAdminPage.tsx
 
 import React, { useState, useEffect } from 'react'; // [수정] useCallback 제거
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { onSnapshot, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { db } from '@/firebase';
@@ -15,6 +16,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import './BannerAdminPage.css';
 
 const BannerAdminPage: React.FC = () => {
+  useDocumentTitle('배너 관리'); // ✅ [추가]
   const [banners, setBanners] = useState<Banner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentBanner, setCurrentBanner] = useState<Banner | null>(null);

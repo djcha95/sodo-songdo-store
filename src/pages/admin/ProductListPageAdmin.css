@@ -117,3 +117,95 @@
 .status-ended      { background-color: #f1f5f9; color: #475569; border-color: #cbd5e1; }
 .status-sold_out   { background-color: #fee2e2; color: #991b1b; border-color: #fca5a5; }
 .status-draft      { background-color: #fefce8; color: #854d0e; border-color: #fde047; }
+
+/* 대기자 명단 버튼 */
+.waitlist-count-button {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.waitlist-count-button:hover {
+  background-color: var(--primary-color-light);
+}
+
+/* 대기자 명단 모달 오버레이 */
+.waitlist-modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+
+/* 대기자 명단 모달 컨텐츠 */
+.waitlist-modal-content {
+  background: white; padding: 2rem; border-radius: 12px;
+  width: 90%; max-width: 700px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: var(--box-shadow-xl);
+}
+
+/* 모달 헤더 */
+.waitlist-modal-header {
+  display: flex; align-items: baseline; gap: 8px;
+  padding-bottom: 1rem; border-bottom: 1px solid var(--border-color-light);
+}
+.waitlist-modal-header h3 { margin: 0; font-size: 1.5rem; color: var(--text-color-dark); }
+.waitlist-modal-header span { color: var(--text-color-medium); font-size: 1rem; }
+.modal-close-button {
+  margin-left: auto; background: none; border: none; font-size: 1.8rem;
+  cursor: pointer; color: var(--text-color-light); padding: 0 0.5rem;
+  transition: color 0.2s;
+}
+.modal-close-button:hover { color: var(--text-color-dark); }
+
+/* 모달 바디 (스크롤 가능) */
+.waitlist-modal-body { 
+  flex-grow: 1; 
+  overflow-y: auto; 
+  margin: 1rem 0; 
+  padding-right: 5px; /* 스크롤바 공간 확보 */
+}
+.waitlist-modal-body table { width: 100%; border-collapse: collapse; }
+.waitlist-modal-body th, .waitlist-modal-body td {
+  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color-light);
+}
+.waitlist-modal-body th { background-color: #f8f9fa; font-weight: var(--font-weight-bold); color: var(--text-color-dark); }
+.waitlist-modal-body td { color: var(--text-color-regular); }
+.waitlist-modal-body tbody tr:last-child td { border-bottom: none; }
+
+
+/* 모달 푸터 (재고 추가 및 전환 버튼) */
+.waitlist-modal-footer {
+  display: flex; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color-light);
+  align-items: center;
+}
+.stock-add-input {
+  flex-grow: 1; padding: 10px; border: 1px solid var(--border-color-medium);
+  border-radius: 8px; font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.stock-add-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color-light);
+}
+.stock-add-confirm-btn {
+  background-color: var(--primary-color); color: white; border: none;
+  padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;
+  transition: all 0.2s;
+}
+.stock-add-confirm-btn:hover { background-color: var(--primary-color-dark); box-shadow: var(--box-shadow-sm); }
+.stock-add-confirm-btn:disabled {
+  background-color: #ced4da;
+  cursor: not-allowed;
+}
+
+.error-text {
+  color: var(--error-color);
+  text-align: center;
+  margin-top: 1rem;
+}

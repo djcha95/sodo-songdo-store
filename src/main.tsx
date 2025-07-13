@@ -2,7 +2,8 @@
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, useParams, Navigate } from 'react-router-dom';
+// ✅ [수정] react-router-dom import 목록에 useNavigate 추가
+import { createBrowserRouter, RouterProvider, useParams, Navigate, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import './index.css';
@@ -11,8 +12,7 @@ import App from './App';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingSpinner from './components/LoadingSpinner';
 
-// Context import (AuthContext의 loading 상태를 사용하기 위함)
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import './styles/toast-styles.css';
 
 // --- 페이지 컴포넌트 lazy loading ---
@@ -29,11 +29,11 @@ const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetai
 const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
 const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
-const StoreInfoPage = React.lazy(() => import('./pages/customer/StoreInfoPage'));
+const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
 const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 
 
-// 관리자 페이지 (AdminLayout에서 이전)
+// 관리자 페이지
 const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));
 const ProductListPageAdmin = React.lazy(() => import('@/pages/admin/ProductListPageAdmin'));
 const ProductAddAdminPage = React.lazy(() => import('@/pages/admin/ProductAddAdminPage'));
@@ -47,29 +47,20 @@ const AiProductPage = React.lazy(() => import('@/pages/admin/AiProductPage'));
 const BoardAdminPage = React.lazy(() => import('@/pages/admin/BoardAdminPage'));
 const CouponAdminPage = React.lazy(() => import('@/pages/admin/CouponAdminPage'));
 const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage'));
-const OrderListPage = React.lazy(() => import('@/pages/admin/OrderListPage'));
-const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
 const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
+const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
 
 
 const ProductDetailPageWrapper = () => {
   const { productId } = useParams<{ productId: string }>();
-  return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
+  // ✅ [수정] useNavigate 훅 호출
+  const navigate = useNavigate(); 
+  return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => navigate(-1)} /> : null;
 };
 
-// AuthContext의 loading 상태에 따라 RouterProvider 렌더링을 제어할 컴포넌트
-const RouterWrapper = () => {
-  const { loading } = useAuth(); // AuthContext에서 loading 상태를 가져옵니다.
-
-  if (loading) {
-    // 인증 정보 로딩 중에는 로딩 스피너를 보여줍니다.
-    return <LoadingSpinner />;
-  }
-
-  // 인증 정보 로딩이 완료되면 RouterProvider를 렌더링합니다.
-  return <RouterProvider router={router} />;
-};
+// ✅ [수정] 사용되지 않는 RouterWrapper 컴포넌트 삭제
+// const RouterWrapper = () => { ... };
 
 
 const router = createBrowserRouter([
@@ -100,8 +91,7 @@ const router = createBrowserRouter([
               { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'encore-requests', element: <EncoreAdminPage /> },
               { path: 'ai-product', element: <AiProductPage /> },
-              { path: 'orders', element: <OrderListPage /> },
-              { path: 'pickup', element: <PickupProcessingPage /> },
+              { path: 'orders', element: <OrderManagementPage /> },
               { path: 'users', element: <UserListPage /> },
               { path: 'users/:userId', element: <UserDetailPage /> },
               { path: 'coupons', element: <CouponAdminPage /> },
@@ -128,7 +118,7 @@ const router = createBrowserRouter([
           { index: true, element: <ProductListPage /> },
           { path: "cart", element: <CartPage /> },
           { path: "onsite-sale", element: <OnsiteSalePage /> },
-          { path: "store-info", element: <StoreInfoPage /> },
+          { path: "customer-center", element: <CustomerCenterPage /> },
           {
             path: "mypage",
             children: [
@@ -159,19 +149,19 @@ const router = createBrowserRouter([
 ]);
 
 createRoot(document.getElementById('root')!).render(
-  <>
-    {/* ✅ [수정 완료] 커스텀 토스트와 충돌을 피하기 위해 toastOptions의 기본 스타일을 제거합니다. */}
+  <React.StrictMode>
     <Toaster
       position="top-center"
       reverseOrder={false}
       toastOptions={{
-        // 전역 성공/에러 메시지 지속 시간만 설정
         success: { duration: 2000 },
         error: { duration: 4000 },
       }}
     />
     <AuthProvider> 
-      <RouterWrapper />
+      <Suspense fallback={<LoadingSpinner />}>
+        <RouterProvider router={router} />
+      </Suspense>
     </AuthProvider>
-  </>
+  </React.StrictMode>
 );

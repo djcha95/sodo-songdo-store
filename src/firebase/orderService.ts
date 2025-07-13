@@ -1,5 +1,5 @@
 // src/firebase/orderService.ts
-
+import { getUserDocById } from './userService'; // ✅ userService에서 import 추가
 import { db } from './firebaseConfig';
 import {
   collection,
@@ -16,7 +16,9 @@ import {
 } from 'firebase/firestore';
 import type { FieldValue } from 'firebase/firestore';
 // ✅ [수정] 사용하지 않는 WaitlistItem 타입 제거
-import type { Order, OrderStatus, OrderItem, Product, SalesRound } from '@/types';
+import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry } from '@/types'; // 타입 추가
+import { Timestamp } from 'firebase/firestore'; // Timestamp 추가
+
 
 /**
  * @description 주문을 생성하고 재고를 차감하는 트랜잭션.
@@ -301,4 +303,61 @@ export const getReservedQuantities = async (): Promise<Record<string, number>> =
   });
   
   return quantities;
+};
+
+/**
+ * @description 대기 목록 항목으로부터 새로운 주문을 생성합니다. (트랜잭션 내부에서만 호출)
+ */
+export const submitOrderFromWaitlist = async (
+  transaction: any, // Firestore Transaction
+  waitlistEntry: WaitlistEntry,
+  product: Product,
+  round: SalesRound
+): Promise<void> => {
+    const { userId, quantity, variantGroupId, itemId } = waitlistEntry; // ✅ variantGroupId, itemId 사용
+    
+    // ✅ [수정] 정확한 옵션 정보 찾기
+    const vg = round.variantGroups.find(v => v.id === variantGroupId);
+    const itemDetail = vg?.items.find(i => i.id === itemId);
+
+    if (!vg || !itemDetail) {
+        // 해당 옵션을 찾을 수 없으면 주문을 생성하지 않고 오류를 발생시켜 트랜잭션을 중단
+        throw new Error(`주문 전환 실패: 상품(${product.groupName})의 옵션(ID: ${itemId})을 찾을 수 없습니다.`);
+    }
+
+    const userDoc = await getUserDocById(userId); // ✅ 사용자 정보 조회
+
+    const newOrderRef = doc(collection(db, 'orders'));
+    const orderData: Omit<Order, 'id'> = {
+        userId,
+        orderNumber: `SODOMALL-W-${Date.now()}`,
+        items: [{
+            productId: product.id,
+            productName: product.groupName,
+            imageUrl: product.imageUrls[0] || '',
+            roundId: round.roundId,
+            roundName: round.roundName,
+            variantGroupId: vg.id, // ✅ 정확한 정보 사용
+            variantGroupName: vg.groupName,
+            itemId: itemDetail.id, // ✅ 정확한 정보 사용
+            itemName: itemDetail.name,
+            quantity,
+            unitPrice: itemDetail.price,
+            stock: itemDetail.stock,
+            deadlineDate: round.deadlineDate,
+            pickupDate: round.pickupDate,
+        }],
+        totalPrice: itemDetail.price * quantity,
+        status: 'RESERVED',
+        createdAt: serverTimestamp(),
+        pickupDate: round.pickupDate,
+        // ✅ [수정] 실제 사용자 정보로 customerInfo 채우기
+        customerInfo: { 
+            name: userDoc?.displayName || '알 수 없음', 
+            phone: userDoc?.phone || '' 
+        },
+        notes: '대기 신청에서 자동으로 전환된 주문입니다.',
+    };
+
+    transaction.set(newOrderRef, orderData);
 };

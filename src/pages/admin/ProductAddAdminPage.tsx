@@ -1,6 +1,7 @@
 // src/pages/admin/ProductAddAdminPage.tsx
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { addProductWithFirstRound, addNewSalesRound, getCategories } from '../../firebase';
@@ -38,6 +39,7 @@ const getSmartDeadline = (): Date => {
 
 // --- 메인 컴포넌트 ---
 const ProductAddAdminPage: React.FC = () => {
+     useDocumentTitle('새 상품 등록'); // ✅ [추가]
     const navigate = useNavigate();
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);

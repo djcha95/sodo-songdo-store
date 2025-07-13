@@ -1,6 +1,7 @@
 // src/pages/admin/CategoryManagementPage.tsx
 
 import { useState, useEffect } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { addCategory, getCategories, updateCategory, deleteCategory, updateCategoriesOrder, getProductsCountByCategory } from '../../firebase';
 import type { Category } from '../../types';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
@@ -10,6 +11,7 @@ import toast from 'react-hot-toast';
 import './CategoryManagementPage.css';
 
 const CategoryManagementPage: React.FC = () => {
+  useDocumentTitle('카테고리 관리'); // ✅ [추가]
   const [categories, setCategories] = useState<Category[]>([]);
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
   const [newCategoryName, setNewCategoryName] = useState<string>('');

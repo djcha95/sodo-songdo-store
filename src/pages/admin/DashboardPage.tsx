@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -30,6 +31,7 @@ const formatDate = (date: Date): string => {
 };
 
 const DashboardPage: React.FC = () => {
+   useDocumentTitle('대시보드'); // ✅ [추가]
   const [loading, setLoading] = useState(true);
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});

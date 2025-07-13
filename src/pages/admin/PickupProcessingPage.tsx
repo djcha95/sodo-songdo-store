@@ -1,6 +1,7 @@
 // src/pages/admin/PickupProcessingPage.tsx
 
 import React, { useState } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 // ✅ [수정] updateMultipleOrderStatuses 함수 import
 import { searchOrdersByPhoneNumber, updateMultipleOrderStatuses } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
@@ -115,6 +116,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
 };
 
 const PickupProcessingPage: React.FC = () => {
+  useDocumentTitle('픽업/노쇼 처리'); // ✅ [추가]
   const [phoneNumberLast4, setPhoneNumberLast4] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Order[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
