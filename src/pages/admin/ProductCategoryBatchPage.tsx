@@ -32,12 +32,14 @@ const ProductCategoryBatchPage = () => {
     const fetchInitialData = async () => {
       setLoadingCategories(true);
       try {
-        const [categoriesData, unassignedProductsData] = await Promise.all([
+        const [categoriesData, unassignedProductsResult] = await Promise.all([
           getCategories(),
-          getProductsByCategory(null) // '분류 없음' 상품
+          // pageSize를 1000으로 설정하여 모든 상품을 가져옴
+          getProductsByCategory(null, 1000) // '분류 없음' 상품
         ]);
         setCategories(categoriesData);
-        setProducts(unassignedProductsData);
+        // getProductsByCategory가 { products: Product[], ... } 형태로 반환하므로 .products를 사용
+        setProducts(unassignedProductsResult.products);
       } catch (err) {
         console.error("초기 데이터 로딩 실패:", err);
         toast.error("데이터를 불러오는 데 실패했습니다.");
@@ -58,8 +60,13 @@ const ProductCategoryBatchPage = () => {
     setSearchTerm(''); // 검색어 초기화
 
     try {
-      const productsData = await getProductsByCategory(categoryName === UNASSIGNED_CATEGORY_KEY ? null : categoryName);
-      setProducts(productsData);
+      // pageSize를 1000으로 설정하여 모든 상품을 가져옴
+      const productsResult = await getProductsByCategory(
+        categoryName === UNASSIGNED_CATEGORY_KEY ? null : categoryName,
+        1000 // 모든 상품을 가져오기 위해 충분히 큰 pageSize 지정
+      );
+      // getProductsByCategory가 { products: Product[], ... } 형태로 반환하므로 .products를 사용
+      setProducts(productsResult.products);
     } catch (err) {
       console.error("상품 목록 로딩 실패:", err);
       toast.error("상품 목록을 불러오는 데 실패했습니다.");
@@ -126,10 +133,16 @@ const ProductCategoryBatchPage = () => {
   };
 
   // 검색어에 따라 필터링된 상품 목록
-  const filteredProducts = products.filter(p => p.groupName.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProducts = products.filter(p => 
+    p.groupName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loadingCategories) {
-    return <div className="page-loader">페이지 구성 중... <Loader className="spin" /></div>;
+    return (
+      <div className="page-loader">
+        페이지 구성 중... <Loader className="spin" />
+      </div>
+    );
   }
 
   return (
@@ -184,7 +197,9 @@ const ProductCategoryBatchPage = () => {
         </div>
         <div className="product-table-container">
           {loadingProducts ? (
-            <div className="list-loader"><Loader className="spin" /> 상품 목록을 불러오는 중...</div>
+            <div className="list-loader">
+              <Loader className="spin" /> 상품 목록을 불러오는 중...
+            </div>
           ) : filteredProducts.length === 0 ? (
             <div className="empty-list-indicator">
               <FileWarning size={40} />
@@ -229,7 +244,7 @@ const ProductCategoryBatchPage = () => {
           <div className="panel-footer">
             <button 
               className="unassign-btn"
-              onClick={() => handleMove('')}
+              onClick={() => handleMove('')} // Firestore에서는 null 대신 빈 문자열 ''로 저장하는 것이 일반적
               disabled={isMoving || selectedProductIds.size === 0}
             >
               <ChevronsRight size={16} />

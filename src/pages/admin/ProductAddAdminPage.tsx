@@ -48,11 +48,17 @@ const ProductAddAdminPage: React.FC = () => {
     const [pageTitle, setPageTitle] = useState('신규 대표 상품 등록');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
-    const [availableSubCategories, setAvailableSubCategories] = useState<string[]>([]);
+    
+    // ✅ [수정] 하위 카테고리 관련 state 제거
+    // const [availableSubCategories, setAvailableSubCategories] = useState<string[]>([]);
+    
     const [groupName, setGroupName] = useState('');
     const [description, setDescription] = useState('');
     const [selectedMainCategory, setSelectedMainCategory] = useState('');
-    const [selectedSubCategory, setSelectedSubCategory] = useState('');
+    
+    // ✅ [수정] 하위 카테고리 관련 state 제거
+    // const [selectedSubCategory, setSelectedSubCategory] = useState('');
+    
     const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -83,7 +89,10 @@ const ProductAddAdminPage: React.FC = () => {
 
     useEffect(() => { if (mode === 'newProduct' && variantGroups.length === 0) { setVariantGroups([{ id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); } }, [mode, variantGroups.length]);
     useEffect(() => { (async () => { try { setCategories(await getCategories()); } catch (err) { toast.error("카테고리 정보를 불러오는 데 실패했습니다."); } })(); }, []);
-    useEffect(() => { const category = categories.find(c => c.id === selectedMainCategory); setAvailableSubCategories(category ? category.subCategories : []); setSelectedSubCategory(''); }, [selectedMainCategory, categories]);
+    
+    // ✅ [수정] 하위 카테고리 관련 useEffect 제거
+    // useEffect(() => { const category = categories.find(c => c.id === selectedMainCategory); setAvailableSubCategories(category ? category.subCategories : []); setSelectedSubCategory(''); }, [selectedMainCategory, categories]);
+    
     useEffect(() => { if (mode === 'newProduct' && productType === 'single') { setVariantGroups(prev => prev.length > 0 ? [{ ...prev[0], groupName: groupName }] : prev); } }, [groupName, productType, mode]);
     
     useEffect(() => {
@@ -141,7 +150,8 @@ const ProductAddAdminPage: React.FC = () => {
                 if (mode === 'newProduct') {
                     const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = {
                         groupName: finalGroupName.trim(), description: description.trim(), storageType: selectedStorageType,
-                        category: categories.find(c => c.id === selectedMainCategory)?.name || '', subCategory: selectedSubCategory || '',
+                        category: categories.find(c => c.id === selectedMainCategory)?.name || '', 
+                        // ✅ [수정] subCategory 필드 제거
                         encoreCount: 0, encoreRequesterIds: [],
                     };
                     await addProductWithFirstRound(productData, salesRoundToSave, imageFiles);
@@ -173,7 +183,8 @@ const ProductAddAdminPage: React.FC = () => {
                         <div className="form-group"><label>대표 상품명 *</label><input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required/></div>
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
-                        {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select value={selectedSubCategory} onChange={e=>setSelectedSubCategory(e.target.value)} disabled={availableSubCategories.length===0}><option value="">소분류</option>{availableSubCategories.map(s=><option key={s} value={s}>{s}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
+                        {/* ✅ [수정] 하위 카테고리 select 제거 */}
+                        {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
                         <div className="form-group"><label>대표 이미지 *</label><div className="compact-image-uploader"><input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>{imagePreviews.map((p,i) => (<div key={p+i} className="thumbnail-preview"><img src={p} alt=""/><button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button></div>))}{imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}</div></div>
                     </div>
                     <div className="form-section">

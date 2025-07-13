@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleRoundStatuses } from '../../firebase';
+// ✅ [수정] 함수 이름 오타를 수정합니다.
+import { getProducts, getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses } from '../../firebase';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
@@ -167,20 +168,17 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <button className="stock-display-button" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정. -1 입력 시 무제한">{vg.configuredStock === -1 ? '∞' : vg.configuredStock}</button>
               )}
             </td>
-            <td><button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 정보를 수정합니다."><Edit size={16}/></button></td>
+            <td><button onClick={() => navigate(`/admin/products/edit/${item.productId}`)} className="admin-action-button" title="이 대표 상품의 정보를 수정합니다."><Edit size={16}/></button></td>
           </tr>
         );
     }
     
-    // ❗ [수정] 그룹 상품의 마스터 행 로직 개선
-    // 그룹 상품의 대표 상태와 가장 임박한 유통기한을 계산합니다.
     const earliestOverallExpiration = useMemo(() => {
         const allDates = item.enrichedVariantGroups.flatMap(vg => vg.items.map(i => safeToDate(i.expirationDate)?.getTime()).filter(Boolean) as number[]);
         return allDates.length > 0 ? Math.min(...allDates) : Infinity;
     }, [item.enrichedVariantGroups]);
     const roundStatus = item.round.status;
 
-    // 확장형 상품 행 렌더링
     return (
       <React.Fragment>
         <tr className="master-row expandable">
@@ -200,17 +198,14 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
               <div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div>
             </div>
           </td>
-
-          {/* ❗ [수정] colSpan 대신 개별 셀을 렌더링하여 정렬 문제 해결 및 대표 정보 표시 */}
           <td><span className={`status-badge status-${roundStatus}`} title={`Round Status: ${roundStatus}`}>{translateStatus(roundStatus)}</span></td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>{formatDate(earliestOverallExpiration)}</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
-
           <td>
-              <button onClick={() => navigate(`/admin/rounds/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차의 대표 정보를 수정합니다.">
+              <button onClick={() => navigate(`/admin/products/edit/${item.productId}`)} className="admin-action-button" title="이 대표 상품의 정보를 수정합니다.">
                   <Edit size={16}/>
               </button>
           </td>
@@ -252,7 +247,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
 const ProductListPageAdmin: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>([] );
   const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
   const [pickedUpQuantitiesMap, setPickedUpQuantitiesMap] = useState<Map<string, number>>(new Map());
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
@@ -352,9 +347,10 @@ const ProductListPageAdmin: React.FC = () => {
   }, [allProducts, reservedQuantitiesMap, pickedUpQuantitiesMap, searchQuery, filterCategory, filterStatus, sortConfig]);
 
   useEffect(() => {
+    // 모든 확장 가능한 라운드의 ID를 초기화 시 확장된 상태로 만듭니다.
     const allExpandableIds = new Set(enrichedRounds.filter(item => item.enrichedVariantGroups.length > 1).map(item => item.uniqueId));
     setExpandedRoundIds(allExpandableIds);
-  }, [allProducts]); 
+  }, [allProducts]); // allProducts가 변경될 때마다 재실행
 
   const handleSortChange = (key: SortableKeys) => {
     setSortConfig(prev => ({ 
@@ -370,13 +366,18 @@ const ProductListPageAdmin: React.FC = () => {
 
   const handleStockEditSave = async (vgUniqueId: string) => {
     const newStockValue = stockInputs[vgUniqueId];
-    setEditingStockId(null);
+    setEditingStockId(null); // 편집 모드 종료
     if (newStockValue === undefined) return;
 
+    // uniqueId에서 productId, roundId, variantGroupId 추출
     const [productId, roundId, variantGroupId] = vgUniqueId.split('_');
     const newStock = parseInt(newStockValue, 10);
 
-    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) { toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다."); return; }
+    // 유효성 검사
+    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
+      toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다.");
+      return;
+    }
 
     const promise = updateMultipleVariantGroupStocks([{ productId, roundId, variantGroupId, newStock }]);
     await toast.promise(promise, {
@@ -385,6 +386,7 @@ const ProductListPageAdmin: React.FC = () => {
       error: "업데이트 중 오류가 발생했습니다.",
     });
 
+    // 성공적으로 업데이트되면 UI 상태 즉시 반영
     setAllProducts(prevProducts => prevProducts.map(p => {
         if (p.id !== productId) return p;
         const newSalesHistory = p.salesHistory.map(r => {
@@ -411,30 +413,43 @@ const ProductListPageAdmin: React.FC = () => {
   const handleSelectionChange = (id: string, isSelected: boolean) => {
     setSelectedItems(prev => {
         const newSet = new Set(prev);
-        if (isSelected) newSet.add(id); else newSet.delete(id);
+        if (isSelected) newSet.add(id);
+        else newSet.delete(id);
         return newSet;
     });
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) { setSelectedItems(new Set(enrichedRounds.map(item => item.uniqueId))); } 
-    else { setSelectedItems(new Set()); }
+    if (e.target.checked) {
+        setSelectedItems(new Set(enrichedRounds.map(item => item.uniqueId)));
+    } else {
+        setSelectedItems(new Set());
+    }
   };
 
-  const handleBulkAction = async (action: 'end_sale') => {
-    if (selectedItems.size === 0) { toast.error("선택된 항목이 없습니다."); return; }
+  const handleBulkAction = async () => {
+    if (selectedItems.size === 0) {
+      toast.error("선택된 항목이 없습니다.");
+      return;
+    }
+
+    // 선택된 각 uniqueId에서 productId와 roundId를 추출하여 업데이트 페이로드 생성
     const updates = Array.from(selectedItems).map(id => {
-        const [productId, roundId] = id.split('-');
-        return { productId, roundId, newStatus: 'ended' as SalesRoundStatus };
+        const [productId, roundId] = id.split('-'); // uniqueId는 productId-roundId 형태
+        return { productId, roundId, newStatus: 'ended' as SalesRoundStatus }; // 판매 종료 상태로 변경
     });
-    const promise = updateMultipleRoundStatuses(updates);
+    
+    // updateMultipleSalesRoundStatuses 함수 호출
+    const promise = updateMultipleSalesRoundStatuses(updates);
+
     await toast.promise(promise, {
         loading: `${selectedItems.size}개 항목의 판매를 종료하는 중...`,
         success: "선택된 항목이 모두 판매 종료 처리되었습니다.",
         error: "일괄 작업 중 오류가 발생했습니다."
     });
-    setSelectedItems(new Set());
-    fetchData(); 
+
+    setSelectedItems(new Set()); // 선택 초기화
+    fetchData(); // 데이터 새로고침
   };
 
   const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;
@@ -465,7 +480,8 @@ const ProductListPageAdmin: React.FC = () => {
                         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select"><option value="all">모든 상태</option><option value="selling">판매중</option><option value="scheduled">판매예정</option><option value="sold_out">품절</option><option value="ended">판매종료</option></select>
                     </div>
                 </div>
-                <div className="bulk-action-wrapper"><button className="bulk-action-button" onClick={() => handleBulkAction('end_sale')} disabled={selectedItems.size === 0}><Trash2 size={16} /> 선택 항목 판매 종료</button></div>
+                {/* ✅ [수정] onClick 핸들러 변경 */}
+                <div className="bulk-action-wrapper"><button className="bulk-action-button" onClick={handleBulkAction} disabled={selectedItems.size === 0}><Trash2 size={16} /> 선택 항목 판매 종료</button></div>
             </div>
             <div className="admin-product-table-container">
               <table className="admin-product-table">

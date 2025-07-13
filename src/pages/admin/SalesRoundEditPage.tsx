@@ -4,10 +4,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById, updateSalesRound, getCategories, updateProductCoreInfo } from '../../firebase';
-import type { Category, StorageType, SalesRound, Product, SalesRoundStatus, VariantGroup, ProductItem } from '../../types';
+// ✅ [수정] 사용되지 않는 SalesRound 타입 제거
+import type { Category, StorageType, Product, SalesRoundStatus, VariantGroup, ProductItem } from '../../types';
 import toast from 'react-hot-toast';
 import { Save, PlusCircle, X, Loader, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
-import './ProductAddAdminPage.css';
+import './ProductAddAdminPage.css'; // 폼 스타일은 공유
 
 // --- UI 상태 관리용 타입 정의 ---
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
@@ -38,9 +39,7 @@ const SalesRoundEditPage: React.FC = () => {
     const [groupName, setGroupName] = useState('');
     const [description, setDescription] = useState('');
     const [selectedMainCategory, setSelectedMainCategory] = useState('');
-    const [selectedSubCategory, setSelectedSubCategory] = useState('');
     const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
-    const [availableSubCategories, setAvailableSubCategories] = useState<string[]>([]);
     const [initialImageUrls, setInitialImageUrls] = useState<string[]>([]);
     const [currentImageUrls, setCurrentImageUrls] = useState<string[]>([]);
     const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
@@ -69,7 +68,7 @@ const SalesRoundEditPage: React.FC = () => {
                 setDescription(product.description);
                 setSelectedStorageType(product.storageType);
                 const mainCat = fetchedCategories.find(c => c.name === product.category);
-                if (mainCat) { setSelectedMainCategory(mainCat.id); if (product.subCategory) setSelectedSubCategory(product.subCategory); }
+                if (mainCat) { setSelectedMainCategory(mainCat.id); } // ✅ 하위 카테고리 로직 제거
                 setInitialImageUrls(product.imageUrls || []);
                 setCurrentImageUrls(product.imageUrls || []);
                 setImagePreviews(product.imageUrls || []);
@@ -96,7 +95,7 @@ const SalesRoundEditPage: React.FC = () => {
         fetchData();
     }, [productId, roundId, navigate]);
 
-    useEffect(() => { const category = categories.find(c => c.id === selectedMainCategory); setAvailableSubCategories(category ? category.subCategories : []); if (category && !category.subCategories.includes(selectedSubCategory)) { setSelectedSubCategory(''); } }, [selectedMainCategory, categories, selectedSubCategory]);
+    // ✅ 하위 카테고리 관련 useEffect 제거
     useEffect(() => { if (!pickupDay) { setPickupDeadlineDate(null); return; } const newPickupDeadline = new Date(pickupDay); if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); } setPickupDeadlineDate(newPickupDeadline); }, [pickupDay, selectedStorageType]);
 
     const handleProductTypeChange = useCallback((newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); } }, [productType]);
@@ -118,8 +117,10 @@ const SalesRoundEditPage: React.FC = () => {
         if (!isDraft) { if (imagePreviews.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; } if (!deadlineDate || !pickupDay || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; } }
         setIsSubmitting(true);
         try {
-            const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '', subCategory: selectedSubCategory || '', };
+            // ✅ [수정] subCategory 필드 제거
+            const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '' };
             await updateProductCoreInfo(productId, productDataToUpdate, newImageFiles, currentImageUrls, initialImageUrls);
+            
             const status: SalesRoundStatus = isDraft ? 'draft' : (publishOption === 'now' ? 'selling' : 'scheduled');
             const salesRoundToUpdate = {
                 roundName: roundName.trim(), status,
@@ -161,7 +162,8 @@ const SalesRoundEditPage: React.FC = () => {
                         <p className="section-subtitle">상품의 기본 정보는 모든 판매 회차에 공통 적용됩니다.</p>
                         <div className="form-group"><label>대표 상품명 *</label><input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}/></div>
-                        <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select value={selectedSubCategory} onChange={e=>setSelectedSubCategory(e.target.value)} disabled={availableSubCategories.length===0}><option value="">소분류</option>{availableSubCategories.map(s=><option key={s} value={s}>{s}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>
+                        {/* ✅ [수정] 하위 카테고리 select 제거 */}
+                        <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>
                         <div className="form-group"><label>대표 이미지 *</label><div className="compact-image-uploader"><input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>{imagePreviews.map((p,i) => (<div key={p+i} className="thumbnail-preview"><img src={p} alt=""/><button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button></div>))}{imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}</div></div>
                     </div>
 
@@ -171,23 +173,10 @@ const SalesRoundEditPage: React.FC = () => {
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} required/></div>
                         {variantGroups.map(vg => (
                             <div className="variant-group-card" key={vg.id}>
-                                {/* ✅ 1. 디자인 적용을 위해 JSX 구조 변경 */}
                                 <div className="variant-group-header">
-                                    <div className="form-group full-width">
-                                        <label>하위 상품 그룹명 *</label>
-                                        <input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder="하위 상품 그룹명" required />
-                                    </div>
-                                    <div className="form-group">
-                                        <label>그룹 총 재고</label>
-                                        <div className="stock-input-wrapper">
-                                            <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/>
-                                            <span className="stock-unit-addon">{vg.stockUnitType || '개'}</span>
-                                        </div>
-                                    </div>
-                                    <div className="form-group">
-                                        <label>유통기한</label>
-                                        <input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/>
-                                    </div>
+                                    <div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder="하위 상품 그룹명" required /></div>
+                                    <div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div>
+                                    <div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>
                                     {productType === 'group' && (<button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? "마지막 그룹은 삭제할 수 없습니다." : "그룹 삭제"}><Trash2 size={16}/></button>)}
                                 </div>
                                 {vg.items.map(item => (

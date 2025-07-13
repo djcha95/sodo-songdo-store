@@ -1,124 +1,150 @@
 /* src/pages/customer/CartPage.css */
 
+.cart-page-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.cart-items-column {
+  flex-grow: 1;
+}
+.cart-summary-column {
+  width: 100%;
+}
+.cart-summary-card {
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-lg);
+  padding: 18px 24px; /* ✅ 상하 패딩 조정 */
+  background-color: var(--bg-color-white);
+}
+.summary-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-color-dark);
+  margin: 0 0 16px; /* ✅ 마진 조정 */
+  padding-bottom: 12px; /* ✅ 패딩 조정 */
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+@media (min-width: 992px) {
+  .cart-page-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) 1fr;
+    align-items: flex-start;
+    gap: 32px;
+  }
+  .cart-summary-column {
+    position: sticky;
+    top: 24px;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin-icon {
+  animation: spin 1.5s linear infinite;
+  margin-left: 8px;
+}
+
 .cart-page-wrapper {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-/* --- 공통 섹션 스타일 --- */
+/* ✅ [수정] 섹션 헤더 스타일 */
+.cart-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 8px; /* 구분선 위쪽 패딩 */
+  border-bottom: 1px solid var(--border-color-light); /* 구분선 추가 */
+}
 .cart-section-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 1.25rem;
+  font-size: 1.2rem; /* ✅ 글자 크기 조정 */
   font-weight: 700;
-  margin: 24px 0 16px;
   color: var(--text-color-dark);
+  margin: 0;
 }
-.cart-section-title:first-child {
-  margin-top: 0;
-}
-.waitlist-title {
-  color: var(--text-color-medium);
-}
+.waitlist-header .cart-section-title { color: var(--text-color-medium); } /* waitlist-title 대신 waitlist-header에 적용 */
 .cart-items-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
-/* --- 비어있을 때 메시지 --- */
-.empty-cart-message {
-  text-align: center;
-  padding: 80px 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+/* ✅ 대기 상품 섹션 상단 여백 추가 */
+.waitlist-section {
+  margin-top: 40px; /* 예약 상품 섹션과의 간격 */
 }
-.empty-cart-message .empty-cart-icon {
-  color: var(--border-color-dark);
-  margin-bottom: 24px;
-}
-.empty-cart-message p {
-  font-size: 1.1rem;
-  color: var(--text-color-medium);
-  margin-bottom: 24px;
-  font-weight: 500;
-}
-.continue-shopping-btn {
+
+/* ✅ [수정] 선택 삭제 버튼 스타일 */
+.bulk-remove-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 30px;
-  background-color: var(--primary-color);
-  color: var(--bg-color-white);
-  text-decoration: none;
-  border-radius: var(--border-radius-lg);
-  font-weight: var(--font-weight-bold);
-  font-size: 1rem;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--danger-color); /* 테두리 색상 조정 */
+  color: var(--danger-color);
+  padding: 6px 12px;
+  border-radius: var(--border-radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
   transition: all 0.2s ease;
+  margin-left: auto; /* ✅ 오른쪽 정렬 */
 }
-.continue-shopping-btn:hover {
-  background-color: var(--primary-color-dark);
-  transform: translateY(-2px);
-}
-
-/* --- 정보 안내 박스 (예약/대기 상품 없음) --- */
-.info-box {
-  background-color: var(--bg-color-light);
-  padding: 24px;
-  border-radius: var(--border-radius-lg);
-  text-align: center;
-  color: var(--text-color-medium);
-  border: 1px dashed var(--border-color-medium);
-}
-.info-box p {
-  font-size: 1rem;
-  font-weight: 500;
-  margin: 0;
+.bulk-remove-btn:hover {
+  background-color: var(--danger-color); /* 호버 시 배경색 조정 */
+  color: var(--bg-color-white);
 }
 
-/* ✅ [개선] 새로운 상품 카드 스타일 --- */
+/* --- ✅ [수정] 상품 카드 전체 스타일 --- */
 .cart-item-card {
   display: flex;
   gap: 16px;
   background-color: var(--bg-color-white);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--box-shadow-md);
-  padding: 16px;
-  transition: box-shadow 0.2s ease;
+  border: 2px solid transparent;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--box-shadow-sm);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-.cart-item-card:hover {
-  box-shadow: var(--box-shadow-lg);
+.cart-item-card.selected {
+  border-color: var(--primary-color);
+  background-color: var(--primary-color-x-light, #f0f6ff);
 }
-
 .item-image-wrapper {
   flex-shrink: 0;
-  width: 90px;
-  height: 90px;
-  border-radius: var(--border-radius-md);
+  width: 100px;
+  height: 100px;
+  border-radius: var(--border-radius-sm);
   overflow: hidden;
   border: 1px solid var(--border-color-light);
-  cursor: pointer;
 }
 .item-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.3s ease; /* ✅ 이미지 호버 효과 추가 */
 }
-
-/* ✅ [개선] 카드 콘텐츠 영역을 flex column으로 재구성 */
+.item-image-wrapper:hover .item-image { /* ✅ 이미지 호버 효과 추가 */
+  transform: scale(1.05);
+}
 .item-details-wrapper {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* flex item 내부 컨텐츠가 넘칠 때 레이아웃이 깨지는 것을 방지 */
+  justify-content: space-between;
+  min-width: 0;
 }
-
-/* --- 카드 상단 (상품명, 옵션, 삭제 버튼) --- */
 .item-header {
   display: flex;
   justify-content: space-between;
@@ -131,193 +157,139 @@
   min-width: 0;
 }
 .item-product-name {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 600;
   color: var(--text-color-dark);
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .item-option-name {
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--text-color-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.item-remove-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-color-light);
-  padding: 4px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: color 0.2s;
-}
-.item-remove-btn:hover {
-  color: var(--danger-color);
-}
-
-/* --- 카드 중단 (픽업 날짜, 대기 상태) --- */
-.item-body {
-  margin-top: auto; /* 상단과 하단 영역 사이의 공간을 채움 */
-  padding: 10px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 .item-pickup-info {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--primary-color);
+  gap: 4px;
+  font-size: 0.85rem; /* ✅ 글자 크기 약간 키움 */
+  font-weight: 600; /* ✅ 글자 더 진하게 */
+  color: var(--text-color-dark); /* ✅ 색상 변경 */
+  text-align: right;
+  flex-shrink: 0;
 }
-
-/* --- 카드 하단 (수량, 가격) --- */
 .item-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .item-total-price {
-  font-size: 1.25rem;
-  font-weight: 800;
+  font-size: 1.1rem; /* ✅ 글자 크기 조정 */
+  font-weight: 700;
   color: var(--text-color-dark);
-  flex-shrink: 0; /* 가격이 찌그러지는 것 방지 */
+  white-space: nowrap; /* ✅ 줄바꿈 방지 */
 }
-
-/* --- 수량 조절 컨트롤 --- */
 .item-quantity-controls {
   display: flex;
   align-items: center;
   border: 1px solid var(--border-color-medium);
   border-radius: var(--border-radius-full);
-  /* ✅ [수정] overflow: hidden 속성을 제거하여 '+' 버튼이 잘리지 않도록 합니다. */
-  height: 40px;
+  height: 38px; /* ✅ 높이 조정 */
   background: white;
 }
 .item-quantity-controls button {
-  background-color: transparent;
+  padding: 0 8px; /* ✅ 패딩 조정 (0 12px -> 0 8px) */
+  background: none;
   border: none;
   cursor: pointer;
-  padding: 8px 12px;
+  color: var(--text-color-dark);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-color-medium);
-  transition: color 0.2s;
-}
-.item-quantity-controls button:hover:not(:disabled) {
-  color: var(--primary-color);
-}
-.item-quantity-controls button:disabled {
-  color: var(--border-color-medium);
-  cursor: not-allowed;
-}
-
-.quantity-display {
-  font-size: 1.1rem;
-  font-weight: 700;
-  min-width: 44px;
-  text-align: center;
-  color: var(--text-color-dark);
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 38px;
-}
-.quantity-input {
-  width: 44px;
-  border: none;
-  text-align: center;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--primary-color);
-  background-color: #f1faff;
   height: 100%;
+}
+.item-quantity-controls button:hover {
+  background-color: var(--bg-color-light);
+}
+.item-quantity-controls button:first-child {
+  border-top-left-radius: var(--border-radius-full);
+  border-bottom-left-radius: var(--border-radius-full);
+}
+.item-quantity-controls button:last-child {
+  border-top-right-radius: var(--border-radius-full);
+  border-bottom-right-radius: var(--border-radius-full);
+}
+.quantity-display, .quantity-input {
+  font-size: 1rem; /* ✅ 글자 크기 조정 */
+  min-width: 32px; /* ✅ 너비 조정 (36px -> 32px) */
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-color-dark);
+  font-weight: 600;
 }
 .quantity-input:focus {
   outline: none;
-}
-.quantity-input::-webkit-outer-spin-button,
-.quantity-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.quantity-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
+  background-color: var(--bg-color-light);
 }
 
-/* --- 대기 상품 특별 스타일 --- */
-.waitlist-item {
-  opacity: 0.85;
-}
+
 .waitlist-status-badge {
+  width: fit-content;
+  margin-top: 8px;
+  padding: 5px 10px;
+  border-radius: var(--border-radius-md);
+  background-color: #f1f3f5;
+  font-size: 0.85rem;
+  color: #868e96;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  border-radius: var(--border-radius-md);
-  background-color: var(--bg-color-medium);
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-color-medium);
+}
+.info-box {
+  background-color: var(--bg-color-light);
   border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-md);
+  padding: 16px;
+  text-align: center;
+  color: var(--text-color-medium);
+  font-size: 0.95rem;
+  margin-top: 12px;
 }
-
-
-/* --- 하단 고정 결제 요약 --- */
-.cart-summary-sticky-footer {
-  position: sticky;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 16px 20px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border-color-light);
-  z-index: 500;
-  margin-top: auto; /* 컨텐츠가 짧을 때도 항상 맨 아래에 위치 */
-}
-@media (max-width: 600px) {
-  .cart-summary-sticky-footer {
-    position: fixed;
-    bottom: 65px; /* 모바일 하단 네비게이션 높이 고려 */
-    left: 0;
-    right: 0;
-  }
-}
-.summary-row.total-amount {
+.summary-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 12px;
+  margin-bottom: 12px; /* ✅ 마진 조정 */
 }
 .total-label {
-  font-size: 1rem;
+  font-size: 0.95rem; /* ✅ 글자 크기 조정 */
   font-weight: 600;
   color: var(--text-color-medium);
 }
+.total-item-count {
+  font-size: 1rem; /* ✅ 글자 크기 조정 */
+  font-weight: 700;
+  color: var(--text-color-dark);
+}
 .total-price-value {
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: var(--accent-color);
+  font-size: 1.2rem; /* ✅ 글자 크기 조정 */
+  font-weight: 700; /* ✅ 폰트 굵기 조정 (강조 줄임) */
+  color: var(--text-color-dark); /* ✅ 색상 변경 (강조 줄임) */
 }
 .checkout-btn {
   width: 100%;
-  padding: 16px;
+  padding: 14px; /* ✅ 패딩 조정 */
   background-color: var(--accent-color);
   color: var(--bg-color-white);
   border: none;
   border-radius: var(--border-radius-lg);
-  font-size: 1.1rem;
+  font-size: 1rem; /* ✅ 글자 크기 조정 */
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -338,32 +310,60 @@
   box-shadow: none;
 }
 
-
-/* --- 토스트 알림 스타일 (단순 확인 & 실행 취소) --- */
-.toast-style-primary {
-  background: var(--primary-color) !important;
-  color: white !important;
-}
-.toast-style-light {
-  background: white !important;
-  color: var(--text-color-dark) !important;
-  box-shadow: var(--box-shadow-lg) !important;
-  border-radius: var(--border-radius-lg) !important;
-}
-.confirmation-toast-simple {
-  padding: 16px;
+.empty-cart-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background-color: var(--bg-color-white);
+  border: 1px dashed var(--border-color-light);
+  border-radius: var(--border-radius-lg);
+  margin-top: 24px;
   text-align: center;
+}
+.empty-cart-icon {
+  color: var(--border-color-medium);
+  margin-bottom: 20px;
+}
+.empty-cart-message p {
+  font-size: 1.1rem;
+  color: var(--text-color-medium);
+  margin-bottom: 24px;
+}
+.continue-shopping-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background-color: var(--primary-color);
+  color: var(--bg-color-white);
+  border-radius: var(--border-radius-md);
+  text-decoration: none;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+.continue-shopping-btn:hover {
+  background-color: var(--primary-color-dark);
+}
+
+/* 토스트 관련 스타일 */
+.confirmation-toast-simple, .undo-toast {
+    background: #333;
+    color: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 .confirmation-toast-simple h4 {
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0 0 8px;
-  color: var(--text-color-dark);
 }
 .confirmation-toast-simple p {
   font-size: 0.9rem;
   margin: 0;
-  color: var(--text-color-medium);
+  opacity: 0.8;
 }
 .toast-buttons-simple {
   display: grid;
@@ -375,28 +375,27 @@
 .toast-buttons-simple button {
   flex-grow: 1;
   border: none;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: var(--border-radius-md);
-  font-size: 1rem;
+  font-size: 0.95rem;
   cursor: pointer;
   font-weight: 600;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, transform 0.1s;
 }
 .toast-confirm-btn-simple {
-  background-color: var(--primary-color);
-  color: var(--bg-color-white);
+  background-color: #fff;
+  color: #333;
 }
 .toast-confirm-btn-simple:hover {
-  background-color: var(--primary-color-dark);
+  background-color: #eee;
 }
 .toast-cancel-btn-simple {
-  background-color: var(--bg-color-medium);
-  color: var(--text-color-dark);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 .toast-cancel-btn-simple:hover {
-  background-color: var(--border-color-medium);
+  background-color: rgba(255, 255, 255, 0.2);
 }
-
 .undo-toast {
   display: flex;
   align-items: center;
@@ -410,7 +409,7 @@
 .undo-toast button {
   background: none;
   border: none;
-  color: #a5d8ff;
+  color: #8ecae6;
   font-weight: 700;
   cursor: pointer;
   padding: 8px;
