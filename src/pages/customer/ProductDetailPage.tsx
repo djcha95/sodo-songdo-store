@@ -244,6 +244,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       stock: selectedItem.stock,
       pickupDate: displayRound.pickupDate,
       status: 'RESERVATION',
+      deadlineDate: displayRound.deadlineDate,
     };
 
     addToCart(itemToAdd);
@@ -298,6 +299,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         stock: selectedItem.stock,
         pickupDate: displayRound.pickupDate,
         status: 'WAITLIST',
+        deadlineDate: displayRound.deadlineDate,
       };
 
       addToCart(itemToWaitlist);

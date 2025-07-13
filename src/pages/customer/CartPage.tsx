@@ -1,7 +1,7 @@
 // src/pages/customer/CartPage.tsx
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // useLocation 제거
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import type { CartItem, Order } from '@/types';
@@ -78,7 +78,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
       if (newQuantity < 1 || newQuantity > stockLimit) return;
       updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, newQuantity);
     };
-    return useLongPress(performUpdate, performUpdate, { delay: 100 }); // ✅ 오류 수정: { delay: 100 } 객체 전달
+    return useLongPress(performUpdate, performUpdate, { delay: 100 });
   }, [item, stockLimit, updateCartItemQuantity]);
 
   const decreaseHandlers = createQuantityHandlers(-1);
@@ -101,7 +101,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
             </div>
             <div className="item-pickup-info">
                 <CalendarDays size={14} />
-                <span>{formatPickupDate(item.pickupDate)}</span> {/* 픽업일 형식 변경 */}
+                <span>{formatPickupDate(item.pickupDate)}</span>
             </div>
         </div>
         <div className="item-footer">
@@ -111,7 +111,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
               // ✅ 수정: 수량에 관계없이 개당 단가를 표시
               <div className="item-total-price">{item.unitPrice.toLocaleString()}원  </div>
             )}
-            <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}> {/* 수량 조절 시 카드 선택 방지 */}
+            <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}>
               <button {...decreaseHandlers} disabled={item.quantity <= 1}><Minus size={18} /></button>
               {isEditing ? (
                 <input ref={inputRef} type="number" className="quantity-input" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onBlur={handleQuantityUpdate} onKeyDown={handleInputKeyDown} />
@@ -129,36 +129,22 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
 
 // --- 메인 페이지 컴포넌트 ---
 const CartPage: React.FC = () => {
-  const { user } = useAuth();
-  const { cartItems, removeItems, removeReservedItems, updateItemsStatus } = useCart();
+  const { user, userDocument } = useAuth();
+  const { 
+    allItems, reservationItems, waitlistItems, 
+    removeItems, removeReservedItems, updateItemsStatus, 
+    reservationTotal, reservationItemCount // ✅ cartTotal -> reservationTotal, cartItemCount -> reservationItemCount 로 변경
+  } = useCart();
   const navigate = useNavigate();
-  // const location = useLocation(); // ✅ useLocation 제거
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isWaitlistProcessing, setIsWaitlistProcessing] = useState(false);
   const [selectedReservationKeys, setSelectedReservationKeys] = useState<Set<string>>(new Set());
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
 
-  // 예약 상품과 대기 상품 분리
-  const reservationItems = useMemo(() =>
-    cartItems.filter(item => item.status === 'RESERVATION').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
-    [cartItems]
-  );
-  const waitlistItems = useMemo(() =>
-    cartItems.filter(item => item.status === 'WAITLIST').sort((a, b) => a.pickupDate.toMillis() - b.pickupDate.toMillis()),
-    [cartItems]
-  );
-
-  // 총 예약 금액 및 수량 계산
-  const { cartTotal, cartItemCount } = useMemo(() => {
-    const total = reservationItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-    const count = reservationItems.reduce((sum, item) => sum + item.quantity, 0);
-    return { cartTotal: total, cartItemCount: count };
-  }, [reservationItems]);
-
   // 대기 상품 자동 예약 전환 및 만료 처리
   useEffect(() => {
-    const waitlistItemsToCheck = cartItems.filter(item => item.status === 'WAITLIST');
+    const waitlistItemsToCheck = allItems.filter(item => item.status === 'WAITLIST');
     if (waitlistItemsToCheck.length === 0) return;
 
     const processWaitlist = async () => {
@@ -202,7 +188,7 @@ const CartPage: React.FC = () => {
       }
     };
     processWaitlist();
-  }, [cartItems, removeItems, updateItemsStatus]);
+  }, [allItems, removeItems, updateItemsStatus]); // ✅ 의존성 배열도 allItems로 변경
 
   // 아이템 선택/선택 해제 핸들러
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
@@ -263,7 +249,7 @@ const CartPage: React.FC = () => {
 
   // 예약 확정 핸들러
   const handleConfirmReservation = async () => {
-    if (!user || !user.uid || !user.phone) {
+    if (!user || !user.uid || !userDocument?.phone) {
       toast.error('전화번호 정보가 없습니다. 다시 로그인 해주세요.');
       navigate('/login', { state: { from: '/cart' }, replace: true });
       return;
@@ -273,8 +259,8 @@ const CartPage: React.FC = () => {
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'> = {
         userId: user.uid,
         items: reservationItems,
-        totalPrice: cartTotal,
-        customerInfo: { name: user.displayName || '미상', phone: user.phone },
+        totalPrice: reservationTotal, // ✅ cartTotal -> reservationTotal
+        customerInfo: { name: user.displayName || '미상', phone: userDocument.phone },
         // 예약 상품들은 이미 픽업일이 같다고 가정
         pickupDate: reservationItems[0].pickupDate,
     };
@@ -287,7 +273,7 @@ const CartPage: React.FC = () => {
         navigate('/mypage/history');
         return '예약이 성공적으로 완료되었습니다!';
       },
-      error: (err) => (err as Error).message || '예약 확정 중 오류가 발생했습니다.',
+      error: (err) => (err as Error).message || '예약 확정 중 오류가 발생합니다.',
     }).finally(() => {
       setIsProcessingOrder(false);
     });
@@ -346,7 +332,7 @@ const CartPage: React.FC = () => {
             )}
 
             {/* 대기 상품 섹션 */}
-            <div className="waitlist-section"> {/* 대기 상품 섹션 간격 조절을 위한 div 추가 */}
+            <div className="waitlist-section">
               <div className="cart-section-header waitlist-header">
                 <h2 className="cart-section-title">
                   <Hourglass size={18}/> 대기 상품 ({waitlistItems.length})
@@ -379,7 +365,7 @@ const CartPage: React.FC = () => {
               )}
             </div>
 
-            {cartItems.length === 0 && (
+            {allItems.length === 0 && (
               <div className="empty-cart-message">
                 <CartIcon size={64} className="empty-cart-icon" />
                 <p>장바구니와 대기 목록이 비어있습니다.</p>
@@ -394,11 +380,11 @@ const CartPage: React.FC = () => {
                   <h3 className="summary-title">예약 정보 요약</h3>
                   <div className="summary-row total-amount">
                     <span className="total-label">총 예약 상품</span>
-                    <span className="total-item-count">{cartItemCount} 개</span>
+                    <span className="total-item-count">{reservationItemCount} 개</span> {/* ✅ cartItemCount -> reservationItemCount */}
                   </div>
                   <div className="summary-row total-amount">
                     <span className="total-label">총 예약 금액</span>
-                    <span className="total-price-value">{cartTotal.toLocaleString()}원</span>
+                    <span className="total-price-value">{reservationTotal.toLocaleString()}원</span> {/* ✅ cartTotal -> reservationTotal */}
                   </div>
                   <button className="checkout-btn" onClick={showOrderConfirmation} disabled={isProcessingOrder}>
                     {isProcessingOrder ? '처리 중...' : `예약 확정하기`}
