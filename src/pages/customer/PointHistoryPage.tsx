@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getPointHistory } from '@/firebase';
 import type { PointLog } from '@/types';
-import { TrendingUp, TrendingDown, History } from 'lucide-react';
+// [수정] 사용하지 않는 History 아이콘을 import 목록에서 제거합니다.
+import { TrendingUp, TrendingDown } from 'lucide-react';
 import './PointHistoryPage.css';
 
 // 날짜 포맷팅 헬퍼
