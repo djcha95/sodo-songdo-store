@@ -2,23 +2,23 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom'; // Link 추가
 import { Timestamp } from 'firebase/firestore';
-import { addProductWithFirstRound, addNewSalesRound, getCategories } from '../../firebase';
+// ✅ [추가] searchProductsByName 함수 import
+import { addProductWithFirstRound, addNewSalesRound, getCategories, searchProductsByName } from '../../firebase';
 import type { Category, StorageType, SalesRound, Product, VariantGroup, ProductItem, SalesRoundStatus } from '../../types';
 import toast from 'react-hot-toast';
-import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
+// ✅ [추가] AlertTriangle 아이콘 import
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
-// ✅ [수정] SodamallLoader를 import 합니다.
 import SodamallLoader from '@/components/common/SodamallLoader';
 import './ProductAddAdminPage.css';
 
-// --- UI 상태 관리용 타입 정의 ---
+// ... (기존 UI 타입 및 헬퍼 함수는 그대로 유지) ...
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
 interface VariantGroupUI { id:string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
 
-// --- 헬퍼 함수 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
 const formatToDateTimeLocal = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const formatDateToYYYYMMDD = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
@@ -40,6 +40,7 @@ const getSmartDeadline = (): Date => {
     return deadline;
 };
 
+
 // --- 메인 컴포넌트 ---
 const ProductAddAdminPage: React.FC = () => {
     useDocumentTitle('새 상품 등록');
@@ -47,6 +48,7 @@ const ProductAddAdminPage: React.FC = () => {
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ... (기존 상태들) ...
     const [mode, setMode] = useState<'newProduct' | 'newRound'>('newProduct');
     const [productType, setProductType] = useState<'single' | 'group'>('single');
     const [existingProductId, setExistingProductId] = useState<string | null>(null);
@@ -69,6 +71,12 @@ const ProductAddAdminPage: React.FC = () => {
     const [pickupDay, setPickupDay] = useState<Date | null>(null);
     const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
 
+
+    // ✅ [추가] 중복 상품 검사 관련 상태
+    const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
+    const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
+    // ... (기존 useEffect 들) ...
     useEffect(() => {
         const { productId, productGroupName, lastRound } = location.state || {};
         if (productId) {
@@ -98,6 +106,35 @@ const ProductAddAdminPage: React.FC = () => {
         setPickupDeadlineDate(newPickupDeadline);
     }, [pickupDay, selectedStorageType]);
 
+
+    // ✅ [추가] 상품명 변경 시 디바운싱을 적용하여 중복 검사 실행
+    useEffect(() => {
+        // 새 상품 등록 모드가 아니거나, 상품명이 비어있으면 검사하지 않음
+        if (mode !== 'newProduct' || !groupName.trim()) {
+            setSimilarProducts([]);
+            return;
+        }
+
+        setIsCheckingDuplicates(true);
+        const handler = setTimeout(async () => {
+            try {
+                const results = await searchProductsByName(groupName.trim());
+                setSimilarProducts(results);
+            } catch (error) {
+                console.error("Error searching products:", error);
+                setSimilarProducts([]);
+            } finally {
+                setIsCheckingDuplicates(false);
+            }
+        }, 500); // 500ms 디바운스
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [groupName, mode]);
+
+
+    // ... (기존 함수들) ...
     const onDragEnd = (result: DropResult) => {
         if (!result.destination) {
             return;
@@ -189,7 +226,6 @@ const ProductAddAdminPage: React.FC = () => {
                     <h1>{pageTitle}</h1>
                     <div className="header-actions">
                         <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
-                        {/* ✅ [수정] 로딩 중일 때는 버튼 텍스트를 변경합니다. */}
                         <button type="submit" disabled={isSubmitting} className="save-button">
                             <Save size={18} />
                             {isSubmitting ? '저장 중...' : (mode === 'newProduct' ? '신규 상품 등록하기' : '새 회차 추가하기')}
@@ -200,10 +236,33 @@ const ProductAddAdminPage: React.FC = () => {
                     <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
                         <p className="section-subtitle">상품의 기본 정보와 첫 판매 회차 이름을 설정합니다.</p>
-                        <div className="form-group"><label>대표 상품명 *</label><input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required/></div>
+                        
+                        {/* ✅ [수정] 대표 상품명 입력 필드에 중복 검사 UI 추가 */}
+                        <div className="form-group with-validation">
+                            <label>대표 상품명 *</label>
+                            <div className="input-wrapper">
+                                <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required disabled={mode === 'newRound'} />
+                                {isCheckingDuplicates && <div className="spinner"></div>}
+                            </div>
+                            {similarProducts.length > 0 && (
+                                <div className="similar-products-warning">
+                                    <AlertTriangle size={16} />
+                                    <span>유사한 이름의 상품이 이미 존재합니다.</span>
+                                    <ul>
+                                        {similarProducts.map(p => (
+                                            <li key={p.id}>
+                                                <Link to={`/admin/products/edit/${p.id}/${p.salesHistory[0]?.roundId}`} target="_blank">{p.groupName}</Link>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
                         {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
+                        
                         <div className="form-group">
                             <label>대표 이미지 *</label>
                             <DragDropContext onDragEnd={onDragEnd}>
@@ -229,6 +288,7 @@ const ProductAddAdminPage: React.FC = () => {
                             </DragDropContext>
                         </div>
                     </div>
+                    {/* ... (나머지 JSX는 그대로 유지) ... */}
                     <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Box size={20} className="icon-color-option"/><h3>판매 옵션 설정 *</h3></div></div><p className="section-subtitle">실제 판매될 상품의 옵션과 가격, 재고 등을 설정합니다.</p>
                         {variantGroups.map(vg => (
@@ -256,7 +316,6 @@ const ProductAddAdminPage: React.FC = () => {
                     </div>
                 </main>
             </form>
-            {/* ✅ [수정] isSubmitting 시 SodamallLoader를 렌더링하고 메시지를 전달합니다. */}
             {isSubmitting && <SodamallLoader message="상품 정보를 저장하고 있습니다..." />}
         </div>
     );
