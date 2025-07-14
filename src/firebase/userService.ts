@@ -1,15 +1,76 @@
 // src/firebase/userService.ts
 
 import { db } from './firebaseConfig';
-import { doc, runTransaction, serverTimestamp, collection, addDoc, Timestamp, getDoc, query, orderBy, getDocs } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, addDoc, Timestamp, getDoc, query, orderBy, getDocs, setDoc } from 'firebase/firestore';
+import type { User } from 'firebase/auth';
 import type { Order, OrderStatus, UserDocument, PointLog } from '@/types';
+// ✅ [제거] OAuthCredential은 더 이상 필요 없습니다.
+
+/**
+ * @description 카카오 로그인 성공 시 사용자 정보를 Firestore에 생성하거나 업데이트합니다.
+ * @param user Firebase Auth를 통해 로그인한 사용자 객체
+ * @param kakaoData (선택) 카카오 /v2/user/me API를 통해 직접 받은 사용자 정보 객체
+ */
+export const processUserSignIn = async (user: User, kakaoData: any | null): Promise<void> => {
+    const userRef = doc(db, 'users', user.uid);
+    
+    // ✅ [단순화] 카카오 API 응답에서 직접 정보를 추출합니다.
+    const kakaoAccount = kakaoData?.kakao_account;
+
+    await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+
+        if (userDoc.exists()) {
+            // 문서가 이미 존재하면, 누락된 정보만 업데이트
+            const existingData = userDoc.data() as UserDocument;
+            const updates: Partial<UserDocument> = {};
+
+            // Firebase User 객체의 displayName이 더 신뢰도 높을 수 있음 (카카오 닉네임)
+            if (!existingData.displayName && user.displayName) {
+                updates.displayName = user.displayName;
+            }
+            if (!existingData.phone && kakaoAccount?.phone_number) {
+                updates.phone = kakaoAccount.phone_number;
+            }
+            if (!existingData.gender && kakaoAccount?.gender) {
+                updates.gender = kakaoAccount.gender;
+            }
+            if (!existingData.ageRange && kakaoAccount?.age_range) {
+                updates.ageRange = kakaoAccount.age_range;
+            }
+            
+            if (Object.keys(updates).length > 0) {
+                transaction.update(userRef, updates);
+            }
+
+        } else {
+            // 새 사용자 문서 생성
+            const newUserDocument: UserDocument = {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                phone: kakaoAccount?.phone_number || null,
+                photoURL: user.photoURL,
+                role: 'customer',
+                createdAt: serverTimestamp(),
+                loyaltyPoints: 10,
+                pickupCount: 0,
+                noShowCount: 0,
+                lastLoginDate: new Date().toISOString().split('T')[0],
+                isRestricted: false,
+                // ✅ [단순화] 모든 정보를 kakaoData에서 가져옵니다.
+                gender: kakaoAccount?.gender || null,
+                ageRange: kakaoAccount?.age_range || null,
+            };
+            transaction.set(userRef, newUserDocument);
+            await addPointLog(transaction, user.uid, 10, '신규 가입');
+        }
+    });
+};
+
 
 /**
  * 신뢰도 점수 로그를 기록하는 헬퍼 함수
- * @param transaction Firestore 트랜잭션 객체
- * @param userId 사용자 ID
- * @param amount 변경된 점수
- * @param reason 점수 변경 사유
  */
 const addPointLog = async (
   transaction: any,
@@ -19,7 +80,7 @@ const addPointLog = async (
 ) => {
   const logRef = doc(collection(db, 'users', userId, 'pointLogs'));
   const now = Timestamp.now();
-  const expiresAt = new Timestamp(now.seconds + 90 * 24 * 60 * 60, now.nanoseconds); // 90일 후 소멸
+  const expiresAt = new Timestamp(now.seconds + 90 * 24 * 60 * 60, now.nanoseconds);
 
   transaction.set(logRef, {
     amount,
@@ -31,10 +92,6 @@ const addPointLog = async (
 
 /**
  * 주문 상태를 업데이트하고 사용자의 신뢰도 점수를 조정하는 트랜잭션 함수
- * @param orderId 주문 ID
- * @param newStatus 새로운 주문 상태
- * @param pointChange 점수 변경량 (+10, -10, -50 등)
- * @param reason 점수 변경 사유
  */
 export const updateOrderStatusAndLoyalty = async (
   order: Order,
@@ -65,17 +122,14 @@ export const updateOrderStatusAndLoyalty = async (
       updates.noShowCount = currentNoShowCount + 1;
     }
     
-    // 1. 사용자 정보 업데이트 (점수, 카운트)
     transaction.update(userRef, updates);
 
-    // 2. 주문 상태 업데이트
     const orderUpdateData: any = { status: newStatus };
     if (newStatus === 'PICKED_UP') {
       orderUpdateData.pickedUpAt = serverTimestamp();
     }
     transaction.update(orderRef, orderUpdateData);
 
-    // 3. 점수 변경 로그 기록
     if (pointChange !== 0) {
       await addPointLog(transaction, order.userId, pointChange, reason);
     }
@@ -85,7 +139,6 @@ export const updateOrderStatusAndLoyalty = async (
 
 /**
  * 일일 첫 로그인 시 포인트를 지급하는 함수
- * @param userId 사용자 ID
  */
 export const recordDailyVisit = async (userId: string) => {
     const userRef = doc(db, 'users', userId);
@@ -98,7 +151,6 @@ export const recordDailyVisit = async (userId: string) => {
 
             const lastLogin = userDoc.data().lastLoginDate;
             
-            // 마지막 로그인 날짜가 오늘이 아닐 경우에만 포인트 지급
             if (lastLogin !== todayStr) {
                 const currentPoints = userDoc.data().loyaltyPoints || 0;
                 
@@ -112,7 +164,6 @@ export const recordDailyVisit = async (userId: string) => {
         });
     } catch (error) {
         console.error("일일 방문 포인트 지급 오류:", error);
-        // 이 오류는 사용자에게 직접적인 영향을 주지 않으므로, 에러를 던지지 않고 콘솔에만 기록
     }
 };
 
