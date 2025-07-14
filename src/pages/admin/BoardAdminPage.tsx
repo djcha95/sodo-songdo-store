@@ -1,12 +1,13 @@
 // src/pages/admin/BoardAdminPage.tsx
 
 import { useState, useEffect } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import './BoardAdminPage.css';
-import { Loader } from 'lucide-react';
+// ✅ [추가] SodamallLoader import
+import SodamallLoader from '@/components/common/SodamallLoader';
 
 type RequestStatus = '요청' | '검토중' | '공구확정' | '반려';
 interface RequestPost {
@@ -18,16 +19,11 @@ interface RequestPost {
   status: RequestStatus;
 }
 
-// 로딩 스피너 컴포넌트 재활용
-const LoadingSpinner = () => (
-    <div className="loading-overlay">
-        <Loader size={48} className="spin" />
-        <p>데이터를 불러오는 중...</p>
-    </div>
-);
+// ✅ [삭제] 기존 LoadingSpinner 컴포넌트 삭제
+
 
 const BoardAdminPage = () => {
-  useDocumentTitle('게시판 관리'); // ✅ [추가]
+  useDocumentTitle('게시판 관리');
 
   const [posts, setPosts] = useState<RequestPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,9 +39,7 @@ const BoardAdminPage = () => {
       setIsLoading(false);
     }, (error) => {
       console.error("게시글 목록 실시간 로딩 오류:", error);
-      // 오류 발생 시 로딩 상태를 해제하고, 사용자에게 알림을 줄 수 있음
       setIsLoading(false);
-      // setError("게시글을 불러오는 데 실패했습니다."); // 필요 시 에러 상태 추가
     });
 
     // 컴포넌트 언마운트 시 구독 해제
@@ -64,8 +58,9 @@ const BoardAdminPage = () => {
     }
   };
   
+  // ✅ [수정] LoadingSpinner를 SodamallLoader로 교체
   if (isLoading) {
-    return <LoadingSpinner />;
+    return <SodamallLoader message="게시판 데이터를 불러오는 중..." />;
   }
 
   return (

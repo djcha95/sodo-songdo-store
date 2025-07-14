@@ -1,12 +1,14 @@
 // src/pages/admin/UserListPage.tsx
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { Loader, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
+// ✅ [추가] SodamallLoader import
+import SodamallLoader from '@/components/common/SodamallLoader';
 
 import './UserListPage.css';
 
@@ -37,16 +39,11 @@ interface Order extends DocumentData {
 // 정렬 기준 타입
 type SortKey = 'displayName' | 'totalOrders' | 'noShowCount' | 'createdAt' | 'pickupRate' | 'totalPriceSum';
 
-// 로딩 스피너 컴포넌트
-const LoadingSpinner = () => (
-    <div className="loading-overlay">
-        <Loader size={48} className="spin" />
-        <p>데이터를 불러오는 중...</p>
-    </div>
-);
+// ✅ [삭제] 기존 LoadingSpinner 컴포넌트 삭제
+
 
 const UserListPage = () => {
-    useDocumentTitle('전체 고객 관리'); // ✅ [추가]
+    useDocumentTitle('전체 고객 관리');
     const [allUsers, setAllUsers] = useState<AppUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -168,7 +165,8 @@ const UserListPage = () => {
         return sortDirection === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />;
     };
 
-    if (isLoading) return <LoadingSpinner />;
+    // ✅ [수정] LoadingSpinner를 SodamallLoader로 교체
+    if (isLoading) return <SodamallLoader message="사용자 데이터를 불러오는 중..." />;
 
     return (
         <div className="user-list-container">
