@@ -2,7 +2,12 @@
 
 import React from 'react';
 import { PlusCircle, X, Minus } from 'lucide-react';
-import type { PricingOption } from '../../types';
+
+// [수정] types.ts에 해당 타입이 없으므로, 컴포넌트 내에서 직접 정의합니다.
+interface PricingOption {
+  unit: string;
+  price: number;
+}
 
 // id를 포함한 타입 정의
 interface EditablePricingOption extends PricingOption {

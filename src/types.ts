@@ -11,6 +11,10 @@ export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
+// ✅ [추가] ProductCard 컴포넌트에서 사용하는 상품의 표시 상태 타입을 정의합니다.
+export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
+
+
 export type LoyaltyTier = '조약돌' | '수정' | '에메랄드' | '다이아몬드';
 
 export interface PointLog {

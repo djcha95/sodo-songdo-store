@@ -12,8 +12,9 @@ import {
   writeBatch,
   addDoc,
   updateDoc,
-  getDocFromServer, // ✅ [수정] getDocFromServer를 import 목록에 추가합니다.
+  getDocFromServer,
 } from 'firebase/firestore';
+// [수정] 사용하지 않는 Timestamp 타입을 import 목록에서 제거합니다.
 import type { DocumentData, Query, DocumentReference } from 'firebase/firestore';
 import {
   ref,
@@ -22,7 +23,10 @@ import {
 } from 'firebase/storage';
 import type { StorageReference } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
-import type { Banner, StoreInfo, Category, Product } from '@/types'; 
+import type { 
+    Banner, StoreInfo, Category, Product, Order, OrderItem,
+    TodayStockItem, TodayOrderItem, TodayPickupItem 
+} from '@/types'; 
 
 // --- Helper Functions ---
 export const uploadImages = async (files: File[], path: string): Promise<string[]> => {
@@ -113,7 +117,6 @@ const STORE_INFO_DOC_ID = 'main'; // 매장 정보는 하나의 문서로 관리
 
 export const getStoreInfo = async (): Promise<StoreInfo | null> => {
     const docRef = doc(db, 'storeInfo', STORE_INFO_DOC_ID);
-    // ✅ [수정] getDoc을 getDocFromServer로 변경하여 캐시를 사용하지 않도록 합니다.
     const docSnap = await getDocFromServer(docRef);
     return docSnap.exists() ? docSnap.data() as StoreInfo : null;
 };
@@ -121,4 +124,72 @@ export const getStoreInfo = async (): Promise<StoreInfo | null> => {
 export const updateStoreInfo = async (storeData: StoreInfo): Promise<void> => {
     const docRef = doc(db, 'storeInfo', STORE_INFO_DOC_ID);
     await setDoc(docRef, storeData, { merge: true });
+};
+
+// DailyDashboardModal 컴포넌트에서 사용할 데이터 조회 함수
+export const getDailyDashboardData = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // 1. Get all products
+    const productsRef = collection(db, 'products');
+    const productsQuery = query(productsRef, where('isArchived', '==', false));
+    const productsSnapshot = await getDocs(productsQuery);
+
+    const todayStock: TodayStockItem[] = [];
+    const todayPickupDeadlineProducts: TodayPickupItem[] = [];
+
+    productsSnapshot.forEach(docSnap => {
+        const product = { id: docSnap.id, ...docSnap.data() } as Product;
+        product.salesHistory?.forEach(round => {
+            const arrivalDate = round.arrivalDate?.toDate();
+            if (arrivalDate && arrivalDate >= today && arrivalDate < tomorrow) {
+                round.variantGroups.forEach(vg => {
+                    todayStock.push({
+                        id: `${product.id}-${vg.id}`,
+                        variantGroupId: vg.id,
+                        name: `${product.groupName} - ${vg.groupName}`,
+                        quantity: vg.totalPhysicalStock,
+                        unitType: vg.stockUnitType
+                    });
+                });
+            }
+
+            const pickupDeadline = round.pickupDeadlineDate?.toDate();
+            if (pickupDeadline && pickupDeadline >= today && pickupDeadline < tomorrow) {
+                todayPickupDeadlineProducts.push({
+                    id: product.id,
+                    name: product.groupName,
+                    pickupDeadlineDate: round.pickupDeadlineDate!,
+                    optionsSummary: round.variantGroups.map(vg => ({
+                        variantGroupName: vg.groupName,
+                        unit: vg.stockUnitType,
+                        currentStock: vg.items.reduce((sum, item) => sum + (item.stock === -1 ? 0 : item.stock), 0)
+                    }))
+                });
+            }
+        });
+    });
+
+    // 2. Get prepaid orders
+    const ordersRef = collection(db, 'orders');
+    const ordersQuery = query(ordersRef, where('status', '==', 'PREPAID'));
+    const ordersSnapshot = await getDocs(ordersQuery);
+    const todayPrepaidOrders: TodayOrderItem[] = [];
+    ordersSnapshot.forEach(docSnap => {
+        const order = docSnap.data() as Order;
+        order.items.forEach((item: OrderItem) => {
+            todayPrepaidOrders.push({
+                id: `${order.id}-${item.itemId}`,
+                customerName: order.customerInfo.name,
+                productName: item.itemName,
+                quantity: item.quantity,
+                status: order.status,
+            });
+        });
+    });
+
+    return { todayStock, todayPrepaidOrders, todayPickupDeadlineProducts };
 };

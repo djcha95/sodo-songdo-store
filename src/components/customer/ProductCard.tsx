@@ -9,7 +9,8 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-import type { Product, SalesRound, CartItem, ProductStatus } from '@/types';
+// [수정] ProductStatus 대신 ProductDisplayStatus 타입을 가져옵니다.
+import type { Product, SalesRound, CartItem, ProductDisplayStatus } from '@/types';
 import useLongPress from '@/hooks/useLongPress';
 import './ProductCard.css';
 
@@ -119,7 +120,8 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
 // --- Main Product Card Component ---
 interface ProductCardProps {
   product: Product;
-  status: ProductStatus;
+  // [수정] prop의 타입을 ProductDisplayStatus로 변경합니다.
+  status: ProductDisplayStatus;
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
@@ -201,7 +203,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       stock: singleOptionItem.stock,
       pickupDate: finalPickupDate,
       status: 'RESERVATION',
-      deadlineDate: displayRound.deadlineDate, // ✅ 이 라인을 추가해주세요.
+      deadlineDate: displayRound.deadlineDate,
     };
 
     addToCart(cartItem);
@@ -256,7 +258,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       stock: singleOptionItem.stock,
       pickupDate: finalPickupDate,
       status: 'WAITLIST',
-      deadlineDate: displayRound.deadlineDate, // ✅ 이 라인을 추가해주세요.
+      deadlineDate: displayRound.deadlineDate,
     };
         
     addToCart(waitlistItem);

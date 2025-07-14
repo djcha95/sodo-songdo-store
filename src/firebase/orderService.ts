@@ -14,9 +14,9 @@ import {
   deleteDoc,
   writeBatch,
 } from 'firebase/firestore';
+// [수정] Timestamp를 값(value)이 아닌 타입(type)으로만 사용하므로, type import로 이동합니다.
 import type { FieldValue } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry } from '@/types';
-import { Timestamp } from 'firebase/firestore';
 import { updateOrderStatusAndLoyalty } from './userService'; // userService에서 함수 import
 
 /**

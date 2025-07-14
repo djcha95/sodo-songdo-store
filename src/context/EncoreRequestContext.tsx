@@ -3,8 +3,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { updateEncoreRequest } from '../firebase';
-// ✅ [수정] 오류의 원인이 된 useLocation import와 사용 코드를 완전히 제거합니다.
-// import { useLocation } from 'react-router-dom';
 
 interface EncoreRequestContextType {
   hasRequestedEncore: (productId: string) => boolean;
@@ -15,20 +13,19 @@ interface EncoreRequestContextType {
 const EncoreRequestContext = createContext<EncoreRequestContextType | undefined>(undefined);
 
 export const EncoreRequestProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  // [수정] user와 함께 userDocument를 useAuth()로부터 가져옵니다.
+  const { user, userDocument } = useAuth();
   const [requestedProductIds, setRequestedProductIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  // ✅ [수정] 오류의 원인이 된 useLocation() 호출을 제거합니다.
-  // useLocation();
 
-  // [수정] 사용자의 요청 기록을 Firestore 데이터로 초기화
+  // [수정] 사용자의 요청 기록을 user가 아닌 userDocument에서 가져와 초기화합니다.
   useEffect(() => {
-    if (user?.encoreRequestedProductIds) {
-      setRequestedProductIds(user.encoreRequestedProductIds);
+    if (userDocument?.encoreRequestedProductIds) { // [수정]
+      setRequestedProductIds(userDocument.encoreRequestedProductIds); // [수정]
     } else {
       setRequestedProductIds([]); // 로그아웃 시 또는 데이터 없을 때 초기화
     }
-  }, [user]);
+  }, [userDocument]); // [수정] 의존성 배열을 userDocument로 변경합니다.
 
   // '공구 요청' 상태 확인 함수
   const hasRequestedEncore = useCallback((productId: string): boolean => {
@@ -37,6 +34,7 @@ export const EncoreRequestProvider: React.FC<{ children: ReactNode }> = ({ child
 
   // '공구 요청' 실행 함수
   const requestEncore = useCallback(async (productId: string) => {
+    // user 객체는 uid 확인을 위해 여전히 필요합니다.
     if (!user) {
       return;
     }
