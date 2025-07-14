@@ -1,7 +1,7 @@
 // src/pages/customer/ProductDetailPage.tsx
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom'; // ✅ useLocation 제거
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import type { Product, ProductItem, CartItem, StorageType, VariantGroup, SalesRound } from '@/types';
 import { Timestamp } from 'firebase/firestore';
@@ -9,8 +9,6 @@ import { getProductById, checkProductAvailability, addWaitlistEntry } from '@/fi
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
-// ❗ [삭제] WaitlistContext import 제거
-// import { useWaitlist } from '@/context/WaitlistContext';
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
   Tag, AlertCircle, Loader2
@@ -20,16 +18,35 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import dayjs from 'dayjs';
 
-// --- 유틸리티 및 헬퍼 함수 (변경 없음) ---
+// --- 유틸리티 및 헬퍼 함수 ---
+
+// ✅ [추가] 날짜 데이터를 안전하게 Date 객체로 변환하는 헬퍼 함수
+const safeToDate = (date: any): Date | null => {
+  if (!date) return null;
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+  }
+  return null;
+};
+
 const formatPrice = (price: number) => `${price.toLocaleString()}원`;
 const formatDateWithDay = (date: Date) => date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }).replace(/\s/g, '');
 const storageIcons: Record<StorageType, JSX.Element> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} /> };
 const storageLabels: Record<StorageType, string> = { ROOM: '실온 보관', COLD: '냉장 보관', FROZEN: '냉동 보관' };
+
+// ✅ [수정] getLatestRoundFromHistory 함수 내에서도 safeToDate 사용
 const getLatestRoundFromHistory = (product: Product | null): SalesRound | null => {
   if (!product || !product.salesHistory || product.salesHistory.length === 0) return null;
   const sortedRounds = [...product.salesHistory]
     .filter(r => r.status !== 'draft')
-    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    .sort((a, b) => {
+      const dateA = safeToDate(b.createdAt);
+      const dateB = safeToDate(a.createdAt);
+      if (!dateA || !dateB) return 0;
+      return dateA.getTime() - dateB.getTime();
+    });
   return sortedRounds?.[0] || null;
 };
 
@@ -62,8 +79,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const { addToCart } = useCart();
   const { user } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
-  // ❗ [삭제] useWaitlist 훅 호출 제거
-  // const { addToWaitlist: addItemsToWaitlistContext } = useWaitlist();
 
   // --- 상태(State) 선언 ---
   const [product, setProduct] = useState<Product | null>(null);
@@ -82,15 +97,22 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const quantityInputRef = useRef<HTMLInputElement>(null);
 
   // --- 메모이제이션(useMemo) 로직 ---
-  const isScheduled = useMemo(() => displayRound?.status === 'scheduled' && displayRound.publishAt && new Date() < displayRound.publishAt.toDate(), [displayRound]);
 
+  // ✅ [수정] isScheduled에서 .toDate() 대신 safeToDate 사용
+  const isScheduled = useMemo(() => {
+    const publishAtDate = safeToDate(displayRound?.publishAt);
+    return displayRound?.status === 'scheduled' && publishAtDate && new Date() < publishAtDate;
+  }, [displayRound]);
+
+  // ✅ [수정] showWaitlistButton에서 .toDate() 대신 safeToDate 사용 (오류 발생 지점)
   const showWaitlistButton = useMemo(() => {
     if (!displayRound) return false;
     const now = new Date();
-    const firstRoundDeadline = displayRound.createdAt ? dayjs(displayRound.createdAt.toDate()).add(1, 'day').set('hour', 13).set('minute', 0).set('second', 0) : null;
-    return displayRound.status === 'sold_out' && firstRoundDeadline && now < firstRoundDeadline.toDate();
+    const createdAtDate = safeToDate(displayRound.createdAt);
+    const firstRoundDeadline = createdAtDate ? dayjs(createdAtDate).add(1, 'day').set('hour', 13).set('minute', 0).set('second', 0).toDate() : null;
+    return displayRound.status === 'sold_out' && firstRoundDeadline && now < firstRoundDeadline;
   }, [displayRound]);
-
+  
   const showEncoreRequestButton = useMemo(() => {
     if (availableForPurchase || showWaitlistButton || !displayRound) return false;
     return displayRound.status === 'ended' || displayRound.status === 'sold_out';
@@ -157,6 +179,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     setCurrentTotalPrice((selectedItem?.price ?? 0) * quantity);
   }, [selectedItem, quantity]);
 
+  // ✅ [수정] checkAvailability에서 .toDate() 대신 safeToDate 사용
   useEffect(() => {
     const checkAvailability = async () => {
       if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
@@ -172,9 +195,11 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       );
 
       const now = new Date();
-      const deadline = displayRound.deadlineDate?.toDate();
-      const pickupDeadline = displayRound.pickupDeadlineDate?.toDate();
-      const firstRoundDeadline = displayRound.createdAt ? dayjs(displayRound.createdAt.toDate()).add(1, 'day').set('hour', 13).set('minute', 0).set('second', 0) : null;
+      const deadline = safeToDate(displayRound.deadlineDate);
+      const pickupDeadline = safeToDate(displayRound.pickupDeadlineDate);
+      const createdAtDate = safeToDate(displayRound.createdAt);
+      const firstRoundDeadline = createdAtDate ? dayjs(createdAtDate).add(1, 'day').set('hour', 13).set('minute', 0).set('second', 0).toDate() : null;
+      
 
       let isPurchasable = false;
       if (displayRound.status === 'selling' && isAvailable) {
@@ -184,7 +209,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           isPurchasable = true;
         }
       }
-      if (showWaitlistButton && displayRound.status === 'sold_out' && firstRoundDeadline && now < firstRoundDeadline.toDate()) {
+      if (showWaitlistButton && displayRound.status === 'sold_out' && firstRoundDeadline && now < firstRoundDeadline) {
         isPurchasable = false;
       }
 
@@ -274,7 +299,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     setWaitlistLoading(true);
 
     try {
-      // ✅ [수정 1] addWaitlistEntry 함수에 마지막 두 인자(variantGroupId, itemId)를 추가합니다.
       await addWaitlistEntry(
         product.id,
         displayRound.roundId,
@@ -304,15 +328,14 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
       addToCart(itemToWaitlist);
       
-      // ✅ [수정 2] UI 즉시 업데이트 로직에도 variantGroupId와 itemId를 추가합니다.
       setDisplayRound(prev => prev ? ({
         ...prev,
         waitlist: [...(prev.waitlist || []), { 
           userId: user.uid, 
           quantity, 
           timestamp: Timestamp.now(),
-          variantGroupId: selectedVariantGroup.id, // 이 필드 추가
-          itemId: selectedItem.id,             // 이 필드 추가
+          variantGroupId: selectedVariantGroup.id,
+          itemId: selectedItem.id,
         }],
         waitlistCount: (prev.waitlistCount || 0) + quantity
       }) : null);
@@ -365,6 +388,10 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       );
     }
 
+    // ✅ [수정] JSX 렌더링 부분에서도 .toDate() 대신 safeToDate 사용
+    const deadlineDate = safeToDate(displayRound.deadlineDate);
+    const pickupDate = safeToDate(displayRound.pickupDate);
+
     return (
       <>
         <div className="main-content-area">
@@ -374,7 +401,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                 src={getOptimizedImageUrl(product.imageUrls?.[currentImageIndex], "1080x1080")}
                 alt={`${product.groupName} 이미지 ${currentImageIndex + 1}`}
                 onClick={openImageModal}
-                fetchPriority="high"
+                fetchpriority="high"
               />
               {product.imageUrls?.length > 1 && (
                 <>
@@ -398,11 +425,11 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
               </div>
               <div className="info-row">
                 <div className="info-label"><CalendarDays size={16} />마감일</div>
-                <div className="info-value">{displayRound.deadlineDate?.toDate() ? formatDateWithDay(displayRound.deadlineDate.toDate()) + ' 13:00' : '미정'}</div>
+                <div className="info-value">{deadlineDate ? formatDateWithDay(deadlineDate) + ' 13:00' : '미정'}</div>
               </div>
               <div className="info-row">
                 <div className="info-label"><CalendarDays size={16} />픽업일</div>
-                <div className="info-value">{displayRound.pickupDate?.toDate() ? formatDateWithDay(displayRound.pickupDate.toDate()) : '미정'}</div>
+                <div className="info-value">{pickupDate ? formatDateWithDay(pickupDate) : '미정'}</div>
               </div>
               <div className="info-row">
                 <div className="info-label">{storageIcons?.[product.storageType]}보관 방법</div>

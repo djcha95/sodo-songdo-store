@@ -5,9 +5,9 @@ import { getProducts, getActiveBanners } from '@/firebase';
 import type { Product, Banner, SalesRound } from '@/types';
 import { Timestamp } from 'firebase/firestore'; // Timestamp 타입을 명시적으로 가져옵니다.
 import toast from 'react-hot-toast';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import ProductSection from '@/components/customer/ProductSection';
-import BannerSlider from '@/components/BannerSlider';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import ProductSection from '@/components//customer/ProductSection';
+import BannerSlider from '@/components/common/BannerSlider';
 import ProductCard from '@/components/customer/ProductCard';
 import dayjs from 'dayjs';
 

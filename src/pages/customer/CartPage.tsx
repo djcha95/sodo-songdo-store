@@ -1,6 +1,6 @@
 // src/pages/customer/CartPage.tsx
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, startTransition } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
@@ -29,30 +29,25 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
   const [inputValue, setInputValue] = useState(item.quantity.toString());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 재고가 null이거나 -1이면 무한대 (999)로 간주, 아니면 실제 재고 사용
   const stockLimit = useMemo(() => item.stock === null || item.stock === -1 ? 999 : item.stock, [item.stock]);
 
   useEffect(() => {
-    // 수량 변경 모드가 아닐 때만 실제 수량으로 입력 값 동기화
     if (!isEditing) setInputValue(item.quantity.toString());
   }, [item.quantity, isEditing]);
 
   useEffect(() => {
-    // 편집 모드 진입 시 입력 필드에 포커스
     if (isEditing && inputRef.current) inputRef.current.focus();
   }, [isEditing]);
 
   const handleQuantityClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // 카드 선택 이벤트 방지
+    e.stopPropagation();
     setIsEditing(true);
   };
 
   const handleQuantityUpdate = useCallback(() => {
     const newQuantity = parseInt(inputValue, 10);
-    // 입력된 값이 유효하지 않거나 0 이하일 경우 1로 설정, 재고 제한 초과 시 재고 제한으로 설정
     const finalQuantity = !isNaN(newQuantity) && newQuantity > 0 ? Math.min(newQuantity, stockLimit) : 1;
 
-    // 수량이 변경될 경우에만 업데이트
     if (finalQuantity !== item.quantity) {
       updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, finalQuantity);
       if (newQuantity > stockLimit) {
@@ -61,20 +56,18 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
         toast.error('최소 1개 이상 구매해야 합니다.');
       }
     }
-    setIsEditing(false); // 편집 모드 종료
+    setIsEditing(false);
   }, [inputValue, item, stockLimit, updateCartItemQuantity]);
 
   const handleInputKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
-      handleQuantityUpdate(); // Enter 키 입력 시 수량 업데이트
+      handleQuantityUpdate();
     }
   };
 
-  // 수량 증감 버튼을 위한 long-press 훅
   const createQuantityHandlers = useCallback((change: number) => {
     const performUpdate = () => {
       const newQuantity = item.quantity + change;
-      // 수량이 1 미만이거나 재고 제한을 초과하면 업데이트하지 않음
       if (newQuantity < 1 || newQuantity > stockLimit) return;
       updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, newQuantity);
     };
@@ -84,7 +77,6 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
   const decreaseHandlers = createQuantityHandlers(-1);
   const increaseHandlers = createQuantityHandlers(1);
 
-  // 픽업 날짜 포맷 변경: 'M/d(EEE) 픽업' (예: 7/17(목) 픽업)
   const formatPickupDate = (timestamp: Timestamp) => format(timestamp.toDate(), 'M/d(EEE)', { locale: ko }) + ' 픽업';
   const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
 
@@ -108,8 +100,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
             {item.status === 'WAITLIST' ? (
               <div className="waitlist-status-badge"><Info size={14}/><span>재고 확보 시 자동 예약 전환</span></div>
             ) : (
-              // ✅ 수정: 수량에 관계없이 개당 단가를 표시
-              <div className="item-total-price">{item.unitPrice.toLocaleString()}원  </div>
+              <div className="item-total-price">{item.unitPrice.toLocaleString()}원</div>
             )}
             <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}>
               <button {...decreaseHandlers} disabled={item.quantity <= 1}><Minus size={18} /></button>
@@ -133,7 +124,7 @@ const CartPage: React.FC = () => {
   const { 
     allItems, reservationItems, waitlistItems, 
     removeItems, removeReservedItems, updateItemsStatus, 
-    reservationTotal, reservationItemCount // ✅ cartTotal -> reservationTotal, cartItemCount -> reservationItemCount 로 변경
+    reservationTotal, reservationItemCount 
   } = useCart();
   const navigate = useNavigate();
 
@@ -142,7 +133,6 @@ const CartPage: React.FC = () => {
   const [selectedReservationKeys, setSelectedReservationKeys] = useState<Set<string>>(new Set());
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
 
-  // 대기 상품 자동 예약 전환 및 만료 처리
   useEffect(() => {
     const waitlistItemsToCheck = allItems.filter(item => item.status === 'WAITLIST');
     if (waitlistItemsToCheck.length === 0) return;
@@ -158,14 +148,12 @@ const CartPage: React.FC = () => {
         waitlistItemsToCheck.forEach(item => {
           const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
           const pickupDate = item.pickupDate.toDate();
-          // 픽업일 당일 13시 마감
           const pickupDeadlineTime = new Date(pickupDate.getFullYear(), pickupDate.getMonth(), pickupDate.getDate(), 13, 0, 0);
 
           if (now > pickupDeadlineTime) {
             itemsToRemove.push({ key: uniqueId, name: item.productName });
           } else {
             const stock = liveStockInfo[uniqueId];
-            // 재고가 충분하면 예약으로 전환
             if (stock && (stock.itemStock === -1 || stock.itemStock >= item.quantity) && (stock.groupStock === null || stock.groupStock === -1 || stock.groupStock >= item.quantity)) {
               itemsToConvert.push(uniqueId);
             }
@@ -188,34 +176,22 @@ const CartPage: React.FC = () => {
       }
     };
     processWaitlist();
-  }, [allItems, removeItems, updateItemsStatus]); // ✅ 의존성 배열도 allItems로 변경
+  }, [allItems, removeItems, updateItemsStatus]);
 
-  // 아이템 선택/선택 해제 핸들러
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
-    if (type === 'reservation') {
-      setSelectedReservationKeys(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(itemKey)) {
-          newSet.delete(itemKey);
-        } else {
-          newSet.add(itemKey);
-        }
-        return newSet;
-      });
-    } else { // waitlist
-      setSelectedWaitlistKeys(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(itemKey)) {
-          newSet.delete(itemKey);
-        } else {
-          newSet.add(itemKey);
-        }
-        return newSet;
-      });
-    }
+    const setter = type === 'reservation' ? setSelectedReservationKeys : setSelectedWaitlistKeys;
+    setter(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemKey)) {
+        newSet.delete(itemKey);
+      } else {
+        newSet.add(itemKey);
+      }
+      return newSet;
+    });
   }, []);
-
-  // 선택된 아이템 일괄 삭제 핸들러
+  
+  // ✅ [수정] 통일된 토스트 스타일 사용
   const handleBulkRemove = useCallback((type: 'reservation' | 'waitlist') => {
     const keysToRemove = type === 'reservation' ? selectedReservationKeys : selectedWaitlistKeys;
     if (keysToRemove.size === 0) {
@@ -224,33 +200,42 @@ const CartPage: React.FC = () => {
     }
 
     toast((t) => (
-      <div className="confirmation-toast-simple">
-        <h4>선택된 상품을 삭제하시겠습니까?</h4>
-        <p>{keysToRemove.size}개의 상품이 장바구니에서 삭제됩니다.</p>
-        <div className="toast-buttons-simple">
-          <button className="toast-cancel-btn-simple" onClick={() => toast.dismiss(t.id)}>취소</button>
-          <button className="toast-confirm-btn-simple" onClick={() => {
-            toast.dismiss(t.id);
-            removeItems(Array.from(keysToRemove));
-            if (type === 'reservation') setSelectedReservationKeys(new Set());
-            else setSelectedWaitlistKeys(new Set());
-            toast.success('선택된 상품이 삭제되었습니다.');
-          }}>삭제</button>
+      <div className="confirmation-toast">
+        <h4>선택 상품 삭제</h4>
+        <p>{keysToRemove.size}개의 상품을 장바구니에서 삭제하시겠습니까?</p>
+        <div className="toast-buttons">
+          <button
+            className="common-button button-secondary button-medium"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            취소
+          </button>
+          <button
+            className="common-button button-danger button-medium"
+            onClick={() => {
+              toast.dismiss(t.id);
+              removeItems(Array.from(keysToRemove));
+              if (type === 'reservation') setSelectedReservationKeys(new Set());
+              else setSelectedWaitlistKeys(new Set());
+              toast.success('선택된 상품이 삭제되었습니다.');
+            }}
+          >
+            삭제
+          </button>
         </div>
       </div>
     ), { duration: 6000 });
   }, [selectedReservationKeys, selectedWaitlistKeys, removeItems]);
 
-  // 이미지 클릭 시 상품 상세 페이지로 이동
   const handleImageClick = useCallback((e: React.MouseEvent, productId: string) => {
-    e.stopPropagation(); // 카드 선택 이벤트 방지
+    e.stopPropagation();
     navigate(`/product/${productId}`);
   }, [navigate]);
-
-  // 예약 확정 핸들러
+  
+  // ✅ [수정] 성공 토스트 자동 사라짐 기능 추가
   const handleConfirmReservation = async () => {
-    if (!user || !user.uid || !userDocument?.phone) {
-      toast.error('전화번호 정보가 없습니다. 다시 로그인 해주세요.');
+    if (!user || !user.uid) {
+      toast.error('예약을 확정하려면 로그인이 필요합니다.');
       navigate('/login', { state: { from: '/cart' }, replace: true });
       return;
     }
@@ -259,39 +244,55 @@ const CartPage: React.FC = () => {
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'> = {
         userId: user.uid,
         items: reservationItems,
-        totalPrice: reservationTotal, // ✅ cartTotal -> reservationTotal
-        customerInfo: { name: user.displayName || '미상', phone: userDocument.phone },
-        // 예약 상품들은 이미 픽업일이 같다고 가정
+        totalPrice: reservationTotal,
+        customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
         pickupDate: reservationItems[0].pickupDate,
     };
     setIsProcessingOrder(true);
     const promise = submitOrder(orderPayload);
+
     toast.promise(promise, {
       loading: '예약을 확정하는 중입니다...',
-      success: () => {
-        removeReservedItems(); // 예약 확정 후 예약된 상품들을 장바구니에서 제거
-        navigate('/mypage/history');
+      success: (result) => {
+        startTransition(() => {
+          removeReservedItems();
+          navigate(result.orderId ? '/mypage/history' : '/mypage/history');
+        });
         return '예약이 성공적으로 완료되었습니다!';
       },
-      error: (err) => (err as Error).message || '예약 확정 중 오류가 발생합니다.',
+      error: (err) => (err as Error).message || '예약 확정 중 오류가 발생했습니다.',
+    }, {
+      success: {
+        duration: 3000, // 3초 후 자동으로 닫힘
+      }
     }).finally(() => {
       setIsProcessingOrder(false);
     });
   };
 
-  // 예약 확정 확인 모달 표시
+  // ✅ [수정] 통일된 토스트 스타일 사용
   const showOrderConfirmation = () => {
     if (reservationItems.length === 0) {
       toast.error('예약할 상품이 없습니다.');
       return;
     }
     toast((t) => (
-      <div className="confirmation-toast-simple">
-        <h4>예약을 확정하시겠습니까?</h4>
+      <div className="confirmation-toast">
+        <h4>예약 확정</h4>
         <p>예약 상품만 주문되며, 대기 상품은 포함되지 않습니다.</p>
-        <div className="toast-buttons-simple">
-          <button className="toast-cancel-btn-simple" onClick={() => toast.dismiss(t.id)}>취소</button>
-          <button className="toast-confirm-btn-simple" onClick={() => { toast.dismiss(t.id); handleConfirmReservation(); }}>확인</button>
+        <div className="toast-buttons">
+          <button
+            className="common-button button-secondary button-medium"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            취소
+          </button>
+          <button
+            className="common-button button-accent button-medium"
+            onClick={() => { toast.dismiss(t.id); handleConfirmReservation(); }}
+          >
+            확인
+          </button>
         </div>
       </div>
     ), { duration: 6000 });
@@ -305,7 +306,6 @@ const CartPage: React.FC = () => {
           <div className="cart-items-column">
             <div className="cart-section-header">
               <h2 className="cart-section-title">🛒 예약 상품 ({reservationItems.length})</h2>
-              {/* 선택 삭제 버튼은 선택된 아이템이 있을 때만 표시 */}
               {selectedReservationKeys.size > 0 && (
                 <button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}>
                   <XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})
@@ -331,14 +331,12 @@ const CartPage: React.FC = () => {
               <div className="info-box"><p>장바구니에 담긴 예약 상품이 없습니다.</p></div>
             )}
 
-            {/* 대기 상품 섹션 */}
             <div className="waitlist-section">
               <div className="cart-section-header waitlist-header">
                 <h2 className="cart-section-title">
                   <Hourglass size={18}/> 대기 상품 ({waitlistItems.length})
                   {isWaitlistProcessing && <RefreshCw size={18} className="spin-icon" />}
                 </h2>
-                {/* 선택 삭제 버튼은 선택된 아이템이 있을 때만 표시 */}
                 {selectedWaitlistKeys.size > 0 && (
                   <button className="bulk-remove-btn" onClick={() => handleBulkRemove('waitlist')}>
                     <XCircle size={16} /> 선택 삭제 ({selectedWaitlistKeys.size})
@@ -380,11 +378,11 @@ const CartPage: React.FC = () => {
                   <h3 className="summary-title">예약 정보 요약</h3>
                   <div className="summary-row total-amount">
                     <span className="total-label">총 예약 상품</span>
-                    <span className="total-item-count">{reservationItemCount} 개</span> {/* ✅ cartItemCount -> reservationItemCount */}
+                    <span className="total-item-count">{reservationItemCount} 개</span>
                   </div>
                   <div className="summary-row total-amount">
                     <span className="total-label">총 예약 금액</span>
-                    <span className="total-price-value">{reservationTotal.toLocaleString()}원</span> {/* ✅ cartTotal -> reservationTotal */}
+                    <span className="total-price-value">{reservationTotal.toLocaleString()}원</span>
                   </div>
                   <button className="checkout-btn" onClick={showOrderConfirmation} disabled={isProcessingOrder}>
                     {isProcessingOrder ? '처리 중...' : `예약 확정하기`}

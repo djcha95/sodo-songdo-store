@@ -4,7 +4,7 @@ import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/produc
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { TrendingUp, SaveAll } from 'lucide-react';
 import './DashboardPage.css';

@@ -2,17 +2,17 @@
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-// ✅ [수정] react-router-dom import 목록에 useNavigate 추가
-import { createBrowserRouter, RouterProvider, useParams, Navigate, useNavigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, useParams, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import './index.css';
 
 import App from './App';
-import ProtectedRoute from './components/ProtectedRoute';
-import LoadingSpinner from './components/LoadingSpinner';
+import ProtectedRoute from './components/common/ProtectedRoute';
+import LoadingSpinner from './components/common/LoadingSpinner';
 
-import { AuthProvider } from './context/AuthContext';
+// Context import (AuthContext의 loading 상태를 사용하기 위함)
+import { AuthProvider, useAuth } from './context/AuthContext';
 import './styles/toast-styles.css';
 
 // --- 페이지 컴포넌트 lazy loading ---
@@ -30,10 +30,11 @@ const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
 const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
 const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
+const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryPage'));
 const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 
 
-// 관리자 페이지
+// 관리자 페이지 (AdminLayout에서 이전)
 const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));
 const ProductListPageAdmin = React.lazy(() => import('@/pages/admin/ProductListPageAdmin'));
 const ProductAddAdminPage = React.lazy(() => import('@/pages/admin/ProductAddAdminPage'));
@@ -47,20 +48,30 @@ const AiProductPage = React.lazy(() => import('@/pages/admin/AiProductPage'));
 const BoardAdminPage = React.lazy(() => import('@/pages/admin/BoardAdminPage'));
 const CouponAdminPage = React.lazy(() => import('@/pages/admin/CouponAdminPage'));
 const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage'));
+// [수정] OrderListPage -> OrderManagementPage
+const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
+const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
 const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
-const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
 
 
 const ProductDetailPageWrapper = () => {
   const { productId } = useParams<{ productId: string }>();
-  // ✅ [수정] useNavigate 훅 호출
-  const navigate = useNavigate(); 
-  return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => navigate(-1)} /> : null;
+  return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
 };
 
-// ✅ [수정] 사용되지 않는 RouterWrapper 컴포넌트 삭제
-// const RouterWrapper = () => { ... };
+// AuthContext의 loading 상태에 따라 RouterProvider 렌더링을 제어할 컴포넌트
+const RouterWrapper = () => {
+  const { loading } = useAuth(); // AuthContext에서 loading 상태를 가져옵니다.
+
+  if (loading) {
+    // 인증 정보 로딩 중에는 로딩 스피너를 보여줍니다.
+    return <LoadingSpinner />;
+  }
+
+  // 인증 정보 로딩이 완료되면 RouterProvider를 렌더링합니다.
+  return <RouterProvider router={router} />;
+};
 
 
 const router = createBrowserRouter([
@@ -91,7 +102,9 @@ const router = createBrowserRouter([
               { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'encore-requests', element: <EncoreAdminPage /> },
               { path: 'ai-product', element: <AiProductPage /> },
+              // [수정] orders 경로의 element를 OrderManagementPage로 변경
               { path: 'orders', element: <OrderManagementPage /> },
+              { path: 'pickup', element: <PickupProcessingPage /> },
               { path: 'users', element: <UserListPage /> },
               { path: 'users/:userId', element: <UserDetailPage /> },
               { path: 'coupons', element: <CouponAdminPage /> },
@@ -118,12 +131,13 @@ const router = createBrowserRouter([
           { index: true, element: <ProductListPage /> },
           { path: "cart", element: <CartPage /> },
           { path: "onsite-sale", element: <OnsiteSalePage /> },
-          { path: "customer-center", element: <CustomerCenterPage /> },
+          { path: "store-info", element: <CustomerCenterPage /> },
           {
             path: "mypage",
             children: [
               { index: true, element: <MyPage /> },
               { path: "history", element: <OrderHistoryPage /> },
+              { path: "points", element: <PointHistoryPage /> },
             ]
           },
         ]
@@ -149,7 +163,7 @@ const router = createBrowserRouter([
 ]);
 
 createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  <>
     <Toaster
       position="top-center"
       reverseOrder={false}
@@ -159,9 +173,7 @@ createRoot(document.getElementById('root')!).render(
       }}
     />
     <AuthProvider> 
-      <Suspense fallback={<LoadingSpinner />}>
-        <RouterProvider router={router} />
-      </Suspense>
+      <RouterWrapper />
     </AuthProvider>
-  </React.StrictMode>
+  </>
 );

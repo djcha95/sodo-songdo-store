@@ -186,7 +186,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
         }
     }
 
-    const cartItem: CartItem = {
+  const cartItem: CartItem = {
       productId: product.id,
       productName: product.groupName,
       imageUrl: product.imageUrls?.[0] || '',
@@ -201,8 +201,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       stock: singleOptionItem.stock,
       pickupDate: finalPickupDate,
       status: 'RESERVATION',
+      deadlineDate: displayRound.deadlineDate, // ✅ 이 라인을 추가해주세요.
     };
-    
+
     addToCart(cartItem);
     toast.success(`${product.groupName} ${quantity}개를 담았어요!`);
     setQuantity(1);
@@ -240,7 +241,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
         }
     }
 
-    const waitlistItem: CartItem = {
+ const waitlistItem: CartItem = {
       productId: product.id,
       productName: product.groupName,
       imageUrl: product.imageUrls?.[0] || '',
@@ -255,8 +256,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       stock: singleOptionItem.stock,
       pickupDate: finalPickupDate,
       status: 'WAITLIST',
+      deadlineDate: displayRound.deadlineDate, // ✅ 이 라인을 추가해주세요.
     };
-    
+        
     addToCart(waitlistItem);
     toast.success(`${product.groupName} ${quantity}개를 대기 목록에 추가했어요!`);
     setQuantity(1);

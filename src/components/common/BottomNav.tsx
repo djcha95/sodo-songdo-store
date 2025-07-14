@@ -1,7 +1,7 @@
 // src/components/BottomNav.tsx
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
+import { useCart } from '../../context/CartContext';
 // ❗ [수정] 고객센터 아이콘 추가
 import { FiHome, FiShoppingBag, FiShoppingCart, FiUser, FiSettings, FiMessageSquare } from 'react-icons/fi';
 import './BottomNav.css';
