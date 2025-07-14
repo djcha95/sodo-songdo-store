@@ -10,12 +10,9 @@ export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
-export type ProductStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
-// ✅ [추가] 신뢰도 등급 타입
 export type LoyaltyTier = '조약돌' | '수정' | '에메랄드' | '다이아몬드';
 
-// ✅ [추가] 포인트 내역 타입
 export interface PointLog {
   id: string;
   amount: number;
@@ -24,7 +21,6 @@ export interface PointLog {
   expiresAt: Timestamp; // 소멸 예정일
 }
 
-// ✅ [추가] 헤더에서 사용할 알림의 종류를 명확하게 정의합니다.
 export type NotificationType =
   | 'GENERAL'             // 일반 알림
   | 'WAITLIST_CONFIRMED'  // 대기 예약 확정
@@ -38,7 +34,6 @@ export interface Notification {
   isRead: boolean;
   timestamp: Timestamp;
   link?: string;
-  // ✅ [추가] 알림 종류를 구분하기 위한 type 속성
   type: NotificationType;
 }
 
@@ -69,9 +64,8 @@ export interface WaitlistEntry {
   userId: string;
   quantity: number;
   timestamp: Timestamp;
-    variantGroupId: string;
+  variantGroupId: string;
   itemId: string;
-  
 }
 
 export interface SalesRound {
@@ -97,7 +91,7 @@ export interface Product {
   storageType: StorageType;
   salesHistory: SalesRound[];
   isArchived: boolean;
-  category?: string; // ✅ 하위 카테고리 제거됨
+  category?: string;
   encoreCount?: number;
   encoreRequesterIds?: string[];
   createdAt: Timestamp;
@@ -125,7 +119,7 @@ export interface CartItem {
   stock: number | null;
   pickupDate: Timestamp;
   status: 'RESERVATION' | 'WAITLIST';
-  deadlineDate: Timestamp; // ✅ [추가] 이 필드를 추가합니다.
+  deadlineDate: Timestamp;
 }
 export type OrderItem = Pick<
   CartItem,
@@ -142,13 +136,12 @@ export type OrderItem = Pick<
   | 'quantity'
   | 'stock'
 > & {
-  // ✅ [수정] deadlineDate를 필수로 변경하여 예약 마감 후 취소 로직에 사용
   deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
   totalQuantity?: number;
   totalPrice?: number;
-  category?: string; // ✅ 하위 카테고리 제거됨
+  category?: string;
   arrivalDate?: Timestamp;
   expirationDate?: Timestamp;
 };
@@ -168,7 +161,7 @@ export interface Order {
     phone: string;
   };
   pickedUpAt?: Timestamp;
-  prepaidAt?: Timestamp; // ✅ [추가] 선입금 처리 시각
+  prepaidAt?: Timestamp;
   notes?: string;
   isBookmarked?: boolean;
 }
@@ -181,35 +174,37 @@ export interface UserDocument {
   uid: string;
   email: string | null;
   displayName: string | null;
-  phone?: string | null;
+  phone: string | null;
   photoURL?: string | null;
   role: 'admin' | 'customer';
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
 
-  // ✅ [수정] 신뢰도 시스템 관련 필드
-  loyaltyPoints: number;      // 현재 신뢰도 점수
-  pickupCount: number;        // 누적 픽업 횟수
-  noShowCount: number;        // 누적 노쇼 횟수
-  lastLoginDate: string;      // 마지막 로그인 날짜 (YYYY-MM-DD 형식)
-  isRestricted?: boolean;     // 이용 제한 여부
+  loyaltyPoints: number;
+  pickupCount: number;
+  noShowCount: number;
+  lastLoginDate: string;
+  isRestricted?: boolean;
+
+  // ✅ [추가] 성별과 연령대 필드를 추가합니다.
+  gender?: 'male' | 'female' | null;
+  ageRange?: string | null;
 }
 
 export interface Banner {
-  id: string;
+  id:string;
   imageUrl: string;
   linkTo?: string;
   order: number;
   createdAt: Timestamp;
   isActive: boolean;
   productId?: string;
-  // ✅ [되돌리기] 텍스트 관련 필드를 다시 제거합니다.
 }
 
 export interface Category {
   id: string;
   name: string;
-  order: number; // ✅ subCategories 필드 제거됨
+  order: number;
 }
 
 export interface GuideItem {
@@ -236,7 +231,6 @@ export interface StoreInfo {
   kakaotalkChannelId?: string;
   usageGuide?: GuideItem[];
   faq?: FaqItem[];
-  // ✅ [추가] 위도와 경도 필드를 추가합니다 (타입은 number).
   latitude?: number;
   longitude?: number;
 }

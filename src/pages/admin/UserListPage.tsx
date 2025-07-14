@@ -7,7 +7,6 @@ import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { ArrowUp, ArrowDown } from 'lucide-react';
-// ✅ [추가] SodamallLoader import
 import SodamallLoader from '@/components/common/SodamallLoader';
 
 import './UserListPage.css';
@@ -17,10 +16,12 @@ interface AppUser extends DocumentData {
     uid: string;
     email: string;
     displayName: string;
+    // ✅ [수정] phone 필드 추가
+    phone?: string | null; 
     role: 'admin' | 'customer';
     noShowCount?: number;
     isRestricted?: boolean;
-    customerPhoneLast4?: string;
+    // ✅ [삭제] customerPhoneLast4 필드는 더 이상 사용하지 않음
     totalOrders?: number;
     pickedUpOrders?: number;
     pickupRate?: number;
@@ -38,9 +39,6 @@ interface Order extends DocumentData {
 
 // 정렬 기준 타입
 type SortKey = 'displayName' | 'totalOrders' | 'noShowCount' | 'createdAt' | 'pickupRate' | 'totalPriceSum';
-
-// ✅ [삭제] 기존 LoadingSpinner 컴포넌트 삭제
-
 
 const UserListPage = () => {
     useDocumentTitle('전체 고객 관리');
@@ -105,6 +103,8 @@ const UserListPage = () => {
                 return {
                     uid: doc.id,
                     ...data,
+                    // ✅ [수정] phone 필드도 명시적으로 가져옴
+                    phone: data.phone || null,
                     createdAt: data.createdAt?.toDate()
                 } as AppUser;
             });
@@ -133,7 +133,8 @@ const UserListPage = () => {
         let results = allUsers.filter(user =>
             (user.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (user.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (user.customerPhoneLast4 || '').includes(searchTerm)
+            // ✅ [수정] 전체 전화번호로 검색하도록 변경
+            (user.phone || '').includes(searchTerm)
         );
 
         if (sortBy) {
@@ -165,7 +166,6 @@ const UserListPage = () => {
         return sortDirection === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />;
     };
 
-    // ✅ [수정] LoadingSpinner를 SodamallLoader로 교체
     if (isLoading) return <SodamallLoader message="사용자 데이터를 불러오는 중..." />;
 
     return (
@@ -188,7 +188,6 @@ const UserListPage = () => {
                     <table className="user-list-table">
                         <thead>
                             <tr>
-                                {/* [수정] th의 자식 div에 flex를 적용하여 정렬 아이콘을 표시합니다. */}
                                 <th onClick={() => handleSort('displayName')} className="sortable">
                                     <div className="sortable-header">
                                         <span>이름</span>
@@ -236,7 +235,8 @@ const UserListPage = () => {
                             {filteredAndSortedUsers.map(user => (
                                 <tr key={user.uid}>
                                     <td>{user.displayName || '이름 없음'}</td>
-                                    <td>****{user.customerPhoneLast4 || '----'}</td>
+                                    {/* ✅ [수정] 전체 전화번호를 표시합니다. */}
+                                    <td>{user.phone || '정보 없음'}</td>
                                     <td>{user.email}</td>
                                     <td>
                                         <span className={`user-role role-${user.role}`}>

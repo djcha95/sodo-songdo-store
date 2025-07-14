@@ -187,14 +187,8 @@ export const cancelOrder = async (order: Order, isPenalty: boolean): Promise<voi
         transaction.update(productRef, { salesHistory: newSalesHistory });
     }
 
-    // 신뢰도 점수 조정 (트랜잭션 외부에서 호출)
-    // 트랜잭션 내에서 직접 userService 함수를 호출하면 순환 참조나 트랜잭션 룰 위반 가능성이 있으므로,
-    // 이 로직은 cancelOrder 함수를 호출하는 상위 로직에서 updateOrderStatusAndLoyalty를 직접 호출하는 것이 더 안전합니다.
-    // 여기서는 트랜잭션 완료 후 호출될 수 있도록 별도로 처리하는 것이 좋습니다.
   });
 
-  // 트랜잭션이 성공적으로 완료된 후, 필요하다면 여기서 신뢰도 점수 업데이트 로직을 트리거합니다.
-  // 이 방법은 트랜잭션의 ACID 속성을 보장하면서도 유연성을 제공합니다.
   if (isPenalty) {
     await updateOrderStatusAndLoyalty(order, 'CANCELED', -10, '예약 마감 후 취소');
   } else {
@@ -335,11 +329,11 @@ export const submitOrderFromWaitlist = async (
     const itemDetail = vg?.items.find(i => i.id === itemId);
 
     if (!vg || !itemDetail) {
-        // 해당 옵션을 찾을 수 없으면 주문을 생성하지 않고 오류를 발생시켜 트랜잭션을 중단
         throw new Error(`주문 전환 실패: 상품(${product.groupName})의 옵션(ID: ${itemId})을 찾을 수 없습니다.`);
     }
 
-    const userDoc = await getUserDocById(userId); // 사용자 정보 조회
+    // ✅ [수정] 사용자 정보를 조회하여 이름과 '전화번호'를 가져옵니다.
+    const userDoc = await getUserDocById(userId);
 
     const newOrderRef = doc(collection(db, 'orders'));
     const orderData: Omit<Order, 'id'> = {
@@ -365,10 +359,10 @@ export const submitOrderFromWaitlist = async (
         status: 'RESERVED',
         createdAt: serverTimestamp(),
         pickupDate: round.pickupDate,
-        // 실제 사용자 정보로 customerInfo 채우기
+        // ✅ [수정] 실제 사용자 정보로 customerInfo를 채웁니다 (전화번호 포함).
         customerInfo: { 
             name: userDoc?.displayName || '알 수 없음', 
-            phone: userDoc?.phone || '' 
+            phone: userDoc?.phone || '' // 사용자 전화번호가 있으면 사용
         },
         notes: '대기 신청에서 자동으로 전환된 주문입니다.',
     };

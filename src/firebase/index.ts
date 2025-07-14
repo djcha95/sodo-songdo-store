@@ -4,7 +4,9 @@
 export * from './productService';
 export * from './orderService';
 export * from './generalService';
-export * from './userService'; // ✅ [추가] userService를 export 목록에 추가
+export * from './userService';
+// ✅ [추가] bannerService를 export 목록에 추가합니다.
+export * from './bannerService';
 
 // 설정 파일에서 db, auth, storage 인스턴스도 함께 내보내서
 // 혹시 다른 곳에서 필요할 경우 사용할 수 있게 합니다.
