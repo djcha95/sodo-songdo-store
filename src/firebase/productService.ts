@@ -15,6 +15,34 @@ import { getUserDocById } from './userService'; // userService에서 사용자 �
 import { submitOrderFromWaitlist } from './orderService'; // orderService에서 import
 
 
+// ... (기존 함수들은 그대로 유지) ...
+
+
+// ✅ [추가] 상품 이름으로 상품을 검색하는 함수
+/**
+ * @description 상품 이름으로 상품을 검색합니다. (자동완성 및 중복 확인용)
+ * Firestore의 한계로 인해 '포함' 검색은 불가능하며, '시작' 검색만 지원합니다.
+ * @param name - 검색할 상품명
+ * @returns - 검색된 상품 목록
+ */
+export const searchProductsByName = async (name: string): Promise<Product[]> => {
+  if (!name) {
+    return [];
+  }
+  const productsRef = collection(db, 'products');
+  // 'groupName' 필드가 검색어(name)로 시작하는 문서를 찾는 쿼리
+  const q = query(
+    productsRef,
+    where('groupName', '>=', name),
+    where('groupName', '<=', name + '\uf8ff'),
+    limit(10) // 최대 10개까지만 결과 반환
+  );
+
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
+};
+
+
 /**
  * @description 대표 상품을 추가하고 첫 번째 판매 회차를 등록하는 함수
  */
