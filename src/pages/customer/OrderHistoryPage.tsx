@@ -7,7 +7,7 @@ import { getUserOrders, updateOrderStatusAndLoyalty } from '@/firebase';
 import useLongPress from '@/hooks/useLongPress';
 import type { Order, OrderStatus } from '@/types';
 import { Timestamp } from 'firebase/firestore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Package,
   ListOrdered,
@@ -17,7 +17,6 @@ import {
   PackageCheck,
   PackageX,
   Hourglass,
-  CalendarDays,
   CreditCard,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -30,7 +29,7 @@ import './OrderHistoryPage.css';
 interface AggregatedItem {
   id: string;
   productName: string;
-  variantGroupName: string; // ✅ [추가] 카드 제목으로 사용할 variant group 이름
+  variantGroupName: string;
   itemName: string;
   totalQuantity: number;
   imageUrl: string;
@@ -138,8 +137,6 @@ const EmptyHistory: React.FC = () => {
   );
 };
 
-// ✅ [수정] 카드 표시 정보 변경
-// 기존 AggregatedItemCard 컴포넌트를 이 코드로 전체 교체하세요.
 const AggregatedItemCard: React.FC<{
   item: AggregatedItem;
   displayDateInfo?: { type: 'pickup' | 'order'; date: Date };
@@ -173,7 +170,6 @@ const AggregatedItemCard: React.FC<{
     }
   );
   
-  // ✅ [수정] 날짜 텍스트 생성 로직 변경
   let displayDateText = '';
   if (displayDateInfo && displayDateInfo.date) {
     const formattedDate = formatPickupDateShort(displayDateInfo.date);
@@ -198,7 +194,6 @@ const AggregatedItemCard: React.FC<{
               <span className="item-option-name">{item.itemName}</span>
               <span className="item-quantity">({item.totalQuantity}개)</span>
             </span>
-            {/* ✅ [수정] 날짜 표시 부분 클래스명 변경 */}
             {displayDateText && <span className="date-info-badge">{displayDateText}</span>}
           </div>
         </div>
@@ -222,7 +217,6 @@ const OrderHistoryPage: React.FC = () => {
     toast.dismiss();
   }, []);
   
-  // ✅ [수정] `variantGroupName`을 합산 데이터에 추가
   const aggregateOrders = (groupBy: 'orderDate' | 'pickupDate'): { [date: string]: AggregatedItem[] } => {
     const aggregated: { [key: string]: AggregatedItem } = {};
 
@@ -242,7 +236,7 @@ const OrderHistoryPage: React.FC = () => {
           aggregated[key] = {
             id: key,
             productName: item.productName,
-            variantGroupName: item.variantGroupName, // variantGroupName 추가
+            variantGroupName: item.variantGroupName,
             itemName: item.itemName,
             totalQuantity: 0,
             imageUrl: item.imageUrl,

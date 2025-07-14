@@ -1,10 +1,10 @@
 // src/firebase/userService.ts
 
 import { db } from './firebaseConfig';
-import { doc, runTransaction, serverTimestamp, collection, addDoc, Timestamp, getDoc, query, orderBy, getDocs, setDoc } from 'firebase/firestore';
+// [수정] 사용하지 않는 addDoc, setDoc을 import 목록에서 제거합니다.
+import { doc, runTransaction, serverTimestamp, collection, Timestamp, getDoc, query, orderBy, getDocs } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import type { Order, OrderStatus, UserDocument, PointLog } from '@/types';
-// ✅ [제거] OAuthCredential은 더 이상 필요 없습니다.
 
 /**
  * @description 카카오 로그인 성공 시 사용자 정보를 Firestore에 생성하거나 업데이트합니다.
@@ -14,7 +14,6 @@ import type { Order, OrderStatus, UserDocument, PointLog } from '@/types';
 export const processUserSignIn = async (user: User, kakaoData: any | null): Promise<void> => {
     const userRef = doc(db, 'users', user.uid);
     
-    // ✅ [단순화] 카카오 API 응답에서 직접 정보를 추출합니다.
     const kakaoAccount = kakaoData?.kakao_account;
 
     await runTransaction(db, async (transaction) => {
@@ -25,7 +24,6 @@ export const processUserSignIn = async (user: User, kakaoData: any | null): Prom
             const existingData = userDoc.data() as UserDocument;
             const updates: Partial<UserDocument> = {};
 
-            // Firebase User 객체의 displayName이 더 신뢰도 높을 수 있음 (카카오 닉네임)
             if (!existingData.displayName && user.displayName) {
                 updates.displayName = user.displayName;
             }
@@ -58,7 +56,6 @@ export const processUserSignIn = async (user: User, kakaoData: any | null): Prom
                 noShowCount: 0,
                 lastLoginDate: new Date().toISOString().split('T')[0],
                 isRestricted: false,
-                // ✅ [단순화] 모든 정보를 kakaoData에서 가져옵니다.
                 gender: kakaoAccount?.gender || null,
                 ageRange: kakaoAccount?.age_range || null,
             };
