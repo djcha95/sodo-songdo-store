@@ -1,11 +1,25 @@
 // src/pages/admin/ProductPreviewModal.tsx
 
 import React from 'react';
-// [수정] PreviewProduct 타입과 ProductItem, VariantGroup 타입을 types.ts에서 정확히 임포트
-import type { PreviewProduct, ProductItem, VariantGroup } from '../../types'; 
+// [수정] ProductItem, VariantGroup 타입만 중앙 types.ts에서 가져옵니다.
+import type { ProductItem, VariantGroup } from '../../types';
+
+// [수정] 컴포넌트가 받는 product prop의 정확한 형태를 정의하는 로컬 인터페이스를 추가합니다.
+// 이 데이터는 폼에서 만들어진 임시 객체이므로, DB의 Product 타입과 구조가 다릅니다.
+interface PreviewProduct {
+  name: string;
+  description?: string;
+  category?: string;
+  subCategory?: string;
+  // [수정] storageType에 'CHILLED'를 포함하여 타입 비교 오류를 해결합니다.
+  storageType?: 'ROOM' | 'CHILLED' | 'FROZEN';
+  specialLabels?: string[];
+  variantGroups?: VariantGroup[];
+}
 
 interface ProductPreviewModalProps {
-  product: PreviewProduct; 
+  // [수정] 로컬에 정의한 PreviewProduct 타입을 사용합니다.
+  product: PreviewProduct;
   imagePreviews: string[];
   onClose: () => void;
 }
@@ -46,7 +60,7 @@ const ProductPreviewModal: React.FC<ProductPreviewModalProps> = ({ product, imag
             </div>
           )}
           
-          {/* [수정] product.variantGroups를 순회하며 하위 상품 그룹 정보 표시 */}
+          {/* product.variantGroups를 순회하며 하위 상품 그룹 정보 표시 */}
           {product.variantGroups && product.variantGroups.length > 0 && (
             <div style={pricingOptionListStyle}>
               <h4 style={{marginBottom: '15px', fontSize: '1.2em', fontWeight: 'bold'}}>판매 옵션 상세</h4>

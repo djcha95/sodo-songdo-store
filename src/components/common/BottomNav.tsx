@@ -8,7 +8,11 @@ import './BottomNav.css';
 
 const BottomNav = () => {
   const { isAdmin } = useAuth();
-  const { cartItemCount } = useCart();
+  // [수정] useCart에서 reservationItemCount와 waitlistItemCount를 가져옵니다.
+  const { reservationItemCount, waitlistItemCount } = useCart();
+
+  // [수정] 두 값을 더하여 장바구니에 표시할 전체 아이템 수를 계산합니다.
+  const cartItemCount = reservationItemCount + waitlistItemCount;
 
   const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
     return "nav-link" + (isActive ? " active" : "");

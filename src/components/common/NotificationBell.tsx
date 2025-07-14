@@ -1,6 +1,7 @@
 // src/components/NotificationBell.tsx
 import { useState } from 'react';
-import type { Notification } from '../../context/AuthContext'; // AuthContext에서 타입을 가져옵니다.
+// Notification 타입은 중앙 관리 파일인 types.ts에서 가져옵니다.
+import type { Notification } from '../../types';
 import '../App.css'; // src/components/ 에서 src/App.css 로 접근
 
 interface NotificationBellProps {
@@ -39,7 +40,8 @@ const NotificationBell = ({ notifications = [], onMarkAsRead }: NotificationBell
                 <li key={noti.id} className={noti.isRead ? 'read' : 'unread'} onClick={() => handleRead(noti.id)}>
                   <p className="notification-message">{noti.message}</p>
                   <span className="notification-time">
-                    {noti.timestamp?.toLocaleDateString('ko-KR') || '날짜 없음'}
+                    {/* [수정] .toDate()를 호출하여 Timestamp를 Date 객체로 변환합니다. */}
+                    {noti.timestamp?.toDate().toLocaleDateString('ko-KR') || '날짜 없음'}
                   </span>
                 </li>
               ))

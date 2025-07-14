@@ -1,12 +1,13 @@
 // src/pages/admin/AiProductPage.tsx
 
 import React from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
-import ComingSoon from '@/components/common/admin/ComingSoon'; // ComingSoon 컴포넌트를 가져옵니다.
+import useDocumentTitle from '@/hooks/useDocumentTitle';
+// ✅ [수정] ComingSoon 컴포넌트의 실제 파일 위치에 맞게 import 경로를 수정합니다.
+import ComingSoon from '@/components/common/ComingSoon';
 import { Bot } from 'lucide-react';
 
 const AiProductPage: React.FC = () => {
-  useDocumentTitle('AI 상품 추천'); // ✅ [추가]
+  useDocumentTitle('AI 상품 추천');
 
   return (
     <ComingSoon

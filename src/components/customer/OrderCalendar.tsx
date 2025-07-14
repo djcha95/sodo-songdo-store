@@ -73,8 +73,6 @@ const OrderCalendar: React.FC = () => {
       // pickupDate가 Timestamp 객체인지 확인
       if (order.pickupDate && typeof (order.pickupDate as Timestamp).toDate === 'function') {
           date = (order.pickupDate as Timestamp).toDate();
-      } else if (order.pickupDate instanceof Date) { // 이미 Date 객체인 경우
-          date = order.pickupDate;
       }
       
       if (date) {
@@ -88,11 +86,11 @@ const OrderCalendar: React.FC = () => {
 
   // useMemo를 사용하여 selectedDateOrders를 최적화
   const selectedDateOrders = useMemo(() => {
-    if (!Array.isArray(value) || !value[0]) {
+    const selectedDateValue = Array.isArray(value) ? value[0] : value;
+    if (!selectedDateValue) {
       return [];
     }
-    const selectedSingleDate = value[0] as Date;
-    const selectedDateString = format(selectedSingleDate, 'yyyy-MM-dd');
+    const selectedDateString = format(selectedDateValue, 'yyyy-MM-dd');
 
     // [수정] 미리 계산된 pickupDates Set을 활용
     if (!pickupDates.has(selectedDateString)) {
@@ -100,7 +98,11 @@ const OrderCalendar: React.FC = () => {
     }
     
     return userOrders.filter((order: Order) => {
-        const pickupDate = order.pickupDate?.toDate();
+        const pickupDateValue = order.pickupDate;
+        let pickupDate: Date | null = null;
+        if (pickupDateValue && typeof (pickupDateValue as Timestamp).toDate === 'function') {
+            pickupDate = (pickupDateValue as Timestamp).toDate();
+        }
         return pickupDate &&
                format(pickupDate, 'yyyy-MM-dd') === selectedDateString;
     });
@@ -111,24 +113,28 @@ const OrderCalendar: React.FC = () => {
     const now = new Date();
     now.setHours(0, 0, 0, 0); // 시간 정보 제거
 
-    const pickupDeadline = order.pickupDeadlineDate?.toDate();
+    const pickupDeadlineValue = order.pickupDeadlineDate;
+    let pickupDeadline: Date | undefined;
+    if (pickupDeadlineValue && typeof (pickupDeadlineValue as Timestamp).toDate === 'function') {
+        pickupDeadline = (pickupDeadlineValue as Timestamp).toDate();
+    }
     const isPickupDeadlinePassed = pickupDeadline && pickupDeadline.getTime() < now.getTime();
 
-    // 우선순위: 취소 > 노쇼 > 픽업 완료 > 선입금 > 예약중
-    if (order.status === 'cancelled') {
+    // [수정] 우선순위: 취소 > 노쇼 > 픽업 완료 > 선입금 > 예약중 (types.ts의 OrderStatus 타입과 일치시킴)
+    if (order.status === 'CANCELED') {
         return { text: '취소', className: 'status-cancelled' };
     }
     // '노쇼'는 마감일이 지났고, 픽업되지 않은 경우
-    if (order.status !== 'delivered' && isPickupDeadlinePassed) {
+    if (order.status !== 'PICKED_UP' && isPickupDeadlinePassed) {
         return { text: '노쇼', className: 'status-cancelled' };
     }
-    if (order.status === 'delivered') {
+    if (order.status === 'PICKED_UP') {
         return { text: '픽업 완료', className: 'status-delivered' };
     }
-    if (order.status === 'paid') {
+    if (order.status === 'PREPAID') {
         return { text: '선입금', className: 'status-paid' };
     }
-    if (order.status === 'pending') {
+    if (order.status === 'RESERVED') {
         return { text: '예약중', className: 'status-pending' };
     }
     return { text: order.status, className: '' };
@@ -138,13 +144,11 @@ const OrderCalendar: React.FC = () => {
   const tileContent = ({ date, view }: { date: Date; view: string }) => {
     if (view === 'month') {
       const holidayInfo = holidays.isHoliday(date);
-      // [수정] 미리 계산된 pickupDates Set을 사용하여 O(1) 시간에 확인
       const hasPickupDate = pickupDates.has(format(date, 'yyyy-MM-dd'));
-
       const holidayName = Array.isArray(holidayInfo) && holidayInfo.length > 0 ? holidayInfo[0].name : undefined;
 
-      // 두 개의 점이 동시에 표시될 수 있도록 조건부 렌더링
-      const dots = [];
+      // [수정] 타입 추론 오류를 막기 위해 배열 타입을 명시적으로 지정
+      const dots: React.ReactNode[] = [];
       if (hasPickupDate) {
           dots.push(<div key="pickup-dot" className="dot pickup-dot"></div>);
       }
@@ -159,23 +163,21 @@ const OrderCalendar: React.FC = () => {
 
   const tileClassName = ({ date, view }: { date: Date; view: string }) => {
     if (view === 'month') {
-      const classes = [];
-      // 공휴일 클래스
+      // [수정] 타입 추론 오류를 막기 위해 배열 타입을 명시적으로 지정
+      const classes: string[] = [];
       const isHoliday = holidays.isHoliday(date);
       if (Array.isArray(isHoliday) && isHoliday.length > 0) {
         classes.push('holiday-tile');
       }
-
-      // 토요일(6)에 파란색 클래스 추가
       if (date.getDay() === 6) {
         classes.push('saturday-tile');
       }
-      // 일요일(0)은 react-calendar의 기본 스타일이 적용되므로 별도 클래스 추가 안함
-      
       return classes.length > 0 ? classes.join(' ') : null;
     }
     return null;
   };
+
+  const selectedDate = Array.isArray(value) ? value[0] : value;
 
   return (
     <>
@@ -201,30 +203,47 @@ const OrderCalendar: React.FC = () => {
             </div>
 
             <div className="order-list-section">
-              <h3>{Array.isArray(value) && value[0] ? `${format(value[0] as Date, 'yyyy년 M월 d일', { locale: ko })} 픽업 내역` : '날짜를 선택하세요'}</h3>
+              <h3>{selectedDate ? `${format(selectedDate, 'yyyy년 M월 d일', { locale: ko })} 픽업 내역` : '날짜를 선택하세요'}</h3>
               {selectedDateOrders.length > 0 ? (
                 <ul className="order-list">
                   {selectedDateOrders.map((order: Order) => {
                     const statusDisplay = getOrderStatusDisplay(order);
+                    // [수정] order.orderDate를 order.createdAt으로 변경
+                    const orderTimestamp = order.createdAt;
+                    let orderDateStr = '날짜 없음';
+                    if (orderTimestamp && typeof (orderTimestamp as Timestamp).toDate === 'function') {
+                        orderDateStr = (orderTimestamp as Timestamp).toDate().toLocaleDateString();
+                    }
+                    const pickupTimestamp = order.pickupDate;
+                    let pickupDateStr = '미정';
+                    if (pickupTimestamp && typeof pickupTimestamp.toDate === 'function') {
+                        pickupDateStr = pickupTimestamp.toDate().toLocaleDateString();
+                    }
+                    const pickupDeadlineTimestamp = order.pickupDeadlineDate;
+                    let pickupDeadlineStr = '';
+                    if (pickupDeadlineTimestamp && typeof pickupDeadlineTimestamp.toDate === 'function') {
+                        pickupDeadlineStr = ` (마감: ${pickupDeadlineTimestamp.toDate().toLocaleDateString()})`;
+                    }
+
                     return (
                       <li key={order.id} className="order-item-card">
                         <div className="order-summary">
-                            <p className="order-date">주문일: {order.orderDate?.toDate().toLocaleDateString() || '날짜 없음'}</p>
+                            <p className="order-date">주문일: {orderDateStr}</p>
                             <p className={`order-status ${statusDisplay.className}`}>{statusDisplay.text}</p>
                         </div>
                         <ul className="order-items-detail">
                             {(order.items as OrderItemWithCategory[] || []).map((item: OrderItemWithCategory, idx: number) => (
                                 <li key={idx} className="order-item-detail-row">
-                                    <span className="product-name-qty">{item.name} ({item.quantity}개)</span>
+                                    {/* [수정] item.name -> item.itemName, item.price -> item.unitPrice */}
+                                    <span className="product-name-qty">{item.itemName} ({item.quantity}개)</span>
                                     <span className="product-category">[{item.category || '기타'}]</span>
-                                    <span className="product-price">{item.price.toLocaleString()}원</span>
+                                    <span className="product-price">{item.unitPrice.toLocaleString()}원</span>
                                 </li>
                             ))}
                         </ul>
                         <p className="order-total-price">총 금액: {order.totalPrice.toLocaleString()}원</p>
                         <p className="order-pickup-info">
-                            픽업 예정일: {order.pickupDate?.toDate().toLocaleDateString() || '미정'}
-                            {order.pickupDeadlineDate && ` (마감: ${order.pickupDeadlineDate.toDate().toLocaleDateString()})`}
+                            픽업 예정일: {pickupDateStr}{pickupDeadlineStr}
                         </p>
                       </li>
                     );
