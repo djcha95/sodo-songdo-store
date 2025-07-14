@@ -15,6 +15,62 @@ import { getUserDocById } from './userService'; // userService에서 사용자 �
 import { submitOrderFromWaitlist } from './orderService'; // orderService에서 import
 
 
+// --- BulkActionBar.tsx에서 사용할 함수 추가 ---
+
+/**
+ * @description 여러 상품의 보관(archive) 상태를 일괄 변경합니다.
+ * @param productIds - 상태를 변경할 상품 ID 배열
+ * @param isArchived - 새로운 보관 상태 (true: 숨김, false: 게시)
+ */
+export const updateProductsStatus = async (productIds: string[], isArchived: boolean): Promise<void> => {
+  const batch = writeBatch(db);
+  productIds.forEach(id => {
+    const productRef = doc(db, 'products', id);
+    batch.update(productRef, { isArchived });
+  });
+  await batch.commit();
+};
+
+/**
+ * @description 여러 상품을 일괄 삭제합니다. Firestore 문서와 Storage의 이미지 파일을 모두 삭제합니다.
+ * @param productIds - 삭제할 상품 ID 배열
+ */
+export const deleteProducts = async (productIds: string[]): Promise<void> => {
+  const batch = writeBatch(db);
+
+  for (const id of productIds) {
+    const productRef = doc(db, 'products', id);
+    
+    try {
+      const productDoc = await getDoc(productRef);
+      if (productDoc.exists()) {
+        const productData = productDoc.data() as Product;
+        const imageUrls = productData.imageUrls || [];
+
+        // Storage에서 이미지 삭제
+        for (const url of imageUrls) {
+          try {
+            const imageRef = ref(storage, url);
+            await deleteObject(imageRef);
+          } catch (error: any) {
+            if (error.code !== 'storage/object-not-found') {
+              console.error(`Failed to delete image ${url}:`, error);
+            }
+          }
+        }
+      }
+      // Firestore 문서 삭제를 배치에 추가
+      batch.delete(productRef);
+
+    } catch (error) {
+      console.error(`상품 삭제 처리 중 오류 발생 (ID: ${id}):`, error);
+    }
+  }
+
+  await batch.commit();
+};
+
+
 // ... (기존 함수들은 그대로 유지) ...
 
 
