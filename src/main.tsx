@@ -8,10 +8,11 @@ import { Toaster } from 'react-hot-toast';
 import './index.css';
 
 import App from './App';
+// 경로 수정: components/common/ 에서 components/ 로 변경
 import ProtectedRoute from './components/common/ProtectedRoute';
 import LoadingSpinner from './components/common/LoadingSpinner';
 
-// Context import (AuthContext의 loading 상태를 사용하기 위함)
+// Context impor  (AuthContext의 loading 상태를 사용하기 위함)
 import { AuthProvider, useAuth } from './context/AuthContext';
 import './styles/toast-styles.css';
 
@@ -29,11 +30,11 @@ const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetai
 const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
 const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
+// CustomerCenterPage와 PointHistoryPage 복원
 const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
 const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryPage'));
 const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
-// ✅ [추가] 개인정보 처리방침 페이지 import
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
 
 
@@ -88,7 +89,6 @@ const router = createBrowserRouter([
           </Suspense>
         ),
       },
-      // ✅ [추가] 개인정보 처리방침 페이지 경로 추가
       {
         path: "privacy",
         element: (
@@ -147,13 +147,13 @@ const router = createBrowserRouter([
           { index: true, element: <ProductListPage /> },
           { path: "cart", element: <CartPage /> },
           { path: "onsite-sale", element: <OnsiteSalePage /> },
-          { path: "store-info", element: <CustomerCenterPage /> },
+          { path: "store-info", element: <CustomerCenterPage /> }, // CustomerCenterPage 복원
           {
             path: "mypage",
             children: [
               { index: true, element: <MyPage /> },
               { path: "history", element: <OrderHistoryPage /> },
-              { path: "points", element: <PointHistoryPage /> },
+              { path: "points", element: <PointHistoryPage /> }, // PointHistoryPage 복원
             ]
           },
         ]
@@ -179,17 +179,24 @@ const router = createBrowserRouter([
 ]);
 
 createRoot(document.getElementById('root')!).render(
-  <>
+  // ✅ [수정] StrictMode를 제거하여 배포 오류를 해결합니다.
+  <React.Fragment>
     <Toaster
       position="top-center"
       reverseOrder={false}
       toastOptions={{
+        style: { // toastOptions.style 추가
+          borderRadius: '8px',
+          background: 'var(--toast-bg-dark, #333)',
+          color: 'var(--toast-text-light, #fff)',
+        },
         success: { duration: 2000 },
         error: { duration: 4000 },
       }}
     />
+    {/* AuthProvider로 RouterWrapper 감싸기 */}
     <AuthProvider> 
       <RouterWrapper />
     </AuthProvider>
-  </>
+  </React.Fragment>
 );

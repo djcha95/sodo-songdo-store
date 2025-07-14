@@ -8,9 +8,10 @@ const LoadingSpinner = () => <div className="loading-spinner">콘텐츠 로딩 �
 
 const AdminLayout = () => {
   // 사이드바의 열림/닫힘 상태를 AdminLayout에서 관리합니다.
+  // main.tsx의 관리자 라우팅 복원과 일관성을 위해 초기값 true로 복원
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
 
-  // 화면 크기에 따라 사이드바 상태를 자동으로 조절하는 로직
+  // 화면 크기에 따라 사이드바 상태를 자동으로 조절하는 로직 복원
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth <= 768) {
