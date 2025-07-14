@@ -9,8 +9,8 @@ import type { Firestore } from 'firebase/firestore';
 import type { Auth } from 'firebase/auth';
 import type { FirebaseStorage } from 'firebase/storage';
 
+// [수정] Vercel에 저장된 'VITE_FIREBASE_...' 이름과 일치하도록 모든 변수명을 수정합니다.
 const firebaseConfig = {
-  // ✅ [수정] _APP_ 부분을 삭제하여 .env 파일과 일치시킵니다.
   apiKey: import.meta.env.VITE_API_KEY as string,
   authDomain: import.meta.env.VITE_AUTH_DOMAIN as string,
   projectId: import.meta.env.VITE_PROJECT_ID as string,
