@@ -1,8 +1,8 @@
 // src/firebase/userService.ts
 
 import { db } from './firebaseConfig';
-import { doc, runTransaction, serverTimestamp, collection, addDoc, Timestamp, getDoc } from 'firebase/firestore'; // getDoc 추가
-import type { Order, OrderStatus, UserDocument } from '@/types'; // UserDocument 타입 추가
+import { doc, runTransaction, serverTimestamp, collection, addDoc, Timestamp, getDoc, query, orderBy, getDocs } from 'firebase/firestore';
+import type { Order, OrderStatus, UserDocument, PointLog } from '@/types';
 
 /**
  * 신뢰도 점수 로그를 기록하는 헬퍼 함수
@@ -123,4 +123,19 @@ export const getUserDocById = async (userId: string): Promise<UserDocument | nul
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
     return userSnap.exists() ? userSnap.data() as UserDocument : null;
+};
+
+/**
+ * @description 특정 사용자의 포인트 변동 내역 전체를 가져옵니다.
+ */
+export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
+  const logsRef = collection(db, 'users', userId, 'pointLogs');
+  const q = query(logsRef, orderBy('createdAt', 'desc'));
+  
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  } as PointLog));
 };

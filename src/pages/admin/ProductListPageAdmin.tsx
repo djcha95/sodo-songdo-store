@@ -10,7 +10,7 @@ import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem,
 import type { WaitlistInfo } from '../../firebase'; // 타입 import 추가
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen } from 'lucide-react';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
 import './ProductListPageAdmin.css';
 
 // =================================================================

@@ -125,8 +125,8 @@ export interface CartItem {
   stock: number | null;
   pickupDate: Timestamp;
   status: 'RESERVATION' | 'WAITLIST';
+  deadlineDate: Timestamp; // ✅ [추가] 이 필드를 추가합니다.
 }
-
 export type OrderItem = Pick<
   CartItem,
   | 'productId'

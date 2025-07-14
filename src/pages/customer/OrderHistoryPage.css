@@ -1,9 +1,10 @@
 /* src/pages/customer/OrderHistoryPage.css */
 
+/* 수정 후 코드 */
 .order-history-page {
   padding: 16px;
-  background-color: var(--bg-color-light); /* 전역 스타일 변수 사용 */
-  min-height: calc(100vh - 125px); /* 헤더 및 하단 네비게이션 높이 고려 */
+  background-color: var(--bg-color-light);
+  padding-bottom: 80px; /* ✅ 화면 하단에 충분한 여백 추가 */
 }
 
 /* --- 보기 방식 토글 --- */
@@ -14,7 +15,7 @@
   padding: 4px;
   margin-bottom: 24px;
   position: sticky;
-  top: 65px; /* 헤더 높이만큼 */
+  top: 65px;
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
@@ -43,15 +44,16 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* --- 로딩, 에러, 빈 상태, 정보 --- */
-.loading-spinner-container {
+/* --- 로딩, 에러, 빈 상태 --- */
+.loading-spinner-container, .error-message, .info-message {
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 50px 0;
+  color: var(--text-color-light);
 }
 
-.loading-spinner {
+.loading-spinner { /* 스피너 로딩 CSS 추가 */
   width: 40px;
   height: 40px;
   border: 4px solid var(--border-color-light);
@@ -60,21 +62,13 @@
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
+@keyframes spin { /* 스피너 애니메이션 추가 */
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
 
 .error-message {
-  text-align: center;
-  padding: 40px 10px;
   color: var(--danger-color);
-}
-
-.info-message {
-    text-align: center;
-    padding: 40px 10px;
-    color: var(--text-color-light);
 }
 
 .empty-history-container {
@@ -123,9 +117,9 @@
 }
 
 
-/* --- 날짜 및 섹션 헤더 --- */
+/* --- 날짜 헤더 --- */
 .date-header {
-  font-size: 1.1rem;
+  font-size: 0.9rem; /* 날짜 헤더 폰트 크기 조정 */
   font-weight: 700;
   color: var(--text-color-dark);
   margin: 24px 0 12px 4px;
@@ -137,269 +131,155 @@
   margin-top: 0;
 }
 
-.time-section-header {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-color-light);
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-color-light);
-  margin: 24px 0 12px 0;
-}
-.time-section-header:first-child {
-    margin-top: 0;
-}
-
-
-/* --- 예약 건별 보기 (Order View) --- */
-.orders-list {
+/* --- 공통 카드 레이아웃 --- */
+.orders-list, .pickup-list {
   display: flex;
   flex-direction: column;
+  gap: 16px; /* 날짜 그룹간 간격 */
+}
+
+/* 새로운 카드들을 위한 그리드 레이아웃 */
+.order-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
 }
 
-.order-card {
+/* ✅ 새로운 카드 스타일 v3 */
+.order-card-v3 {
   background-color: var(--bg-color-white);
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color-light);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  margin-bottom: 4px;
+  transition: all 0.2s ease;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background-color: var(--bg-color-light);
-  border-bottom: 1px solid var(--border-color-light);
+.order-card-v3.cancellable:hover {
+  border-color: var(--danger-color);
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.1);
+  cursor: pointer;
+  transform: translateY(-2px);
 }
+
+.product-name-top { /* 카드 좌상단 상품명 */
+  color: var(--text-color-dark);
+  font-weight: 700; /* 상품명 강조 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1; /* 상단에서 왼쪽 공간 차지 */
+  text-align: left; /* 좌측 정렬 */
+}
+
+.card-v3-body {
+  padding: 16px; /* 헤더/푸터 없을 때 상하좌우 여백 조정 */
+  display: flex;
+  gap: 12px;
+  flex-grow: 1;
+  align-items: center; /* 세로 중앙 정렬 */
+}
+
+/* 모든 정보를 포함하는 새로운 컨테이너 */
+.item-aggregated-info {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column; /* 세로로 쌓이도록 */
+    justify-content: space-between; /* 상단과 하단 항목을 공간 분할하여 배치 */
+    height: 100%; /* 부모 높이만큼 확장 */
+}
+
+.info-top-row, .info-bottom-row {
+    display: flex;
+    justify-content: space-between; /* 양 끝 정렬 */
+    align-items: center;
+    width: 100%;
+}
+
+.info-bottom-row {
+  margin-top: 8px; /* 상단 행과 간격 */
+}
+
 
 .status-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  padding: 5px 10px;
-  border-radius: 15px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  flex-shrink: 0; /* 공간이 부족해도 줄어들지 않음 */
+  /* margin-top 제거, flex 정렬로 처리 */
 }
 .status-reserved { background-color: #e7f5ff; color: #1c7ed6; }
 .status-picked_up, .status-completed { background-color: #e6fcf5; color: #087f5b; }
 .status-canceled { background-color: #f1f3f5; color: #868e96; }
 .status-no_show { background-color: #fff5f5; color: #c92a2a; }
 
-
-.order-date {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-color-light);
-}
-
-.card-body {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.order-item {
+.pickup-date-display {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-color-medium);
+  flex-shrink: 0;
+  /* margin-top 제거, flex 정렬로 처리 */
 }
 
-/* ✅ [FIX] 이미지가 비정상적으로 커지는 것을 방지하기 위한 래퍼 스타일 */
 .item-image-wrapper {
-  width: 50px;
-  height: 50px;
+  width: 60px; /* 이미지 크기 약간 키움 */
+  height: 60px;
   flex-shrink: 0;
   border-radius: 8px;
-  overflow: hidden; /* 이미지가 래퍼를 벗어나지 않도록 함 */
-  background-color: var(--bg-color-light); /* 이미지 로딩 전 배경색 */
+  overflow: hidden;
+  background-color: var(--bg-color-light);
 }
-
 .item-image {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* 이미지가 비율을 유지하며 래퍼를 꽉 채움 */
-  display: block; /* 이미지 하단에 생기는 불필요한 여백 제거 */
+  object-fit: cover;
+  display: block;
 }
 
-.item-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-grow: 1;
+.item-options-quantity {
+    display: flex;
+    flex-wrap: wrap; /* 내용이 길어지면 다음 줄로 */
+    align-items: baseline; /* 텍스트 베이스라인 정렬 */
+    text-align: left; /* 좌측 정렬 */
+    flex-grow: 1; /* 공간 최대한 차지 */
 }
 
-
-
-.item-name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-color-dark);
-}
-
-.item-quantity-price {
+.item-option-name {
+  color: var(--text-color-medium);
   font-size: 0.9rem;
-  color: var(--text-color-light);
-}
-
-.card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-color-light);
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.total-price {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--text-color-dark);
-}
-
-.cancel-button {
-  background-color: var(--bg-color-light-gray);
-  color: var(--text-color-light);
-  border: 1px solid var(--border-color-medium);
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s;
-}
-.cancel-button:hover {
-  background-color: #ffe3e3;
-  color: var(--danger-color);
-  border-color: var(--danger-color);
-}
-.cancel-button.warning {
-  background-color: #fff0f0;
-  color: var(--danger-color);
-  border-color: #ffd1d1;
-}
-.cancel-button.warning:hover {
-  background-color: #ffe3e3;
-  border-color: var(--danger-color);
-}
-
-
-/* --- 픽업일 순 보기 (Pickup View) --- */
-.pickup-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.pickup-group-card {
-  background-color: var(--bg-color-white);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-quantity {
+  color: var(--primary-color); /* 파란색으로 변경 */
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-left: 2px; /* 괄호 앞 여백 */
+  white-space: nowrap;
 }
 
-.collapsible-trigger {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  width: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  border-bottom: 1px solid var(--border-color-light);
-}
-.collapsible-trigger:only-child {
-  border-bottom: none;
-}
-
-
-.trigger-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--primary-color);
-}
-
-.pickup-group-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin: 0;
-  color: var(--text-color-dark);
-}
-
-.chevron-icon {
+.order-timestamp {
+  font-size: 0.75rem;
   color: var(--text-color-light);
-  transition: transform 0.3s ease;
-}
-.chevron-icon.open {
-  transform: rotate(180deg);
+  font-family: monospace;
+  /* margin-top 제거, flex 정렬로 처리 */
 }
 
-.collapsible-content {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.pickup-item {
-  display: flex;
-  gap: 12px;
-  border-bottom: 1px solid var(--border-color-light);
-  padding-bottom: 12px;
-}
-.pickup-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.item-total-quantity {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--primary-color);
-}
-
-.item-options-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.option-chip {
-  background-color: var(--bg-color-light);
-  color: var(--text-color-dark);
-  padding: 4px 8px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-}
-
-/* --- 기간별 집계 카드 내부 스타일 --- */
-.aggregated-item-group {
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px dashed var(--border-color-light);
-}
-.aggregated-item-group:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
-}
-.aggregated-item-date {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-color-dark);
-    margin: 0 0 10px;
+/* --- 픽업일 순 보기 전용 --- */
+.pickup-list .order-card-v3:hover {
+  transform: none; /* 픽업일 카드는 호버 효과 없음 */
+  cursor: default;
+  border-color: var(--border-color-light);
+  box-shadow: none;
 }
 
 
@@ -435,4 +315,16 @@
   background-color: var(--danger-color);
   color: white;
   border-color: var(--danger-color);
+}
+
+/* ✅ [추가] 날짜 표시 디자인 */
+.date-info-badge {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 4px 10px;
+  border-radius: var(--border-radius-full);
+  background-color: var(--bg-color-medium);
+  color: var(--text-color-medium);
+  white-space: nowrap;
 }

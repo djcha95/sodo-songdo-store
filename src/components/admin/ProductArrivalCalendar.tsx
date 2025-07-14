@@ -6,7 +6,7 @@ import 'react-calendar/dist/Calendar.css';
 import './ProductArrivalCalendar.css';
 // ❗ [수정] 상대 경로 대신 절대 경로 별칭을 사용하여 import 안정성을 높입니다.
 import { getProductArrivals } from '@/firebase'; 
-import Header from '../Header';
+import Header from '../common/Header';
 import toast from 'react-hot-toast';
 
 type ValuePiece = Date | null;

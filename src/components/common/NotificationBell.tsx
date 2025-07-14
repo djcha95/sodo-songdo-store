@@ -1,6 +1,6 @@
 // src/components/NotificationBell.tsx
 import { useState } from 'react';
-import type { Notification } from '../context/AuthContext'; // AuthContext에서 타입을 가져옵니다.
+import type { Notification } from '../../context/AuthContext'; // AuthContext에서 타입을 가져옵니다.
 import '../App.css'; // src/components/ 에서 src/App.css 로 접근
 
 interface NotificationBellProps {

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
-import ComingSoon from '@/components/admin/ComingSoon'; // ComingSoon 컴포넌트를 가져옵니다.
+import ComingSoon from '@/components/common/admin/ComingSoon'; // ComingSoon 컴포넌트를 가져옵니다.
 import { Bot } from 'lucide-react';
 
 const AiProductPage: React.FC = () => {

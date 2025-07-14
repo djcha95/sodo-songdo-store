@@ -1,14 +1,14 @@
-// src/components/Header.tsx
+// src/components/common/Header.tsx
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, CalendarDays, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
-import './Header.css';
-// ✅ [수정] 사용하지 않는 NotificationType 임포트 제거
+import { useNotification } from '@/context/NotificationContext'; // ✅ useNotification import
 import type { Notification } from '@/types';
+import './Header.css';
 
 interface HeaderProps {
   title?: string;
@@ -31,11 +31,15 @@ const Header: React.FC<HeaderProps> = ({
   
   const isHomePage = location.pathname === '/';
 
-  const { user, notifications = [], handleMarkAsRead = () => {} } = useAuth();
+  const { user } = useAuth();
+  // ✅ [수정] useAuth 대신 useNotification 훅에서 알림 관련 데이터와 함수를 가져옵니다.
+  const { notifications, unreadCount, handleMarkAsRead, markAllAsRead } = useNotification();
 
-  const hasPickupToday = notifications.some(n => n.type === 'PICKUP_TODAY' && !n.isRead);
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
+  // 픽업 당일 알림이 있는지 여부는 notifications 배열로 직접 계산합니다.
+  const hasPickupToday = useMemo(() => 
+    notifications.some(n => n.type === 'PICKUP_TODAY' && !n.isRead),
+    [notifications]
+  );
 
   useEffect(() => {
     const today = new Date();
@@ -52,6 +56,7 @@ const Header: React.FC<HeaderProps> = ({
 
 
   const getInternalHeaderConfig = (pathname: string): HeaderProps => {
+    // ... 이 함수 내용은 변경 없습니다 ...
     switch (pathname) {
       case '/':
         return { showLogo: true, showDate: true, showBackButton: false };
@@ -91,6 +96,11 @@ const Header: React.FC<HeaderProps> = ({
       navigate(notification.link);
     }
     setIsDropdownOpen(false);
+  };
+
+  const handleMarkAllReadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    markAllAsRead();
   };
 
   return (
@@ -143,21 +153,31 @@ const Header: React.FC<HeaderProps> = ({
             
             {isDropdownOpen && (
               <div className="notification-dropdown">
-                {notifications.length > 0 ? (
-                  notifications.map(n => (
-                    <div 
-                      key={n.id} 
-                      className={`notification-item ${n.isRead ? 'read' : ''}`}
-                      onClick={() => onNotificationClick(n)}
-                    >
-                      {n.message}
+                <div className="notification-dropdown-header">
+                  <h4>알림</h4>
+                  {unreadCount > 0 && (
+                    <button onClick={handleMarkAllReadClick} className="mark-all-read-btn">
+                      모두 읽음
+                    </button>
+                  )}
+                </div>
+                <div className="notification-list">
+                  {notifications.length > 0 ? (
+                    notifications.map(n => (
+                      <div 
+                        key={n.id} 
+                        className={`notification-item ${n.isRead ? 'read' : ''}`}
+                        onClick={() => onNotificationClick(n)}
+                      >
+                        {n.message}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="notification-item no-notifications">
+                      새로운 알림이 없습니다.
                     </div>
-                  ))
-                ) : (
-                  <div className="notification-item no-notifications">
-                    새로운 알림이 없습니다.
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>
