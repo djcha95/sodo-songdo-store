@@ -1,0 +1,50 @@
+/* src/pages/customer/PrivacyPolicyPage.css */
+
+.privacy-policy-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  color: #333;
+}
+
+.privacy-policy-container h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 1rem;
+}
+
+.privacy-policy-container .effective-date {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 2rem;
+}
+
+.privacy-policy-container h2 {
+  font-size: 1.3rem;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.privacy-policy-container p,
+.privacy-policy-container li {
+  line-height: 1.8;
+  font-size: 1rem;
+  text-align: justify;
+}
+
+.privacy-policy-container ol,
+.privacy-policy-container ul {
+  padding-left: 2rem;
+}
+
+.privacy-policy-container ol > li,
+.privacy-policy-container ul > li {
+  margin-bottom: 0.5rem;
+}
