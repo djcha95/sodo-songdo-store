@@ -97,7 +97,8 @@ const router = createBrowserRouter([
               { path: 'dashboard', element: <DashboardPage /> },
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
-              { path: 'products/edit/:productId', element: <SalesRoundEditPage /> },
+              // ✅ [수정] 경로에 :roundId 파라미터 추가
+              { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'encore-requests', element: <EncoreAdminPage /> },
