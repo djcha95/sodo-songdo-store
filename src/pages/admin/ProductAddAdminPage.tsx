@@ -7,10 +7,11 @@ import { Timestamp } from 'firebase/firestore';
 import { addProductWithFirstRound, addNewSalesRound, getCategories } from '../../firebase';
 import type { Category, StorageType, SalesRound, Product, VariantGroup, ProductItem, SalesRoundStatus } from '../../types';
 import toast from 'react-hot-toast';
-import { Save, PlusCircle, X, Loader, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
-// ✅ [추가] 드래그 앤 드롭 라이브러리 import
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
+// ✅ [수정] SodamallLoader를 import 합니다.
+import SodamallLoader from '@/components/common/SodamallLoader';
 import './ProductAddAdminPage.css';
 
 // --- UI 상태 관리용 타입 정의 ---
@@ -25,7 +26,6 @@ const parseDateString = (dateString: string): Date | null => { if (!dateString) 
 const formatNumberWithCommas = (value: number | ''): string => { if (value === '' || value === null) return ''; return Number(value).toLocaleString('ko-KR'); };
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 
-const LoadingSpinner = () => (<div className="loading-overlay"><Loader size={48} className="spin" /> <p>잠시만 기다려 주세요...</p></div>);
 const storageTypeOptions: { key: StorageType; name:string; className: string }[] = [{ key: 'ROOM', name: '실온', className: 'storage-btn-room' }, { key: 'FROZEN', name: '냉동', className: 'storage-btn-frozen' }, { key: 'COLD', name: '냉장', className: 'storage-btn-cold' }];
 const bundleUnitKeywords = ['묶음', '박스', '곽', '세트', '팩', '봉지'];
 const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'];
@@ -98,20 +98,15 @@ const ProductAddAdminPage: React.FC = () => {
         setPickupDeadlineDate(newPickupDeadline);
     }, [pickupDay, selectedStorageType]);
 
-    // ✅ [추가] 이미지 드래그 앤 드롭 순서 변경 핸들러
     const onDragEnd = (result: DropResult) => {
         if (!result.destination) {
             return;
         }
         const { source, destination } = result;
-
-        // imagePreviews 순서 변경
         const newPreviews = Array.from(imagePreviews);
         const [reorderedPreview] = newPreviews.splice(source.index, 1);
         newPreviews.splice(destination.index, 0, reorderedPreview);
         setImagePreviews(newPreviews);
-
-        // imageFiles 순서도 동일하게 변경
         const newFiles = Array.from(imageFiles);
         const [reorderedFile] = newFiles.splice(source.index, 1);
         newFiles.splice(destination.index, 0, reorderedFile);
@@ -190,7 +185,17 @@ const ProductAddAdminPage: React.FC = () => {
     return (
         <div className="product-add-page-wrapper smart-form">
             <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
-                <header className="product-add-header"><h1>{pageTitle}</h1><div className="header-actions"><button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button><button type="submit" disabled={isSubmitting} className="save-button">{isSubmitting ? <Loader size={18} className="spin" /> : <Save size={18} />} {isSubmitting ? '저장 중...' : (mode === 'newProduct' ? '신규 상품 등록하기' : '새 회차 추가하기')}</button></div></header>
+                <header className="product-add-header">
+                    <h1>{pageTitle}</h1>
+                    <div className="header-actions">
+                        <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
+                        {/* ✅ [수정] 로딩 중일 때는 버튼 텍스트를 변경합니다. */}
+                        <button type="submit" disabled={isSubmitting} className="save-button">
+                            <Save size={18} />
+                            {isSubmitting ? '저장 중...' : (mode === 'newProduct' ? '신규 상품 등록하기' : '새 회차 추가하기')}
+                        </button>
+                    </div>
+                </header>
                 <main className="main-content-grid-3-col-final">
                     <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
@@ -199,29 +204,17 @@ const ProductAddAdminPage: React.FC = () => {
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
                         {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
-                        
-                        {/* ✅ [수정] 이미지 업로드 영역을 DragDropContext로 감쌈 */}
                         <div className="form-group">
                             <label>대표 이미지 *</label>
                             <DragDropContext onDragEnd={onDragEnd}>
                                 <Droppable droppableId="image-previews" direction="horizontal">
                                     {(provided) => (
-                                        <div 
-                                            className="compact-image-uploader" 
-                                            {...provided.droppableProps} 
-                                            ref={provided.innerRef}
-                                        >
+                                        <div className="compact-image-uploader" {...provided.droppableProps} ref={provided.innerRef}>
                                             <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>
                                             {imagePreviews.map((p, i) => (
                                                 <Draggable key={p+i} draggableId={p+i.toString()} index={i}>
                                                     {(provided, snapshot) => (
-                                                        <div 
-                                                            ref={provided.innerRef} 
-                                                            {...provided.draggableProps} 
-                                                            {...provided.dragHandleProps}
-                                                            className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`}
-                                                            style={{...provided.draggableProps.style}}
-                                                        >
+                                                        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`} style={{...provided.draggableProps.style}}>
                                                             <img src={p} alt={`미리보기 ${i+1}`}/>
                                                             <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>
                                                         </div>
@@ -229,11 +222,7 @@ const ProductAddAdminPage: React.FC = () => {
                                                 </Draggable>
                                             ))}
                                             {provided.placeholder}
-                                            {imagePreviews.length < 10 && (
-                                                <button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn">
-                                                    <PlusCircle size={20}/>
-                                                </button>
-                                            )}
+                                            {imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}
                                         </div>
                                     )}
                                 </Droppable>
@@ -267,7 +256,8 @@ const ProductAddAdminPage: React.FC = () => {
                     </div>
                 </main>
             </form>
-            {isSubmitting && <LoadingSpinner />}
+            {/* ✅ [수정] isSubmitting 시 SodamallLoader를 렌더링하고 메시지를 전달합니다. */}
+            {isSubmitting && <SodamallLoader message="상품 정보를 저장하고 있습니다..." />}
         </div>
     );
 };

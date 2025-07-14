@@ -5,7 +5,10 @@ import { getCategories } from '@/firebase/generalService';
 import { getProductsByCategory, moveProductsToCategory } from '@/firebase/productService';
 import type { Product, Category } from '@/types';
 import toast from 'react-hot-toast';
-import { Loader, ArrowLeftRight, Search, ChevronsRight, FileWarning, FolderSymlink } from 'lucide-react';
+import { ArrowLeftRight, Search, ChevronsRight, FileWarning, FolderSymlink } from 'lucide-react';
+// ✅ [수정] 경로를 찾지 못하는 문제를 해결하기 위해 절대 경로 별칭 대신 상대 경로를 사용합니다.
+import SodamallLoader from '../../components/common/SodamallLoader';
+import InlineSodamallLoader from '../../components/common/InlineSodamallLoader';
 import './ProductCategoryBatchPage.css';
 
 // '분류 없음'을 나타내는 특수 상수
@@ -34,11 +37,9 @@ const ProductCategoryBatchPage = () => {
       try {
         const [categoriesData, unassignedProductsResult] = await Promise.all([
           getCategories(),
-          // pageSize를 1000으로 설정하여 모든 상품을 가져옴
-          getProductsByCategory(null, 1000) // '분류 없음' 상품
+          getProductsByCategory(null, 1000)
         ]);
         setCategories(categoriesData);
-        // getProductsByCategory가 { products: Product[], ... } 형태로 반환하므로 .products를 사용
         setProducts(unassignedProductsResult.products);
       } catch (err) {
         console.error("초기 데이터 로딩 실패:", err);
@@ -56,16 +57,14 @@ const ProductCategoryBatchPage = () => {
     
     setSelectedCategory(categoryName);
     setLoadingProducts(true);
-    setSelectedProductIds(new Set()); // 선택 초기화
-    setSearchTerm(''); // 검색어 초기화
+    setSelectedProductIds(new Set());
+    setSearchTerm('');
 
     try {
-      // pageSize를 1000으로 설정하여 모든 상품을 가져옴
       const productsResult = await getProductsByCategory(
         categoryName === UNASSIGNED_CATEGORY_KEY ? null : categoryName,
-        1000 // 모든 상품을 가져오기 위해 충분히 큰 pageSize 지정
+        1000
       );
-      // getProductsByCategory가 { products: Product[], ... } 형태로 반환하므로 .products를 사용
       setProducts(productsResult.products);
     } catch (err) {
       console.error("상품 목록 로딩 실패:", err);
@@ -104,7 +103,6 @@ const ProductCategoryBatchPage = () => {
       toast.error('이동할 상품을 먼저 선택해주세요.');
       return;
     }
-    // 자기 자신에게 이동하는 것 방지
     if (selectedCategory === targetCategoryName) {
       toast.error('같은 카테고리로는 이동할 수 없습니다.');
       return;
@@ -118,7 +116,6 @@ const ProductCategoryBatchPage = () => {
     toast.promise(promise, {
       loading: `${productIdsToMove.length}개 상품을 '${targetCategoryName === UNASSIGNED_CATEGORY_KEY ? "분류 없음" : targetCategoryName}'(으)로 이동 중...`,
       success: () => {
-        // 성공 시, 현재 목록에서 이동된 상품들을 제거하여 즉시 UI에 반영
         setProducts(prev => prev.filter(p => !productIdsToMove.includes(p.id)));
         setSelectedProductIds(new Set());
         setIsMoving(false);
@@ -138,11 +135,7 @@ const ProductCategoryBatchPage = () => {
   );
 
   if (loadingCategories) {
-    return (
-      <div className="page-loader">
-        페이지 구성 중... <Loader className="spin" />
-      </div>
-    );
+    return <SodamallLoader message="페이지 구성 중..." />;
   }
 
   return (
@@ -197,9 +190,7 @@ const ProductCategoryBatchPage = () => {
         </div>
         <div className="product-table-container">
           {loadingProducts ? (
-            <div className="list-loader">
-              <Loader className="spin" /> 상품 목록을 불러오는 중...
-            </div>
+            <InlineSodamallLoader message="상품 목록을 불러오는 중..." />
           ) : filteredProducts.length === 0 ? (
             <div className="empty-list-indicator">
               <FileWarning size={40} />
@@ -244,7 +235,7 @@ const ProductCategoryBatchPage = () => {
           <div className="panel-footer">
             <button 
               className="unassign-btn"
-              onClick={() => handleMove('')} // Firestore에서는 null 대신 빈 문자열 ''로 저장하는 것이 일반적
+              onClick={() => handleMove('')}
               disabled={isMoving || selectedProductIds.size === 0}
             >
               <ChevronsRight size={16} />

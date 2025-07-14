@@ -1,17 +1,19 @@
 // src/pages/admin/CategoryManagementPage.tsx
 
 import { useState, useEffect } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { addCategory, getCategories, updateCategory, deleteCategory, updateCategoriesOrder, getProductsCountByCategory } from '../../firebase';
 import type { Category } from '../../types';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
-import { PlusCircle, Edit, Trash2, X, Check, Loader, GripVertical } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, X, Check, GripVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
+// ✅ [추가] SodamallLoader import
+import SodamallLoader from '@/components/common/SodamallLoader';
 import './CategoryManagementPage.css';
 
 const CategoryManagementPage: React.FC = () => {
-  useDocumentTitle('카테고리 관리'); // ✅ [추가]
+  useDocumentTitle('카테고리 관리');
   const [categories, setCategories] = useState<Category[]>([]);
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
   const [newCategoryName, setNewCategoryName] = useState<string>('');
@@ -34,7 +36,7 @@ const CategoryManagementPage: React.FC = () => {
       ]);
       
       setCategories(fetchedCategories);
-      setProductCounts(countsData); // ✅ [수정] 반환값이 객체이므로 바로 설정
+      setProductCounts(countsData);
 
     } catch (err) {
       console.error("데이터 불러오기 오류:", err);
@@ -60,7 +62,6 @@ const CategoryManagementPage: React.FC = () => {
 
     const promise = new Promise<void>(async (resolve, reject) => {
         try {
-            // ✅ [수정] subCategories 필드 제거
             const newCategory: Omit<Category, 'id'> = {
                 name: trimmedName,
                 order: categories.length, 
@@ -113,7 +114,6 @@ const CategoryManagementPage: React.FC = () => {
     const { source, destination } = result;
     if (!destination) return;
     
-    // ✅ [수정] 하위 카테고리 드래그 로직 제거
     if (result.type !== 'CATEGORY') return;
 
     const reordered = Array.from(categories);
@@ -161,7 +161,8 @@ const CategoryManagementPage: React.FC = () => {
 
   return (
     <div className="category-management-container">
-      {loading && ( <div className="loading-overlay"> <Loader size={48} className="spin" /> <p>데이터 처리 중...</p> </div> )}
+      {/* ✅ [수정] loading 상태일 때 SodamallLoader를 사용합니다. */}
+      {loading && <SodamallLoader message="데이터 처리 중..." />}
       {error && <div className="error-message-banner">{error}</div>}
 
       <div className="category-form-section section-card">
@@ -198,7 +199,6 @@ const CategoryManagementPage: React.FC = () => {
                                 <button type="button" onClick={handleCancelEdit} disabled={loading}><X size={20} /></button>
                               </form>
                             ) : (
-                              // ✅ [수정] productCounts 접근 방식을 category.name으로 변경
                               <span className="category-name-display">
                                 {category.name} ({productCounts[category.name] || 0})
                               </span>
@@ -208,7 +208,6 @@ const CategoryManagementPage: React.FC = () => {
                               <button onClick={() => handleDeleteCategory(category)} disabled={loading} className="icon-btn trash-btn"><Trash2 size={18} /></button>
                             </div>
                           </div>
-                          {/* ✅ [제거] 하위 카테고리 관련 JSX 모두 제거 */}
                         </li>
                       )}
                     </Draggable>
