@@ -18,9 +18,12 @@ const initKakaoSDK = () => {
     const checkKakaoLoad = () => {
       if (window.Kakao) {
         try {
-          window.Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY);
+          if (import.meta.env.VITE_KAKAO_JS_KEY && !window.Kakao.isInitialized()) {
+            window.Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY);
+          }
           resolve();
         } catch (error) {
+          console.error("Kakao SDK init error:", error);
           reject(error);
         }
       } else {
@@ -41,8 +44,7 @@ const LoginPage: React.FC = () => {
       try {
         await initKakaoSDK();
       } catch (err) {
-        console.error("DEBUG: Kakao SDK 초기화 오류:", err);
-        toast.error("카카오 로그인 기능을 불러올 수 없습니다.");
+        toast.error("카카오 로그인 기능을 불러오는 데 실패했습니다.");
       } finally {
         setLoading(false);
       }
@@ -67,13 +69,10 @@ const LoginPage: React.FC = () => {
     
     provider.addScope('openid');
     provider.addScope('profile_nickname');
-    provider.addScope('name');
+    provider.addScope('profile_image');
+    provider.addScope('account_email');
     provider.addScope('phone_number');
-    provider.addScope('gender');
-    provider.addScope('age_range');
-    // ✅ [추가] 카카오톡 채널 관련 스코프를 추가합니다.
-    provider.addScope('plusfriends');
-
+    
     const loginPromise = signInWithPopup(auth, provider)
       .then(async (result) => {
         try {
@@ -81,11 +80,13 @@ const LoginPage: React.FC = () => {
             url: '/v2/user/me',
           });
           
+          // ✅ [수정] processUserSignIn 호출 시 두 번째 인자로 카카오 데이터를 전달합니다.
           await processUserSignIn(result.user, kakaoUserData);
 
         } catch (apiError) {
           console.error("카카오 사용자 정보 API 요청 실패:", apiError);
           toast.error("사용자 정보를 가져오는 데 실패했습니다.");
+          // API 요청 실패 시에도 null을 전달하여 함수 호출 형식은 유지합니다.
           await processUserSignIn(result.user, null);
         }
         return result;
