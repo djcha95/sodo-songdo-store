@@ -11,7 +11,7 @@ import * as bannerService from '@/firebase/bannerService';
 import BannerForm from '@/pages/admin/components/BannerForm';
 import BannerList from '@/pages/admin/components/BannerList';
 import Notification from '@/pages/admin/components/Notification';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
 
 import './BannerAdminPage.css';
 

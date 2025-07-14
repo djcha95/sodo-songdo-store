@@ -1,5 +1,5 @@
 // src/firebase/orderService.ts
-import { getUserDocById } from './userService'; // ✅ userService에서 import 추가
+import { getUserDocById } from './userService';
 import { db } from './firebaseConfig';
 import {
   collection,
@@ -15,10 +15,9 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { FieldValue } from 'firebase/firestore';
-// ✅ [수정] 사용하지 않는 WaitlistItem 타입 제거
-import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry } from '@/types'; // 타입 추가
-import { Timestamp } from 'firebase/firestore'; // Timestamp 추가
-
+import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry } from '@/types';
+import { Timestamp } from 'firebase/firestore';
+import { updateOrderStatusAndLoyalty } from './userService'; // userService에서 함수 import
 
 /**
  * @description 주문을 생성하고 재고를 차감하는 트랜잭션.
@@ -66,8 +65,8 @@ export const submitOrder = async (
       const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
       const productItem = variantGroup.items[itemIndex];
       
-      const groupStock = variantGroup.totalPhysicalStock;
-      const itemStock = productItem.stock;
+      let groupStock = variantGroup.totalPhysicalStock;
+      let itemStock = productItem.stock;
 
       let availableStock = Infinity;
       if (groupStock !== null && groupStock !== -1) {
@@ -124,27 +123,29 @@ export const submitOrder = async (
 };
 
 /**
- * @description 사용자의 예약을 취소하고, 상품 재고를 복구하는 함수
+ * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 필요시 신뢰도 점수를 조정하는 함수
+ * @param order - 취소할 주문 객체
+ * @param isPenalty - 페널티(신뢰도 점수 차감)를 적용할지 여부
  */
-export const cancelOrder = async (orderId: string, userId: string): Promise<void> => {
-  const orderRef = doc(db, 'orders', orderId);
+export const cancelOrder = async (order: Order, isPenalty: boolean): Promise<void> => {
+  const orderRef = doc(db, 'orders', order.id);
 
   await runTransaction(db, async (transaction) => {
     // --- 1. READ PHASE ---
     const orderDoc = await transaction.get(orderRef);
     if (!orderDoc.exists()) throw new Error("주문 정보를 찾을 수 없습니다.");
-    const order = orderDoc.data() as Order;
+    const currentOrder = orderDoc.data() as Order;
 
-    if (order.userId !== userId) throw new Error("본인의 주문만 취소할 수 있습니다.");
-    if (order.status !== 'RESERVED' && order.status !== 'PREPAID') {
+    if (currentOrder.userId !== order.userId) throw new Error("본인의 주문만 취소할 수 있습니다.");
+    if (currentOrder.status !== 'RESERVED' && currentOrder.status !== 'PREPAID') {
         throw new Error("예약 또는 결제 완료 상태의 주문만 취소할 수 있습니다.");
     }
     
     const now = new Date();
-    const pickupDate = order.pickupDate?.toDate();
+    const pickupDate = currentOrder.pickupDate?.toDate();
     if (pickupDate && now >= pickupDate) throw new Error("픽업이 시작된 주문은 취소할 수 없습니다.");
 
-    const productRefs = [...new Set(order.items.map(item => item.productId))].map(id => doc(db, 'products', id));
+    const productRefs = [...new Set(currentOrder.items.map(item => item.productId))].map(id => doc(db, 'products', id));
     const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
     
     const productDataMap = new Map<string, Product>();
@@ -157,7 +158,7 @@ export const cancelOrder = async (orderId: string, userId: string): Promise<void
     // --- 2. WRITE PHASE ---
     transaction.update(orderRef, { status: 'CANCELED' });
 
-    for (const item of order.items) {
+    for (const item of currentOrder.items) {
         const productData = productDataMap.get(item.productId);
         if (!productData) continue;
 
@@ -185,7 +186,20 @@ export const cancelOrder = async (orderId: string, userId: string): Promise<void
         const productRef = doc(db, 'products', item.productId);
         transaction.update(productRef, { salesHistory: newSalesHistory });
     }
+
+    // 신뢰도 점수 조정 (트랜잭션 외부에서 호출)
+    // 트랜잭션 내에서 직접 userService 함수를 호출하면 순환 참조나 트랜잭션 룰 위반 가능성이 있으므로,
+    // 이 로직은 cancelOrder 함수를 호출하는 상위 로직에서 updateOrderStatusAndLoyalty를 직접 호출하는 것이 더 안전합니다.
+    // 여기서는 트랜잭션 완료 후 호출될 수 있도록 별도로 처리하는 것이 좋습니다.
   });
+
+  // 트랜잭션이 성공적으로 완료된 후, 필요하다면 여기서 신뢰도 점수 업데이트 로직을 트리거합니다.
+  // 이 방법은 트랜잭션의 ACID 속성을 보장하면서도 유연성을 제공합니다.
+  if (isPenalty) {
+    await updateOrderStatusAndLoyalty(order, 'CANCELED', -10, '예약 마감 후 취소');
+  } else {
+    await updateOrderStatusAndLoyalty(order, 'CANCELED', 0, '일반 예약 취소');
+  }
 };
 
 /**
@@ -314,9 +328,9 @@ export const submitOrderFromWaitlist = async (
   product: Product,
   round: SalesRound
 ): Promise<void> => {
-    const { userId, quantity, variantGroupId, itemId } = waitlistEntry; // ✅ variantGroupId, itemId 사용
+    const { userId, quantity, variantGroupId, itemId } = waitlistEntry;
     
-    // ✅ [수정] 정확한 옵션 정보 찾기
+    // 정확한 옵션 정보 찾기
     const vg = round.variantGroups.find(v => v.id === variantGroupId);
     const itemDetail = vg?.items.find(i => i.id === itemId);
 
@@ -325,7 +339,7 @@ export const submitOrderFromWaitlist = async (
         throw new Error(`주문 전환 실패: 상품(${product.groupName})의 옵션(ID: ${itemId})을 찾을 수 없습니다.`);
     }
 
-    const userDoc = await getUserDocById(userId); // ✅ 사용자 정보 조회
+    const userDoc = await getUserDocById(userId); // 사용자 정보 조회
 
     const newOrderRef = doc(collection(db, 'orders'));
     const orderData: Omit<Order, 'id'> = {
@@ -337,9 +351,9 @@ export const submitOrderFromWaitlist = async (
             imageUrl: product.imageUrls[0] || '',
             roundId: round.roundId,
             roundName: round.roundName,
-            variantGroupId: vg.id, // ✅ 정확한 정보 사용
+            variantGroupId: vg.id,
             variantGroupName: vg.groupName,
-            itemId: itemDetail.id, // ✅ 정확한 정보 사용
+            itemId: itemDetail.id,
             itemName: itemDetail.name,
             quantity,
             unitPrice: itemDetail.price,
@@ -351,7 +365,7 @@ export const submitOrderFromWaitlist = async (
         status: 'RESERVED',
         createdAt: serverTimestamp(),
         pickupDate: round.pickupDate,
-        // ✅ [수정] 실제 사용자 정보로 customerInfo 채우기
+        // 실제 사용자 정보로 customerInfo 채우기
         customerInfo: { 
             name: userDoc?.displayName || '알 수 없음', 
             phone: userDoc?.phone || '' 

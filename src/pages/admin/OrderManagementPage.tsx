@@ -12,7 +12,7 @@ import {
 } from '../../firebase';
 import type { Order, OrderStatus } from '../../types';
 import { Timestamp } from 'firebase/firestore';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck } from 'lucide-react';
 import './OrderManagementPage.css';
 

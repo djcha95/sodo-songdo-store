@@ -1,7 +1,7 @@
 // src/context/CartContext.tsx
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import type { CartItem } from '../types'; 
+import type { CartItem } from '../types';
 import { Timestamp } from 'firebase/firestore';
 
 interface CartContextType {
@@ -37,6 +37,9 @@ export const CartProvider: React.FC<{children: ReactNode}> = ({ children }) => {
         return parsedItems.map((item: any) => ({
           ...item,
           pickupDate: new Timestamp(item.pickupDate.seconds, item.pickupDate.nanoseconds),
+          // ✅ [수정] pickupDate와 마찬가지로 deadlineDate도 Timestamp 객체로 변환합니다.
+          // deadlineDate가 없을 수도 있는 과거 데이터를 위해 방어 코드 추가
+          deadlineDate: item.deadlineDate ? new Timestamp(item.deadlineDate.seconds, item.deadlineDate.nanoseconds) : null
         }));
       }
       return [];

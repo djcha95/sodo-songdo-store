@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
 import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/Header'; // ❗️참고: 이 헤더는 고객용일 수 있습니다.
+import Header from '../../components/common/Header'; // ❗️참고: 이 헤더는 고객용일 수 있습니다.
 import { getUserOrders } from '../../firebase';
 import type { Order, OrderItem, } from '../../types'; // ✅ [수정] OrderStatus 추가
 import { Timestamp } from 'firebase/firestore';

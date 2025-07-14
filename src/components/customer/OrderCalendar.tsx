@@ -7,7 +7,7 @@ import './OrderCalendar.css';
 import { useAuth } from '../../context/AuthContext';
 import { getUserOrders } from '../../firebase';
 import type { Order, OrderItem } from '../../types';
-import Header from '../Header';
+import Header from '../common/Header';
 import Holidays from 'date-holidays';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';

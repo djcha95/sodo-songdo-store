@@ -2,7 +2,7 @@
 
 import React from 'react';
 import type { StoreInfo } from '@/types';
-import { EditableField } from '@/pages/customer/CustomerCenterPage';
+import { EditableField } from '@/components/common/EditableField';
 import KakaoMap from './KakaoMap';
 import { Phone, Mail, Building, User, Info, Clock, MessageSquare } from 'lucide-react';
 
