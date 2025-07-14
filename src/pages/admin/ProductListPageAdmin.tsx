@@ -192,7 +192,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <button className="stock-display-button" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정. -1 입력 시 무제한">{vg.configuredStock === -1 ? '∞' : vg.configuredStock}</button>
               )}
             </td>
-            <td><button onClick={() => navigate(`/admin/products/edit/${item.productId}`)} className="admin-action-button" title="이 대표 상품의 정보를 수정합니다."><Edit size={16}/></button></td>
+            {/* ✅ [수정] navigate 경로에 item.round.roundId 추가 */}
+            <td><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차 정보를 수정합니다."><Edit size={16}/></button></td>
           </tr>
         );
     }
@@ -229,7 +230,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>
-              <button onClick={() => navigate(`/admin/products/edit/${item.productId}`)} className="admin-action-button" title="이 대표 상품의 정보를 수정합니다.">
+              {/* ✅ [수정] navigate 경로에 item.round.roundId 추가 */}
+              <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차 정보를 수정합니다.">
                   <Edit size={16}/>
               </button>
           </td>

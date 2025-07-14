@@ -1,18 +1,21 @@
 // src/pages/admin/ProductAddAdminPage.tsx
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { addProductWithFirstRound, addNewSalesRound, getCategories } from '../../firebase';
 import type { Category, StorageType, SalesRound, Product, VariantGroup, ProductItem, SalesRoundStatus } from '../../types';
 import toast from 'react-hot-toast';
 import { Save, PlusCircle, X, Loader, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
+// ✅ [추가] 드래그 앤 드롭 라이브러리 import
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import type { DropResult } from 'react-beautiful-dnd';
 import './ProductAddAdminPage.css';
 
 // --- UI 상태 관리용 타입 정의 ---
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
-interface VariantGroupUI { id: string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
+interface VariantGroupUI { id:string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
 
 // --- 헬퍼 함수 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
@@ -39,7 +42,7 @@ const getSmartDeadline = (): Date => {
 
 // --- 메인 컴포넌트 ---
 const ProductAddAdminPage: React.FC = () => {
-     useDocumentTitle('새 상품 등록'); // ✅ [추가]
+    useDocumentTitle('새 상품 등록');
     const navigate = useNavigate();
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,15 +54,9 @@ const ProductAddAdminPage: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
     
-    // ✅ [수정] 하위 카테고리 관련 state 제거
-    // const [availableSubCategories, setAvailableSubCategories] = useState<string[]>([]);
-    
     const [groupName, setGroupName] = useState('');
     const [description, setDescription] = useState('');
     const [selectedMainCategory, setSelectedMainCategory] = useState('');
-    
-    // ✅ [수정] 하위 카테고리 관련 state 제거
-    // const [selectedSubCategory, setSelectedSubCategory] = useState('');
     
     const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
     const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -92,9 +89,6 @@ const ProductAddAdminPage: React.FC = () => {
     useEffect(() => { if (mode === 'newProduct' && variantGroups.length === 0) { setVariantGroups([{ id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); } }, [mode, variantGroups.length]);
     useEffect(() => { (async () => { try { setCategories(await getCategories()); } catch (err) { toast.error("카테고리 정보를 불러오는 데 실패했습니다."); } })(); }, []);
     
-    // ✅ [수정] 하위 카테고리 관련 useEffect 제거
-    // useEffect(() => { const category = categories.find(c => c.id === selectedMainCategory); setAvailableSubCategories(category ? category.subCategories : []); setSelectedSubCategory(''); }, [selectedMainCategory, categories]);
-    
     useEffect(() => { if (mode === 'newProduct' && productType === 'single') { setVariantGroups(prev => prev.length > 0 ? [{ ...prev[0], groupName: groupName }] : prev); } }, [groupName, productType, mode]);
     
     useEffect(() => {
@@ -103,6 +97,26 @@ const ProductAddAdminPage: React.FC = () => {
         if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); }
         setPickupDeadlineDate(newPickupDeadline);
     }, [pickupDay, selectedStorageType]);
+
+    // ✅ [추가] 이미지 드래그 앤 드롭 순서 변경 핸들러
+    const onDragEnd = (result: DropResult) => {
+        if (!result.destination) {
+            return;
+        }
+        const { source, destination } = result;
+
+        // imagePreviews 순서 변경
+        const newPreviews = Array.from(imagePreviews);
+        const [reorderedPreview] = newPreviews.splice(source.index, 1);
+        newPreviews.splice(destination.index, 0, reorderedPreview);
+        setImagePreviews(newPreviews);
+
+        // imageFiles 순서도 동일하게 변경
+        const newFiles = Array.from(imageFiles);
+        const [reorderedFile] = newFiles.splice(source.index, 1);
+        newFiles.splice(destination.index, 0, reorderedFile);
+        setImageFiles(newFiles);
+    };
 
     const handleProductTypeChange = (newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); }};
     const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === id ? { ...vg, [field]: value } : vg)); }, []);
@@ -153,7 +167,6 @@ const ProductAddAdminPage: React.FC = () => {
                     const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = {
                         groupName: finalGroupName.trim(), description: description.trim(), storageType: selectedStorageType,
                         category: categories.find(c => c.id === selectedMainCategory)?.name || '', 
-                        // ✅ [수정] subCategory 필드 제거
                         encoreCount: 0, encoreRequesterIds: [],
                     };
                     await addProductWithFirstRound(productData, salesRoundToSave, imageFiles);
@@ -185,9 +198,47 @@ const ProductAddAdminPage: React.FC = () => {
                         <div className="form-group"><label>대표 상품명 *</label><input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required/></div>
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
-                        {/* ✅ [수정] 하위 카테고리 select 제거 */}
                         {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
-                        <div className="form-group"><label>대표 이미지 *</label><div className="compact-image-uploader"><input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>{imagePreviews.map((p,i) => (<div key={p+i} className="thumbnail-preview"><img src={p} alt=""/><button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button></div>))}{imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}</div></div>
+                        
+                        {/* ✅ [수정] 이미지 업로드 영역을 DragDropContext로 감쌈 */}
+                        <div className="form-group">
+                            <label>대표 이미지 *</label>
+                            <DragDropContext onDragEnd={onDragEnd}>
+                                <Droppable droppableId="image-previews" direction="horizontal">
+                                    {(provided) => (
+                                        <div 
+                                            className="compact-image-uploader" 
+                                            {...provided.droppableProps} 
+                                            ref={provided.innerRef}
+                                        >
+                                            <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>
+                                            {imagePreviews.map((p, i) => (
+                                                <Draggable key={p+i} draggableId={p+i.toString()} index={i}>
+                                                    {(provided, snapshot) => (
+                                                        <div 
+                                                            ref={provided.innerRef} 
+                                                            {...provided.draggableProps} 
+                                                            {...provided.dragHandleProps}
+                                                            className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`}
+                                                            style={{...provided.draggableProps.style}}
+                                                        >
+                                                            <img src={p} alt={`미리보기 ${i+1}`}/>
+                                                            <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>
+                                                        </div>
+                                                    )}
+                                                </Draggable>
+                                            ))}
+                                            {provided.placeholder}
+                                            {imagePreviews.length < 10 && (
+                                                <button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn">
+                                                    <PlusCircle size={20}/>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </Droppable>
+                            </DragDropContext>
+                        </div>
                     </div>
                     <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Box size={20} className="icon-color-option"/><h3>판매 옵션 설정 *</h3></div></div><p className="section-subtitle">실제 판매될 상품의 옵션과 가격, 재고 등을 설정합니다.</p>
