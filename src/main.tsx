@@ -32,6 +32,9 @@ const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryP
 const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
 const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryPage'));
 const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
+const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
+// ✅ [추가] 개인정보 처리방침 페이지 import
+const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
 
 
 // 관리자 페이지 (AdminLayout에서 이전)
@@ -48,7 +51,6 @@ const AiProductPage = React.lazy(() => import('@/pages/admin/AiProductPage'));
 const BoardAdminPage = React.lazy(() => import('@/pages/admin/BoardAdminPage'));
 const CouponAdminPage = React.lazy(() => import('@/pages/admin/CouponAdminPage'));
 const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage'));
-// [수정] OrderListPage -> OrderManagementPage
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
 const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
 const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
@@ -65,11 +67,9 @@ const RouterWrapper = () => {
   const { loading } = useAuth(); // AuthContext에서 loading 상태를 가져옵니다.
 
   if (loading) {
-    // 인증 정보 로딩 중에는 로딩 스피너를 보여줍니다.
     return <LoadingSpinner />;
   }
 
-  // 인증 정보 로딩이 완료되면 RouterProvider를 렌더링합니다.
   return <RouterProvider router={router} />;
 };
 
@@ -80,6 +80,23 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { path: "login", element: <LoginPage /> },
+      {
+        path: "terms",
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <TermsPage />
+          </Suspense>
+        ),
+      },
+      // ✅ [추가] 개인정보 처리방침 페이지 경로 추가
+      {
+        path: "privacy",
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <PrivacyPolicyPage />
+          </Suspense>
+        ),
+      },
 
       // --- 관리자 경로 ---
       {
@@ -97,13 +114,11 @@ const router = createBrowserRouter([
               { path: 'dashboard', element: <DashboardPage /> },
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
-              // ✅ [수정] 경로에 :roundId 파라미터 추가
               { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'encore-requests', element: <EncoreAdminPage /> },
               { path: 'ai-product', element: <AiProductPage /> },
-              // [수정] orders 경로의 element를 OrderManagementPage로 변경
               { path: 'orders', element: <OrderManagementPage /> },
               { path: 'pickup', element: <PickupProcessingPage /> },
               { path: 'users', element: <UserListPage /> },
