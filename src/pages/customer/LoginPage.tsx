@@ -1,37 +1,41 @@
 // src/pages/customer/LoginPage.tsx
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { signInWithCustomToken } from "firebase/auth";
+import { auth, processUserSignIn } from "@/firebase";
+import { useAuth } from "@/context/AuthContext";
+import toast from "react-hot-toast";
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { signInWithPopup, OAuthProvider } from "firebase/auth";
-import { auth, processUserSignIn } from '../../firebase';
-import './LoginPage.css';
-import { useAuth } from '@/context/AuthContext';
-import toast from 'react-hot-toast';
+import "./LoginPage.css";
 
-// Kakao SDK 초기화 로직
-const initKakaoSDK = () => {
-  return new Promise<void>((resolve, reject) => {
-    if (window.Kakao && window.Kakao.isInitialized()) {
-      resolve();
-      return;
-    }
-    const checkKakaoLoad = () => {
+/* ───────── Kakao SDK 초기화 ───────── */
+const initKakaoSDK = () =>
+  new Promise<void>((resolve, reject) => {
+    if (window.Kakao && window.Kakao.isInitialized()) return resolve();
+
+    const wait = () => {
       if (window.Kakao) {
         try {
-          if (import.meta.env.VITE_KAKAO_JS_KEY && !window.Kakao.isInitialized()) {
-            window.Kakao.init(import.meta.env.VITE_KAKAO_JS_KEY);
-          }
+          const key = import.meta.env.VITE_KAKAO_JS_KEY;
+          if (key && !window.Kakao.isInitialized()) window.Kakao.init(key);
           resolve();
-        } catch (error) {
-          console.error("Kakao SDK init error:", error);
-          reject(error);
+        } catch (e) {
+          console.error("Kakao SDK init error:", e);
+          reject(e);
         }
-      } else {
-        setTimeout(checkKakaoLoad, 100);
-      }
+      } else setTimeout(wait, 100);
     };
-    checkKakaoLoad();
+    wait();
   });
+
+/* ───────── API URL 계산 ───────── */
+const getApiUrl = () => {
+  // 1순위 .env 값
+  const envUrl = import.meta.env.VITE_KAKAO_LOGIN_API;
+  if (envUrl) return envUrl;
+
+  // 2순위: firebase hosting rewrite → same‑origin + /api/kakaoLogin
+  return `${window.location.origin.replace(/\/$/, "")}/api/kakaoLogin`;
 };
 
 const LoginPage: React.FC = () => {
@@ -39,84 +43,98 @@ const LoginPage: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
+  /* SDK 로드 */
   useEffect(() => {
-    const initializeSDK = async () => {
+    (async () => {
       try {
         await initKakaoSDK();
-      } catch (err) {
+      } catch {
         toast.error("카카오 로그인 기능을 불러오는 데 실패했습니다.");
       } finally {
         setLoading(false);
       }
-    };
-    initializeSDK();
+    })();
   }, []);
-  
+
+  /* 이미 로그인됐으면 홈으로 */
   useEffect(() => {
-    if (!authLoading && user) {
-      navigate('/', { replace: true });
-    }
+    if (!authLoading && user) navigate("/", { replace: true });
   }, [user, authLoading, navigate]);
 
-  const handleKakaoLogin = async () => {
+  /* ───── 카카오 로그인 ───── */
+  const handleKakaoLogin = () => {
     if (!window.Kakao?.isInitialized()) {
-      toast.error("카카오 로그인 기능이 아직 준비되지 않았습니다.");
+      toast.error("카카오 SDK가 아직 준비되지 않았습니다.");
       return;
     }
-    
+
+    const kakaoLogin = window.Kakao.Auth?.login;
+    if (typeof kakaoLogin !== "function") {
+      toast.error("Kakao.Auth.login 메서드를 찾을 수 없습니다.");
+      return;
+    }
+
     setLoading(true);
-    const provider = new OAuthProvider('oidc.kakao');
-    
-    provider.addScope('openid');
-    provider.addScope('profile_nickname');
-    provider.addScope('profile_image');
-    provider.addScope('account_email');
-    provider.addScope('phone_number');
-    
-    const loginPromise = signInWithPopup(auth, provider)
-      .then(async (result) => {
-        try {
-          const kakaoUserData = await window.Kakao.API.request({
-            url: '/v2/user/me',
-          });
-          
-          // ✅ [수정] processUserSignIn 호출 시 두 번째 인자로 카카오 데이터를 전달합니다.
-          await processUserSignIn(result.user, kakaoUserData);
 
-        } catch (apiError) {
-          console.error("카카오 사용자 정보 API 요청 실패:", apiError);
-          toast.error("사용자 정보를 가져오는 데 실패했습니다.");
-          // API 요청 실패 시에도 null을 전달하여 함수 호출 형식은 유지합니다.
-          await processUserSignIn(result.user, null);
-        }
-        return result;
+    const loginPromise = new Promise(async (resolve, reject) => {
+      kakaoLogin({
+        // 동의 항목 (전화번호 + 성별·연령대)
+        scope: "profile_nickname,account_email,name,gender,age_range,phone_number",
+        throughTalk: false, // PC·모바일 통일: 항상 웹 창
+        success: async ({ access_token }) => {
+          try {
+            const apiUrl = getApiUrl();
+            const res = await fetch(apiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token: access_token }),
+            });
+
+            if (!res.ok) {
+              const { message } = await res.json().catch(() => ({}));
+              throw new Error(message || "Firebase 토큰 생성 실패");
+            }
+
+            const { firebaseToken } = await res.json();
+            const userCred = await signInWithCustomToken(auth, firebaseToken);
+
+            const kakaoUserData = await window.Kakao.API.request({
+              url: "/v2/user/me",
+            });
+
+            await processUserSignIn(userCred.user, kakaoUserData);
+            resolve(userCred);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        fail: (err) => reject(new Error(JSON.stringify(err))),
       });
-
-    toast.promise(loginPromise, {
-        loading: '카카오 로그인 중입니다...',
-        success: <b>로그인 성공! 환영합니다.</b>,
-        error: (err) => {
-            if (err.code === 'auth/popup-closed-by-user') { return null; }
-            console.error("카카오 로그인 상세 오류:", err);
-            return '로그인 중 오류가 발생했습니다.';
-        }
-    }).finally(() => {
-        setLoading(false);
     });
+
+    toast
+      .promise(loginPromise, {
+        loading: "카카오 로그인 중...",
+        success: "로그인 성공! 환영합니다.",
+        error: (err) => (err as Error).message,
+      })
+      .finally(() => setLoading(false));
   };
 
-  const isButtonDisabled = loading || authLoading;
+  const disabled = loading || authLoading;
 
   return (
     <div className="login-container">
       <div className="login-box">
         <h2 className="title">소도몰</h2>
         <p className="subtitle">소비자도!</p>
-        <div className="social-login-options">
-          <button onClick={handleKakaoLogin} className="kakao-login-button" disabled={isButtonDisabled}>
-            {isButtonDisabled ? '준비 중...' : '카카오로 시작하기'}
-          </button>
-        </div>
+        <button
+          className="kakao-login-button"
+          onClick={handleKakaoLogin}
+          disabled={disabled}
+        >
+          {disabled ? "준비 중..." : "카카오로 시작하기"}
+        </button>
       </div>
     </div>
   );

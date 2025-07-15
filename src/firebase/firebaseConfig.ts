@@ -9,7 +9,7 @@ import type { Firestore } from 'firebase/firestore';
 import type { Auth } from 'firebase/auth';
 import type { FirebaseStorage } from 'firebase/storage';
 
-// [수정] Vercel에 저장된 'VITE_FIREBASE_...' 이름과 일치하도록 모든 변수명을 수정합니다.
+// .env 파일에서 실제 운영 서버의 설정 값을 읽어옵니다.
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY as string,
   authDomain: import.meta.env.VITE_AUTH_DOMAIN as string,
@@ -19,8 +19,12 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_APP_ID as string,
 };
 
+// Firebase 앱을 초기화합니다.
 const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
+// 실제 서버에 연결된 db, auth, storage 인스턴스를 내보냅니다.
 export const db: Firestore = getFirestore(app);
 export const auth: Auth = getAuth(app);
 export const storage: FirebaseStorage = getStorage(app);
+
+// 로컬 개발 환경일 때 에뮬레이터에 연결하는 코드를 모두 삭제했습니다.
