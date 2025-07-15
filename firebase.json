@@ -20,10 +20,18 @@
   ],
   "hosting": {
     "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "/api/kakaoLogin",
-        "function": "kakaoLogin"
+        "function": {
+          "functionId": "kakaoLogin",
+          "region": "asia-northeast3"
+        }
       },
       {
         "source": "**",
