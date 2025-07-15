@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/kakaoLogin",
+      "destination": "https://kakaologin-gjxboavawq-du.a.run.app"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
