@@ -1,0 +1,157 @@
+/* src/components/admin/QuickCheckOrderCard.css */
+
+/* ✅ 애니메이션 효과 추가 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.qc-order-card {
+    background-color: #fff; 
+    border: 1px solid var(--border-color-light);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: fadeIn 0.4s ease-out;
+
+    /* ✅ [수정] 카드의 가로, 세로 크기를 고정 */
+    width: 300px;
+    height: 150px;
+}
+
+.qc-order-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+}
+
+.qc-order-card.selected {
+    /* ✅ 선택 시 파란색 테두리 강조 */
+    border: 2px solid var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
+}
+
+/* ✅ 상태별 배경색상 진하게 변경 */
+.qc-order-card.bg-picked-up-strong { background-color: #cfe2ff; border-color: #9ec5fe; }
+.qc-order-card.bg-prepaid-strong { background-color: #fff3cd; border-color: #ffeeba; }
+.qc-order-card.bg-noshow-strong { background-color: #f8d7da; border-color: #f5c2c7; }
+.qc-order-card.bg-canceled { background-color: #e9ecef; border-color: #dee2e6; }
+.qc-order-card.bg-default { background-color: #ffffff; }
+
+.qco-top-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-color-regular);
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color-extralight);
+}
+.qco-top-row .today {
+    font-weight: var(--font-weight-bold);
+    color: #fd7e14;
+}
+
+.qco-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-grow: 1; 
+    overflow: hidden; /* ✅ 내용이 넘칠 경우를 대비 */
+}
+
+.qco-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 0.95rem;
+}
+
+.qco-item-name {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-color-dark);
+    
+    /* ✅ [수정] 상품명이 길 경우 2줄까지 표시하고 말줄임표 처리 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2; /* 보여줄 줄 수 */
+    line-clamp: 2; /* ✅ [오류 수정] 표준 속성 추가 */
+    -webkit-box-orient: vertical;
+    word-break: keep-all; /* 단어 단위로 줄바꿈 */
+}
+
+.qco-item-qty {
+    flex-shrink: 0;
+    font-weight: var(--font-weight-semibold);
+    color: var(--primary-color-dark);
+    padding: 2px 8px;
+    border-radius: var(--border-radius-sm);
+    transition: background-color 0.2s;
+}
+.qco-item-qty:hover {
+    background-color: var(--primary-color-light);
+}
+
+/* ✅ 수량 수정 UI 스타일 */
+.qco-qty-editor {
+    display: flex;
+    align-items: center;
+    gap: 6px; /* 버튼과 입력 필드 사이 간격 */
+}
+.qco-qty-editor button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-color-light); /* 기본 아이콘 색상 */
+    display: flex;
+    align-items: center;
+}
+.qco-qty-editor button:hover {
+    color: var(--primary-color); /* 호버 시 색상 변경 */
+}
+
+.qco-qty-input {
+    width: 45px;
+    padding: 2px 6px;
+    border: 1px solid var(--border-color-light);
+    border-radius: var(--border-radius-sm);
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: var(--font-weight-semibold);
+    /* ✅ [오류 수정] 표준 속성 추가 */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+/* Chrome, Safari, Edge에서 숫자 입력 필드의 스핀 버튼 제거 */
+.qco-qty-input::-webkit-outer-spin-button,
+.qco-qty-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.qco-bottom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-top: 1px solid var(--border-color-extralight);
+    padding-top: 8px;
+    margin-top: 4px;
+}
+
+.qco-customer-name {
+    font-size: 1rem;
+    font-weight: var(--font-weight-semibold);
+}
+
+.qco-total-price {
+    font-size: 1.15rem;
+    font-weight: var(--font-weight-bold);
+    color: var(--primary-color-dark);
+}

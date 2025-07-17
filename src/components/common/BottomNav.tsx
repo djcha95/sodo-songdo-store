@@ -1,17 +1,15 @@
 // src/components/BottomNav.tsx
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { useCart } from '../../context/CartContext';
-// ❗ [수정] 고객센터 아이콘 추가
+import { useAuth } from '@/context/AuthContext'; // 상대 경로 수정
+import { useCart } from '@/context/CartContext'; // 상대 경로 수정
 import { FiHome, FiShoppingBag, FiShoppingCart, FiUser, FiSettings, FiMessageSquare } from 'react-icons/fi';
 import './BottomNav.css';
 
 const BottomNav = () => {
   const { isAdmin } = useAuth();
-  // [수정] useCart에서 reservationItemCount와 waitlistItemCount를 가져옵니다.
   const { reservationItemCount, waitlistItemCount } = useCart();
 
-  // [수정] 두 값을 더하여 장바구니에 표시할 전체 아이템 수를 계산합니다.
+  // 예약 상품과 대기 상품 수를 더하여 전체 아이템 수를 계산
   const cartItemCount = reservationItemCount + waitlistItemCount;
 
   const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
@@ -37,8 +35,8 @@ const BottomNav = () => {
         </div>
         <span>장바구니</span>
       </NavLink>
-      {/* ❗ [추가] '고객센터' 메뉴를 추가하고 /store-info 경로로 연결합니다. */}
-      <NavLink to="/store-info" className={getNavLinkClass}>
+      {/* ✅ [수정] '고객센터' 메뉴의 경로를 /customer-center 로 수정합니다. */}
+      <NavLink to="/customer-center" className={getNavLinkClass}>
         <FiMessageSquare />
         <span>고객센터</span>
       </NavLink>

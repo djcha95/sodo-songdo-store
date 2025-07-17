@@ -5,16 +5,17 @@
     --table-col-번호-width: 40px;
     --table-col-주문일시-width: 130px;
     --table-col-고객명-width: 90px;
-    --table-col-전화번호-width: 120px;
-    --table-col-품목-width: 220px;
-    --table-col-예약수량-width: 70px;
-    --table-col-합계-width: 100px;
+    --table-col-전화번호-width: 100px;
+    --table-col-품목-width: 250px;
+    --table-col-수량-width: 70px;
+    --table-col-합계-width: 120px;
     --table-col-픽업일-width: 100px;
     --table-col-완료시각-width: 130px;
     --table-col-선입금-width: 130px;
-    --table-col-상태-width: 160px; /* 배지가 추가되어 너비 확장 */
+    --table-col-상태-width: 160px;
     --table-col-비고-width: 180px;
-    --table-col-관리-width: 80px;
+    --table-col-북마크-width: 50px;
+    --table-col-삭제-width: 50px;
 }
 
 
@@ -36,6 +37,29 @@
     font-size: var(--font-size-2xl, 1.875rem);
     font-weight: var(--font-weight-bold, 700);
     color: var(--text-color-dark, #212529);
+}
+
+.quick-check-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs, 0.5rem);
+    background-color: var(--primary-color-dark, #0056b3);
+    color: white;
+    border: none;
+    padding: var(--spacing-sm, 0.75rem) var(--spacing-md, 1rem);
+    border-radius: var(--border-radius-md, 8px);
+    font-size: var(--font-size-base, 1rem);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.quick-check-button:hover {
+    background-color: var(--primary-color, #007bff);
+}
+
+.quick-check-button:active {
+    transform: translateY(1px);
 }
 
 /* --- Filter and Search Controls --- */
@@ -137,7 +161,7 @@
 
 /* --- Table Styles (Excel-like) --- */
 .admin-table-container {
-    overflow-x: auto; /* Enable horizontal scrolling for table */
+    overflow-x: auto;
     background-color: white;
     border-radius: var(--border-radius-lg, 12px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -153,14 +177,15 @@
         var(--table-col-고객명-width) +
         var(--table-col-전화번호-width) +
         var(--table-col-품목-width) +
-        var(--table-col-예약수량-width) +
+        var(--table-col-수량-width) +
         var(--table-col-합계-width) +
         var(--table-col-픽업일-width) +
         var(--table-col-완료시각-width) +
         var(--table-col-선입금-width) +
         var(--table-col-상태-width) +
         var(--table-col-비고-width) +
-        var(--table-col-관리-width)
+        var(--table-col-북마크-width) +
+        var(--table-col-삭제-width)
     );
     font-size: var(--font-size-sm);
 }
@@ -172,13 +197,12 @@
     vertical-align: middle;
 }
 
-/* Zebra-striping for better readability */
 .admin-table.excel-style tbody tr:nth-child(even) {
     background-color: #f8f9fa;
 }
 
 .admin-table.excel-style tbody tr:hover {
-    background-color: #e9ecef; /* Slightly darker on hover */
+    background-color: #e9ecef;
 }
 
 .admin-table.excel-style th {
@@ -211,19 +235,26 @@
     text-align: center;
 }
 
-.phone-link {
-    color: var(--primary-color);
-    text-decoration: none;
-}
-.phone-link:hover {
-    text-decoration: underline;
-}
-
 .price-cell {
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold, 700);
     text-align: right;
     font-family: monospace;
 }
+
+/* Item Cell Style */
+.item-cell {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.item-thumbnail {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: var(--border-radius-sm);
+}
+
 
 /* --- Status Cell Styles --- */
 .status-cell-content {
@@ -272,25 +303,14 @@
     white-space: nowrap;
 }
 
-.status-extra-badge.late-pickup {
-    background-color: #e6f7ff;
-    color: #096dd9;
-    border: 1px solid #91d5ff;
-}
-
-.status-extra-badge.no-show-pending {
-    background-color: #fff1f0;
-    color: #cf1322;
-    border: 1px solid #ffa39e;
-}
+.status-extra-badge.late-pickup { background-color: #e6f7ff; color: #096dd9; border: 1px solid #91d5ff; }
+.status-extra-badge.no-show-pending { background-color: #fff1f0; color: #cf1322; border: 1px solid #ffa39e; }
 
 
 /* Action Buttons in Table */
 .action-cell {
     text-align: center;
-    display: flex;
-    gap: var(--spacing-xs, 0.5rem);
-    justify-content: center;
+    vertical-align: middle;
 }
 .action-button {
     background: none;
@@ -331,26 +351,108 @@
     font-size: inherit;
     resize: vertical;
 }
-.notes-textarea:focus {
-    outline: none;
-    border-color: var(--primary-color);
-}
-.notes-display {
-    cursor: pointer;
-    min-height: 24px;
-    width: 100%;
-    display: block;
-    line-height: 1.5;
-    padding: 2px 0;
-}
-.notes-placeholder {
-    color: var(--text-color-light, #adb5bd);
-    font-style: italic;
-}
+.notes-textarea:focus { outline: none; border-color: var(--primary-color); }
+.notes-display { cursor: pointer; min-height: 24px; width: 100%; display: block; line-height: 1.5; padding: 2px 0; }
+.notes-placeholder { color: var(--text-color-light, #adb5bd); font-style: italic; }
 
 /* No results cell */
 .no-results-cell {
     text-align: center;
     padding: var(--spacing-lg, 1.5rem);
     color: var(--text-color-light, #adb5bd);
+}
+
+/* ✅ [개선] 페이지네이션 전체 스타일 */
+.pagination-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-md, 1rem);
+    padding-top: var(--spacing-lg, 1.5rem);
+    margin-top: var(--spacing-md, 1rem);
+    border-top: 1px solid var(--border-color-light, #e9ecef);
+}
+
+.pagination-left, .pagination-center, .pagination-right {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.pagination-left {
+    justify-content: flex-start;
+}
+
+.pagination-center {
+    justify-content: center;
+    gap: var(--spacing-xs, 0.5rem);
+}
+
+.pagination-right {
+    justify-content: flex-end;
+}
+
+.items-per-page-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm, 0.5rem);
+    font-size: var(--font-size-sm, 0.875rem);
+    color: var(--text-color-regular, #495057);
+}
+
+.items-per-page-selector select {
+    padding: var(--spacing-xs, 0.5rem) var(--spacing-sm, 0.75rem);
+    border-radius: var(--border-radius-md, 8px);
+    border: 1px solid var(--border-color-light, #dee2e6);
+    background-color: white;
+}
+
+.total-items-display {
+    font-size: var(--font-size-sm, 0.875rem);
+    color: var(--text-color-light, #adb5bd);
+}
+
+.pagination-center button,
+.pagination-ellipsis {
+    background-color: white;
+    border: 1px solid var(--border-color-light, #dee2e6);
+    color: var(--text-color-regular, #495057);
+    min-width: 38px;
+    height: 38px;
+    padding: 0 var(--spacing-sm, 0.75rem);
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: var(--border-radius-md, 8px);
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    font-weight: var(--font-weight-medium);
+}
+
+.pagination-ellipsis {
+    cursor: default;
+    border: 1px solid transparent;
+    background-color: transparent;
+    color: var(--text-color-light);
+}
+
+.pagination-center button:hover:not(:disabled) {
+    background-color: #e9ecef;
+    border-color: #ced4da;
+    color: var(--primary-color-dark);
+}
+
+.pagination-center button:disabled {
+    color: var(--text-color-light, #adb5bd);
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.pagination-center button.active {
+    background-color: var(--primary-color, #007bff);
+    color: white;
+    border-color: var(--primary-color, #007bff);
+    font-weight: var(--font-weight-bold);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
 }

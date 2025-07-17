@@ -1,14 +1,16 @@
 // src/pages/admin/SalesRoundEditPage.tsx
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById, updateSalesRound, getCategories, updateProductCoreInfo } from '../../firebase';
-// ✅ [수정] 사용되지 않는 SalesRound 타입 제거
 import type { Category, StorageType, Product, SalesRoundStatus, VariantGroup, ProductItem } from '../../types';
 import toast from 'react-hot-toast';
-import { Save, PlusCircle, X, Loader, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
+// ✅ [수정] 공용 로더 컴포넌트 import
+import SodamallLoader from '@/components/common/SodamallLoader';
+import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
 import './ProductAddAdminPage.css'; // 폼 스타일은 공유
 
 // --- UI 상태 관리용 타입 정의 ---
@@ -23,12 +25,12 @@ const parseDateString = (dateString: string): Date | null => { if (!dateString) 
 const formatNumberWithCommas = (value: number | ''): string => { if (value === '' || value === null) return ''; return Number(value).toLocaleString('ko-KR'); };
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 
-const LoadingSpinner = () => (<div className="loading-overlay"><Loader size={48} className="spin" /> <p>잠시만 기다려 주세요...</p></div>);
+// ❗ [제거] 로컬 LoadingSpinner 컴포넌트 제거
 const storageTypeOptions: { key: StorageType; name:string; className: string }[] = [{ key: 'ROOM', name: '실온', className: 'storage-btn-room' }, { key: 'FROZEN', name: '냉동', className: 'storage-btn-frozen' }, { key: 'COLD', name: '냉장', className: 'storage-btn-cold' }];
 
 // --- 메인 컴포넌트 ---
 const SalesRoundEditPage: React.FC = () => {
-    useDocumentTitle('상품 수정'); // ✅ [추가]
+    useDocumentTitle('상품 수정');
     const { productId, roundId } = useParams<{ productId: string; roundId: string }>();
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,7 +72,7 @@ const SalesRoundEditPage: React.FC = () => {
                 setDescription(product.description);
                 setSelectedStorageType(product.storageType);
                 const mainCat = fetchedCategories.find(c => c.name === product.category);
-                if (mainCat) { setSelectedMainCategory(mainCat.id); } // ✅ 하위 카테고리 로직 제거
+                if (mainCat) { setSelectedMainCategory(mainCat.id); }
                 setInitialImageUrls(product.imageUrls || []);
                 setCurrentImageUrls(product.imageUrls || []);
                 setImagePreviews(product.imageUrls || []);
@@ -97,7 +99,6 @@ const SalesRoundEditPage: React.FC = () => {
         fetchData();
     }, [productId, roundId, navigate]);
 
-    // ✅ 하위 카테고리 관련 useEffect 제거
     useEffect(() => { if (!pickupDay) { setPickupDeadlineDate(null); return; } const newPickupDeadline = new Date(pickupDay); if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); } setPickupDeadlineDate(newPickupDeadline); }, [pickupDay, selectedStorageType]);
 
     const handleProductTypeChange = useCallback((newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); } }, [productType]);
@@ -119,7 +120,6 @@ const SalesRoundEditPage: React.FC = () => {
         if (!isDraft) { if (imagePreviews.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; } if (!deadlineDate || !pickupDay || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; } }
         setIsSubmitting(true);
         try {
-            // ✅ [수정] subCategory 필드 제거
             const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '' };
             await updateProductCoreInfo(productId, productDataToUpdate, newImageFiles, currentImageUrls, initialImageUrls);
             
@@ -149,14 +149,22 @@ const SalesRoundEditPage: React.FC = () => {
         } finally { setIsSubmitting(false); }
     };
   
-    if (isLoading) return <LoadingSpinner />;
+    // ✅ [수정] 페이지 전체 로딩 시 SodamallLoader 사용
+    if (isLoading) return <SodamallLoader />;
 
     return (
         <div className="product-add-page-wrapper smart-form">
             <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
                 <header className="product-add-header">
                     <h1>판매 회차 수정</h1>
-                    <div className="header-actions"><button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button><button type="submit" disabled={isSubmitting} className="save-button">{isSubmitting ? <Loader size={18} className="spin" /> : <Save size={18} />} 수정 내용 저장</button></div>
+                    <div className="header-actions">
+                        <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
+                        {/* ✅ [수정] 버튼 내 로딩 시 InlineSodamallLoader 사용 */}
+                        <button type="submit" disabled={isSubmitting} className="save-button">
+                            {isSubmitting ? <InlineSodamallLoader /> : <Save size={18} />}
+                            수정 내용 저장
+                        </button>
+                    </div>
                 </header>
                 <main className="main-content-grid-3-col-final">
                      <div className="form-section">
@@ -164,7 +172,6 @@ const SalesRoundEditPage: React.FC = () => {
                         <p className="section-subtitle">상품의 기본 정보는 모든 판매 회차에 공통 적용됩니다.</p>
                         <div className="form-group"><label>대표 상품명 *</label><input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}/></div>
-                        {/* ✅ [수정] 하위 카테고리 select 제거 */}
                         <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>
                         <div className="form-group"><label>대표 이미지 *</label><div className="compact-image-uploader"><input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>{imagePreviews.map((p,i) => (<div key={p+i} className="thumbnail-preview"><img src={p} alt=""/><button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button></div>))}{imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}</div></div>
                     </div>
@@ -204,7 +211,8 @@ const SalesRoundEditPage: React.FC = () => {
                     </div>
                 </main>
             </form>
-            {isSubmitting && <LoadingSpinner />}
+            {/* ✅ [수정] 폼 제출 시 SodamallLoader 사용 */}
+            {isSubmitting && <SodamallLoader message="수정 내용을 저장하고 있습니다..." />}
         </div>
     );
 };

@@ -1,22 +1,22 @@
 // src/pages/admin/BannerAdminPage.tsx
 
-import React, { useState, useEffect } from 'react'; // [수정] useCallback 제거
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import React, { useState, useEffect } from 'react';
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { onSnapshot, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { db } from '@/firebase';
 import type { Banner } from '@/types';
-import * as bannerService from '@/firebase/bannerService'; 
+import * as bannerService from '@/firebase/bannerService';
 
 import BannerForm from '@/pages/admin/components/BannerForm';
 import BannerList from '@/pages/admin/components/BannerList';
 import Notification from '@/pages/admin/components/Notification';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+import SodamallLoader from '@/components/common/SodamallLoader'; // ✅ [수정] SodamallLoader로 변경
 
 import './BannerAdminPage.css';
 
 const BannerAdminPage: React.FC = () => {
-  useDocumentTitle('배너 관리'); // ✅ [추가]
+  useDocumentTitle('배너 관리');
   const [banners, setBanners] = useState<Banner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentBanner, setCurrentBanner] = useState<Banner | null>(null);
@@ -25,7 +25,7 @@ const BannerAdminPage: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribe = onSnapshot(q,
       (snapshot) => {
         const bannersData = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -44,7 +44,6 @@ const BannerAdminPage: React.FC = () => {
   }, []);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
-    // react-hot-toast를 사용하여 알림 표시
     switch (type) {
       case 'success':
         toast.success(message);
@@ -53,24 +52,18 @@ const BannerAdminPage: React.FC = () => {
         toast.error(message);
         break;
       case 'info':
-        // [수정] toast.info 대신 기본 toast() 함수 사용
-        toast(message); 
+        toast(message);
         break;
     }
   };
-
-// src/pages/admin/BannerAdminPage.tsx 파일 내부
 
   const handleFormSubmit = async (formData: Omit<Banner, 'id' | 'imageUrl'>, imageFile?: File | null) => {
     setIsSubmitting(true);
     try {
       if (currentBanner) {
-        // 배너 수정
-        // ✅ [수정] updateBanner 함수 호출 시 불필요한 imageUrl 속성을 제거했습니다.
         await bannerService.updateBanner(currentBanner.id, formData, imageFile);
         showNotification('배너가 성공적으로 수정되었습니다.', 'success');
       } else {
-        // 새 배너 추가
         await bannerService.addBanner(formData, imageFile as File);
         showNotification('새 배너가 성공적으로 추가되었습니다.', 'success');
       }
@@ -82,18 +75,16 @@ const BannerAdminPage: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
   const handleEdit = (banner: Banner) => {
     setCurrentBanner(banner);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  
-// src/pages/admin/BannerAdminPage.tsx 파일의 handleDelete 함수를 아래 코드로 교체해주세요.
 
   const handleDelete = async (id: string) => {
     const confirmationPromise = new Promise<boolean>((resolve) => {
       toast(
         (t) => (
-          // ✅ [수정] CSS 스타일이 적용되도록 올바른 HTML 구조와 클래스 이름을 사용합니다.
           <div className="custom-toast-container">
             <p className="toast-message">
               정말로 이 배너를 삭제하시겠습니까?
@@ -124,14 +115,13 @@ const BannerAdminPage: React.FC = () => {
         ),
         {
           duration: 6000,
-          // ✅ [수정] 커스텀 토스트의 배경을 흰색으로 지정합니다.
           style: {
             background: 'white',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
             padding: '16px',
             borderRadius: '10px',
             border: '1px solid #e0e0e0',
-            width: '350px', // 토스트 너비 지정
+            width: '350px',
           },
         }
       );
@@ -162,7 +152,7 @@ const BannerAdminPage: React.FC = () => {
       error: '상태 변경에 실패했습니다.',
     });
   };
-  
+
   const handleReorder = async (activeId: string, overId: string | null) => {
     if (!overId) return;
 
@@ -170,7 +160,7 @@ const BannerAdminPage: React.FC = () => {
     const newIndex = banners.findIndex((b) => b.id === overId);
 
     if (oldIndex === -1 || newIndex === -1) return;
-    
+
     const newBanners = Array.from(banners);
     const [movedItem] = newBanners.splice(oldIndex, 1);
     newBanners.splice(newIndex, 0, movedItem);
@@ -181,7 +171,7 @@ const BannerAdminPage: React.FC = () => {
       const bannerRef = doc(db, 'banners', banner.id);
       batch.update(bannerRef, { order: index });
     });
-    
+
     try {
       await batch.commit();
       toast.success('배너 순서가 저장되었습니다.');
@@ -197,7 +187,7 @@ const BannerAdminPage: React.FC = () => {
   };
 
   if (isLoading) {
-    return <LoadingSpinner />;
+    return <SodamallLoader />;
   }
 
   return (

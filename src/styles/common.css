@@ -73,13 +73,13 @@
   box-shadow: var(--box-shadow-md);
 }
 
-/* Accent (긍정, 완료 액션) */
+/* Accent (긍정, 완료 액션) - ✅ 이제 주조색(파란색)을 따르도록 변경 */
 .button-accent {
-    background-color: var(--accent-color, #28a745);
+    background-color: var(--primary-color, #007bff);
     color: white;
 }
 .button-accent:hover:not(:disabled) {
-    background-color: #218838;
+    background-color: var(--primary-color-dark, #0056b3);
 }
 
 /* Ghost (테두리만 있는 버튼) */
@@ -279,25 +279,45 @@
 /* ✅ ========== Unified Toast Styles =========== */
 /* =============================================== */
 
-.confirmation-toast {
-  padding: 16px;
+/* ✅ [삭제] 더 이상 사용하지 않는 규칙 제거
+.global-toast-container .confirmation-toast { ... }
+*/
+
+/* ✅ [수정] 커스텀 토스트의 디자인을 더 세련되게 개선 */
+.confirmation-toast-content {
+  background: linear-gradient(180deg, var(--bg-color-white) 0%, #F7F8FA 100%);
+  border-radius: var(--border-radius-xl, 16px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 28px;
   text-align: center;
   width: 100%;
-  max-width: 350px;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
-.confirmation-toast h4 {
-  margin: 0 0 8px;
-  font-size: var(--font-size-md);
+.confirmation-toast-content .toast-icon {
+  color: var(--primary-color);
+  margin-bottom: 8px; /* 아이콘과 제목 사이 간격 */
+  /* 아이콘에 약간의 입체감 추가 */
+  filter: drop-shadow(0 2px 4px rgba(0, 123, 255, 0.2));
+}
+
+.confirmation-toast-content h4 {
+  margin: 0;
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   color: var(--text-color-dark);
 }
 
-.confirmation-toast p {
+.confirmation-toast-content p {
   margin: 0 0 16px;
   font-size: var(--font-size-sm);
   color: var(--text-color-medium);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .toast-buttons {
