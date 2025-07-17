@@ -11,7 +11,6 @@ export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
-// ✅ [추가] ProductCard 컴포넌트에서 사용하는 상품의 표시 상태 타입을 정의합니다.
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
 
@@ -22,15 +21,15 @@ export interface PointLog {
   amount: number;
   reason: string;
   createdAt: Timestamp;
-  expiresAt: Timestamp; // 소멸 예정일
+  expiresAt: Timestamp;
 }
 
 export type NotificationType =
-  | 'GENERAL'             // 일반 알림
-  | 'WAITLIST_CONFIRMED'  // 대기 예약 확정
-  | 'PICKUP_REMINDER'     // 픽업 D-1 등 미리 알림
-  | 'PICKUP_TODAY'        // 픽업 당일 알림
-  | 'NEW_INTERACTION';    // 찜, 댓글 등 (미래 확장용)
+  | 'GENERAL'
+  | 'WAITLIST_CONFIRMED'
+  | 'PICKUP_REMINDER'
+  | 'PICKUP_TODAY'
+  | 'NEW_INTERACTION';
 
 export interface Notification {
   id: string;
@@ -81,7 +80,7 @@ export interface SalesRound {
   deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
-  arrivalDate?: Timestamp;
+  arrivalDate?: Timestamp | null; // arrivalDate도 null 허용
   createdAt: Timestamp;
   waitlist: WaitlistEntry[];
   waitlistCount: number;
@@ -146,8 +145,9 @@ export type OrderItem = Pick<
   totalQuantity?: number;
   totalPrice?: number;
   category?: string;
-  arrivalDate?: Timestamp;
-  expirationDate?: Timestamp;
+  arrivalDate?: Timestamp | null; // arrivalDate도 null 허용
+  expirationDate?: Timestamp | null;
+  stockDeductionAmount?: number;
 };
 
 export interface Order {
@@ -159,13 +159,14 @@ export interface Order {
   status: OrderStatus;
   createdAt: Timestamp | FieldValue;
   pickupDate: Timestamp;
-  pickupDeadlineDate?: Timestamp;
+  pickupDeadlineDate?: Timestamp | null;
   customerInfo: {
     name: string;
     phone: string;
+    phoneLast4?: string;
   };
-  pickedUpAt?: Timestamp;
-  prepaidAt?: Timestamp;
+  pickedUpAt?: Timestamp | null;
+  prepaidAt?: Timestamp | null;
   notes?: string;
   isBookmarked?: boolean;
 }
@@ -190,7 +191,6 @@ export interface UserDocument {
   lastLoginDate: string;
   isRestricted?: boolean;
 
-  // ✅ [추가] 성별과 연령대 필드를 추가합니다.
   gender?: 'male' | 'female' | null;
   ageRange?: string | null;
 }
@@ -293,4 +293,23 @@ export interface WaitlistItem {
   quantity: number;
   imageUrl: string;
   timestamp: Timestamp;
+}
+
+// ✅ [신규] 그룹화된 주문 데이터를 위한 타입 추가
+export interface AggregatedOrderGroup {
+  groupKey: string; // 고객명-상품ID-아이템ID 등으로 구성된 고유 키
+  customerInfo: Order['customerInfo'];
+  item: OrderItem; // 대표 상품 정보
+  totalQuantity: number;
+  totalPrice: number;
+  status: OrderStatus; // 그룹의 대표 상태 (모두 픽업완료 등)
+  pickupDate: Timestamp;
+  pickupDeadlineDate?: Timestamp | null;
+  
+  // 이 그룹에 포함된 원본 주문들의 정보
+  originalOrders: {
+    orderId: string;
+    quantity: number;
+    status: OrderStatus; // 개별 주문의 상태
+  }[];
 }

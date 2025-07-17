@@ -17,14 +17,13 @@
 @media (max-width: 1400px) { .main-content-grid-3-col-final { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 992px) { .main-content-grid-3-col-final { grid-template-columns: 1fr; } }
 
-/* ✅ [수정] min-width: 0; 를 추가하여 그리드 아이템이 콘텐츠 크기 때문에 늘어나는 것을 방지합니다. */
 .form-section {
   background-color: white;
   border: 1px solid #e9ecef;
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  min-width: 0; /* 이 속성이 핵심입니다. */
+  min-width: 0;
 }
 .sticky-section { position: sticky; top: 95px; }
 .form-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px 0; }
@@ -54,7 +53,6 @@
 .thumbnail-preview:hover .remove-thumbnail-btn { opacity: 1; }
 .add-thumbnail-btn { width: 80px; height: 80px; flex-shrink: 0; border: 2px dashed #dee2e6; border-radius: 8px; color: #adb5bd; display: flex; align-items: center; justify-content: center; cursor: pointer; background-color: #f8f9fa; transition: all 0.2s; }
 .add-thumbnail-btn:hover { border-color: var(--primary-color); color: var(--primary-color); }
-/* 드래그 중인 아이템에 대한 스타일 */
 .thumbnail-preview.dragging { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 2px var(--primary-color); transform: scale(1.05); background-color: white; z-index: 10; }
 
 
@@ -116,8 +114,6 @@ input[placeholder="비우면 무제한"]::placeholder {
   font-style: italic;
 }
 
-/* src/pages/admin/ProductAddAdminPage.css 에 추가 */
-
 /* --- 중복 상품 검사 UI --- */
 .form-group.with-validation .input-wrapper {
   position: relative;
@@ -125,16 +121,29 @@ input[placeholder="비우면 무제한"]::placeholder {
   align-items: center;
 }
 
-.form-group.with-validation .input-wrapper .spinner {
+/* ✅ [수정] 인라인 아이콘 로더를 위한 스타일 */
+.input-spinner-wrapper {
   position: absolute;
   right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner-icon {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(0,0,0,0.1);
-  border-left-color: var(--primary-color);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  color: var(--primary-color);
+  animation: spin 1s linear infinite;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 
 .similar-products-warning {
   margin-top: 12px;

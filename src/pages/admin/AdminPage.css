@@ -26,19 +26,7 @@
   margin: 0 auto; /* 중앙 정렬 */
 }
 
-/* --- 로딩 스피너 (AdminPage.tsx에서 Suspense fallback으로 사용) --- */
-.loading-spinner {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  min-height: 200px;
-  font-size: var(--font-size-md, 1.2rem);
-  color: var(--text-color-light, #868e96);
-  background-color: var(--bg-color-white, #ffffff);
-  border-radius: var(--border-radius-lg, 12px);
-  box-shadow: var(--box-shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
-}
+/* ❗ [제거] 더 이상 사용하지 않는 로딩 스피너 스타일을 제거합니다. */
 
 
 /* --- 반응형 디자인 (모바일/태블릿 최적화) --- */

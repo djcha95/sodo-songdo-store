@@ -5,9 +5,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import type { CartItem, Order } from '@/types';
-import { submitOrder, getLiveStockForItems } from '@/firebase';
+import { submitOrder, getLiveStockForItems, getReservedQuantitiesMap } from '@/firebase';
 import type { Timestamp } from 'firebase/firestore';
-import { ShoppingCart as CartIcon, ArrowRight, Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle } from 'lucide-react';
+import { ShoppingCart as CartIcon, ArrowRight, Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -15,15 +15,28 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
 
+// 수동으로 토스트를 끄는 헬퍼 함수
+const showToast = (type: 'success' | 'error' | 'info' | 'blank', message: string | React.ReactNode, duration: number = 4000) => {
+  const toastId = toast[type](message, {
+    duration: Infinity, // 라이브러리 타이머와 충돌하지 않도록 무한으로 설정
+  });
+
+  // 우리가 직접 만든 타이머로 제어
+  setTimeout(() => {
+    toast.dismiss(toastId);
+  }, duration);
+};
+
 // --- CartItemCard 컴포넌트 ---
 interface CartItemCardProps {
   item: CartItem;
   isSelected: boolean;
   onSelect: (itemKey: string) => void;
   onImageClick: (e: React.MouseEvent, productId: string) => void;
+  isStockExceeded?: boolean;
 }
 
-const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect, onImageClick }) => {
+const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect, onImageClick, isStockExceeded = false }) => {
   const { updateCartItemQuantity } = useCart();
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState(item.quantity.toString());
@@ -51,9 +64,9 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
     if (finalQuantity !== item.quantity) {
       updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, finalQuantity);
       if (newQuantity > stockLimit) {
-        toast.error(`최대 ${stockLimit}개까지만 구매 가능합니다.`);
+        showToast('error', `최대 ${stockLimit}개까지만 구매 가능합니다.`);
       } else if (newQuantity < 1) {
-        toast.error('최소 1개 이상 구매해야 합니다.');
+        showToast('error', '최소 1개 이상 구매해야 합니다.');
       }
     }
     setIsEditing(false);
@@ -81,7 +94,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
   const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
 
   return (
-    <div className={`cart-item-card ${isSelected ? 'selected' : ''}`} onClick={() => onSelect(itemKey)}>
+    <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${isStockExceeded ? 'stock-exceeded' : ''}`} onClick={() => onSelect(itemKey)}>
       <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
         <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
       </div>
@@ -123,60 +136,85 @@ const CartPage: React.FC = () => {
   const { user, userDocument } = useAuth();
   const { 
     allItems, reservationItems, waitlistItems, 
-    removeItems, removeReservedItems, updateItemsStatus, 
-    reservationTotal, reservationItemCount 
+    removeItems, removeReservedItems, updateCartItemQuantity,
+    reservationTotal,
   } = useCart();
   const navigate = useNavigate();
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
-  const [isWaitlistProcessing, setIsWaitlistProcessing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(true);
   const [selectedReservationKeys, setSelectedReservationKeys] = useState<Set<string>>(new Set());
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
+  const [stockExceededKeys, setStockExceededKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const waitlistItemsToCheck = allItems.filter(item => item.status === 'WAITLIST');
-    if (waitlistItemsToCheck.length === 0) return;
+    if (reservationItems.length === 0) {
+      setIsSyncing(false);
+      return;
+    }
 
-    const processWaitlist = async () => {
-      setIsWaitlistProcessing(true);
+    const checkStockAndAdjust = async () => {
+      setIsSyncing(true);
+      setStockExceededKeys(new Set()); 
       try {
-        const liveStockInfo = await getLiveStockForItems(waitlistItemsToCheck);
-        const itemsToConvert: string[] = [];
-        const itemsToRemove: { key: string, name: string }[] = [];
-        const now = new Date();
+        const [liveStockInfo, reservedMap] = await Promise.all([
+          getLiveStockForItems(reservationItems),
+          getReservedQuantitiesMap()
+        ]);
+        
+        const adjustments = new Map<string, number>();
+        const exceededKeys = new Set<string>();
 
-        waitlistItemsToCheck.forEach(item => {
-          const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
-          const pickupDate = item.pickupDate.toDate();
-          const pickupDeadlineTime = new Date(pickupDate.getFullYear(), pickupDate.getMonth(), pickupDate.getDate(), 13, 0, 0);
+        for (const item of reservationItems) {
+          const productStockInfo = liveStockInfo[`${item.productId}-${item.variantGroupId}-${item.itemId}`];
+          const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+          
+          const groupTotalStock = productStockInfo?.groupStock;
+          const groupReservedQuantity = reservedMap.get(groupReservedKey) || 0;
+          
+          let availableStock = Infinity;
+          if(groupTotalStock !== null && groupTotalStock !== -1) {
+            availableStock = groupTotalStock - groupReservedQuantity;
+          }
+          
+          if (item.quantity > availableStock) {
+            const adjustedQuantity = Math.max(0, Math.floor(availableStock));
+            
+            if (adjustedQuantity > 0) {
+              adjustments.set(`${item.productId}-${item.variantGroupId}-${item.itemId}`, adjustedQuantity);
+              showToast('error', `'${item.variantGroupName}' 재고 부족으로 수량이 ${adjustedQuantity}개로 자동 조정되었습니다.`);
+            } else {
+               adjustments.set(`${item.productId}-${item.variantGroupId}-${item.itemId}`, 0);
+               showToast('error', `'${item.variantGroupName}' 재고가 모두 소진되어 장바구니에서 삭제됩니다.`);
+            }
+            exceededKeys.add(`${item.productId}-${item.variantGroupId}-${item.itemId}`);
+          }
+        }
 
-          if (now > pickupDeadlineTime) {
-            itemsToRemove.push({ key: uniqueId, name: item.productName });
-          } else {
-            const stock = liveStockInfo[uniqueId];
-            if (stock && (stock.itemStock === -1 || stock.itemStock >= item.quantity) && (stock.groupStock === null || stock.groupStock === -1 || stock.groupStock >= item.quantity)) {
-              itemsToConvert.push(uniqueId);
+        if (adjustments.size > 0) {
+          for (const [key, newQuantity] of adjustments.entries()) {
+            const [productId, variantGroupId, itemId] = key.split('-');
+            if (newQuantity > 0) {
+              updateCartItemQuantity(productId, variantGroupId, itemId, newQuantity);
+            } else {
+              removeItems([key]);
             }
           }
-        });
+        }
+        setStockExceededKeys(exceededKeys);
 
-        if (itemsToConvert.length > 0) {
-          updateItemsStatus(itemsToConvert, 'RESERVATION');
-          toast.success(`${itemsToConvert.length}개 대기 상품이 예약으로 자동 전환되었습니다!`);
-        }
-        if (itemsToRemove.length > 0) {
-          removeItems(itemsToRemove.map(i => i.key));
-          itemsToRemove.forEach(item => toast.error(`'${item.name}' 대기 상품이 마감되어 자동 삭제되었습니다.`));
-        }
       } catch (error) {
-        console.error("대기 목록 처리 중 오류:", error);
-        toast.error("대기 목록을 업데이트하는 중 문제가 발생했습니다.");
+        console.error("재고 확인 중 오류:", error);
+        showToast('error', "재고를 확인하는 중 문제가 발생했습니다.");
       } finally {
-        setIsWaitlistProcessing(false);
+        setIsSyncing(false);
       }
     };
-    processWaitlist();
-  }, [allItems, removeItems, updateItemsStatus]);
+
+    checkStockAndAdjust();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
     const setter = type === 'reservation' ? setSelectedReservationKeys : setSelectedWaitlistKeys;
@@ -191,16 +229,16 @@ const CartPage: React.FC = () => {
     });
   }, []);
   
-  // ✅ [수정] 통일된 토스트 스타일 사용
   const handleBulkRemove = useCallback((type: 'reservation' | 'waitlist') => {
     const keysToRemove = type === 'reservation' ? selectedReservationKeys : selectedWaitlistKeys;
     if (keysToRemove.size === 0) {
-      toast('삭제할 상품을 선택해주세요.', { icon: 'ℹ️' });
+      showToast('info', '삭제할 상품을 선택해주세요.');
       return;
     }
 
     toast((t) => (
-      <div className="confirmation-toast">
+      <div className="confirmation-toast-content">
+        <AlertTriangle size={44} className="toast-icon" style={{ color: 'var(--danger-color)' }} />
         <h4>선택 상품 삭제</h4>
         <p>{keysToRemove.size}개의 상품을 장바구니에서 삭제하시겠습니까?</p>
         <div className="toast-buttons">
@@ -217,14 +255,22 @@ const CartPage: React.FC = () => {
               removeItems(Array.from(keysToRemove));
               if (type === 'reservation') setSelectedReservationKeys(new Set());
               else setSelectedWaitlistKeys(new Set());
-              toast.success('선택된 상품이 삭제되었습니다.');
+              showToast('success', '선택된 상품이 삭제되었습니다.');
             }}
           >
             삭제
           </button>
         </div>
       </div>
-    ), { duration: 6000 });
+    ), {
+      id: 'bulk-delete-confirmation',
+      style: {
+        background: 'transparent',
+        boxShadow: 'none',
+        border: 'none',
+        padding: 0,
+      }
+    });
   }, [selectedReservationKeys, selectedWaitlistKeys, removeItems]);
 
   const handleImageClick = useCallback((e: React.MouseEvent, productId: string) => {
@@ -232,14 +278,60 @@ const CartPage: React.FC = () => {
     navigate(`/product/${productId}`);
   }, [navigate]);
   
-  // ✅ [수정] 성공 토스트 자동 사라짐 기능 추가
+  const finalStockCheck = async (): Promise<boolean> => {
+    setIsSyncing(true);
+    try {
+      const [liveStockInfo, reservedMap] = await Promise.all([
+        getLiveStockForItems(reservationItems),
+        getReservedQuantitiesMap(),
+      ]);
+
+      for (const item of reservationItems) {
+        const productStockInfo = liveStockInfo[`${item.productId}-${item.variantGroupId}-${item.itemId}`];
+        const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+        const groupTotalStock = productStockInfo?.groupStock;
+        const groupReservedQuantity = reservedMap.get(groupReservedKey) || 0;
+        
+        let availableStock = Infinity;
+        if (groupTotalStock !== null && groupTotalStock !== -1) {
+          availableStock = groupTotalStock - groupReservedQuantity;
+        }
+
+        if (item.quantity > availableStock) {
+          showToast('error', 
+            (
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ margin: 0, fontWeight: '600' }}>'{item.variantGroupName}' 재고가 부족합니다.</p>
+                <p style={{ margin: '4px 0 0', fontWeight: 400, opacity: 0.8 }}>(현재 {availableStock}개 구매 가능)</p>
+              </div>
+            )
+          );
+          return false;
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error("최종 재고 확인 중 오류:", error);
+      showToast('error', "재고 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+
   const handleConfirmReservation = async () => {
     if (!user || !user.uid) {
-      toast.error('예약을 확정하려면 로그인이 필요합니다.');
+      showToast('error', '예약을 확정하려면 로그인이 필요합니다.');
       navigate('/login', { state: { from: '/cart' }, replace: true });
       return;
     }
     if (isProcessingOrder || reservationItems.length === 0) return;
+
+    const isStockSufficient = await finalStockCheck();
+    if (!isStockSufficient) {
+      return;
+    }
 
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'> = {
         userId: user.uid,
@@ -256,28 +348,32 @@ const CartPage: React.FC = () => {
       success: (result) => {
         startTransition(() => {
           removeReservedItems();
-          navigate(result.orderId ? '/mypage/history' : '/mypage/history');
+          navigate(result.orderId ? `/order/success/${result.orderId}` : '/mypage/history');
         });
         return '예약이 성공적으로 완료되었습니다!';
       },
       error: (err) => (err as Error).message || '예약 확정 중 오류가 발생했습니다.',
     }, {
       success: {
-        duration: 3000, // 3초 후 자동으로 닫힘
+        duration: 3000, 
+      },
+      error: {
+        duration: 4000,
       }
     }).finally(() => {
       setIsProcessingOrder(false);
     });
   };
 
-  // ✅ [수정] 통일된 토스트 스타일 사용
   const showOrderConfirmation = () => {
     if (reservationItems.length === 0) {
-      toast.error('예약할 상품이 없습니다.');
+      showToast('error', '예약할 상품이 없습니다.');
       return;
     }
+    
     toast((t) => (
-      <div className="confirmation-toast">
+      <div className="confirmation-toast-content">
+        <Info size={44} className="toast-icon" />
         <h4>예약 확정</h4>
         <p>예약 상품만 주문되며, 대기 상품은 포함되지 않습니다.</p>
         <div className="toast-buttons">
@@ -295,17 +391,27 @@ const CartPage: React.FC = () => {
           </button>
         </div>
       </div>
-    ), { duration: 6000 });
+    ), {
+      id: 'order-confirmation',
+      style: {
+        background: 'transparent',
+        boxShadow: 'none',
+        border: 'none',
+        padding: 0,
+      },
+    });
   };
-
 
   return (
     <div className="cart-page-wrapper">
-      <div className="customer-page-container">
+      <div className="customer-page-container cart-container">
         <div className="cart-page-layout">
           <div className="cart-items-column">
             <div className="cart-section-header">
-              <h2 className="cart-section-title">🛒 예약 상품 ({reservationItems.length})</h2>
+              <h2 className="cart-section-title">
+                🛒 예약 상품 ({reservationItems.length})
+                {isSyncing && <RefreshCw size={18} className="spin-icon" />}
+              </h2>
               {selectedReservationKeys.size > 0 && (
                 <button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}>
                   <XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})
@@ -323,6 +429,7 @@ const CartPage: React.FC = () => {
                       isSelected={selectedReservationKeys.has(itemKey)}
                       onSelect={(key) => handleItemSelect(key, 'reservation')}
                       onImageClick={handleImageClick}
+                      isStockExceeded={stockExceededKeys.has(itemKey)}
                     />
                   );
                 })}
@@ -335,7 +442,6 @@ const CartPage: React.FC = () => {
               <div className="cart-section-header waitlist-header">
                 <h2 className="cart-section-title">
                   <Hourglass size={18}/> 대기 상품 ({waitlistItems.length})
-                  {isWaitlistProcessing && <RefreshCw size={18} className="spin-icon" />}
                 </h2>
                 {selectedWaitlistKeys.size > 0 && (
                   <button className="bulk-remove-btn" onClick={() => handleBulkRemove('waitlist')}>
@@ -363,7 +469,7 @@ const CartPage: React.FC = () => {
               )}
             </div>
 
-            {allItems.length === 0 && (
+            {allItems.length === 0 && !isSyncing && (
               <div className="empty-cart-message">
                 <CartIcon size={64} className="empty-cart-icon" />
                 <p>장바구니와 대기 목록이 비어있습니다.</p>
@@ -375,18 +481,9 @@ const CartPage: React.FC = () => {
           {reservationItems.length > 0 && (
             <div className="cart-summary-column">
                 <div className="cart-summary-card">
-                  <h3 className="summary-title">예약 정보 요약</h3>
-                  <div className="summary-row total-amount">
-                    <span className="total-label">총 예약 상품</span>
-                    <span className="total-item-count">{reservationItemCount} 개</span>
-                  </div>
-                  <div className="summary-row total-amount">
-                    <span className="total-label">총 예약 금액</span>
-                    <span className="total-price-value">{reservationTotal.toLocaleString()}원</span>
-                  </div>
-                  <button className="checkout-btn" onClick={showOrderConfirmation} disabled={isProcessingOrder}>
+                  <button className="checkout-btn" onClick={showOrderConfirmation} disabled={isProcessingOrder || isSyncing}>
                     {isProcessingOrder ? '처리 중...' : `예약 확정하기`}
-                    {!isProcessingOrder && <ArrowRight size={20} />}
+                    {!isProcessingOrder && !isSyncing && <ArrowRight size={20} />}
                   </button>
                 </div>
             </div>

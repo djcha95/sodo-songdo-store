@@ -8,13 +8,17 @@
   align-items: center;
   text-align: center;
   width: 100%;
+  /* ✅ App.tsx에서 토스트 자체의 패딩을 0으로 줬으므로,
+     여기서 내부 컨텐츠의 패딩을 직접 제어합니다. */
+  padding: 20px;
 }
 
 /* 토스트 메시지 텍스트 */
 .toast-message {
   margin: 0;
-  font-size: var(--font-size-md, 1rem); /* 글자 크기 키움 */
-  color: var(--text-color-dark, #333);
+  font-size: var(--font-size-md, 1rem);
+  /* ✅ 흰 배경에 잘 보이도록 어두운 텍스트 색상 사용 */
+  color: var(--text-color-dark, #343a40);
   line-height: 1.5;
 }
 
@@ -30,30 +34,30 @@
   flex-grow: 1; /* 버튼이 공간을 균등하게 차지 */
   border-radius: var(--border-radius-md, 8px);
   font-weight: var(--font-weight-semibold, 600);
-  font-size: var(--font-size-md, 1rem); /* 글자 크기 키움 */
-  padding: 12px 16px; /* 패딩을 키워 버튼 크기 확대 */
+  font-size: var(--font-size-md, 1rem);
+  padding: 12px 16px;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
 }
 
-/* 삭제(확인) 버튼 스타일 */
+/* ✅ 확인 버튼 스타일 (파란색 테마) */
 .toast-button-confirm {
-  background-color: var(--danger-color, #dc3545);
-  color: white;
-  border-color: var(--danger-color, #dc3545);
+  background-color: var(--primary-color, #007bff);
+  color: var(--bg-color-white, #ffffff);
+  border-color: var(--primary-color, #007bff);
 }
 
 .toast-button-confirm:hover {
-  background-color: #c82333; /* 더 진한 빨강 */
-  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.4);
+  background-color: var(--primary-color-dark, #0056b3);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.4);
 }
 
-/* 취소 버튼 스타일 */
+/* ✅ 취소 버튼 스타일 (회색 테마) */
 .toast-button-cancel {
   background-color: var(--bg-color-medium, #e9ecef);
   color: var(--text-color-medium, #495057);
-  border-color: #ced4da;
+  border-color: var(--border-color-medium, #ced4da);
 }
 
 .toast-button-cancel:hover {

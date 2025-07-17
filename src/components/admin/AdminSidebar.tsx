@@ -6,7 +6,7 @@ import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, Star, Bot,
   ClipboardList, Gift, Image as ImageIcon, MessageSquare, TestTube2,
-  ExternalLink, Menu, SlidersHorizontal
+  ExternalLink, Menu, SlidersHorizontal, Zap // ✅ Zap 아이콘 추가
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -54,7 +54,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
           <MenuItem to="/admin/dashboard" icon={<Home size={18} />} text="대시보드" isSidebarOpen={isSidebarOpen} />
 
           <MenuGroupTitle title="주문 및 고객" isSidebarOpen={isSidebarOpen} />
-          {/* ✅ [수정] 주문 통합 관리 메뉴 추가 */}
+          {/* ✅ [추가] 빠른 예약확인 메뉴 추가 */}
+          <MenuItem to="/admin/quick-check" icon={<Zap size={18} />} text="빠른 예약확인" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/orders" icon={<ShoppingCart size={18} />} text="주문 통합 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/product-arrivals" icon={<ClipboardList size={18} />} text="상품 입고 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/users" icon={<Users size={18} />} text="고객 관리" isSidebarOpen={isSidebarOpen} />

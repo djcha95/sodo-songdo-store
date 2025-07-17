@@ -6,13 +6,15 @@ import toast from 'react-hot-toast';
 import type { Product, ProductItem, CartItem, StorageType, VariantGroup, SalesRound } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById, checkProductAvailability, addWaitlistEntry } from '@/firebase/productService';
+import { getReservedQuantitiesMap } from '@/firebase/orderService';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
-  Tag, AlertCircle, Loader2
+  Tag, AlertCircle, PackageCheck
 } from 'lucide-react';
+import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
 import './ProductDetailPage.css';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
@@ -20,7 +22,6 @@ import dayjs from 'dayjs';
 
 // --- 유틸리티 및 헬퍼 함수 ---
 
-// ✅ [추가] 날짜 데이터를 안전하게 Date 객체로 변환하는 헬퍼 함수
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
@@ -36,7 +37,6 @@ const formatDateWithDay = (date: Date) => date.toLocaleDateString('ko-KR', { mon
 const storageIcons: Record<StorageType, JSX.Element> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} /> };
 const storageLabels: Record<StorageType, string> = { ROOM: '실온 보관', COLD: '냉장 보관', FROZEN: '냉동 보관' };
 
-// ✅ [수정] getLatestRoundFromHistory 함수 내에서도 safeToDate 사용
 const getLatestRoundFromHistory = (product: Product | null): SalesRound | null => {
   if (!product || !product.salesHistory || product.salesHistory.length === 0) return null;
   const sortedRounds = [...product.salesHistory]
@@ -95,16 +95,27 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [isQuantityEditing, setIsQuantityEditing] = useState(false);
   const quantityInputRef = useRef<HTMLInputElement>(null);
+  const [reservedQuantities, setReservedQuantities] = useState<Map<string, number>>(new Map());
+  const [stockLoading, setStockLoading] = useState(true);
 
   // --- 메모이제이션(useMemo) 로직 ---
-
-  // ✅ [수정] isScheduled에서 .toDate() 대신 safeToDate 사용
+  
+  const allAvailableOptions = useMemo(() => {
+    if (!displayRound) return [];
+    const options: { vg: VariantGroup, item: ProductItem, vgIndex: number, itemIndex: number }[] = [];
+    (displayRound.variantGroups || []).forEach((vg, vgIndex) => {
+      (vg.items || []).forEach((item, itemIndex) => {
+        options.push({ vg, item, vgIndex, itemIndex });
+      });
+    });
+    return options;
+  }, [displayRound]);
+  
   const isScheduled = useMemo(() => {
     const publishAtDate = safeToDate(displayRound?.publishAt);
     return displayRound?.status === 'scheduled' && publishAtDate && new Date() < publishAtDate;
   }, [displayRound]);
 
-  // ✅ [수정] showWaitlistButton에서 .toDate() 대신 safeToDate 사용 (오류 발생 지점)
   const showWaitlistButton = useMemo(() => {
     if (!displayRound) return false;
     const now = new Date();
@@ -121,24 +132,19 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const userAlreadyRequestedEncore = !!(user && product && hasRequestedEncore(product.id));
   const userAlreadyWaitlisted = useMemo(() => !!(user && displayRound?.waitlist?.some(entry => entry.userId === user.uid)), [displayRound, user]);
 
-  const allAvailableOptions = useMemo(() => {
-    if (!displayRound) return [];
-    const options: { vg: VariantGroup, item: ProductItem, vgIndex: number, itemIndex: number }[] = [];
-    (displayRound.variantGroups || []).forEach((vg, vgIndex) => {
-      (vg.items || []).forEach((item, itemIndex) => {
-        options.push({ vg, item, vgIndex, itemIndex });
-      });
-    });
-    return options;
-  }, [displayRound]);
-
   // --- 데이터 로딩 및 상태 업데이트 로직 (useEffect) ---
   useEffect(() => {
-    const fetchProductData = async () => {
+    const fetchInitialData = async () => {
       setLoading(true);
+      setStockLoading(true);
       setError(null);
+
       try {
-        const productData = await getProductById(productId);
+        const [productData, reservedQtyMap] = await Promise.all([
+          getProductById(productId),
+          getReservedQuantitiesMap()
+        ]);
+
         if (!productData) {
           setError('상품 정보를 찾을 수 없습니다.');
           return;
@@ -151,6 +157,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         }
 
         setProduct(productData);
+        setReservedQuantities(reservedQtyMap);
         setDisplayRound(latestRound);
 
         const firstVg = latestRound.variantGroups?.[0];
@@ -167,11 +174,12 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);
+        setStockLoading(false);
       }
     };
 
     if (isOpen && productId) {
-      fetchProductData();
+      fetchInitialData();
     }
   }, [isOpen, productId]);
 
@@ -179,15 +187,25 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     setCurrentTotalPrice((selectedItem?.price ?? 0) * quantity);
   }, [selectedItem, quantity]);
 
-  // ✅ [수정] checkAvailability에서 .toDate() 대신 safeToDate 사용
   useEffect(() => {
     const checkAvailability = async () => {
       if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
         setAvailableForPurchase(false);
         return;
       }
+      
+      const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
+      const reserved = reservedQuantities.get(reservedKey) || 0;
+      const totalStock = selectedVariantGroup.totalPhysicalStock;
+      
+      let isAvailableByStock = true;
+      if (totalStock !== null && totalStock !== -1) {
+        if (totalStock - reserved < (selectedItem.stockDeductionAmount || 1)) {
+           isAvailableByStock = false;
+        }
+      }
 
-      const isAvailable = await checkProductAvailability(
+      const isAvailableByStatus = await checkProductAvailability(
         product.id,
         displayRound.roundId,
         selectedVariantGroup.id,
@@ -200,9 +218,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       const createdAtDate = safeToDate(displayRound.createdAt);
       const firstRoundDeadline = createdAtDate ? dayjs(createdAtDate).add(1, 'day').set('hour', 13).set('minute', 0).set('second', 0).toDate() : null;
       
-
       let isPurchasable = false;
-      if (displayRound.status === 'selling' && isAvailable) {
+      if (displayRound.status === 'selling' && isAvailableByStock && isAvailableByStatus) {
         if (deadline && now <= deadline) {
           isPurchasable = true;
         } else if (pickupDeadline && now < pickupDeadline) {
@@ -217,7 +234,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     };
 
     checkAvailability();
-  }, [selectedVariantGroup, selectedItem, product, displayRound, showWaitlistButton]);
+  }, [selectedVariantGroup, selectedItem, product, displayRound, showWaitlistButton, reservedQuantities]);
 
   // --- 핸들러 함수들 ---
   const createQuantityUpdater = (delta: number) => () => {
@@ -251,8 +268,15 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
     if (quantity < 1) { toast.error('1개 이상 선택해주세요.'); return; }
 
-    const isAvailable = await checkProductAvailability(product.id, displayRound.roundId, selectedVariantGroup.id, selectedItem.id);
-    if (!isAvailable) { toast.error('선택하신 상품의 재고가 부족합니다.'); return; }
+    const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
+    const reserved = reservedQuantities.get(reservedKey) || 0;
+    const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
+    const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
+
+    if (quantity * (selectedItem.stockDeductionAmount || 1) > remainingStock) {
+      toast.error(`죄송합니다. 재고가 부족합니다. (현재 ${Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1) )}개 구매 가능)`);
+      return;
+    }
 
     const itemToAdd: CartItem = {
       productId: product.id,
@@ -275,7 +299,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     addToCart(itemToAdd);
     toast.success(`${product.groupName} ${quantity}개를 장바구니에 담았습니다.`);
     onClose();
-  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose]);
+  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, reservedQuantities]);
 
   const handleEncoreRequest = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
@@ -388,9 +412,9 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       );
     }
 
-    // ✅ [수정] JSX 렌더링 부분에서도 .toDate() 대신 safeToDate 사용
     const deadlineDate = safeToDate(displayRound.deadlineDate);
     const pickupDate = safeToDate(displayRound.pickupDate);
+    const isMultiGroup = displayRound.variantGroups.length > 1;
 
     return (
       <>
@@ -435,6 +459,50 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                 <div className="info-label">{storageIcons?.[product.storageType]}보관 방법</div>
                 <div className={`info-value storage-type-${product.storageType}`}>{storageLabels?.[product.storageType]}</div>
               </div>
+              {/* ✅ [수정] 잔여 수량 표시 로직 전면 수정 */}
+              <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}>
+                <div className="info-label">
+                    <PackageCheck size={16} />잔여 수량
+                </div>
+                <div className="info-value">
+                    {stockLoading ? (
+                        <span>확인중...</span>
+                    ) : (
+                      <>
+                        {!isMultiGroup ? (
+                          // 단일 상품 (variantGroup이 1개)
+                          (() => {
+                            const vg = displayRound.variantGroups[0];
+                            const totalStock = vg.totalPhysicalStock;
+                            const reservedKey = `${product.id}-${displayRound.roundId}-${vg.id}`;
+                            const reserved = reservedQuantities.get(reservedKey) || 0;
+                            const remainingStock = totalStock === null || totalStock === -1 ? Infinity : totalStock - reserved;
+                            const stockText = remainingStock === Infinity ? '수량 무제한' : `${remainingStock}개`;
+                            return <span className="stock-list-quantity single">{stockText}</span>;
+                          })()
+                        ) : (
+                          // 그룹 상품 (variantGroup이 여러 개)
+                          <div className="stock-list">
+                            {displayRound.variantGroups.map(vg => {
+                                const totalStock = vg.totalPhysicalStock;
+                                const reservedKey = `${product.id}-${displayRound.roundId}-${vg.id}`;
+                                const reserved = reservedQuantities.get(reservedKey) || 0;
+                                const remainingStock = totalStock === null || totalStock === -1 ? Infinity : totalStock - reserved;
+                                const stockText = remainingStock === Infinity ? '수량 무제한' : `${remainingStock}개`;
+
+                                return (
+                                    <div key={vg.id} className="stock-list-item">
+                                        <span className="stock-list-name">{vg.groupName}</span>
+                                        <span className="stock-list-quantity">{stockText}</span>
+                                    </div>
+                                );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -449,19 +517,27 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         <div className="modal-scroll-area">
           {renderContent()}
         </div>
-        {displayRound && (
+        {product && displayRound && (
           <div className="product-purchase-footer">
-            {allAvailableOptions.length > 0 && (
+            {allAvailableOptions.length > 1 && (
               <div className="select-wrapper">
                 <select className="price-select" onChange={handleOptionChange} value={allAvailableOptions.findIndex(opt => opt.item.id === selectedItem?.id)}>
-                  {allAvailableOptions.map((opt, index) => (
-                    <option key={`${opt.vg.id}-${opt.item.id}-${index}`} value={index}>
-                      {opt.vg.groupName} - {opt.item.name} ({formatPrice(opt.item.price)})
-                    </option>
-                  ))}
+                  {allAvailableOptions.map((opt, index) => {
+                    const isSingleVg = displayRound.variantGroups.length === 1;
+                    const optionText = isSingleVg 
+                      ? `${opt.item.name} (${formatPrice(opt.item.price)})`
+                      : `${opt.vg.groupName} - ${opt.item.name} (${formatPrice(opt.item.price)})`;
+
+                    return (
+                      <option key={`${opt.vg.id}-${opt.item.id}-${index}`} value={index}>
+                        {optionText}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
+            
             <div className="purchase-action-row">
               {(availableForPurchase || showWaitlistButton) ? (
                 <>
@@ -490,13 +566,13 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                     </button>
                   ) : (
                     <button className="waitlist-btn-fixed" onClick={handleAddToWaitlist} disabled={userAlreadyWaitlisted || waitlistLoading}>
-                      {waitlistLoading ? <Loader2 className="spinner-icon-small" /> : userAlreadyWaitlisted ? '대기 완료' : '대기 신청'}
+                      {waitlistLoading ? <InlineSodamallLoader /> : userAlreadyWaitlisted ? '대기 완료' : '대기 신청'}
                     </button>
                   )}
                 </>
               ) : showEncoreRequestButton ? (
                 <button className="encore-request-btn-fixed" onClick={handleEncoreRequest} disabled={userAlreadyRequestedEncore || encoreLoading}>
-                  {encoreLoading ? <Loader2 className="spinner-icon-small" /> : userAlreadyRequestedEncore ? '요청 완료' : '앵콜 요청'}
+                  {encoreLoading ? <InlineSodamallLoader /> : userAlreadyRequestedEncore ? '요청 완료' : '앵콜 요청'}
                 </button>
               ) : (
                 <button className="sold-out-btn-fixed" disabled>

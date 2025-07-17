@@ -1,0 +1,369 @@
+/* src/pages/admin/QuickCheckPage.css */
+
+.quick-check-page {
+  padding: 1rem; /* 기본 패딩 (모바일 우선) */
+  max-width: 100%;
+  margin: 0 auto;
+  /* ✅ 카드 영역이 불필요하게 늘어나는 것을 방지하기 위해 flex 관련 속성 제거 */
+  /* display: flex; */
+  /* flex-direction: column; */
+  /* min-height: 100vh; */
+}
+
+@media (min-width: 768px) {
+  .quick-check-page {
+    padding: 2rem; /* 데스크톱에서 패딩 증가 */
+  }
+}
+
+.qcp-header h1 {
+  font-size: 2.25rem; /* 기본 폰트 크기 */
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+  color: #343a40;
+}
+
+/* ✅ [수정] 검색창을 감싸는 컨테이너를 추가하여 중앙 정렬 */
+.qcp-search-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.qcp-search-form {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center; /* 내부 아이템들도 중앙 정렬 */
+  width: 100%; /* 컨테이너 너비에 맞춤 */
+  max-width: 800px; /* 검색 폼의 최대 너비 제한 (선택 사항) */
+}
+
+.qcp-filter-wrapper,
+.qcp-input-wrapper,
+.qcp-search-button {
+  flex-shrink: 0;
+}
+
+.qcp-input-wrapper {
+  max-width: 350px;
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.qcp-filter-wrapper {
+  background-color: #fff;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-md);
+  padding-left: var(--spacing-sm);
+  color: var(--text-color-light);
+}
+
+.qcp-filter-icon {
+  color: var(--text-color-regular);
+}
+
+.qcp-filter-select {
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) var(--spacing-xs);
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  flex-grow: 1;
+}
+
+
+.qcp-input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-color-light);
+}
+
+.qcp-input {
+  width: 100%;
+  padding: 10px 10px 10px 35px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color-light);
+  font-size: 0.9rem;
+}
+
+.qcp-clear-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-color-light);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.qcp-clear-icon:hover {
+  color: var(--text-color-dark);
+}
+
+.qcp-search-button {
+  padding: 10px var(--spacing-md);
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+
+@media (min-width: 768px) {
+  .qcp-search-form {
+    flex-wrap: nowrap;
+    justify-content: center;
+  }
+  .qcp-input-wrapper {
+    width: auto;
+    min-width: 350px;
+  }
+}
+
+.qcp-name-selector {
+  background-color: var(--primary-color-light);
+  border: 1px solid var(--primary-color-dark);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  text-align: center;
+}
+
+.qcp-name-selector h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.qcp-name-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.qcp-name-buttons button {
+  background-color: #fff;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius-full);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.8rem;
+}
+
+.qcp-name-buttons button:hover,
+.qcp-name-buttons button.active {
+  background-color: var(--primary-color);
+  color: #fff;
+  /* transform: scale(1.05);  ✅ 제거 */
+}
+
+.qcp-results-summary {
+  text-align: center;
+  margin-bottom: var(--spacing-md);
+  color: var(--text-color-regular);
+  font-size: 0.9rem;
+}
+
+/* ✅ [수정] 카드 그리드를 감싸서 중앙 정렬을 담당하는 컨테이너 */
+.qcp-results-container {
+  display: flex;
+  justify-content: center;
+}
+
+.qcp-results-grid {
+  /* ✅ [수정] flex 레이아웃으로 변경하고 중앙 정렬 */
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap; /* 필요에 따라 줄바꿈 허용 */
+  gap: var(--spacing-sm);
+  padding-bottom: 120px; /* 푸터 높이를 고려한 여백 */
+  max-width: 100%; /* 부모 컨테이너를 넘어가지 않도록 설정 */
+  /* ✅ 추가: 초기 상태를 위한 스타일 (애니메이션 시작) */
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+/* ✅ 추가: 로딩 또는 검색 완료 후 나타나는 스타일 */
+.qcp-results-grid.loaded {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (min-width: 600px) {
+  .qcp-results-grid {
+    gap: var(--spacing-md);
+  }
+  .qcp-header h1 {
+    font-size: 2.2rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .qcp-results-grid {
+    gap: var(--spacing-lg);
+  }
+  .qcp-header h1 {
+    font-size: 2.5rem;
+  }
+}
+
+/* ✅ [수정] 필터링 후 결과가 없을 때 표시되는 메시지 스타일 */
+.qcp-no-results {
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--text-color-regular);
+  font-size: 1rem;
+  /* 그리드 내에서 모든 컬럼을 차지하도록 설정 */
+  /* grid-column: 1 / -1; ✅ flex 레이아웃에서는 필요 없음 */
+  width: 100%; /* 중앙 정렬을 위해 필요할 수 있음 */
+}
+
+/* Footer Styles */
+.qcp-footer {
+  /* ✅ [핵심 수정] position: fixed로 변경하여 항상 화면 하단에 고정 */
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  /* 사이드바 너비 변수를 사용하여 왼쪽 위치를 동적으로 설정 */
+  left: var(--admin-sidebar-width, 250px); /* 기본 250px */
+  z-index: 1000;
+
+  background-color: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-lg);
+
+  /* 사이드바 상태 변화에 맞춰 부드럽게 움직이도록 transition 추가 */
+  transition: left 0.3s ease-in-out;
+}
+
+/* ✅ [핵심 수정] AdminLayout 컴포넌트에 .sidebar-collapsed 클래스가 추가되면, 이 스타일이 적용됩니다. */
+/* 이 클래스는 부모 컴포넌트인 AdminLayout.tsx의 Root div에 적용되어야 합니다. */
+.sidebar-collapsed .qcp-footer {
+  left: var(--admin-sidebar-collapsed-width, 70px); /* 70px로 변경 */
+}
+
+
+.qcp-footer-summary {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-color-dark);
+  white-space: nowrap;
+}
+
+.qcp-footer-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-direction: row;
+  justify-content: flex-end;
+  flex-grow: 1;
+}
+
+.qcp-footer-actions button {
+  flex-grow: 1;
+  max-width: 150px;
+  padding: 12px 16px;
+  font-size: 1rem;
+  border-radius: var(--border-radius-md);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  transition: all 0.2s ease;
+}
+
+/* 모바일 화면 조정 */
+@media (max-width: 768px) {
+    .qcp-footer {
+        position: fixed; /* 모바일에서도 fixed 유지 */
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-md); /* 모바일 푸터 패딩 */
+    }
+    /* 모바일에서는 사이드바 collapsed 상태와 관계없이 left 0 */
+    .sidebar-collapsed .qcp-footer {
+        left: 0;
+    }
+    .qcp-footer-summary {
+        text-align: center;
+    }
+    .qcp-footer-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .qcp-results-grid {
+        padding-bottom: 140px; /* 모바일 푸터 높이 고려 */
+    }
+}
+
+/* 버튼 색상 스타일 (이전과 동일) */
+.action-pickup {
+  background-color: #0d6efd;
+  color: white;
+}
+
+.action-prepaid {
+  background-color: #ffc107;
+  color: white;
+}
+
+.action-noshow {
+  background-color: #dc3545;
+  color: white;
+}
+
+.action-delete {
+  background-color: #212529;
+  color: white;
+}
+
+.action-cancel-pickup,
+.action-cancel-prepaid,
+.action-cancel-noshow {
+  font-weight: bold;
+}
+
+.action-cancel-pickup {
+  background-color: #0a58ca;
+  color: white;
+}
+
+.action-cancel-prepaid {
+  background-color: #e0a800;
+  color: white;
+}
+
+.action-cancel-noshow {
+  background-color: #bb2d3b;
+  color: white;
+}

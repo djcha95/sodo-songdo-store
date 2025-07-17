@@ -3,32 +3,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // products, banners, categories 등 공개 정보는 누구나 읽을 수 있습니다.
-    // (단, 쓰기는 아무나 할 수 없도록 막아서 데이터를 보호합니다.)
+    // [함수] 요청을 보낸 사용자가 관리자인지 확인하는 함수
+    function isAdmin() {
+      // users 컬렉션에서 현재 로그인한 사용자의 문서를 가져와
+      // role 필드가 'admin'인지 확인합니다.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // --- 공개 정보 (누구나 읽기 가능, 쓰기는 관리자만) ---
     match /products/{productId} {
       allow read: if true;
-      allow write: if request.auth != null; // 로그인한 사용자는 상품 추가/수정 가능
+      allow write: if isAdmin();
     }
     match /banners/{bannerId} {
       allow read: if true;
-      allow write: if request.auth != null; // 로그인한 사용자는 배너 추가/수정 가능
+      allow write: if isAdmin();
     }
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
-    // 사용자는 자신의 정보(users/{userId})만 읽고 쓸 수 있습니다.
-    match /users/{userId}/{documents=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // ✅ [최종 수정] 실제 코드에서 사용하는 'storeInfo' 컬렉션에 대한 규칙
+    // 이 규칙이 일치하지 않아 권한 오류가 발생했습니다.
+    match /storeInfo/{docId} {
+      allow read: if true;        // 누구나 매장 정보를 읽을 수 있습니다.
+      allow write: if isAdmin();   // 관리자만 수정할 수 있습니다.
     }
 
-    // 주문은 생성한 사용자 본인만 읽거나 생성할 수 있습니다.
+
+    // --- 사용자 정보 ---
+    // 관리자: 모든 사용자 목록/정보 보거나 수정 가능
+    // 일반 사용자: 자신의 정보만 보거나 수정 가능
+    match /users/{userId} {
+      allow get: if request.auth.uid == userId || isAdmin();
+      allow list: if isAdmin();
+      allow update, create: if request.auth.uid == userId || isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /users/{userId}/{subcollection}/{docId} {
+      allow read, write: if request.auth.uid == userId || isAdmin();
+    }
+
+
+    // --- 주문 정보 ---
+    // 관리자: 모든 주문 목록/정보 보거나 수정 가능
+    // 일반 사용자: 자신의 주문만 보거나 생성 가능
     match /orders/{orderId} {
-      allow read: if request.auth.uid == resource.data.userId;
+      allow get: if request.auth.uid == resource.data.userId || isAdmin();
+      allow list: if isAdmin();
       allow create: if request.auth.uid == request.resource.data.userId;
-      // 수정/삭제는 더 복잡한 규칙이 필요하므로 일단 막습니다.
-      allow update, delete: if false;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

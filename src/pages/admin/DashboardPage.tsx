@@ -1,26 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+// ✅ [수정] SodamallLoader를 사용합니다.
+import SodamallLoader from '@/components/common/SodamallLoader';
 import toast from 'react-hot-toast';
 import { TrendingUp, SaveAll } from 'lucide-react';
 import './DashboardPage.css';
 
 interface EnrichedGroupItem {
-  id: string; 
+  id: string;
   productId: string;
   productName: string;
   roundId: string;
   roundName: string;
   variantGroupId: string;
   variantGroupName: string;
-  uploadDate: string; 
+  uploadDate: string;
   reservedQuantity: number;
   waitlistedQuantity: number;
-  configuredStock: number; 
+  configuredStock: number;
 }
 
 const formatDate = (date: Date): string => {
@@ -31,7 +32,7 @@ const formatDate = (date: Date): string => {
 };
 
 const DashboardPage: React.FC = () => {
-   useDocumentTitle('대시보드'); // ✅ [추가]
+   useDocumentTitle('대시보드');
   const [loading, setLoading] = useState(true);
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
@@ -57,12 +58,12 @@ const DashboardPage: React.FC = () => {
       const allDisplayItems: EnrichedGroupItem[] = [];
       products.forEach((product: Product) => {
         const uploadDate = product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
-        
+
         product.salesHistory?.forEach((round: SalesRound) => {
           round.variantGroups?.forEach((vg: VariantGroup) => {
             const groupId = vg.id || `${product.id}-${round.roundId}-${vg.groupName}`;
             const groupKey = `${product.id}-${round.roundId}-${groupId}`;
-            
+
             const groupStock = vg.totalPhysicalStock ?? -1;
             const hasGroupStock = groupStock !== -1;
             const representativeItemStock = vg.items?.[0]?.stock ?? -1;
@@ -107,7 +108,7 @@ const DashboardPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
-  
+
   const sortedDateKeys = useMemo(() => {
     return Object.keys(groupedItems).sort((a, b) => b.localeCompare(a));
   }, [groupedItems]);
@@ -126,13 +127,13 @@ const DashboardPage: React.FC = () => {
       .map(([itemId, newStockValue]) => {
         const item = Object.values(groupedItems).flat().find(i => i.id === itemId);
         if (!item || newStockValue.trim() === '') return null;
-        
+
         const newStock = parseInt(newStockValue, 10);
         if (isNaN(newStock)) {
           toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
           return 'invalid';
         }
-        
+
         return {
           productId: item.productId,
           roundId: item.roundId,
@@ -161,7 +162,8 @@ const DashboardPage: React.FC = () => {
     fetchData();
   };
 
-  if (loading) return <LoadingSpinner />;
+  // ✅ [수정] 페이지 로딩 시 SodamallLoader를 사용합니다.
+  if (loading) return <SodamallLoader />;
 
   return (
     <div className="dashboard-container">
@@ -170,8 +172,8 @@ const DashboardPage: React.FC = () => {
           <TrendingUp size={28} />
           <h1>통합 판매 현황 대시보드</h1>
         </div>
-        <button 
-          className="bulk-save-button" 
+        <button
+          className="bulk-save-button"
           onClick={handleBulkSave}
           disabled={Object.keys(stockInputs).length === 0}
         >
@@ -201,8 +203,8 @@ const DashboardPage: React.FC = () => {
                 <tbody>
                   {groupedItems[date].map((item, index) => {
                     const remainingStock = item.configuredStock === -1 ? -1 : item.configuredStock - item.reservedQuantity;
-                    const displayName = item.productName === item.variantGroupName 
-                      ? item.productName 
+                    const displayName = item.productName === item.variantGroupName
+                      ? item.productName
                       : `${item.productName} - ${item.variantGroupName}`;
 
                     return (
@@ -213,13 +215,13 @@ const DashboardPage: React.FC = () => {
                         <td className="quantity-cell">{item.reservedQuantity}</td>
                         <td className="quantity-cell">{item.waitlistedQuantity}</td>
                         <td className="quantity-cell important-cell">
-                          {remainingStock === -1 
-                            ? <span className="unlimited-stock">무제한</span> 
+                          {remainingStock === -1
+                            ? <span className="unlimited-stock">무제한</span>
                             : `${remainingStock}`}
                         </td>
                         <td className="quantity-cell">
-                          {item.configuredStock === -1 
-                            ? <span className="unlimited-stock">무제한</span> 
+                          {item.configuredStock === -1
+                            ? <span className="unlimited-stock">무제한</span>
                             : `${item.configuredStock}`}
                         </td>
                         <td>

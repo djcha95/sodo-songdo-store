@@ -9,4 +9,9 @@
 
 .customer-main-content {
   flex-grow: 1;
+  
+  /* ✅ [수정] 자식 컴포넌트(페이지)가 높이 100%를 올바르게 계산하도록 
+     main 영역 자체를 flex 컨테이너로 만듭니다. */
+  display: flex;
+  flex-direction: column;
 }

@@ -2,20 +2,19 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { useNavigate, useLocation, Link } from 'react-router-dom'; // Link 추가
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
-// ✅ [추가] searchProductsByName 함수 import
 import { addProductWithFirstRound, addNewSalesRound, getCategories, searchProductsByName } from '../../firebase';
 import type { Category, StorageType, SalesRound, Product, VariantGroup, ProductItem, SalesRoundStatus } from '../../types';
 import toast from 'react-hot-toast';
-// ✅ [추가] AlertTriangle 아이콘 import
-import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle } from 'lucide-react';
+// ✅ [수정] Loader2 아이콘을 import합니다.
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
 import SodamallLoader from '@/components/common/SodamallLoader';
 import './ProductAddAdminPage.css';
 
-// ... (기존 UI 타입 및 헬퍼 함수는 그대로 유지) ...
+// --- UI 타입 및 헬퍼 함수 ---
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
 interface VariantGroupUI { id:string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
 
@@ -35,7 +34,7 @@ const getSmartDeadline = (): Date => {
     const deadline = new Date(now);
     deadline.setHours(13, 0, 0, 0);
     const dayOfWeek = now.getDay();
-    if (dayOfWeek === 6) { deadline.setDate(now.getDate() + 2); } 
+    if (dayOfWeek === 6) { deadline.setDate(now.getDate() + 2); }
     else { deadline.setDate(now.getDate() + 1); }
     return deadline;
 };
@@ -48,18 +47,17 @@ const ProductAddAdminPage: React.FC = () => {
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // ... (기존 상태들) ...
     const [mode, setMode] = useState<'newProduct' | 'newRound'>('newProduct');
     const [productType, setProductType] = useState<'single' | 'group'>('single');
     const [existingProductId, setExistingProductId] = useState<string | null>(null);
     const [pageTitle, setPageTitle] = useState('신규 대표 상품 등록');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
-    
+
     const [groupName, setGroupName] = useState('');
     const [description, setDescription] = useState('');
     const [selectedMainCategory, setSelectedMainCategory] = useState('');
-    
+
     const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -72,11 +70,9 @@ const ProductAddAdminPage: React.FC = () => {
     const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
 
 
-    // ✅ [추가] 중복 상품 검사 관련 상태
     const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
     const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
-    // ... (기존 useEffect 들) ...
     useEffect(() => {
         const { productId, productGroupName, lastRound } = location.state || {};
         if (productId) {
@@ -96,9 +92,9 @@ const ProductAddAdminPage: React.FC = () => {
 
     useEffect(() => { if (mode === 'newProduct' && variantGroups.length === 0) { setVariantGroups([{ id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); } }, [mode, variantGroups.length]);
     useEffect(() => { (async () => { try { setCategories(await getCategories()); } catch (err) { toast.error("카테고리 정보를 불러오는 데 실패했습니다."); } })(); }, []);
-    
+
     useEffect(() => { if (mode === 'newProduct' && productType === 'single') { setVariantGroups(prev => prev.length > 0 ? [{ ...prev[0], groupName: groupName }] : prev); } }, [groupName, productType, mode]);
-    
+
     useEffect(() => {
         if (!pickupDay) { setPickupDeadlineDate(null); return; }
         const newPickupDeadline = new Date(pickupDay);
@@ -107,16 +103,14 @@ const ProductAddAdminPage: React.FC = () => {
     }, [pickupDay, selectedStorageType]);
 
 
-    // ✅ [추가] 상품명 변경 시 디바운싱을 적용하여 중복 검사 실행
     useEffect(() => {
-        // 새 상품 등록 모드가 아니거나, 상품명이 비어있으면 검사하지 않음
         if (mode !== 'newProduct' || !groupName.trim()) {
             setSimilarProducts([]);
             return;
         }
 
-        setIsCheckingDuplicates(true);
         const handler = setTimeout(async () => {
+            setIsCheckingDuplicates(true);
             try {
                 const results = await searchProductsByName(groupName.trim());
                 setSimilarProducts(results);
@@ -126,7 +120,7 @@ const ProductAddAdminPage: React.FC = () => {
             } finally {
                 setIsCheckingDuplicates(false);
             }
-        }, 500); // 500ms 디바운스
+        }, 500);
 
         return () => {
             clearTimeout(handler);
@@ -134,7 +128,6 @@ const ProductAddAdminPage: React.FC = () => {
     }, [groupName, mode]);
 
 
-    // ... (기존 함수들) ...
     const onDragEnd = (result: DropResult) => {
         if (!result.destination) {
             return;
@@ -170,7 +163,7 @@ const ProductAddAdminPage: React.FC = () => {
             totalPhysicalStock: vg.totalPhysicalStock === '' ? null : Number(vg.totalPhysicalStock),
             stockUnitType: vg.stockUnitType,
             items: vg.items.map(item => ({
-                id: generateUniqueId(), name: item.name, price: Number(item.price) || 0, stock: -1, 
+                id: generateUniqueId(), name: item.name, price: Number(item.price) || 0, stock: -1,
                 limitQuantity: item.limitQuantity === '' ? null : Number(item.limitQuantity),
                 expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
                 stockDeductionAmount: Number(item.deductionAmount) || 1,
@@ -185,9 +178,9 @@ const ProductAddAdminPage: React.FC = () => {
     });
 
     const handleSubmit = async (isDraft: boolean = false) => {
-        if (!isDraft) { 
-            if (mode === 'newProduct' && imageFiles.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; } 
-            if (!deadlineDate || !pickupDay || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; } 
+        if (!isDraft) {
+            if (mode === 'newProduct' && imageFiles.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; }
+            if (!deadlineDate || !pickupDay || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; }
         }
         setIsSubmitting(true);
         const submissionPromise = new Promise<void>(async (resolve, reject) => {
@@ -198,7 +191,7 @@ const ProductAddAdminPage: React.FC = () => {
                 if (mode === 'newProduct') {
                     const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = {
                         groupName: finalGroupName.trim(), description: description.trim(), storageType: selectedStorageType,
-                        category: categories.find(c => c.id === selectedMainCategory)?.name || '', 
+                        category: categories.find(c => c.id === selectedMainCategory)?.name || '',
                         encoreCount: 0, encoreRequesterIds: [],
                     };
                     await addProductWithFirstRound(productData, salesRoundToSave, imageFiles);
@@ -218,7 +211,7 @@ const ProductAddAdminPage: React.FC = () => {
             error: (err) => { setIsSubmitting(false); return `저장 실패: ${(err as Error).message}`; }
         });
     };
- 
+
     return (
         <div className="product-add-page-wrapper smart-form">
             <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
@@ -236,13 +229,17 @@ const ProductAddAdminPage: React.FC = () => {
                     <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
                         <p className="section-subtitle">상품의 기본 정보와 첫 판매 회차 이름을 설정합니다.</p>
-                        
-                        {/* ✅ [수정] 대표 상품명 입력 필드에 중복 검사 UI 추가 */}
+
                         <div className="form-group with-validation">
                             <label>대표 상품명 *</label>
                             <div className="input-wrapper">
                                 <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required disabled={mode === 'newRound'} />
-                                {isCheckingDuplicates && <div className="spinner"></div>}
+                                {/* ✅ [수정] 입력창 옆에 작은 아이콘 로더를 표시합니다. */}
+                                {isCheckingDuplicates && (
+                                    <div className="input-spinner-wrapper">
+                                        <Loader2 className="spinner-icon" />
+                                    </div>
+                                )}
                             </div>
                             {similarProducts.length > 0 && (
                                 <div className="similar-products-warning">
@@ -262,7 +259,7 @@ const ProductAddAdminPage: React.FC = () => {
                         <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
                         <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
                         {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
-                        
+
                         <div className="form-group">
                             <label>대표 이미지 *</label>
                             <DragDropContext onDragEnd={onDragEnd}>
@@ -288,7 +285,6 @@ const ProductAddAdminPage: React.FC = () => {
                             </DragDropContext>
                         </div>
                     </div>
-                    {/* ... (나머지 JSX는 그대로 유지) ... */}
                     <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Box size={20} className="icon-color-option"/><h3>판매 옵션 설정 *</h3></div></div><p className="section-subtitle">실제 판매될 상품의 옵션과 가격, 재고 등을 설정합니다.</p>
                         {variantGroups.map(vg => (

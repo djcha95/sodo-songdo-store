@@ -20,6 +20,8 @@ import {
   CreditCard,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+// ✅ [추가] InlineSodamallLoader import
+import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
 import './OrderHistoryPage.css';
 
 // =================================================================
@@ -338,7 +340,8 @@ const OrderHistoryPage: React.FC = () => {
     if (loading)
       return (
         <div className="loading-spinner-container">
-          <div className="loading-spinner"></div>
+          {/* ✅ [수정] 로딩 시 InlineSodamallLoader 사용 */}
+          <InlineSodamallLoader />
         </div>
       );
     if (error) return <div className="error-message">{error}</div>;

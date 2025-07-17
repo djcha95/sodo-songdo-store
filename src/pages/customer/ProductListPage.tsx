@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getProducts, getActiveBanners } from '@/firebase';
 import type { Product, Banner, SalesRound } from '@/types';
-import { Timestamp } from 'firebase/firestore'; // Timestamp 타입을 명시적으로 가져옵니다.
+import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+// ✅ [수정] SodamallLoader import
+import SodamallLoader from '@/components/common/SodamallLoader';
 import ProductSection from '@/components//customer/ProductSection';
 import BannerSlider from '@/components/common/BannerSlider';
 import ProductCard from '@/components/customer/ProductCard';
@@ -217,7 +218,8 @@ const ProductListPage: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [ongoingProducts]);
 
-  if (loading) return <LoadingSpinner />;
+  // ✅ [수정] 페이지 전체 로딩 시 SodamallLoader 사용
+  if (loading) return <SodamallLoader />;
 
   return (
     <div className="customer-page-container">
