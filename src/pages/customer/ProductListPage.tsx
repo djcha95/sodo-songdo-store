@@ -1,88 +1,60 @@
 // src/pages/customer/ProductListPage.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getProducts, getActiveBanners } from '@/firebase';
+import { getProducts, getActiveBanners, getReservedQuantitiesMap } from '@/firebase';
 import type { Product, Banner, SalesRound } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-// ✅ [수정] SodamallLoader import
 import SodamallLoader from '@/components/common/SodamallLoader';
-import ProductSection from '@/components//customer/ProductSection';
+import ProductSection from '@/components/customer/ProductSection';
 import BannerSlider from '@/components/common/BannerSlider';
 import ProductCard from '@/components/customer/ProductCard';
 import dayjs from 'dayjs';
+import 'dayjs/locale/ko';
+import isBetween from 'dayjs/plugin/isBetween';
+import { PackageSearch } from 'lucide-react';
 
 import './ProductListPage.css';
 import '@/styles/common.css';
 
-// ✅ [FIX] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수
+dayjs.extend(isBetween);
+
 const safeToDate = (date: any): Date | null => {
-  if (!date) {
-    return null;
+  if (!date) return null;
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
   }
-  // 1. 이미 JavaScript Date 객체인 경우
-  if (date instanceof Date) {
-    return date;
-  }
-  // 2. Firestore Timestamp 객체인 경우
-  if (typeof date.toDate === 'function') {
-    return date.toDate();
-  }
-  // 3. JSON.stringify를 통해 변환된 객체인 경우 (e.g., { seconds: ..., nanoseconds: ... })
-  if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
-    return new Timestamp(date.seconds, date.nanoseconds).toDate();
-  }
-  // 4. 날짜 형식의 문자열인 경우
-  if (typeof date === 'string') {
-    const parsedDate = new Date(date);
-    if (!isNaN(parsedDate.getTime())) {
-      return parsedDate;
-    }
-  }
-  // 그 외의 경우, 변환 실패
-  console.warn("Unsupported date format:", date);
   return null;
 };
-
 
 const getDisplayRound = (product: Product): SalesRound | null => {
-  if (!product.salesHistory || product.salesHistory.length === 0) {
-    return null;
-  }
-  const activeRounds = product.salesHistory.filter((r: SalesRound) => r.status === 'selling' || r.status === 'scheduled');
-  if (activeRounds.length > 0) {
-    // ✅ [FIX] 날짜 비교 시 safeToDate 헬퍼 함수 사용
-    return activeRounds.sort((a: SalesRound, b: SalesRound) => {
-        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
-        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
-        return dateA - dateB;
-    })[0];
-  }
-  const nonDraftRounds = product.salesHistory.filter((r: SalesRound) => r.status !== 'draft');
-  if (nonDraftRounds.length > 0) {
-    // ✅ [FIX] 날짜 비교 시 safeToDate 헬퍼 함수 사용
-    return nonDraftRounds.sort((a: SalesRound, b: SalesRound) => {
-        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
-        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
-        return dateA - dateB;
-    })[0];
-  }
-  return null;
+    if (!product.salesHistory || product.salesHistory.length === 0) return null;
+    const sellingRound = product.salesHistory.find(r => r.status === 'selling');
+    if (sellingRound) return sellingRound;
+    
+    const now = new Date();
+    const futureScheduledRounds = product.salesHistory
+      .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! > now)
+      .sort((a, b) => safeToDate(a.publishAt)!.getTime() - safeToDate(b.publishAt)!.getTime());
+    if (futureScheduledRounds.length > 0) return futureScheduledRounds[0];
+  
+    const pastRounds = product.salesHistory
+      .filter(r => r.status === 'ended' || r.status === 'sold_out')
+      .sort((a, b) => safeToDate(b.deadlineDate)!.getTime() - safeToDate(a.deadlineDate)!.getTime());
+    if (pastRounds.length > 0) return pastRounds[0];
+    
+    const nonDraftRounds = product.salesHistory
+      .filter(r => r.status !== 'draft')
+      .sort((a,b) => safeToDate(b.createdAt)!.getTime() - safeToDate(a.createdAt)!.getTime());
+  
+    return nonDraftRounds[0] || null;
 };
 
-const getTotalStock = (round: SalesRound | null): number => {
-  if (!round) return 0;
-  return round.variantGroups?.reduce((acc, vg) => {
-    if (vg.totalPhysicalStock != null && vg.totalPhysicalStock !== -1) {
-      return acc + vg.totalPhysicalStock;
-    }
-    const itemsStock = vg.items?.reduce((itemAcc, item) => itemAcc + (item.stock === -1 ? Infinity : (item.stock || 0)), 0) || 0;
-    return acc + itemsStock;
-  }, 0) ?? 0;
-};
-
-const getRepresentativePrice = (round: SalesRound | null): number => {
-  return round?.variantGroups?.[0]?.items?.[0]?.price ?? 0;
+const isLimitedStock = (round: SalesRound): boolean => {
+    if (!round.variantGroups || round.variantGroups.length === 0) return false;
+    return round.variantGroups.some(vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1);
 };
 
 
@@ -91,17 +63,21 @@ const ProductListPage: React.FC = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
       try {
-        const fetchedProducts = await getProducts(false);
-        const activeBanners = await getActiveBanners();
+        const [fetchedProducts, activeBanners, reservedMap] = await Promise.all([
+          getProducts(false),
+          getActiveBanners(),
+          getReservedQuantitiesMap()
+        ]);
         setProducts(fetchedProducts);
         setBanners(activeBanners);
+        setReservedQuantitiesMap(reservedMap);
       } catch (error) {
-        console.error("데이터 로딩 중 오류 발생:", error);
         toast.error("데이터를 불러오는 중 문제가 발생했습니다.");
       } finally {
         setLoading(false);
@@ -110,141 +86,147 @@ const ProductListPage: React.FC = () => {
     fetchInitialData();
   }, []);
 
-  const { ongoingProducts, additionalProducts, visiblePastProducts } = useMemo(() => {
+  const { todaysProducts, closingSoonProducts, otherActiveProducts, pastProductsByDate } = useMemo(() => {
     const now = dayjs();
-    const tempOngoing: Product[] = [];
-    const tempAdditional: Product[] = [];
+    const todayStart = now.startOf('day');
+    const todayEnd = now.endOf('day');
+    
+    const tempTodays: Product[] = [];
+    const tempClosingSoon: Product[] = [];
+    const tempOthers: Product[] = [];
     const tempPast: Product[] = [];
 
     products.forEach(product => {
       const round = getDisplayRound(product);
-      if (!round) return;
-
-      // ✅ [FIX] .toDate() 대신 safeToDate 헬퍼 함수 사용
-      const deadlineDate = safeToDate(round.deadlineDate);
-      const pickupDate = safeToDate(round.pickupDate);
-
-      // 날짜 변환 실패 시 해당 상품은 처리하지 않음
-      if (!deadlineDate || !pickupDate) return;
-
-      const deadline = dayjs(deadlineDate);
-      const finalPickupDeadline = dayjs(pickupDate).hour(13).minute(0).second(0);
+      if (!round || round.status === 'draft' || round.status === 'scheduled') return;
       
-      const isTerminalStatus = round.status === 'ended' || round.status === 'sold_out';
-      if (isTerminalStatus || now.isAfter(finalPickupDeadline)) {
+      const createdAt = safeToDate(round.createdAt);
+      const pickupDate = safeToDate(round.pickupDate);
+      if (!createdAt || !pickupDate) return;
+
+      const firstDeadline = dayjs(createdAt).add(1, 'day').hour(13).minute(0).second(0);
+      const finalDeadline = dayjs(pickupDate).hour(13).minute(0).second(0);
+
+      if (now.isAfter(finalDeadline)) {
         tempPast.push(product);
-        return;
-      }
-      
-      if (now.isBefore(deadline)) {
-        tempOngoing.push(product);
+      } else if (dayjs(createdAt).isBetween(todayStart, todayEnd, null, '[]')) {
+        tempTodays.push(product);
+      } else if (now.isAfter(firstDeadline) && isLimitedStock(round)) {
+        tempClosingSoon.push(product);
       } else {
-        tempAdditional.push(product);
+        tempOthers.push(product);
       }
     });
     
-    tempOngoing.sort((a, b) => {
-      const roundA = getDisplayRound(a);
-      const roundB = getDisplayRound(b);
-
-      const stockA = getTotalStock(roundA);
-      const stockB = getTotalStock(roundB);
-
-      const isWaitlistA = stockA === 0;
-      const isWaitlistB = stockB === 0;
-
-      if (isWaitlistA && !isWaitlistB) return 1;
-      if (!isWaitlistA && isWaitlistB) return -1;
-
-      if (stockA !== stockB) {
-        return stockA - stockB;
-      }
-
-      const priceA = getRepresentativePrice(roundA);
-      const priceB = getRepresentativePrice(roundB);
-      return priceB - priceA;
+    tempClosingSoon.sort((a, b) => {
+        const arrivalA = safeToDate(getDisplayRound(a)?.arrivalDate)?.getTime() || Infinity;
+        const arrivalB = safeToDate(getDisplayRound(b)?.arrivalDate)?.getTime() || Infinity;
+        return arrivalA - arrivalB;
     });
 
-
-    tempAdditional.sort((a, b) => {
-        const dateA = safeToDate(getDisplayRound(a)?.pickupDate)?.getTime() || 0;
-        const dateB = safeToDate(getDisplayRound(b)?.pickupDate)?.getTime() || 0;
-        return dateA - dateB;
+    const pastGroups: { [key: string]: Product[] } = {};
+    tempPast.forEach(p => {
+        const round = getDisplayRound(p);
+        const uploadDate = safeToDate(round?.createdAt);
+        if (uploadDate) {
+            const dateKey = dayjs(uploadDate).format('YYYY-MM-DD');
+            if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
+            pastGroups[dateKey].push(p);
+        }
     });
     
-    const oneWeekAgo = dayjs().subtract(7, 'day');
-    const filteredPast = tempPast.filter(product => {
-      const round = getDisplayRound(product);
-      if (!round) return false;
-      // ✅ [FIX] .toDate() 대신 safeToDate 헬퍼 함수 사용
-      const pickupDate = safeToDate(round.pickupDate);
-      return pickupDate ? dayjs(pickupDate).isAfter(oneWeekAgo) : false;
-    });
-    
-    filteredPast.sort((a, b) => {
-        const dateA = safeToDate(getDisplayRound(b)?.pickupDate)?.getTime() || 0;
-        const dateB = safeToDate(getDisplayRound(a)?.pickupDate)?.getTime() || 0;
-        return dateA - dateB;
+    const sortedDates = Object.keys(pastGroups).sort((a, b) => dayjs(b).diff(dayjs(a)));
+    const recentPastGroups: { [key: string]: Product[] } = {};
+    sortedDates.slice(0, 3).forEach(date => {
+        recentPastGroups[date] = pastGroups[date];
     });
 
     return {
-      ongoingProducts: tempOngoing,
-      additionalProducts: tempAdditional,
-      visiblePastProducts: filteredPast,
+      todaysProducts: tempTodays,
+      closingSoonProducts: tempClosingSoon,
+      otherActiveProducts: tempOthers,
+      pastProductsByDate: recentPastGroups,
     };
   }, [products]);
 
   useEffect(() => {
-    if (ongoingProducts.length === 0) { setCountdown(null); return; }
+    if (todaysProducts.length === 0) {
+        setCountdown(null);
+        return;
+    }
     
-    const deadlines = ongoingProducts
-      // ✅ [FIX] .toDate() 대신 safeToDate 헬퍼 함수 사용
-      .map(p => safeToDate(getDisplayRound(p)?.deadlineDate)?.getTime())
-      .filter((d): d is number => d !== undefined && d !== null);
+    const countdownInterval = setInterval(() => {
+        const tomorrow1pm = dayjs().add(1, 'day').hour(13).minute(0).second(0);
+        const now = dayjs();
+        const diff = tomorrow1pm.diff(now, 'second');
 
-    if (deadlines.length === 0) return;
-    
-    const fastestDeadline = Math.min(...deadlines);
-    
-    const intervalId = setInterval(() => {
-      const remainingSeconds = dayjs(fastestDeadline).diff(dayjs(), 'second');
-      if (remainingSeconds <= 0) { setCountdown("마감!"); clearInterval(intervalId); return; }
-      const days = Math.floor(remainingSeconds / 86400);
-      const hours = Math.floor((remainingSeconds % 86400) / 3600);
-      const minutes = Math.floor((remainingSeconds % 3600) / 60);
-      const seconds = remainingSeconds % 60;
-      setCountdown(`${days > 0 ? `${days}일 ` : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+        if (diff <= 0) {
+            setCountdown("마감!");
+            clearInterval(countdownInterval);
+            return;
+        }
+
+        const hours = Math.floor(diff / 3600);
+        const minutes = Math.floor((diff % 3600) / 60);
+        const seconds = diff % 60;
+        setCountdown(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
     }, 1000);
-    return () => clearInterval(intervalId);
-  }, [ongoingProducts]);
 
-  // ✅ [수정] 페이지 전체 로딩 시 SodamallLoader 사용
+    return () => clearInterval(countdownInterval);
+  }, [todaysProducts]);
+
   if (loading) return <SodamallLoader />;
+  
+  const allActiveProducts = [...otherActiveProducts];
+  if(todaysProducts.length > 0) {
+      allActiveProducts.unshift(...todaysProducts);
+  }
 
   return (
     <div className="customer-page-container">
-      <div className="page-section banner-section">
-        <BannerSlider banners={banners} />
-      </div>
-
-      <ProductSection title={<>🔥 오늘의 공동구매</>} countdownText={countdown}>
-        {ongoingProducts.length > 0
-          ? ongoingProducts.map(p => <ProductCard key={p.id} product={p} status="ONGOING" />)
-          : <div className="no-products-message">진행중인 공동구매가 없습니다.</div>
+      <div className="page-section banner-section"><BannerSlider banners={banners} /></div>
+      
+      <ProductSection 
+        title={<>🔥 오늘의 공동구매 🔥</>} 
+        countdownText={todaysProducts.length > 0 ? countdown : null}
+      >
+        {todaysProducts.length > 0 
+            ? todaysProducts.map(p => <ProductCard key={p.id} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)
+            : (
+                <div className="product-list-placeholder">
+                    <PackageSearch size={48} className="placeholder-icon" />
+                    <p className="placeholder-text">상품을 준비중입니다</p>
+                    <span className="placeholder-subtext">매일 새로운 상품을 기대해주세요!</span>
+                </div>
+            )
         }
       </ProductSection>
       
-      {additionalProducts.length > 0 && (
-        <ProductSection title="⏳ 마감 임박! 추가 예약">
-          {additionalProducts.map(p => <ProductCard key={p.id} product={p} status="ADDITIONAL_RESERVATION" />)}
+      {otherActiveProducts.length > 0 && (
+        <ProductSection title={<>🛍️ 진행중인 다른 공구</>}>
+            {otherActiveProducts.map(p => <ProductCard key={p.id} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)}
         </ProductSection>
       )}
 
-      {visiblePastProducts.length > 0 && (
-        <ProductSection title="🗓️ 지난 공동구매">
-          {visiblePastProducts.map(p => <ProductCard key={p.id} product={p} status="PAST" />)}
+      {closingSoonProducts.length > 0 && (
+        <ProductSection title={<>⏰ 마감임박! 추가공구</>}>
+          {closingSoonProducts.map(p => <ProductCard key={p.id} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)}
         </ProductSection>
       )}
+
+      <div className="past-products-section">
+        {Object.keys(pastProductsByDate).map(date => (
+          <ProductSection 
+            key={date} 
+            title={<>{dayjs(date).locale('ko').format('M월 D일 (dddd)')} 마감 공구</>}
+          >
+            {pastProductsByDate[date].map(p => (
+              <ProductCard key={p.id} product={p} reservedQuantitiesMap={reservedQuantitiesMap} isPastProduct={true} />
+            ))}
+          </ProductSection>
+        ))}
+      </div>
+      
     </div>
   );
 };
