@@ -1,12 +1,23 @@
 // src/pages/admin/PickupProcessingPage.tsx
 
 import React, { useState } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
-// ✅ [수정] updateMultipleOrderStatuses 함수 import
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { searchOrdersByPhoneNumber, updateMultipleOrderStatuses } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
+import { Timestamp } from 'firebase/firestore'; // Timestamp 임포트 추가
 import { Search, Phone, CheckCircle, XCircle, DollarSign, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// ✅ [오류 수정] 날짜 관련 오류 해결을 위한 헬퍼 함수 추가
+const safeToDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (date instanceof Date) return date;
+    if (typeof date.toDate === 'function') return date.toDate();
+    if (typeof date === 'object' && date.seconds !== undefined) {
+      return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+    }
+    return null;
+};
 
 // 개별 주문 상품 아이템을 표시하는 컴포넌트
 interface OrderItemDisplayProps {
@@ -21,7 +32,6 @@ const OrderItemDisplay: React.FC<OrderItemDisplayProps> = ({ item }) => {
       padding: '8px 0',
       borderBottom: '1px dashed #eee'
     }}>
-      {/* ✅ [수정] item.name -> item.productName 으로 변경 */}
       <span>{item.productName} ({item.itemName})</span>
       <span>{item.quantity}개</span>
     </div>
@@ -39,14 +49,13 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
   const {
     id,
     status,
-    createdAt, // ✅ [수정] orderDate -> createdAt
-    customerInfo, // ✅ [수정] customerName -> customerInfo
+    createdAt,
+    customerInfo,
     pickupDate,
     items = [],
     totalPrice
   } = order;
   
-  // ✅ [수정] status 값을 OrderStatus 타입에 맞게 변경
   const statusColor = (statusValue: OrderStatus) => {
     switch (statusValue) {
       case 'PREPAID': return '#fffbe6';
@@ -92,17 +101,16 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
     >
       <div style={{ marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', color: '#333' }}>
-          {/* ✅ [수정] createdAt으로 날짜 표시 */}
-          <span>주문일: {createdAt ? new Date((createdAt as any).seconds * 1000).toLocaleDateString() : '날짜 없음'}</span>
+          {/* ✅ [오류 수정] safeToDate 사용 */}
+          <span>주문일: {safeToDate(createdAt)?.toLocaleDateString() ?? '날짜 없음'}</span>
           <span style={{ fontWeight: 'bold', color: '#007bff' }}>{statusText(status)}</span>
         </div>
-        {/* ✅ [수정] customerInfo.name으로 이름 표시 */}
         <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '10px 0 5px' }}>{customerInfo.name} 님</h3>
         <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '10px' }}>
-          픽업 예정일: {pickupDate ? new Date(pickupDate.seconds * 1000).toLocaleDateString() : '미정'}
+          {/* ✅ [오류 수정] safeToDate 사용 */}
+          픽업 예정일: {safeToDate(pickupDate)?.toLocaleDateString() ?? '미정'}
         </div>
         <div style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
-           {/* ✅ [수정] item.id -> item.itemId 로 키 변경 */}
           {items.map((item: OrderItem, index: number) => (
             <OrderItemDisplay key={item.itemId || index} item={item} />
           ))}
@@ -116,7 +124,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
 };
 
 const PickupProcessingPage: React.FC = () => {
-  useDocumentTitle('픽업/노쇼 처리'); // ✅ [추가]
+  useDocumentTitle('픽업/노쇼 처리');
   const [phoneNumberLast4, setPhoneNumberLast4] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Order[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -158,7 +166,6 @@ const PickupProcessingPage: React.FC = () => {
     );
   };
   
-  // ✅ [수정] 여러 주문을 한 번에 업데이트하는 로직으로 변경
   const handleStatusUpdate = async (status: OrderStatus) => {
     if (selectedOrderIds.length === 0) {
       toast.error('처리할 주문을 선택해주세요.');
@@ -277,7 +284,6 @@ const PickupProcessingPage: React.FC = () => {
               총 {totalPrice.toLocaleString()}원
             </span>
             <div style={{ display: 'flex', flexGrow: 1, gap: '5px' }}>
-              {/* ✅ [수정] status 값을 OrderStatus 타입에 맞게 변경 */}
               <button
                 onClick={() => handleStatusUpdate('PREPAID')}
                 style={{ backgroundColor: '#ffc107', color: 'white', height: '50px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', flexGrow: 1, cursor: 'pointer', border: 'none' }}
