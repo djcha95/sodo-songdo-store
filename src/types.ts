@@ -14,7 +14,7 @@ export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
 
-export type LoyaltyTier = '조약돌' | '수정' | '에메랄드' | '다이아몬드';
+export type LoyaltyTier = '조약돌' | '수정' | '에메랄드' | '다이아몬스';
 
 export interface PointLog {
   id: string;
@@ -29,7 +29,11 @@ export type NotificationType =
   | 'WAITLIST_CONFIRMED'
   | 'PICKUP_REMINDER'
   | 'PICKUP_TODAY'
-  | 'NEW_INTERACTION';
+  | 'NEW_INTERACTION'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'error';
 
 export interface Notification {
   id: string;
@@ -49,8 +53,8 @@ export interface ProductItem {
   id: string;
   name: string;
   price: number;
-  stock: number;
-  limitQuantity?: number | null;
+  stock: number; // -1은 무제한
+  limitQuantity?: number | null; // 1인당 최대 구매 가능 수량 (null 허용)
   stockDeductionAmount: number;
   expirationDate?: Timestamp | null;
 }
@@ -59,7 +63,7 @@ export interface VariantGroup {
   id: string;
   groupName: string;
   items: ProductItem[];
-  totalPhysicalStock: number | null;
+  totalPhysicalStock: number | null; // 그룹 전체가 공유하는 물리적 재고, null이면 개별 재고 사용
   stockUnitType: string;
 }
 
@@ -80,10 +84,10 @@ export interface SalesRound {
   deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
-  arrivalDate?: Timestamp | null; // arrivalDate도 null 허용
+  arrivalDate?: Timestamp | null;
   createdAt: Timestamp;
-  waitlist: WaitlistEntry[];
-  waitlistCount: number;
+  waitlist?: WaitlistEntry[];
+  waitlistCount?: number;
 }
 
 export interface Product {
@@ -100,6 +104,9 @@ export interface Product {
   createdAt: Timestamp;
   limitedStockAmount?: number;
   specialLabels?: SpecialLabel[];
+  subCategory?: string;
+  updatedAt?: Timestamp;
+  tags?: string[];
 }
 
 
@@ -108,6 +115,7 @@ export interface Product {
 // =================================================================
 
 export interface CartItem {
+  id: string;
   productId: string;
   productName: string;
   imageUrl: string;
@@ -120,35 +128,23 @@ export interface CartItem {
   quantity: number;
   unitPrice: number;
   stock: number | null;
-  pickupDate: Timestamp;
+  pickupDate: Timestamp | Date;
   status: 'RESERVATION' | 'WAITLIST';
-  deadlineDate: Timestamp;
+  deadlineDate: Timestamp | Date;
+  stockDeductionAmount: number;
 }
-export type OrderItem = Pick<
-  CartItem,
-  | 'productId'
-  | 'roundId'
-  | 'roundName'
-  | 'variantGroupId'
-  | 'itemId'
-  | 'productName'
-  | 'variantGroupName'
-  | 'itemName'
-  | 'imageUrl'
-  | 'unitPrice'
-  | 'quantity'
-  | 'stock'
-> & {
-  deadlineDate: Timestamp;
-  pickupDate: Timestamp;
-  pickupDeadlineDate?: Timestamp | null;
-  totalQuantity?: number;
-  totalPrice?: number;
-  category?: string;
-  arrivalDate?: Timestamp | null; // arrivalDate도 null 허용
-  expirationDate?: Timestamp | null;
-  stockDeductionAmount?: number;
-};
+
+export interface OrderItem extends Omit<CartItem, 'status'> {
+  arrivalDate: Timestamp | Date | null;
+  pickupDeadlineDate: Timestamp | Date | null;
+  expirationDate?: Timestamp | Date | null; 
+}
+
+export interface CustomerInfo {
+  name: string;
+  phone: string;
+  phoneLast4?: string;
+}
 
 export interface Order {
   id: string;
@@ -158,19 +154,31 @@ export interface Order {
   totalPrice: number;
   status: OrderStatus;
   createdAt: Timestamp | FieldValue;
-  pickupDate: Timestamp;
-  pickupDeadlineDate?: Timestamp | null;
-  customerInfo: {
-    name: string;
-    phone: string;
-    phoneLast4?: string;
-  };
+  pickupDate: Timestamp | Date;
+  pickupDeadlineDate?: Timestamp | Date | null;
+  customerInfo: CustomerInfo;
   pickedUpAt?: Timestamp | null;
   prepaidAt?: Timestamp | null;
   notes?: string;
   isBookmarked?: boolean;
+  canceledAt?: Timestamp;
 }
 
+export interface AggregatedOrderGroup {
+  groupKey: string;
+  customerInfo: Order['customerInfo'];
+  item: OrderItem;
+  totalQuantity: number;
+  totalPrice: number;
+  status: OrderStatus;
+  pickupDate: Timestamp | Date;
+  pickupDeadlineDate?: Timestamp | Date | null;
+  originalOrders: {
+    orderId: string;
+    quantity: number;
+    status: OrderStatus;
+  }[];
+}
 
 // =================================================================
 // ⚙️ 기타 애플리케이션 타입
@@ -184,15 +192,14 @@ export interface UserDocument {
   role: 'admin' | 'customer';
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
-
   loyaltyPoints: number;
   pickupCount: number;
   noShowCount: number;
   lastLoginDate: string;
   isRestricted?: boolean;
-
   gender?: 'male' | 'female' | null;
   ageRange?: string | null;
+  loyaltyTier?: string;
 }
 
 export interface Banner {
@@ -203,12 +210,14 @@ export interface Banner {
   createdAt: Timestamp;
   isActive: boolean;
   productId?: string;
+  title?: string;
 }
 
 export interface Category {
   id: string;
   name: string;
   order: number;
+  subCategories?: Category[];
 }
 
 export interface GuideItem {
@@ -295,21 +304,24 @@ export interface WaitlistItem {
   timestamp: Timestamp;
 }
 
-// ✅ [신규] 그룹화된 주문 데이터를 위한 타입 추가
-export interface AggregatedOrderGroup {
-  groupKey: string; // 고객명-상품ID-아이템ID 등으로 구성된 고유 키
-  customerInfo: Order['customerInfo'];
-  item: OrderItem; // 대표 상품 정보
-  totalQuantity: number;
-  totalPrice: number;
-  status: OrderStatus; // 그룹의 대표 상태 (모두 픽업완료 등)
-  pickupDate: Timestamp;
-  pickupDeadlineDate?: Timestamp | null;
-  
-  // 이 그룹에 포함된 원본 주문들의 정보
-  originalOrders: {
-    orderId: string;
-    quantity: number;
-    status: OrderStatus; // 개별 주문의 상태
-  }[];
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  phone?: string;
+  isAdmin?: boolean;
+  loyaltyPoints?: number;
+  loyaltyTier?: string;
+  createdAt: Timestamp;
+  lastLogin: Timestamp;
+  encoreRequestedProductIds?: string[];
+}
+
+export interface LoyaltyLog {
+  id: string;
+  change: number;
+  reason: string;
+  timestamp: Timestamp;
+  orderId?: string;
 }

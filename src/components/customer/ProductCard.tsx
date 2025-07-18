@@ -9,7 +9,6 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-// [수정] ProductStatus 대신 ProductDisplayStatus 타입을 가져옵니다.
 import type { Product, SalesRound, CartItem, ProductDisplayStatus } from '@/types';
 import useLongPress from '@/hooks/useLongPress';
 import './ProductCard.css';
@@ -120,7 +119,6 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
 // --- Main Product Card Component ---
 interface ProductCardProps {
   product: Product;
-  // [수정] prop의 타입을 ProductDisplayStatus로 변경합니다.
   status: ProductDisplayStatus;
 }
 
@@ -149,7 +147,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     const isSoldOut = totalStock === 0;
     
-    // ❗ [FIX] '마감 임박' 상태일 때도 한정 수량 뱃지가 표시되도록 조건을 추가합니다.
     const isLimitedStock = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && totalStock > 0 && totalStock < Infinity;
     
     const isPurchasable = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && !isSoldOut;
@@ -174,21 +171,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
 
     const { displayRound, singleOptionItem } = cardData;
 
-    const pickupDateObject = displayRound.pickupDate;
-    let finalPickupDate: Timestamp;
-    if (pickupDateObject instanceof Timestamp) {
-        finalPickupDate = pickupDateObject;
-    } else {
-        const parsedDate = safeToDate(pickupDateObject);
-        if (parsedDate) {
-            finalPickupDate = Timestamp.fromDate(parsedDate);
-        } else {
-            toast.error("상품의 픽업 날짜 정보가 올바르지 않습니다.");
-            return;
-        }
-    }
-
-  const cartItem: CartItem = {
+    const cartItem: CartItem = {
+      // ✅ [오류 수정] 필수 필드인 id와 stockDeductionAmount 추가
+      id: `reservation-${product.id}-${singleOptionItem.id}-${Date.now()}`,
+      stockDeductionAmount: singleOptionItem.stockDeductionAmount,
       productId: product.id,
       productName: product.groupName,
       imageUrl: product.imageUrls?.[0] || '',
@@ -201,7 +187,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       quantity,
       unitPrice: singleOptionItem.price,
       stock: singleOptionItem.stock,
-      pickupDate: finalPickupDate,
+      pickupDate: displayRound.pickupDate,
       status: 'RESERVATION',
       deadlineDate: displayRound.deadlineDate,
     };
@@ -229,21 +215,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       return;
     }
 
-    const pickupDateObject = displayRound.pickupDate;
-    let finalPickupDate: Timestamp;
-    if (pickupDateObject instanceof Timestamp) {
-        finalPickupDate = pickupDateObject;
-    } else {
-        const parsedDate = safeToDate(pickupDateObject);
-        if (parsedDate) {
-            finalPickupDate = Timestamp.fromDate(parsedDate);
-        } else {
-            toast.error("상품의 픽업 날짜 정보가 올바르지 않습니다.");
-            return;
-        }
-    }
-
- const waitlistItem: CartItem = {
+    const waitlistItem: CartItem = {
+      // ✅ [오류 수정] 필수 필드인 id와 stockDeductionAmount 추가
+      id: `waitlist-${product.id}-${singleOptionItem.id}-${Date.now()}`,
+      stockDeductionAmount: singleOptionItem.stockDeductionAmount,
       productId: product.id,
       productName: product.groupName,
       imageUrl: product.imageUrls?.[0] || '',
@@ -256,7 +231,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       quantity: quantity,
       unitPrice: singleOptionItem.price,
       stock: singleOptionItem.stock,
-      pickupDate: finalPickupDate,
+      pickupDate: displayRound.pickupDate,
       status: 'WAITLIST',
       deadlineDate: displayRound.deadlineDate,
     };

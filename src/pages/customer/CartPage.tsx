@@ -4,9 +4,9 @@ import React, { useState, useMemo, useRef, useEffect, useCallback, startTransiti
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
-import type { CartItem, Order } from '@/types';
+import type { CartItem, Order, OrderItem } from '@/types'; // OrderItem 임포트
 import { submitOrder, getLiveStockForItems, getReservedQuantitiesMap } from '@/firebase';
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { ShoppingCart as CartIcon, ArrowRight, Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -15,13 +15,28 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
 
+// ✅ [FIX] 다양한 날짜 형식을 안전하게 Date 객체로 변환하는 헬퍼 함수
+const safeToDate = (date: any): Date | null => {
+  if (!date) return null;
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+  }
+  if (typeof date === 'string') {
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) return parsedDate;
+  }
+  console.warn("Unsupported date format in CartPage:", date);
+  return null;
+};
+
 // 수동으로 토스트를 끄는 헬퍼 함수
 const showToast = (type: 'success' | 'error' | 'info' | 'blank', message: string | React.ReactNode, duration: number = 4000) => {
   const toastId = toast[type](message, {
-    duration: Infinity, // 라이브러리 타이머와 충돌하지 않도록 무한으로 설정
+    duration: Infinity,
   });
 
-  // 우리가 직접 만든 타이머로 제어
   setTimeout(() => {
     toast.dismiss(toastId);
   }, duration);
@@ -62,7 +77,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
     const finalQuantity = !isNaN(newQuantity) && newQuantity > 0 ? Math.min(newQuantity, stockLimit) : 1;
 
     if (finalQuantity !== item.quantity) {
-      updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, finalQuantity);
+      updateCartItemQuantity(item.id, finalQuantity); // item.id만 전달
       if (newQuantity > stockLimit) {
         showToast('error', `최대 ${stockLimit}개까지만 구매 가능합니다.`);
       } else if (newQuantity < 1) {
@@ -82,7 +97,7 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
     const performUpdate = () => {
       const newQuantity = item.quantity + change;
       if (newQuantity < 1 || newQuantity > stockLimit) return;
-      updateCartItemQuantity(item.productId, item.variantGroupId, item.itemId, newQuantity);
+      updateCartItemQuantity(item.id, newQuantity); // item.id만 전달
     };
     return useLongPress(performUpdate, performUpdate, { delay: 100 });
   }, [item, stockLimit, updateCartItemQuantity]);
@@ -90,8 +105,14 @@ const CartItemCard: React.FC<CartItemCardProps> = ({ item, isSelected, onSelect,
   const decreaseHandlers = createQuantityHandlers(-1);
   const increaseHandlers = createQuantityHandlers(1);
 
-  const formatPickupDate = (timestamp: Timestamp) => format(timestamp.toDate(), 'M/d(EEE)', { locale: ko }) + ' 픽업';
-  const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+  // ✅ [FIX] safeToDate 헬퍼 함수를 사용하여 날짜를 안전하게 포맷팅
+  const formatPickupDate = (dateValue: any) => {
+    const date = safeToDate(dateValue);
+    if (!date) return '날짜 정보 없음';
+    return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
+  }
+
+  const itemKey = item.id; // CartItem.id는 필수로 고유하므로 그대로 사용
 
   return (
     <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${isStockExceeded ? 'stock-exceeded' : ''}`} onClick={() => onSelect(itemKey)}>
@@ -136,8 +157,8 @@ const CartPage: React.FC = () => {
   const { user, userDocument } = useAuth();
   const { 
     allItems, reservationItems, waitlistItems, 
-    removeItems, removeReservedItems, updateCartItemQuantity,
-    reservationTotal,
+    removeItems, updateCartItemQuantity,
+    reservationTotal, removeReservedItems
   } = useCart();
   const navigate = useNavigate();
 
@@ -166,6 +187,7 @@ const CartPage: React.FC = () => {
         const exceededKeys = new Set<string>();
 
         for (const item of reservationItems) {
+          const itemKey = item.id; // CartItem.id는 필수로 고유하므로 그대로 사용
           const productStockInfo = liveStockInfo[`${item.productId}-${item.variantGroupId}-${item.itemId}`];
           const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
           
@@ -181,21 +203,20 @@ const CartPage: React.FC = () => {
             const adjustedQuantity = Math.max(0, Math.floor(availableStock));
             
             if (adjustedQuantity > 0) {
-              adjustments.set(`${item.productId}-${item.variantGroupId}-${item.itemId}`, adjustedQuantity);
+              adjustments.set(itemKey, adjustedQuantity);
               showToast('error', `'${item.variantGroupName}' 재고 부족으로 수량이 ${adjustedQuantity}개로 자동 조정되었습니다.`);
             } else {
-               adjustments.set(`${item.productId}-${item.variantGroupId}-${item.itemId}`, 0);
+               adjustments.set(itemKey, 0);
                showToast('error', `'${item.variantGroupName}' 재고가 모두 소진되어 장바구니에서 삭제됩니다.`);
             }
-            exceededKeys.add(`${item.productId}-${item.variantGroupId}-${item.itemId}`);
+            exceededKeys.add(itemKey);
           }
         }
 
         if (adjustments.size > 0) {
           for (const [key, newQuantity] of adjustments.entries()) {
-            const [productId, variantGroupId, itemId] = key.split('-');
             if (newQuantity > 0) {
-              updateCartItemQuantity(productId, variantGroupId, itemId, newQuantity);
+              updateCartItemQuantity(key, newQuantity);
             } else {
               removeItems([key]);
             }
@@ -213,8 +234,7 @@ const CartPage: React.FC = () => {
 
     checkStockAndAdjust();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
-
+  }, [allItems.length]); // allItems.length를 의존성 배열에 추가하여 allItems 변경 시 재실행
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
     const setter = type === 'reservation' ? setSelectedReservationKeys : setSelectedWaitlistKeys;
@@ -333,9 +353,16 @@ const CartPage: React.FC = () => {
       return;
     }
 
+    // reservationItems(CartItem[])를 OrderItem[] 타입으로 변환
+    const orderItems: OrderItem[] = reservationItems.map(item => ({
+        ...item,
+        arrivalDate: null, // 주문 시점에는 알 수 없으므로 null
+        pickupDeadlineDate: null, // 주문 시점에는 알 수 없으므로 null
+    }));
+
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'> = {
         userId: user.uid,
-        items: reservationItems,
+        items: orderItems, // 변환된 orderItems 사용
         totalPrice: reservationTotal,
         customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
         pickupDate: reservationItems[0].pickupDate,
@@ -345,10 +372,11 @@ const CartPage: React.FC = () => {
 
     toast.promise(promise, {
       loading: '예약을 확정하는 중입니다...',
-      success: (result) => {
+      success: () => {
         startTransition(() => {
           removeReservedItems();
-          navigate(result.orderId ? `/order/success/${result.orderId}` : '/mypage/history');
+          // ✅ [FIX] 예약 확정 후 주문내역 페이지로 이동
+          navigate('/mypage/history');
         });
         return '예약이 성공적으로 완료되었습니다!';
       },
@@ -421,7 +449,7 @@ const CartPage: React.FC = () => {
             {reservationItems.length > 0 ? (
               <div className="cart-items-list">
                 {reservationItems.map(item => {
-                  const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+                  const itemKey = item.id; // CartItem.id는 필수로 고유하므로 그대로 사용
                   return (
                     <CartItemCard
                       key={itemKey}
@@ -452,7 +480,7 @@ const CartPage: React.FC = () => {
               {waitlistItems.length > 0 ? (
                 <div className="cart-items-list">
                   {waitlistItems.map(item => {
-                    const itemKey = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
+                    const itemKey = item.id; // CartItem.id는 필수로 고유하므로 그대로 사용
                     return (
                       <CartItemCard
                         key={itemKey}

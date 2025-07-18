@@ -1,32 +1,36 @@
 // src/pages/admin/OrderListPage.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
+import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/common/Header'; // ❗️참고: 이 헤더는 고객용일 수 있습니다.
+import Header from '../../components/common/Header';
 import { getUserOrders } from '../../firebase';
-import type { Order, OrderItem, } from '../../types'; // ✅ [수정] OrderStatus 추가
+import type { Order, OrderItem } from '../../types';
 import { Timestamp } from 'firebase/firestore';
-import "../customer/OrderHistoryPage.css"; // ❗️참고: 고객용 CSS를 참조하고 있습니다.
+import "../customer/OrderHistoryPage.css";
 import { motion } from 'framer-motion';
 import { AiOutlineCheckCircle, AiOutlineCloseCircle, AiOutlineClockCircle, AiOutlineExclamationCircle } from 'react-icons/ai';
 import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
 import Collapsible from 'react-collapsible';
 
-// ✅ [수정] OrderItem 타입을 사용하도록 변경
-interface OrderItemWithDetails extends OrderItem {
-  category?: string;
-  subCategory?: string;
-}
+const safeToDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (date instanceof Date) return date;
+    if (typeof date.toDate === 'function') return date.toDate();
+    if (typeof date === 'object' && date.seconds !== undefined) {
+      return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+    }
+    return null;
+  };
+
+// OrderItemWithDetails 인터페이스 제거 (OrderItem에 이미 필요한 필드 포함)
 
 interface GroupedOrders {
   [date: string]: Order[];
 }
 
 const OrderListPage: React.FC = () => {
-  useDocumentTitle('고객 주문 내역'); // ✅ [추가 및 수정] 페이지 제목 설정
-
-  // ✅ [수정] useAuth에서 notifications, handleMarkAsRead 제거
+  useDocumentTitle('고객 주문 내역');
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,8 +64,8 @@ const OrderListPage: React.FC = () => {
     if (!orders.length) return {};
     const groups: GroupedOrders = {};
     orders.forEach(order => {
-      // ✅ [수정] orderDate -> createdAt
-      const dateKey = order.createdAt instanceof Timestamp ? order.createdAt.toDate().toLocaleDateString('ko-KR') : '날짜 미정';
+      const orderDate = safeToDate(order.createdAt);
+      const dateKey = orderDate ? orderDate.toLocaleDateString('ko-KR') : '날짜 미정';
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -74,15 +78,14 @@ const OrderListPage: React.FC = () => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    const pickupDeadline = order.pickupDeadlineDate?.toDate();
+    const pickupDeadline = safeToDate(order.pickupDeadlineDate);
     const isPickupDeadlinePassed = pickupDeadline && pickupDeadline.getTime() < now.getTime();
 
-    // ✅ [수정] status 값을 OrderStatus 타입에 맞게 대문자로 변경
     switch (order.status) {
       case 'CANCELED':
         return { text: '예약 취소', className: 'status-cancelled', icon: <AiOutlineCloseCircle /> };
       case 'PICKED_UP':
-      case 'COMPLETED': // COMPLETED도 픽업 완료로 간주
+      case 'COMPLETED':
         return { text: '픽업 완료', className: 'status-delivered', icon: <AiOutlineCheckCircle /> };
       case 'PREPAID':
         if (isPickupDeadlinePassed) {
@@ -101,14 +104,13 @@ const OrderListPage: React.FC = () => {
     }
   };
 
-  const formatDate = (timestamp?: Timestamp | null) => {
+  const formatDate = (timestamp?: Timestamp | Date | null) => {
     if (!timestamp) return '미정';
-    const date = timestamp.toDate();
+    const date = safeToDate(timestamp);
+    if (!date) return '미정';
     return date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' });
   };
 
-
-  /* ───── 렌더링 ───── */
   const Body = () => {
     if (loading) return <p className="loading-message">예약 내역을 불러오는 중…</p>;
     if (error) return <p className="error-message">{error}</p>;
@@ -162,20 +164,19 @@ const OrderListPage: React.FC = () => {
                         </span>
                       </div>
                       <ul className="order-items-detail-list">
-                        {(order.items as OrderItemWithDetails[] || []).map((item: OrderItemWithDetails, idx: number) => (
+                        {(order.items || []).map((item: OrderItem, idx: number) => ( // OrderItemWithDetails 대신 OrderItem 사용
                           <li key={idx} className="order-item-detail-row">
                             <div className="product-main-info">
-                              {/* ✅ [수정] item.name -> item.productName */}
                               <span className="product-name-qty">
                                 {item.productName} <span className="product-quantity-display">({item.quantity}개)</span>
                               </span>
-                              <span className="product-category">
+                              {/* category와 subCategory는 OrderItem에 직접 없어 Order 타입으로 내려받는 item에 없을 수 있음. types.ts 확인 필요 */}
+                              {/* <span className="product-category">
                                 [{item.category || '기타'}]
                                 {item.subCategory && ` (${item.subCategory})`}
-                              </span>
+                              </span> */}
                             </div>
                             <div className="product-sub-info">
-                               {/* ✅ [수정] item.price -> item.unitPrice */}
                               <span className="product-price">{(item.unitPrice * item.quantity).toLocaleString()}원</span>
                               <div className="product-date-info-group">
                                 <span className="product-date-info">
@@ -191,7 +192,7 @@ const OrderListPage: React.FC = () => {
                       </ul>
                       <div className="order-footer-section">
                         <span className="order-pickup-info">
-                          픽업 예정일: {order.pickupDate?.toDate().toLocaleDateString() || '미정'}
+                          픽업 예정일: {safeToDate(order.pickupDate)?.toLocaleDateString() || '미정'}
                           {order.pickupDeadlineDate && ` (마감: ${formatDate(order.pickupDeadlineDate)})`}
                         </span>
                       </div>
@@ -208,7 +209,6 @@ const OrderListPage: React.FC = () => {
 
   return (
     <>
-      {/* ✅ [수정] Header에서 props 제거 */}
       <Header title="예약 내역" />
       <div className="customer-page-container">
         <Body />

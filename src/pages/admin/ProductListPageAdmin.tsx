@@ -10,7 +10,6 @@ import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem,
 import type { WaitlistInfo } from '../../firebase';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen } from 'lucide-react';
-// ✅ [수정] 공용 로더 컴포넌트 import
 import SodamallLoader from '@/components/common/SodamallLoader';
 import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
 import './ProductListPageAdmin.css';
@@ -60,7 +59,7 @@ const formatTimestamp = (timestamp: Timestamp) => {
 };
 
 const getEarliestExpirationDateForGroup = (variantGroup: VariantGroup): number => {
-    const dates = variantGroup.items.map(i => safeToDate(i.expirationDate)?.getTime()).filter((d): d is number => d !== undefined && d !== null);
+    const dates = variantGroup.items.map(i => i.expirationDate ? safeToDate(i.expirationDate)?.getTime() : undefined).filter((d): d is number => d !== undefined && d !== null);
     return dates.length > 0 ? Math.min(...dates) : Infinity;
 };
 
@@ -179,12 +178,12 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
             <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
             <td className="quantity-cell">
               {`${vg.reservedQuantity} / `}
-              {item.round.waitlistCount > 0 ? (
+              {(item.round.waitlistCount ?? 0) > 0 ? (
                 <button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName)}>
-                  {item.round.waitlistCount || 0}
+                  {item.round.waitlistCount ?? 0}
                 </button>
               ) : (
-                item.round.waitlistCount || 0
+                item.round.waitlistCount ?? 0
               )}
             </td>
             <td className="quantity-cell">{vg.pickedUpQuantity}</td>
@@ -201,7 +200,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
     }
     
     const earliestOverallExpiration = useMemo(() => {
-        const allDates = item.enrichedVariantGroups.flatMap(vg => vg.items.map(i => safeToDate(i.expirationDate)?.getTime()).filter(Boolean) as number[]);
+        const allDates = item.enrichedVariantGroups.flatMap(vg => vg.items.map(i => i.expirationDate ? safeToDate(i.expirationDate)?.getTime() : undefined).filter(Boolean) as number[]);
         return allDates.length > 0 ? Math.min(...allDates) : Infinity;
     }, [item.enrichedVariantGroups]);
     const roundStatus = item.round.status;
@@ -252,20 +251,19 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
                   <td className="quantity-cell">
                     {`${subVg.reservedQuantity} / `}
-                    {item.round.waitlistCount > 0 ? (
+                    {(item.round.waitlistCount ?? 0) > 0 ? (
                       <button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName)}>
-                        {item.round.waitlistCount || 0}
+                        {item.round.waitlistCount ?? 0}
                       </button>
                     ) : (
-                      item.round.waitlistCount || 0
+                      item.round.waitlistCount ?? 0
                     )}
                   </td>
                   <td className="quantity-cell">{subVg.pickedUpQuantity}</td>
                   <td className="stock-cell">
                       {editingStockId === subVgUniqueId ? (
                           <input type="number" className="stock-input" value={stockInputs[subVgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [subVgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(subVgUniqueId)} autoFocus onKeyDown={(e) => { 
-                              // ✅ [오류 수정] vgUniqueId -> subVgUniqueId로 변경
-                              if (e.key === 'Enter') onStockEditSave(subVgUniqueId); 
+                              if (e.key === 'Enter') onStockEditSave(subVgUniqueId);
                               if (e.key === 'Escape') onStockEditStart('', 0); 
                           }} />
                       ) : (
@@ -337,7 +335,6 @@ const WaitlistModal: React.FC<{
                     <button onClick={onClose} className="modal-close-button">&times;</button>
                 </div>
                 <div className="waitlist-modal-body">
-                    {/* ✅ [수정] 모달 내부 로딩 시 InlineSodamallLoader 사용 */}
                     {loading && <div className="modal-inline-loader"><InlineSodamallLoader /></div>}
                     {error && <p className="error-text">{error}</p>}
                     {!loading && !error && (
@@ -392,7 +389,7 @@ const ProductListPageAdmin: React.FC = () => {
   const [sortConfig, setSortConfig] = usePersistentState<{key: SortableKeys, direction: 'asc' | 'desc'}>('adminProductSort', { key: 'roundCreatedAt', direction: 'desc' });
   
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set()); // ✅ [오류 수정] new Set() 문법 오류 수정
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
 
   // 대기자 명단 모달 관련 상태
