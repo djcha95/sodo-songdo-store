@@ -1,7 +1,5 @@
 /* src/pages/customer/ProductListPage.css */
 
-/* ✅ [수정] 헤더 고정 문제를 유발하던 불필요한 전역 스타일을 삭제합니다. */
-
 .banner-slider-container {
   margin-bottom: 0 !important;
 }
@@ -10,13 +8,33 @@
   margin-bottom: 16px; 
 }
 
-.no-products-message {
+/* ✅ [수정] 기존 no-products-message를 placeholder 스타일로 변경 */
+.product-list-placeholder {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #adb5bd;
   text-align: center;
-  padding: 60px 20px;
-  color: #868e96;
+  min-height: 200px; /* 카드가 있을 때와 높이 차이가 너무 나지 않도록 */
 }
-.no-products-message p {
-  margin-bottom: 10px;
+
+.placeholder-icon {
+  margin-bottom: 16px;
+  color: #ced4da;
+}
+
+.placeholder-text {
   font-size: 1.1rem;
-  font-weight: 500;
+  font-weight: 600;
+  color: #868e96;
+  margin: 0;
+}
+
+.placeholder-subtext {
+  font-size: 0.9rem;
+  color: #adb5bd;
+  margin-top: 4px;
 }

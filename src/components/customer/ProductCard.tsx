@@ -9,18 +9,22 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-import type { Product, SalesRound, CartItem, ProductDisplayStatus } from '@/types';
+// ✅ [수정] 필요한 타입만 임포트하여 경고 해결
+import type { Product, SalesRound, CartItem } from '@/types';
 import useLongPress from '@/hooks/useLongPress';
 import './ProductCard.css';
+
+// --- 유틸리티 및 헬퍼 함수 ---
 
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
   if (typeof date.toDate === 'function') return date.toDate();
-  if (typeof date === 'object' && date.seconds !== undefined && date.nanoseconds !== undefined) {
-    return new Timestamp(date.seconds, date.nanoseconds).toDate();
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
   }
-  if (typeof date === 'string') {
+  // ✅ [수정] 문자열 날짜도 파싱할 수 있도록 추가
+  if (typeof date === 'string') { 
     const parsedDate = new Date(date);
     if (!isNaN(parsedDate.getTime())) return parsedDate;
   }
@@ -28,29 +32,30 @@ const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// --- Helper Functions ---
 const getDisplayRound = (product: Product): SalesRound | null => {
-  if (!product.salesHistory || product.salesHistory.length === 0) return null;
+    if (!product.salesHistory || product.salesHistory.length === 0) return null;
+    const sellingRound = product.salesHistory.find(r => r.status === 'selling');
+    if (sellingRound) return sellingRound;
   
-  const activeRounds = product.salesHistory.filter(r => r.status === 'selling' || r.status === 'scheduled');
-  if (activeRounds.length > 0) {
-    return activeRounds.sort((a, b) => {
-        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
-        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
-        return dateA - dateB;
-    })[0];
-  }
-
-  const nonDraftRounds = product.salesHistory.filter(r => r.status !== 'draft');
-  if (nonDraftRounds.length > 0) {
-    return nonDraftRounds.sort((a, b) => {
-        const dateA = safeToDate(b.createdAt)?.getTime() || 0;
-        const dateB = safeToDate(a.createdAt)?.getTime() || 0;
-        return dateA - dateB;
-    })[0];
-  }
-  return null;
+    const now = new Date();
+    const futureScheduledRounds = product.salesHistory
+      .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! > now)
+      .sort((a, b) => safeToDate(a.publishAt)!.getTime() - safeToDate(b.publishAt)!.getTime());
+    if (futureScheduledRounds.length > 0) return futureScheduledRounds[0];
+  
+    const pastRounds = product.salesHistory
+      .filter(r => r.status === 'ended' || r.status === 'sold_out')
+      .sort((a, b) => safeToDate(b.deadlineDate)!.getTime() - safeToDate(a.deadlineDate)!.getTime());
+    if (pastRounds.length > 0) return pastRounds[0];
+    
+    const nonDraftRounds = product.salesHistory
+      .filter(r => r.status !== 'draft')
+      .sort((a,b) => safeToDate(b.createdAt)!.getTime() - safeToDate(a.createdAt)!.getTime());
+  
+    return nonDraftRounds[0] || null;
 };
+
+type ProductActionState = 'PURCHASABLE' | 'WAITLISTABLE' | 'REQUIRE_OPTION' | 'ENDED' | 'SCHEDULED';
 
 // --- Quantity Controls Component ---
 interface QuantityInputProps {
@@ -89,28 +94,13 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
 
   return (
     <div className="quantity-controls">
-      <button {...decreaseHandlers} disabled={quantity <= 1}>
-        <Minus size={16} />
-      </button>
+      <button {...decreaseHandlers} disabled={quantity <= 1}><Minus size={16} /></button>
       {isEditing ? (
-        <input
-          ref={inputRef}
-          type="number"
-          className="quantity-input"
-          value={quantity}
-          onChange={handleDirectInputChange}
-          onBlur={handleInputBlur}
-          onKeyDown={handleInputKeyDown}
-          onClick={(e) => e.stopPropagation()}
-        />
+        <input ref={inputRef} type="number" className="quantity-input" value={quantity} onChange={handleDirectInputChange} onBlur={handleInputBlur} onKeyDown={handleInputKeyDown} onClick={(e) => e.stopPropagation()} />
       ) : (
-        <span className="quantity-display" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}>
-          {quantity}
-        </span>
+        <span className="quantity-display" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}>{quantity}</span>
       )}
-      <button {...increaseHandlers} disabled={quantity >= maxStock}>
-        <Plus size={16} />
-      </button>
+      <button {...increaseHandlers} disabled={quantity >= maxStock}><Plus size={16} /></button>
     </div>
   );
 };
@@ -119,10 +109,11 @@ const QuantityInput: React.FC<QuantityInputProps> = ({ quantity, setQuantity, ma
 // --- Main Product Card Component ---
 interface ProductCardProps {
   product: Product;
-  status: ProductDisplayStatus;
+  reservedQuantitiesMap: Map<string, number>;
+  isPastProduct?: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMap, isPastProduct = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -135,44 +126,72 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     return () => { if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current); };
   }, []);
 
+// src/components/customer/ProductCard.tsx
+
   const cardData = useMemo(() => {
     const displayRound = getDisplayRound(product);
     if (!displayRound) return null;
 
-    const totalStock = displayRound.variantGroups?.reduce((acc, vg) => {
-        if (vg.totalPhysicalStock != null && vg.totalPhysicalStock !== -1) return acc + vg.totalPhysicalStock;
-        return acc + (vg.items?.reduce((itemAcc, item) => itemAcc + (item.stock === -1 ? Infinity : (item.stock || 0)), 0) || 0);
-    }, 0) ?? 0;
-    
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
-    const isSoldOut = totalStock === 0;
-    
-    const isLimitedStock = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && totalStock > 0 && totalStock < Infinity;
-    
-    const isPurchasable = (status === 'ONGOING' || status === 'ADDITIONAL_RESERVATION') && !isSoldOut;
-    const isWaitlistAvailable = status === 'ONGOING' && isSoldOut;
-    const singleOptionItem = !isMultiOption ? displayRound.variantGroups?.[0]?.items?.[0] : null;
+    const singleOptionVg = !isMultiOption ? displayRound.variantGroups?.[0] : null;
+    const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
-    const pickupDate = safeToDate(displayRound.pickupDate);
-    if (!pickupDate) return null;
+    const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
+    const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+    
+    // 'totalStock'을 안전하게 계산하도록 수정
+    const totalStock = singleOptionVg?.totalPhysicalStock; 
+    const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
+
+    let actionState: ProductActionState = 'ENDED';
+
+    // ... (이하 actionState를 결정하는 로직은 그대로 유지)
+    if (isPastProduct) {
+      actionState = 'ENDED';
+    } else {
+      const now = new Date();
+      const publishAtDate = safeToDate(displayRound.publishAt);
+      const finalSaleDeadline = safeToDate(displayRound.pickupDate) ? dayjs(safeToDate(displayRound.pickupDate)).hour(13).minute(0).second(0).toDate() : null;
+      
+      if (displayRound.status === 'scheduled' && publishAtDate && now < publishAtDate) {
+        actionState = 'SCHEDULED';
+      } else if (finalSaleDeadline && now >= finalSaleDeadline) {
+        actionState = 'ENDED';
+      } else if (displayRound.status === 'selling') {
+        if (isMultiOption) {
+          actionState = 'REQUIRE_OPTION';
+        } else {
+          const isSoldOut = remainingStock < (singleOptionItem?.stockDeductionAmount || 1);
+          if (!isSoldOut) {
+            actionState = 'PURCHASABLE';
+          } else {
+            const createdAtDate = safeToDate(displayRound.createdAt);
+            const firstPeriodDeadline = createdAtDate ? dayjs(createdAtDate).add(1, 'day').hour(13).minute(0).second(0).toDate() : null;
+            const isFirstPeriodActive = firstPeriodDeadline && now < firstPeriodDeadline;
+            actionState = isFirstPeriodActive ? 'WAITLISTABLE' : 'ENDED';
+          }
+        }
+      }
+    }
 
     return {
-      displayRound, isPurchasable, isMultiOption, singleOptionItem, isLimitedStock,
-      totalStock, isSoldOut, isWaitlistAvailable,
+      displayRound, isMultiOption, singleOptionItem, singleOptionVg, remainingStock, actionState,
       price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
-      pickupDateFormatted: dayjs(pickupDate).locale('ko').format('M/D(ddd)'),
+      pickupDateFormatted: dayjs(safeToDate(displayRound.pickupDate)).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
-  }, [product, status]);
-
+  }, [product, reservedQuantitiesMap, isPastProduct]);
   const handleAddToCart = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!cardData || !cardData.displayRound || !cardData.singleOptionItem || isJustAdded) return;
-
-    const { displayRound, singleOptionItem } = cardData;
+    const { displayRound, singleOptionItem, singleOptionVg, remainingStock } = cardData;
+    
+    if (quantity * singleOptionItem.stockDeductionAmount > remainingStock) {
+        toast.error('재고가 부족합니다.');
+        return;
+    }
 
     const cartItem: CartItem = {
-      // ✅ [오류 수정] 필수 필드인 id와 stockDeductionAmount 추가
       id: `reservation-${product.id}-${singleOptionItem.id}-${Date.now()}`,
       stockDeductionAmount: singleOptionItem.stockDeductionAmount,
       productId: product.id,
@@ -180,8 +199,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       imageUrl: product.imageUrls?.[0] || '',
       roundId: displayRound.roundId,
       roundName: displayRound.roundName,
-      variantGroupId: displayRound.variantGroups?.[0]?.id || '',
-      variantGroupName: displayRound.variantGroups?.[0]?.groupName || '',
+      variantGroupId: singleOptionVg?.id || '',
+      variantGroupName: singleOptionVg?.groupName || '',
       itemId: singleOptionItem.id || '',
       itemName: singleOptionItem.name,
       quantity,
@@ -195,11 +214,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     addToCart(cartItem);
     toast.success(`${product.groupName} ${quantity}개를 담았어요!`);
     setQuantity(1);
-
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
     addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
-
   }, [product, quantity, cardData, addToCart, isJustAdded]);
   
   const handleRequestWaitlist = useCallback((e: React.MouseEvent) => {
@@ -208,15 +225,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       if (!user) toast.error("대기 신청을 하려면 로그인이 필요합니다.");
       return;
     }
-    
-    const { displayRound, singleOptionItem } = cardData;
-    if (!singleOptionItem) {
-      toast.error("옵션이 하나인 상품만 대기 신청이 가능합니다.");
-      return;
-    }
+    const { displayRound, singleOptionItem, singleOptionVg } = cardData;
+    if (!singleOptionItem || !singleOptionVg) return;
 
     const waitlistItem: CartItem = {
-      // ✅ [오류 수정] 필수 필드인 id와 stockDeductionAmount 추가
       id: `waitlist-${product.id}-${singleOptionItem.id}-${Date.now()}`,
       stockDeductionAmount: singleOptionItem.stockDeductionAmount,
       productId: product.id,
@@ -224,9 +236,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
       imageUrl: product.imageUrls?.[0] || '',
       roundId: displayRound.roundId,
       roundName: displayRound.roundName,
-      variantGroupId: displayRound.variantGroups?.[0]?.id || '',
-      variantGroupName: displayRound.variantGroups?.[0]?.groupName || '',
-      itemId: singleOptionItem.id || '',
+      variantGroupId: singleOptionVg.id,
+      variantGroupName: singleOptionVg.groupName,
+      itemId: singleOptionItem.id,
       itemName: singleOptionItem.name,
       quantity: quantity,
       unitPrice: singleOptionItem.price,
@@ -239,7 +251,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
     addToCart(waitlistItem);
     toast.success(`${product.groupName} ${quantity}개를 대기 목록에 추가했어요!`);
     setQuantity(1);
-    
   }, [product, quantity, cardData, user, addToCart]);
 
   const handleCardClick = useCallback(() => { 
@@ -248,73 +259,70 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, status }) => {
 
   if (!cardData) return null;
 
-  const { isPurchasable, isMultiOption, isSoldOut, isWaitlistAvailable, price, pickupDateFormatted, storageType, totalStock, isLimitedStock } = cardData;
+  const { price, pickupDateFormatted, storageType, actionState, remainingStock } = cardData;
 
-  const getStorageTypeInfo = (type: string | undefined) => {
+  const getStorageTypeInfo = (type: typeof product.storageType) => {
     switch (type) {
       case 'FROZEN': return { label: '냉동', style: { backgroundColor: '#5c7cfa', color: '#fff' } };
       case 'COLD': return { label: '냉장', style: { backgroundColor: '#e63946', color: '#fff' } };
       case 'ROOM': return { label: '실온', style: { backgroundColor: '#212529', color: '#fff' } };
-      default: return null;
+      default: return null; // undefined 또는 다른 값이 올 경우를 대비
     }
   };
   const storageInfo = getStorageTypeInfo(storageType);
+  const isLimitedStock = remainingStock > 0 && remainingStock !== Infinity;
 
   const renderActionControls = () => {
-    if (status === 'PAST') return null;
-
-    if (isWaitlistAvailable) {
-      return (
-        <div className="action-controls" onClick={(e) => e.stopPropagation()}>
-          <QuantityInput quantity={quantity} setQuantity={setQuantity} />
-          <button className="waitlist-btn" onClick={handleRequestWaitlist}>
-            <Hourglass size={14} />
-            <span>대기</span>
-          </button>
-        </div>
-      );
+    // ✅ [수정] isPastProduct일 경우 아무것도 렌더링하지 않음
+    if (isPastProduct) {
+      return null;
     }
-    
-    if (!isPurchasable) return <div className="options-btn disabled">{isSoldOut ? '품절' : '마감'}</div>;
-    
-    if (isMultiOption) return <button className="options-btn" onClick={handleCardClick}>옵션 선택하기 <ChevronRight size={16} /></button>;
-    
-    const variantGroup = cardData.displayRound?.variantGroups?.[0];
-    const physicalStock = variantGroup?.totalPhysicalStock;
-    const maxStockForUI = (physicalStock != null && physicalStock !== -1) ? physicalStock : 999;
-    
-    return (
-      <div className="action-controls" onClick={(e) => e.stopPropagation()}>
-        <QuantityInput quantity={quantity} setQuantity={setQuantity} maxStock={maxStockForUI} />
-        {isJustAdded ? (
-          <button className="add-to-cart-btn just-added" disabled>
-            <Check size={18} />
-            완료
-          </button>
-        ) : (
-          <button className="add-to-cart-btn" onClick={handleAddToCart}>
-            담기
-          </button>
-        )}
-      </div>
-    );
+
+    switch (actionState) {
+      case 'PURCHASABLE':
+        const maxStockForUI = Math.floor(remainingStock / (cardData.singleOptionItem?.stockDeductionAmount || 1));
+        return (
+          <div className="action-controls" onClick={(e) => e.stopPropagation()}>
+            <QuantityInput quantity={quantity} setQuantity={setQuantity} maxStock={maxStockForUI} />
+            {isJustAdded ? (
+              <button className="add-to-cart-btn just-added" disabled><Check size={18} /> 완료</button>
+            ) : (
+              <button className="add-to-cart-btn" onClick={handleAddToCart}>담기</button>
+            )}
+          </div>
+        );
+      case 'WAITLISTABLE':
+        return (
+          <div className="action-controls" onClick={(e) => e.stopPropagation()}>
+            <QuantityInput quantity={quantity} setQuantity={setQuantity} />
+            <button className="waitlist-btn" onClick={handleRequestWaitlist}><Hourglass size={14} /><span>대기</span></button>
+          </div>
+        );
+      case 'REQUIRE_OPTION':
+        return <button className="options-btn" onClick={handleCardClick}>옵션 선택하기 <ChevronRight size={16} /></button>;
+      case 'ENDED':
+        return <div className="options-btn disabled">예약 종료</div>;
+      case 'SCHEDULED':
+        return <div className="options-btn disabled">판매 예정</div>;
+      default:
+        return null;
+    }
   };
 
   return (
     <div className="product-card-wrapper">
       <div className="product-card-final" onClick={handleCardClick}>
-        {isLimitedStock && (
-          <div className="card-top-badge">
-            <Flame size={14} /> {isMultiOption ? '한정수량' : `${totalStock}개 한정`}
-          </div>
+        {isLimitedStock && (actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION') && (
+          <div className="card-top-badge"><Flame size={14} /> {cardData.isMultiOption ? '한정수량' : `${remainingStock}개 한정`}</div>
         )}
         <div className="card-image-container">
           <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" />
-          {!isPurchasable && !isWaitlistAvailable && status !== 'PAST' && <div className="card-overlay-badge">{isSoldOut ? '품절' : '마감'}</div>}
+          {/* ✅ [수정] 지난 상품 카드에서는 '예약 종료' 배지를 표시하지 않음 */}
+          {actionState === 'ENDED' && !isPastProduct && <div className="card-overlay-badge">예약 종료</div>}
         </div>
         <div className="card-content-container">
           <div className="content-row"><h3 className="content-title">{product.groupName}</h3>{storageInfo && <span className="content-badge" style={storageInfo.style}>{storageInfo.label}</span>}</div>
-          <div className="content-row meta-row"><span className="content-price">{(price ?? 0).toLocaleString()}원</span><span className="content-pickup"><Calendar size={14} /> {pickupDateFormatted}</span></div>
+          <div className="content-row meta-row"><span className="content-price">{price.toLocaleString()}원</span><span className="content-pickup"><Calendar size={14} /> {pickupDateFormatted}</span></div>
           <div className="content-action-row">{renderActionControls()}</div>
         </div>
       </div>
