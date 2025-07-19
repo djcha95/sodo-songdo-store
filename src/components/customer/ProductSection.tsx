@@ -15,7 +15,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countd
  const { scrollRef, mouseHandlers, scrollByPage, showLeftArrow, showRightArrow } = useHorizontalScroll();
 
  const childElements = React.Children.toArray(children);
- const hasContent = childElements.length > 0 && (childElements.length > 1 || childElements[0]);
+ const hasContent = childElements.length > 0 && childElements.some(child => child !== null);
 
  return (
    <section className="page-section product-section">
@@ -30,27 +30,28 @@ const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countd
        )}
      </div>
      
-     {/* ✅ [수정] 내용이 있을 때만 스크롤 컨테이너를 렌더링 */}
-     {hasContent ? (
-        <div className="horizontal-scroll-container">
-          {showLeftArrow && (
-            <button className="scroll-arrow prev" onClick={() => scrollByPage('left')} aria-label="이전 상품 보기">
-              <ChevronLeft />
-            </button>
-          )}
-          <div className="product-grid horizontal-scroll" ref={scrollRef} {...mouseHandlers}>
-            {children}
-          </div>
-          {showRightArrow && (
-            <button className="scroll-arrow next" onClick={() => scrollByPage('right')} aria-label="다음 상품 보기">
-              <ChevronRight />
-            </button>
-          )}
-        </div>
-     ) : (
-        // 내용이 없을 경우 children을 그대로 렌더링 (플레이스홀더 등)
-        children
-     )}
+     <div className="horizontal-scroll-container">
+       {/* ✅ [수정] 화살표를 CSS 클래스로 제어하여 항상 존재하도록 수정 */}
+       <button 
+         className={`scroll-arrow prev ${showLeftArrow ? 'visible' : ''}`} 
+         onClick={() => scrollByPage('left')} 
+         aria-label="이전 상품 보기"
+       >
+         <ChevronLeft />
+       </button>
+       
+       <div className="product-grid horizontal-scroll" ref={scrollRef} {...mouseHandlers}>
+         {hasContent ? children : null}
+       </div>
+
+       <button 
+         className={`scroll-arrow next ${showRightArrow ? 'visible' : ''}`} 
+         onClick={() => scrollByPage('right')} 
+         aria-label="다음 상품 보기"
+       >
+         <ChevronRight />
+       </button>
+     </div>
    </section>
  );
 };
