@@ -107,21 +107,67 @@ const ProductListPage: React.FC = () => {
       const firstDeadline = dayjs(createdAt).add(1, 'day').hour(13).minute(0).second(0);
       const finalDeadline = dayjs(pickupDate).hour(13).minute(0).second(0);
 
+      // ✅ [수정] 품절 여부를 판매 기간 종료 조건과 분리
       if (now.isAfter(finalDeadline)) {
         tempPast.push(product);
       } else if (dayjs(createdAt).isBetween(todayStart, todayEnd, null, '[]')) {
-        tempTodays.push(product);
+        tempTodays.push(product); // 품절 상품도 여기에 포함
       } else if (now.isAfter(firstDeadline) && isLimitedStock(round)) {
-        tempClosingSoon.push(product);
+        tempClosingSoon.push(product); // 품절 상품도 여기에 포함
       } else {
         tempOthers.push(product);
       }
     });
     
+    // ✅ [수정] 오늘의 공동구매 정렬 로직
+    tempTodays.sort((a, b) => {
+        const getSortState = (p: Product) => {
+            const r = getDisplayRound(p)!;
+            const isMultiOption = r.variantGroups.length > 1 || r.variantGroups[0]?.items.length > 1;
+            if (isMultiOption) return { sortGroup: 1, value: 0 }; // 옵션 상품은 일단 앞으로
+
+            const vg = r.variantGroups[0];
+            const item = vg.items[0];
+            const key = `${p.id}-${r.roundId}-${vg.id}`;
+            const reserved = reservedQuantitiesMap.get(key) || 0;
+            const stock = vg.totalPhysicalStock;
+            const remaining = (stock === null || stock === -1) ? Infinity : stock - reserved;
+
+            // 1. 대기(품절) 상품 그룹
+            if (remaining < (item.stockDeductionAmount || 1)) {
+                return { sortGroup: 3, value: 0 }; 
+            }
+            // 2. 한정 수량 상품 그룹
+            if (stock !== null && stock !== -1) {
+                return { sortGroup: 1, value: remaining };
+            }
+            // 3. 무제한 수량 상품 그룹
+            return { sortGroup: 2, value: item.price };
+        };
+
+        const stateA = getSortState(a);
+        const stateB = getSortState(b);
+
+        // 1순위: 그룹별 정렬 (한정수량 > 무제한 > 대기)
+        if (stateA.sortGroup !== stateB.sortGroup) {
+            return stateA.sortGroup - stateB.sortGroup;
+        }
+
+        // 2순위: 그룹 내 정렬
+        if (stateA.sortGroup === 1) { // 한정 수량 그룹
+            return stateA.value - stateB.value; // 재고 적은 순 (오름차순)
+        }
+        if (stateA.sortGroup === 2) { // 무제한 그룹
+            return stateB.value - stateA.value; // 가격 높은 순 (내림차순)
+        }
+
+        return 0; // 그 외 정렬 불필요
+    });
+    
     tempClosingSoon.sort((a, b) => {
-        const arrivalA = safeToDate(getDisplayRound(a)?.arrivalDate)?.getTime() || Infinity;
-        const arrivalB = safeToDate(getDisplayRound(b)?.arrivalDate)?.getTime() || Infinity;
-        return arrivalA - arrivalB;
+        const pickupA = safeToDate(getDisplayRound(a)?.pickupDate)?.getTime() || Infinity;
+        const pickupB = safeToDate(getDisplayRound(b)?.pickupDate)?.getTime() || Infinity;
+        return pickupA - pickupB;
     });
 
     const pastGroups: { [key: string]: Product[] } = {};
@@ -135,11 +181,13 @@ const ProductListPage: React.FC = () => {
         }
     });
     
-    const sortedDates = Object.keys(pastGroups).sort((a, b) => dayjs(b).diff(dayjs(a)));
     const recentPastGroups: { [key: string]: Product[] } = {};
-    sortedDates.slice(0, 3).forEach(date => {
-        recentPastGroups[date] = pastGroups[date];
-    });
+    for (let i = 1; i <= 3; i++) {
+        const targetDate = now.subtract(i, 'day').format('YYYY-MM-DD');
+        if (pastGroups[targetDate]) {
+            recentPastGroups[targetDate] = pastGroups[targetDate];
+        }
+    }
 
     return {
       todaysProducts: tempTodays,
@@ -147,47 +195,38 @@ const ProductListPage: React.FC = () => {
       otherActiveProducts: tempOthers,
       pastProductsByDate: recentPastGroups,
     };
-  }, [products]);
+  }, [products, reservedQuantitiesMap]);
 
   useEffect(() => {
     if (todaysProducts.length === 0) {
         setCountdown(null);
         return;
     }
-    
     const countdownInterval = setInterval(() => {
         const tomorrow1pm = dayjs().add(1, 'day').hour(13).minute(0).second(0);
         const now = dayjs();
         const diff = tomorrow1pm.diff(now, 'second');
-
         if (diff <= 0) {
             setCountdown("마감!");
             clearInterval(countdownInterval);
             return;
         }
-
         const hours = Math.floor(diff / 3600);
         const minutes = Math.floor((diff % 3600) / 60);
         const seconds = diff % 60;
         setCountdown(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
     }, 1000);
-
     return () => clearInterval(countdownInterval);
   }, [todaysProducts]);
 
   if (loading) return <SodamallLoader />;
-  
-  const allActiveProducts = [...otherActiveProducts];
-  if(todaysProducts.length > 0) {
-      allActiveProducts.unshift(...todaysProducts);
-  }
 
   return (
     <div className="customer-page-container">
       <div className="page-section banner-section"><BannerSlider banners={banners} /></div>
       
       <ProductSection 
-        title={<>🔥 오늘의 공동구매 🔥</>} 
+        title={<>🔥 오늘의 공동구매</>} 
         countdownText={todaysProducts.length > 0 ? countdown : null}
       >
         {todaysProducts.length > 0 
@@ -215,16 +254,21 @@ const ProductListPage: React.FC = () => {
       )}
 
       <div className="past-products-section">
-        {Object.keys(pastProductsByDate).map(date => (
-          <ProductSection 
-            key={date} 
-            title={<>{dayjs(date).locale('ko').format('M월 D일 (dddd)')} 마감 공구</>}
-          >
-            {pastProductsByDate[date].map(p => (
-              <ProductCard key={p.id} product={p} reservedQuantitiesMap={reservedQuantitiesMap} isPastProduct={true} />
-            ))}
-          </ProductSection>
-        ))}
+        {Object.keys(pastProductsByDate).map(date => {
+            const productsForDate = pastProductsByDate[date];
+            if (!productsForDate || productsForDate.length === 0) return null;
+
+            return (
+              <ProductSection 
+                key={date} 
+                title={<>{dayjs(date).locale('ko').format('M월 D일 (dddd)')} 마감 공구</>}
+              >
+                {productsForDate.map(p => (
+                  <ProductCard key={p.id} product={p} reservedQuantitiesMap={reservedQuantitiesMap} isPastProduct={true} />
+                ))}
+              </ProductSection>
+            );
+        })}
       </div>
       
     </div>

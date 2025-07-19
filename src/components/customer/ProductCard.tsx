@@ -126,8 +126,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     return () => { if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current); };
   }, []);
 
-// src/components/customer/ProductCard.tsx
-
   const cardData = useMemo(() => {
     const displayRound = getDisplayRound(product);
     if (!displayRound) return null;
@@ -142,6 +140,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     // 'totalStock'을 안전하게 계산하도록 수정
     const totalStock = singleOptionVg?.totalPhysicalStock; 
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
+
+    // ✅ [추가] 그룹 상품의 한정 수량 여부 판단
+    const isMultiOptionLimitedStock = isMultiOption && displayRound.variantGroups.some(vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1);
+
 
     let actionState: ProductActionState = 'ENDED';
 
@@ -175,12 +177,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     }
 
     return {
-      displayRound, isMultiOption, singleOptionItem, singleOptionVg, remainingStock, actionState,
+      displayRound, isMultiOption, singleOptionItem, singleOptionVg, remainingStock, actionState, isMultiOptionLimitedStock,
       price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
       pickupDateFormatted: dayjs(safeToDate(displayRound.pickupDate)).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
   }, [product, reservedQuantitiesMap, isPastProduct]);
+
   const handleAddToCart = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!cardData || !cardData.displayRound || !cardData.singleOptionItem || isJustAdded) return;
@@ -259,7 +262,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
 
   if (!cardData) return null;
 
-  const { price, pickupDateFormatted, storageType, actionState, remainingStock } = cardData;
+  const { price, pickupDateFormatted, storageType, actionState, remainingStock, isMultiOption, isMultiOptionLimitedStock } = cardData;
 
   const getStorageTypeInfo = (type: typeof product.storageType) => {
     switch (type) {
@@ -270,7 +273,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     }
   };
   const storageInfo = getStorageTypeInfo(storageType);
-  const isLimitedStock = remainingStock > 0 && remainingStock !== Infinity;
+  const isSingleOptionLimitedStock = !isMultiOption && remainingStock > 0 && remainingStock !== Infinity;
+
 
   const renderActionControls = () => {
     // ✅ [수정] isPastProduct일 경우 아무것도 렌더링하지 않음
@@ -312,8 +316,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
   return (
     <div className="product-card-wrapper">
       <div className="product-card-final" onClick={handleCardClick}>
-        {isLimitedStock && (actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION') && (
-          <div className="card-top-badge"><Flame size={14} /> {cardData.isMultiOption ? '한정수량' : `${remainingStock}개 한정`}</div>
+        {/* ✅ [수정] 그룹 상품 한정수량 배지 로직 추가 */}
+        {(isSingleOptionLimitedStock || isMultiOptionLimitedStock) && (actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION') && (
+          <div className="card-top-badge">
+            <Flame size={14} /> 
+            {isMultiOptionLimitedStock ? '한정수량 예약중' : `${remainingStock}개 한정`}
+          </div>
         )}
         <div className="card-image-container">
           <img src={product.imageUrls?.[0]} alt={product.groupName} loading="lazy" />

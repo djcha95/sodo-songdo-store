@@ -63,7 +63,6 @@
   scroll-snap-type: x mandatory;
   scroll-padding-left: 12px;
   justify-content: flex-start;
-  /* ✅ [수정] 카드를 아래 기준으로 정렬하고, 높이를 맞추지 않음 */
   align-items: end; 
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -78,8 +77,43 @@
 }
 
 .scroll-arrow {
-  display: none;
+  /* ✅ [수정] 모바일에서도 화살표가 보이도록 position 관련 속성을 @media 밖으로 이동 */
+  display: flex;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dee2e6;
+  border-radius: 50%;
+  width: 40px; /* 모바일에서 약간 작게 */
+  height: 40px;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
 }
+
+/* ✅ [추가] 화살표가 보여야 할 때 적용될 스타일 */
+.scroll-arrow.visible {
+  opacity: 0.8;
+  pointer-events: auto;
+}
+.scroll-arrow:hover {
+  opacity: 1 !important; /* hover 시에는 확실히 보이도록 */
+  transform: translateY(-50%) scale(1.05);
+}
+
+.scroll-arrow.prev {
+  left: 4px; /* 모바일 화면 좌측에 가깝게 */
+}
+.scroll-arrow.next {
+  right: 4px; /* 모바일 화면 우측에 가깝게 */
+}
+
 
 /* --- 💻 데스크탑(768px 이상) 스타일 --- */
 @media (min-width: 768px) {
@@ -99,29 +133,11 @@
     width: 250px;
   }
   .scroll-arrow {
-    display: flex;
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(255, 255, 255, 0.95);
-    border: 1px solid #dee2e6;
-    border-radius: 50%;
-    width: 44px;
+    width: 44px; /* 데스크탑에서 다시 원래 크기로 */
     height: 44px;
-    cursor: pointer;
-    z-index: 10;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    transition: opacity 0.2s, transform 0.2s;
-    opacity: 0.8;
-  }
-  .scroll-arrow:hover {
-    opacity: 1;
-    transform: translateY(-50%) scale(1.05);
   }
   .scroll-arrow.prev {
-    left: 16px;
+    left: 16px; /* 데스크탑에서는 여백을 더 줌 */
   }
   .scroll-arrow.next {
     right: 16px;
