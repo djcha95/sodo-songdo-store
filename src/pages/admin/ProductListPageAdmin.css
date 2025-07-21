@@ -1,7 +1,7 @@
 /* src/pages/admin/ProductListPageAdmin.css */
 
 /* --- 기본 레이아웃 및 헤더 --- */
-.product-list-admin-container { padding: 0; } /* AdminLayout에서 패딩을 관리하므로 여기선 제거 */
+.product-list-admin-container { padding: 0; }
 .admin-page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); padding: 0 0.5rem; }
 .admin-page-title { display: flex; align-items: center; gap: 12px; font-size: var(--font-size-xxxl); font-weight: var(--font-weight-extrabold); color: var(--text-color-dark); }
 .admin-add-button { display: inline-flex; align-items: center; gap: 8px; background-color: var(--primary-color); color: white; padding: 10px 18px; border: none; border-radius: var(--border-radius-md); font-weight: var(--font-weight-bold); font-size: 0.95rem; cursor: pointer; transition: all 0.2s; box-shadow: var(--box-shadow-sm); }
@@ -34,41 +34,29 @@
 .admin-product-table thead { display: table-header-group !important; }
 .admin-product-table tbody { display: table-row-group !important; }
 .admin-product-table tr { display: table-row !important; transition: background-color 0.15s ease-in-out; }
-
-/* ❗ [디자인 개선] 마우스 호버 시 행 전체에 부드러운 배경색 변화를 줍니다. */
 .admin-product-table tbody tr:hover > td { background-color: var(--primary-color-light, #eef2ff); }
-
-.admin-product-table th, 
-.admin-product-table td {
-  display: table-cell !important;
-  /* ❗ [디자인 개선] 셀의 상하 여백을 늘려 가독성을 높입니다. */
-  padding: 14px 15px;
-  text-align: left;
-  vertical-align: middle;
-  border-bottom: 1px solid var(--border-color-light);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.9rem;
-}
+.admin-product-table th, .admin-product-table td { display: table-cell !important; padding: 14px 15px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border-color-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; }
 .admin-product-table th { background-color: #f8f9fa; font-weight: var(--font-weight-bold); color: var(--text-color-dark); padding: 16px 15px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* 무제한 재고 상품 행 강조 스타일 */
+.admin-product-table tbody tr.unlimited-stock-warning > td {
+  background-color: #fffbeb;
+}
+.admin-product-table tbody tr.unlimited-stock-warning:hover > td {
+  background-color: #fef9c3;
+}
 
-/* ❗ [수정] '상태', '유통기한' 칸을 늘리고 다른 칸들의 너비를 재조정합니다. */
+
+/* 테이블 컬럼 너비 조정 */
 .admin-product-table th:nth-child(1), .admin-product-table td:nth-child(1) { width: 4%; text-align: center; }
 .admin-product-table th:nth-child(2), .admin-product-table td:nth-child(2) { width: 5%; }
 .admin-product-table th:nth-child(3), .admin-product-table td:nth-child(3) { width: 7%; }
 .admin-product-table th:nth-child(4), .admin-product-table td:nth-child(4) { width: 8%; }
 .admin-product-table th:nth-child(5), .admin-product-table td:nth-child(5) { width: 7%; text-align: center; }
-.admin-product-table th:nth-child(6), .admin-product-table td:nth-child(6) {
-  width: 23%;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-}
-.admin-product-table th:nth-child(7), .admin-product-table td:nth-child(7) { width: 7%; text-align: center; } /* 상태 (확대) */
+.admin-product-table th:nth-child(6), .admin-product-table td:nth-child(6) { width: 23%; white-space: normal; overflow: visible; text-overflow: clip; }
+.admin-product-table th:nth-child(7), .admin-product-table td:nth-child(7) { width: 7%; text-align: center; }
 .admin-product-table th:nth-child(8), .admin-product-table td:nth-child(8) { width: 8%; text-align: right; }
-.admin-product-table th:nth-child(9), .admin-product-table td:nth-child(9) { width: 8%; } /* 유통기한 (확대) */
+.admin-product-table th:nth-child(9), .admin-product-table td:nth-child(9) { width: 8%; }
 .admin-product-table th:nth-child(10), .admin-product-table td:nth-child(10) { width: 7%; text-align: center; }
 .admin-product-table th:nth-child(11), .admin-product-table td:nth-child(11) { width: 5%; text-align: center; }
 .admin-product-table th:nth-child(12), .admin-product-table td:nth-child(12) { width: 5%; text-align: center; }
@@ -88,7 +76,6 @@
 .product-thumbnail { width: 48px; height: 48px; object-fit: cover; border-radius: var(--border-radius-md); border: 1px solid var(--border-color-light); flex-shrink: 0; }
 .product-name-cell-v2 { display: flex; align-items: center; gap: 14px; }
 .product-name-text { display: flex; flex-direction: column; gap: 4px; }
-/* ❗ [디자인 개선] 상품명/회차명 폰트를 조정하여 정보 위계를 명확히 합니다. */
 .product-group-name { font-weight: 600; color: #1a202c; font-size: 0.95rem; }
 .round-name-text { font-size: 0.85rem; color: #718096; }
 
@@ -106,106 +93,126 @@
 .sub-row-no { display: inline-block; text-align: right; width: 100%; color: var(--text-color-medium); font-size: 0.85rem; padding-right: 8px; }
 .sub-row-name { color: var(--text-color-regular); padding-left: 24px !important; }
 
-.status-badge { padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid transparent; }
+/* 상태 배지 가독성 향상 */
+.status-badge {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  border: 1px solid transparent;
+  display: inline-block;
+}
+
 .storage-badge { padding: 3px 8px; border-radius: var(--border-radius-sm); font-size: 0.75rem; font-weight: 600; text-align: center; }
 .storage-ROOM { background-color: #f1f5f9; color: #1e293b; }
 .storage-FROZEN { background-color: #e0f2fe; color: #0c4a6e; }
 .storage-COLD { background-color: #fee2e2; color: #991b1b; }
 
-.status-selling    { background-color: #dcfce7; color: #166534; border-color: #86efac; }
-.status-scheduled  { background-color: #e0f2fe; color: #075985; border-color: #7dd3fc; }
-.status-ended      { background-color: #f1f5f9; color: #475569; border-color: #cbd5e1; }
-.status-sold_out   { background-color: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-.status-draft      { background-color: #fefce8; color: #854d0e; border-color: #fde047; }
+.status-selling    { background-color: #dcfce7; color: #15803d; border-color: #86efac; }
+.status-scheduled  { background-color: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
+.status-ended      { background-color: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+.status-sold_out   { background-color: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+.status-draft      { background-color: #fefce8; color: #a16207; border-color: #fde047; }
 
 /* 대기자 명단 버튼 */
-.waitlist-count-button {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  text-decoration: underline;
-  cursor: pointer;
-  font-weight: bold;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-.waitlist-count-button:hover {
-  background-color: var(--primary-color-light);
-}
+.waitlist-count-button { background: none; border: none; color: var(--primary-color); text-decoration: underline; cursor: pointer; font-weight: bold; padding: 2px 4px; border-radius: 4px; }
+.waitlist-count-button:hover { background-color: var(--primary-color-light); }
 
-/* 대기자 명단 모달 오버레이 */
-.waitlist-modal-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex; align-items: center; justify-content: center; z-index: 1000;
-}
-
-/* 대기자 명단 모달 컨텐츠 */
-.waitlist-modal-content {
-  background: white; padding: 2rem; border-radius: 12px;
-  width: 90%; max-width: 700px; max-height: 80vh;
-  display: flex; flex-direction: column;
-  box-shadow: var(--box-shadow-xl);
-}
-
-/* 모달 헤더 */
-.waitlist-modal-header {
-  display: flex; align-items: baseline; gap: 8px;
-  padding-bottom: 1rem; border-bottom: 1px solid var(--border-color-light);
-}
+/* 대기자 명단 모달 */
+.waitlist-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.waitlist-modal-content { background: white; padding: 2rem; border-radius: 12px; width: 90%; max-width: 700px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: var(--box-shadow-xl); }
+.waitlist-modal-header { display: flex; align-items: baseline; gap: 8px; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color-light); }
 .waitlist-modal-header h3 { margin: 0; font-size: 1.5rem; color: var(--text-color-dark); }
 .waitlist-modal-header span { color: var(--text-color-medium); font-size: 1rem; }
-.modal-close-button {
-  margin-left: auto; background: none; border: none; font-size: 1.8rem;
-  cursor: pointer; color: var(--text-color-light); padding: 0 0.5rem;
-  transition: color 0.2s;
-}
+.modal-close-button { margin-left: auto; background: none; border: none; font-size: 1.8rem; cursor: pointer; color: var(--text-color-light); padding: 0 0.5rem; transition: color 0.2s; }
 .modal-close-button:hover { color: var(--text-color-dark); }
-
-/* 모달 바디 (스크롤 가능) */
-.waitlist-modal-body { 
-  flex-grow: 1; 
-  overflow-y: auto; 
-  margin: 1rem 0; 
-  padding-right: 5px; /* 스크롤바 공간 확보 */
-}
+.waitlist-modal-body { flex-grow: 1; overflow-y: auto; margin: 1rem 0; padding-right: 5px; }
 .waitlist-modal-body table { width: 100%; border-collapse: collapse; }
-.waitlist-modal-body th, .waitlist-modal-body td {
-  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color-light);
-}
+.waitlist-modal-body th, .waitlist-modal-body td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color-light); }
 .waitlist-modal-body th { background-color: #f8f9fa; font-weight: var(--font-weight-bold); color: var(--text-color-dark); }
 .waitlist-modal-body td { color: var(--text-color-regular); }
 .waitlist-modal-body tbody tr:last-child td { border-bottom: none; }
-
-
-/* 모달 푸터 (재고 추가 및 전환 버튼) */
-.waitlist-modal-footer {
-  display: flex; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color-light);
-  align-items: center;
-}
-.stock-add-input {
-  flex-grow: 1; padding: 10px; border: 1px solid var(--border-color-medium);
-  border-radius: 8px; font-size: 1rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.stock-add-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-color-light);
-}
-.stock-add-confirm-btn {
-  background-color: var(--primary-color); color: white; border: none;
-  padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;
-  transition: all 0.2s;
-}
+.waitlist-modal-footer { display: flex; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color-light); align-items: center; }
+.stock-add-input { flex-grow: 1; padding: 10px; border: 1px solid var(--border-color-medium); border-radius: 8px; font-size: 1rem; transition: border-color 0.2s, box-shadow 0.2s; }
+.stock-add-input:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-color-light); }
+.stock-add-confirm-btn { background-color: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
 .stock-add-confirm-btn:hover { background-color: var(--primary-color-dark); box-shadow: var(--box-shadow-sm); }
-.stock-add-confirm-btn:disabled {
-  background-color: #ced4da;
+.stock-add-confirm-btn:disabled { background-color: #ced4da; cursor: not-allowed; }
+.error-text { color: var(--error-color); text-align: center; margin-top: 1rem; }
+
+/* 페이지네이션 컨트롤 스타일 */
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #fff;
+  border-top: 1px solid var(--border-color-light);
+  border-bottom-left-radius: var(--border-radius-lg);
+  border-bottom-right-radius: var(--border-radius-lg);
+}
+
+.pagination-left,
+.pagination-center,
+.pagination-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-center {
+  flex-grow: 1;
+  justify-content: center;
+}
+
+.pagination-container button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border: 1px solid var(--border-color-medium);
+  background-color: white;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.pagination-container button:hover:not(:disabled) {
+  background-color: #f8f9fa;
+  border-color: var(--border-color-dark);
+}
+
+.pagination-container button:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.error-text {
-  color: var(--error-color);
-  text-align: center;
-  margin-top: 1rem;
+.page-info {
+  font-weight: 500;
+  color: var(--text-color-regular);
+  font-family: 'Inter', sans-serif;
+}
+
+.items-per-page-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.items-per-page-selector label {
+  font-size: 0.9rem;
+  color: var(--text-color-medium);
+}
+
+.items-per-page-selector select {
+  padding: 6px 8px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color-medium);
+}
+
+.total-items-display {
+  font-size: 0.9rem;
+  color: var(--text-color-medium);
 }
