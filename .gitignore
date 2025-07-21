@@ -5,6 +5,7 @@
 
 # Firebase Admin SDK 키 파일 (보안상 매우 중요)
 /scripts/sso-do-firebase-adminsdk-fbsvc-6fcec91050.json
+sodomall-service-key.json
 
 # Firebase 에뮬레이터 로그 파일
 database-debug.log

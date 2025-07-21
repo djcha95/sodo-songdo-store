@@ -8,7 +8,6 @@
 }
 
 .cart-items-column {
-  /* ✅ [수정] 하단 고정 푸터 높이를 고려하여 여백 조정 */
   padding-bottom: 150px; 
 }
 
@@ -27,7 +26,6 @@
 }
 
 .cart-summary-card {
-  /* ✅ [수정] 콤팩트한 디자인을 위해 패딩 축소 */
   padding: 12px 20px;
 }
 
@@ -53,7 +51,6 @@
     max-width: none;
   }
   .cart-summary-card {
-    /* ✅ [수정] 콤팩트한 디자인을 위해 패딩 축소 */
     padding: 16px 20px;
     border: 1px solid var(--border-color-light);
     border-radius: var(--border-radius-lg);
@@ -124,18 +121,15 @@
 }
 .cart-item-card {
   display: flex;
-  /* ✅ [수정] 카드 내부 아이템 간격 축소 */
   gap: 12px;
   background-color: var(--bg-color-white);
   border: 2px solid transparent;
   border-radius: var(--border-radius-md);
   box-shadow: var(--box-shadow-sm);
-  /* ✅ [수정] 카드 내부 패딩 축소 */
   padding: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
-/* ✅ [추가] 재고 부족 상품에 대한 시각적 피드백 */
 .cart-item-card.stock-exceeded {
   border-color: var(--warning-color, #ffc107);
   background-color: var(--warning-color-x-light, #fff9e6);
@@ -147,7 +141,6 @@
 }
 .item-image-wrapper {
   flex-shrink: 0;
-  /* ✅ [수정] 이미지 크기 축소 */
   width: 80px;
   height: 80px;
   border-radius: var(--border-radius-sm);
@@ -182,7 +175,6 @@
   min-width: 0;
 }
 .item-product-name {
-  /* ✅ [수정] 폰트 크기 축소 */
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-color-dark);
@@ -289,7 +281,6 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  /* ✅ [수정] 콤팩트한 디자인을 위해 마진 축소 */
   margin-bottom: 8px;
 }
 .total-label {
@@ -310,7 +301,7 @@
 .checkout-btn {
   width: 100%;
   padding: 14px;
-  margin-top: 4px; /* ✅ [추가] 상단 간격 추가 */
+  margin-top: 4px;
   background-color: var(--accent-color);
   color: var(--bg-color-white);
   border: none;
@@ -370,4 +361,103 @@
 }
 .continue-shopping-btn:hover {
   background-color: var(--primary-color-dark);
+}
+
+/* ✅ [추가] 선입금 안내 모달 스타일 */
+.prepayment-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.prepayment-modal-content {
+  background-color: white;
+  padding: 24px 28px;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.prepayment-modal-content .toast-icon-wrapper {
+  background-color: var(--warning-color-x-light, #fffbeB);
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--warning-color-dark, #b45309);
+  margin-bottom: 8px;
+}
+.prepayment-modal-content h4 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-color-dark);
+  margin: 0;
+}
+
+.prepayment-modal-content p {
+  font-size: 0.95rem;
+  color: var(--text-color-medium);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.prepayment-modal-content .bank-info {
+  background-color: var(--bg-color-light);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.prepayment-modal-content .bank-info strong {
+  font-weight: 600;
+  color: var(--text-color-dark);
+}
+
+.prepayment-modal-content .price-to-pay {
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+.prepayment-modal-content .price-to-pay strong {
+  font-size: 1.1rem;
+  color: var(--accent-color);
+}
+
+.prepayment-modal-content small {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.prepayment-modal-content .modal-confirm-button {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  background-color: var(--accent-color);
+  color: var(--bg-color-white);
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.prepayment-modal-content .modal-confirm-button:hover {
+  background-color: var(--accent-color-dark);
 }

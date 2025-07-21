@@ -5,14 +5,16 @@ import {
   collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
   writeBatch,
   increment, arrayUnion, where, orderBy, Timestamp, runTransaction,
-  startAfter, limit, getCountFromServer
+  startAfter, limit, getCountFromServer, serverTimestamp
 } from 'firebase/firestore';
 import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem } from '@/types';
-import { getUserDocById } from './userService'; // userService에서 사용자 정보 조회를 위해 import
-import { submitOrderFromWaitlist } from './orderService'; // orderService에서 import
+// ✨ [수정] PaginatedProductsResponse 타입 추가
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem, WaitlistInfo, UserDocument, PointLog, PaginatedProductsResponse } from '@/types';
+import { getUserDocById } from './userService';
+import { submitOrderFromWaitlist } from './orderService';
+import { calculateTier } from '@/utils/loyaltyUtils';
 
 
 // --- BulkActionBar.tsx에서 사용할 함수 추가 ---
@@ -201,10 +203,10 @@ export const updateProductCoreInfo = async (
   const deletePromises = imageUrlsToDelete.map(url => {
     try {
       const imageRef = ref(storage, url);
-      return Promise.resolve(deleteObject(imageRef)); // Promise.resolve()로 감싸서 항상 Promise를 반환하도록 함
+      return Promise.resolve(deleteObject(imageRef));
     } catch (e) {
       console.warn(`이미지 삭제 실패 (URL: ${url}):`, e);
-      return Promise.resolve(); // 오류 발생 시에도 Promise.all이 실패하지 않도록 resolve
+      return Promise.resolve();
     }
   });
   await Promise.all(deletePromises);
@@ -243,27 +245,47 @@ export const getProductById = async (productId: string): Promise<Product | null>
 };
 
 /**
- * @description 모든 대표 상품 목록 가져오기
+ * @description 대표 상품 목록을 페이지 단위로 가져옵니다. (무한 스크롤용)
+ * @param archived - 보관된 상품 포함 여부
+ * @param pageSize - 한 번에 가져올 상품 수
+ * @param lastVisible - 이전 페이지의 마지막 문서 (다음 페이지 시작점)
+ * @returns 상품 목록과 다음 페이지를 위한 마지막 문서 정보를 포함하는 객체
  */
-export const getProducts = async (archived: boolean = false): Promise<Product[]> => {
-  const queryConstraints = [
-    where('isArchived', '==', archived),
-    orderBy('createdAt', 'desc')
-  ];
-
-  const productsQuery: Query<DocumentData> = query(
+export const getProducts = async (
+  archived: boolean = false,
+  pageSize: number = 10,
+  lastVisible: DocumentData | null = null
+): Promise<PaginatedProductsResponse> => {
+  let productsQuery: Query<DocumentData> = query(
     collection(db, 'products'),
-    ...queryConstraints
+    where('isArchived', '==', archived),
+    orderBy('createdAt', 'desc'),
+    limit(pageSize)
   );
-  
+
+  if (lastVisible) {
+    productsQuery = query(
+      collection(db, 'products'),
+      where('isArchived', '==', archived),
+      orderBy('createdAt', 'desc'),
+      startAfter(lastVisible),
+      limit(pageSize)
+    );
+  }
+
   const snapshot = await getDocs(productsQuery);
-  return snapshot.docs.map((doc: DocumentData) => ({ id: doc.id, ...doc.data() } as Product));
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Product));
+  const newLastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
+
+  return {
+    products,
+    lastVisible: newLastVisible,
+  };
 };
 
 
 /**
  * @description 여러 개의 하위 그룹 재고를 한 번의 작업으로 업데이트하는 함수
- * 이 함수는 대시보드에서 여러 품목의 재고를 일괄적으로 변경할 때 유용합니다.
  */
 export const updateMultipleVariantGroupStocks = async (
   updates: {
@@ -274,11 +296,8 @@ export const updateMultipleVariantGroupStocks = async (
   }[]
 ): Promise<void> => {
   const batch = writeBatch(db);
-
-  // 업데이트가 필요한 모든 상품 문서를 한 번씩만 읽기 위해 Map을 사용합니다.
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
-  // 먼저 필요한 모든 상품 데이터를 가져와 메모리에 로드합니다.
   for (const update of updates) {
     if (!productsToUpdate.has(update.productId)) {
       const productRef = doc(db, 'products', update.productId);
@@ -292,7 +311,6 @@ export const updateMultipleVariantGroupStocks = async (
     }
   }
   
-  // 메모리에 로드된 상품 데이터에 모든 변경사항을 적용합니다.
   for (const update of updates) {
     const productInfo = productsToUpdate.get(update.productId);
     if (!productInfo) continue;
@@ -303,7 +321,6 @@ export const updateMultipleVariantGroupStocks = async (
       if (round.roundId === update.roundId) {
         const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
           if (vg.id === update.variantGroupId) {
-            // totalPhysicalStock을 업데이트합니다.
             return { ...vg, totalPhysicalStock: update.newStock };
           }
           return vg;
@@ -313,11 +330,9 @@ export const updateMultipleVariantGroupStocks = async (
       return round;
     });
     
-    // 메모리에 있는 productData를 업데이트합니다.
     productData.salesHistory = newSalesHistory; 
   }
 
-  // 최종적으로 변경된 모든 상품 데이터를 배치에 추가합니다.
   for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
@@ -333,7 +348,7 @@ export const addWaitlistEntry = async (
   productId: string,
   roundId: string,
   userId: string,
-  quantity: number, // ❗이곳에 쉼표(,)를 추가했습니다.
+  quantity: number,
   variantGroupId: string,
   itemId: string
 ): Promise<void> => {
@@ -341,24 +356,16 @@ export const addWaitlistEntry = async (
 
   await runTransaction(db, async (transaction) => {
     const productDoc = await transaction.get(productRef);
-    if (!productDoc.exists()) {
-      throw new Error("상품을 찾을 수 없습니다.");
-    }
+    if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
 
     const productData = productDoc.data() as Product;
     const newSalesHistory = [...productData.salesHistory];
     const roundIndex = newSalesHistory.findIndex(r => r.roundId === roundId);
-
-    if (roundIndex === -1) {
-      throw new Error("판매 회차 정보를 찾을 수 없습니다.");
-    }
+    if (roundIndex === -1) throw new Error("판매 회차 정보를 찾을 수 없습니다.");
 
     const round = newSalesHistory[roundIndex];
-
     const existingEntry = round.waitlist?.find(entry => entry.userId === userId && entry.itemId === itemId);
-    if (existingEntry) {
-      throw new Error("이미 대기를 신청한 상품입니다.");
-    }
+    if (existingEntry) throw new Error("이미 대기를 신청한 상품입니다.");
     
     const newWaitlistEntry: WaitlistEntry = {
       userId,
@@ -370,12 +377,8 @@ export const addWaitlistEntry = async (
     
     round.waitlist = [...(round.waitlist || []), newWaitlistEntry];
     round.waitlistCount = (round.waitlistCount || 0) + quantity;
-
     newSalesHistory[roundIndex] = round;
-
-    transaction.update(productRef, {
-      salesHistory: newSalesHistory,
-    });
+    transaction.update(productRef, { salesHistory: newSalesHistory });
   });
 };
 
@@ -393,12 +396,9 @@ export const updateItemStock = async (
     
     await runTransaction(db, async (transaction) => {
         const productSnap = await transaction.get(productRef);
-        if (!productSnap.exists()) {
-            throw new Error("상품을 찾을 수 없습니다.");
-        }
+        if (!productSnap.exists()) throw new Error("상품을 찾을 수 없습니다.");
         
         const product = productSnap.data() as Product;
-
         const newSalesHistory = product.salesHistory.map((round: SalesRound) => {
             if (round.roundId === roundId) {
                 const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
@@ -436,9 +436,7 @@ export const checkProductAvailability = async (productId: string, roundId: strin
   if (!item) return false;
 
   const hasSufficientItemStock = item.stock === -1 || item.stock > 0;
-  if (!hasSufficientItemStock) {
-    return false;
-  }
+  if (!hasSufficientItemStock) return false;
 
   const hasSufficientGroupStock = 
     variantGroup.totalPhysicalStock === null || 
@@ -547,9 +545,7 @@ export const updateSalesRoundStatus = async (
 
   await runTransaction(db, async (transaction) => {
     const productSnap = await transaction.get(productRef);
-    if (!productSnap.exists()) {
-      throw new Error("상품을 찾을 수 없습니다.");
-    }
+    if (!productSnap.exists()) throw new Error("상품을 찾을 수 없습니다.");
 
     const product = productSnap.data() as Product;
     const newSalesHistory = product.salesHistory.map(round => {
@@ -565,7 +561,6 @@ export const updateSalesRoundStatus = async (
 
 /**
  * @description 여러 판매 회차의 'status'를 한 번에 업데이트하는 함수
- * @param updates - { productId, roundId, newStatus } 객체 배열
  */
 export const updateMultipleSalesRoundStatuses = async (
   updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
@@ -573,7 +568,6 @@ export const updateMultipleSalesRoundStatuses = async (
   const batch = writeBatch(db);
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
-  // 필요한 모든 상품 문서를 한 번씩 읽어 메모리에 로드
   for (const update of updates) {
     if (!productsToUpdate.has(update.productId)) {
       const productRef = doc(db, 'products', update.productId);
@@ -587,13 +581,11 @@ export const updateMultipleSalesRoundStatuses = async (
     }
   }
 
-  // 메모리에 로드된 상품 데이터에 모든 변경사항 적용
   for (const update of updates) {
     const productInfo = productsToUpdate.get(update.productId);
     if (!productInfo) continue;
 
     const { productData } = productInfo;
-
     const newSalesHistory = productData.salesHistory.map((round: SalesRound) => {
       if (round.roundId === update.roundId) {
         return { ...round, status: update.newStatus };
@@ -601,11 +593,9 @@ export const updateMultipleSalesRoundStatuses = async (
       return round;
     });
     
-    // 메모리에 있는 productData를 업데이트
     productData.salesHistory = newSalesHistory; 
   }
 
-  // 최종적으로 변경된 모든 상품 데이터를 배치에 추가
   for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
   }
@@ -625,13 +615,31 @@ interface ArrivalInfo {
   arrivalDate: Timestamp;
 }
 
+// ✨ [신규] 모든 상품을 한 번에 가져오는 함수 (페이지네이션 미적용)
+/**
+ * @description 보관되지 않은 모든 상품을 가져옵니다. (기능용)
+ * @param archived - 보관된 상품 포함 여부
+ * @returns 상품 배열
+ */
+export const getAllProducts = async (archived: boolean = false): Promise<Product[]> => {
+  const productsQuery: Query<DocumentData> = query(
+    collection(db, 'products'),
+    where('isArchived', '==', archived),
+    orderBy('createdAt', 'desc')
+  );
+
+  const snapshot = await getDocs(productsQuery);
+  return snapshot.docs.map((doc: DocumentData) => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+
 export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
-  const products = await getProducts(false); // isArchived가 false인 상품만 가져옴
+  // ✨ [수정] 페이지네이션 없는 getAllProducts 함수로 변경하여 모든 상품을 순회하도록 수정
+  const products = await getAllProducts(false);
   const arrivals: ArrivalInfo[] = [];
 
   products.forEach(product => {
     product.salesHistory.forEach(round => {
-      // arrivalDate가 존재하는 경우에만 추가
       if (round.arrivalDate) {
         arrivals.push({
           productId: product.id,
@@ -647,74 +655,112 @@ export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
   return arrivals;
 };
 
-export interface WaitlistInfo {
-  productId: string;
-  productName: string;
-  roundId: string;
-  roundName: string;
-  userId: string;
-  userName: string; // 사용자 이름 추가
-  quantity: number;
-  timestamp: Timestamp;
-}
 
-/**
- * @description 모든 판매 회차의 대기 명단 정보를 가져옵니다.
- */
-export const getAllWaitlists = async (): Promise<WaitlistInfo[]> => {
-  const products = await getProducts(false); // 보관처리되지 않은 상품만 조회
-  const allWaitlists: WaitlistInfo[] = [];
-
-  for (const product of products) {
-    for (const round of product.salesHistory) {
-      if (round.waitlist && round.waitlist.length > 0) {
-        for (const entry of round.waitlist) {
-          const userDoc = await getUserDocById(entry.userId);
-          allWaitlists.push({
-            productId: product.id,
-            productName: product.groupName,
-            roundId: round.roundId,
-            roundName: round.roundName,
-            userName: userDoc?.displayName || '알 수 없음', // 사용자 이름 추가
-            ...entry
-          });
-        }
-      }
-    }
-  }
-
-  // 최신순으로 정렬
-  allWaitlists.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+// ✨ [신규] 특정 사용자의 모든 대기 목록을 가져오는 함수
+export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
+  if (!userId) return [];
   
-  return allWaitlists;
+  // Firestore는 배열 내 객체의 필드를 직접 쿼리하는 것을 지원하지 않으므로,
+  // 모든 상품을 가져와 클라이언트에서 필터링합니다.
+  const allProductsSnapshot = await getDocs(query(collection(db, 'products'), where('isArchived', '==', false)));
+  const userWaitlist: WaitlistInfo[] = [];
+
+  allProductsSnapshot.docs.forEach(doc => {
+    const product = { id: doc.id, ...doc.data() } as Product;
+    product.salesHistory.forEach(round => {
+      if (round.waitlist && round.waitlist.length > 0) {
+        round.waitlist.forEach(entry => {
+          if (entry.userId === userId) {
+            const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
+            const item = vg?.items.find(i => i.id === entry.itemId);
+
+            userWaitlist.push({
+              productId: product.id,
+              productName: product.groupName,
+              roundId: round.roundId,
+              roundName: round.roundName,
+              variantGroupId: entry.variantGroupId,
+              itemId: entry.itemId,
+              itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
+              imageUrl: product.imageUrls[0] || '',
+              quantity: entry.quantity,
+              timestamp: entry.timestamp,
+              isPrioritized: entry.isPrioritized || false,
+            });
+          }
+        });
+      }
+    });
+  });
+  
+  return userWaitlist.sort((a, b) => {
+    if (a.isPrioritized && !b.isPrioritized) return -1;
+    if (!a.isPrioritized && b.isPrioritized) return 1;
+    return b.timestamp.toMillis() - a.timestamp.toMillis();
+  });
 };
+
+// ✨ [신규] 사용자가 대기 목록 항목을 취소하는 함수
+export const cancelWaitlistEntry = async (
+  productId: string, 
+  roundId: string, 
+  userId: string, 
+  itemId: string
+): Promise<void> => {
+  const productRef = doc(db, 'products', productId);
+  await runTransaction(db, async (transaction) => {
+    const productDoc = await transaction.get(productRef);
+    if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
+    
+    const productData = productDoc.data() as Product;
+    const newSalesHistory = [...productData.salesHistory];
+    const roundIndex = newSalesHistory.findIndex(r => r.roundId === roundId);
+    if (roundIndex === -1) throw new Error("판매 회차를 찾을 수 없습니다.");
+    
+    const round = newSalesHistory[roundIndex];
+    if (!round.waitlist) return;
+
+    const entryToCancel = round.waitlist.find(e => e.userId === userId && e.itemId === itemId);
+    if (!entryToCancel) return;
+
+    round.waitlist = round.waitlist.filter(e => !(e.userId === userId && e.itemId === itemId));
+    round.waitlistCount = (round.waitlistCount || 0) - entryToCancel.quantity;
+    
+    newSalesHistory[roundIndex] = round;
+    transaction.update(productRef, { salesHistory: newSalesHistory });
+  });
+};
+
 
 /**
  * @description 특정 판매 회차의 대기 명단 정보를 사용자 이름과 함께 가져옵니다.
  */
-export const getWaitlistForRound = async (productId: string, roundId: string): Promise<WaitlistInfo[]> => {
+export const getWaitlistForRound = async (productId: string, roundId: string): Promise<(WaitlistInfo & {userName: string})[]> => {
   const product = await getProductById(productId);
-  if (!product) {
-    throw new Error("상품 정보를 찾을 수 없습니다.");
-  }
+  if (!product) throw new Error("상품 정보를 찾을 수 없습니다.");
 
   const round = product.salesHistory.find(r => r.roundId === roundId);
-  if (!round || !round.waitlist) {
-    return [];
-  }
+  if (!round || !round.waitlist) return [];
 
-  // 대기 시간순으로 정렬 (선착순)
-  const sortedWaitlist = round.waitlist.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+  const sortedWaitlist = round.waitlist.sort((a, b) => {
+    if (a.isPrioritized && !b.isPrioritized) return -1;
+    if (!a.isPrioritized && b.isPrioritized) return 1;
+    return b.timestamp.toMillis() - a.timestamp.toMillis();
+  });
 
-  // 각 대기 항목에 사용자 이름을 추가
   const detailedWaitlist = await Promise.all(
     sortedWaitlist.map(async (entry) => {
       const userDoc = await getUserDocById(entry.userId);
+      const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
+      const item = vg?.items.find(i => i.id === entry.itemId);
+      
       return {
         productId: product.id,
         productName: product.groupName,
         roundId: round.roundId,
         roundName: round.roundName,
+        itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
+        imageUrl: product.imageUrls[0] || '',
         userName: userDoc?.displayName || '알 수 없음',
         ...entry,
       };
@@ -730,7 +776,7 @@ export const getWaitlistForRound = async (productId: string, roundId: string): P
 export const addStockAndProcessWaitlist = async (
   productId: string,
   roundId: string,
-  variantGroupId: string, // 어떤 옵션의 재고를 추가할지 명시
+  variantGroupId: string,
   additionalStock: number
 ): Promise<{ convertedCount: number; failedCount: number; }> => {
   let availableStock = additionalStock;
@@ -739,7 +785,7 @@ export const addStockAndProcessWaitlist = async (
 
   const productRef = doc(db, 'products', productId);
 
-  return runTransaction(db, async (transaction) => {
+  await runTransaction(db, async (transaction) => {
     const productDoc = await transaction.get(productRef);
     if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
 
@@ -749,13 +795,17 @@ export const addStockAndProcessWaitlist = async (
     if (roundIndex === -1) throw new Error("판매 회차를 찾을 수 없습니다.");
     
     const round = salesHistory[roundIndex];
-    if (!round.waitlist || round.waitlist.length === 0) return { convertedCount: 0, failedCount: 0 };
+    if (!round.waitlist || round.waitlist.length === 0) return;
 
-    // 선착순으로 대기 목록 정렬
-    const sortedWaitlist = round.waitlist.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
-    const remainingWaitlist: WaitlistEntry[] = [];
+    const sortedWaitlist = round.waitlist.sort((a, b) => {
+      if (a.isPrioritized && !b.isPrioritized) return -1;
+      if (!a.isPrioritized && b.isPrioritized) return 1;
+      return a.timestamp.toMillis() - b.timestamp.toMillis();
+    });
     
-    // 재고 업데이트
+    const remainingWaitlist: WaitlistEntry[] = [];
+    const usersToRefund = new Set<string>();
+    
     const groupIndex = round.variantGroups.findIndex(vg => vg.id === variantGroupId);
     if (groupIndex === -1) throw new Error("상품 옵션을 찾을 수 없습니다.");
     
@@ -765,29 +815,53 @@ export const addStockAndProcessWaitlist = async (
     }
     
     for (const entry of sortedWaitlist) {
-      if (entry.quantity <= availableStock) {
+      const itemToProcess = round.variantGroups[groupIndex].items.find(item => item.id === entry.itemId);
+
+      if (itemToProcess && entry.quantity <= availableStock) {
         try {
-          // 재고 차감 및 주문 생성 (orderService에 새 함수 필요)
           await submitOrderFromWaitlist(transaction, entry, product, round);
           availableStock -= entry.quantity;
           convertedCount++;
         } catch (e) {
             console.error(`주문 전환 실패 (사용자: ${entry.userId}):`, e);
             failedCount++;
-            remainingWaitlist.push(entry); // 실패 시 다시 대기 목록에 포함
+            remainingWaitlist.push(entry);
         }
       } else {
         remainingWaitlist.push(entry);
+        if (entry.isPrioritized) {
+          usersToRefund.add(entry.userId);
+        }
       }
     }
     
-    // 대기 목록에서 성공적으로 전환된 사용자들 제거
     round.waitlist = remainingWaitlist;
     round.waitlistCount = remainingWaitlist.reduce((sum, entry) => sum + entry.quantity, 0);
     salesHistory[roundIndex] = round;
     
     transaction.update(productRef, { salesHistory });
 
-    return { convertedCount, failedCount };
+    for (const userId of usersToRefund) {
+      const userRef = doc(db, 'users', userId);
+      const userDoc = await transaction.get(userRef);
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as UserDocument;
+        const refundAmount = 50;
+        const newPoints = userData.points + refundAmount;
+        const newTier = calculateTier(newPoints);
+        const pointHistoryEntry: Omit<PointLog, 'id'> = {
+          amount: refundAmount,
+          reason: '대기 순번 상승권 환불 (재고 미확보)',
+          createdAt: serverTimestamp(),
+        };
+        transaction.update(userRef, {
+          points: newPoints,
+          loyaltyTier: newTier,
+          pointHistory: arrayUnion(pointHistoryEntry),
+        });
+      }
+    }
   });
+
+  return { convertedCount, failedCount };
 };

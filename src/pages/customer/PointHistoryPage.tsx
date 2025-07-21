@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getPointHistory } from '@/firebase';
 import type { PointLog } from '@/types';
-// [수정] 사용하지 않는 History 아이콘을 import 목록에서 제거합니다.
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import './PointHistoryPage.css';
 
@@ -68,7 +67,8 @@ const PointHistoryPage: React.FC = () => {
                 <h2>포인트 내역</h2>
                 <div className="current-points-display">
                     <span>현재 포인트</span>
-                    <strong>{(userDocument?.loyaltyPoints || 0).toLocaleString()}점</strong>
+                    {/* ✅ [수정] loyaltyPoints -> points 로 변경 */}
+                    <strong>{(userDocument?.points || 0).toLocaleString()}점</strong>
                 </div>
             </header>
             <div className="point-history-content">

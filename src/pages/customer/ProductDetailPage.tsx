@@ -12,15 +12,17 @@ import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
-  Tag, AlertCircle, PackageCheck, Hourglass
+  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX
 } from 'lucide-react';
 import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
 import './ProductDetailPage.css';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
 
 // --- 유틸리티 및 헬퍼 함수 ---
+dayjs.extend(isBetween);
 
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
@@ -37,19 +39,16 @@ const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// 날짜 포맷팅 헬퍼 함수
 const formatDateWithDay = (date: Date | Timestamp | null | undefined): string => {
   const d = safeToDate(date);
   if (!d) return '날짜 미정';
   return dayjs(d).format('MM.DD(ddd)');
 };
 
-// 가격 포맷팅 헬퍼 함수
 const formatPrice = (price: number) => {
   return price.toLocaleString('ko-KR') + '원';
 };
 
-// 보관 방법 라벨 및 아이콘 매핑
 const storageLabels: Record<StorageType, string> = {
   ROOM: '상온',
   COLD: '냉장',
@@ -62,28 +61,31 @@ const storageIcons: Record<StorageType, React.ReactNode> = {
   FROZEN: <Snowflake size={16} />,
 };
 
-// 최신 SalesRound를 찾는 헬퍼 함수
 const getLatestRoundFromHistory = (product: Product | null): SalesRound | null => {
   if (!product || !product.salesHistory || product.salesHistory.length === 0) return null;
 
-  // 판매중(selling)인 라운드가 있으면 그것을 최우선으로 반환
-  const sellingRound = product.salesHistory.find(r => r.status === 'selling');
-  if (sellingRound) return sellingRound;
-
-  // 판매 예정(scheduled) 라운드 중 가장 가까운 미래의 것을 반환
+  const sellingRounds = product.salesHistory.filter(r => r.status === 'selling');
+  if (sellingRounds.length > 0) {
+    return sellingRounds.sort((a, b) => safeToDate(b.createdAt)!.getTime() - safeToDate(a.createdAt)!.getTime())[0];
+  }
+  
   const now = new Date();
+
+  const nowSellingScheduled = product.salesHistory
+    .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! <= now)
+    .sort((a, b) => safeToDate(b.publishAt)!.getTime() - safeToDate(a.publishAt)!.getTime());
+  if (nowSellingScheduled.length > 0) return nowSellingScheduled[0];
+  
   const futureScheduledRounds = product.salesHistory
     .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! > now)
     .sort((a, b) => safeToDate(a.publishAt)!.getTime() - safeToDate(b.publishAt)!.getTime());
   if (futureScheduledRounds.length > 0) return futureScheduledRounds[0];
 
-  // 판매 종료(ended) 또는 품절(sold_out)된 라운드 중 가장 최근 것을 반환
   const pastRounds = product.salesHistory
     .filter(r => r.status === 'ended' || r.status === 'sold_out')
     .sort((a, b) => safeToDate(b.deadlineDate)!.getTime() - safeToDate(a.deadlineDate)!.getTime());
   if (pastRounds.length > 0) return pastRounds[0];
 
-  // 위 조건에 아무것도 해당하지 않으면, 임시저장이 아닌 것 중 가장 최신 생성 라운드를 반환
   const nonDraftRounds = product.salesHistory
     .filter(r => r.status !== 'draft')
     .sort((a,b) => safeToDate(b.createdAt)!.getTime() - safeToDate(a.createdAt)!.getTime());
@@ -122,7 +124,7 @@ interface ProductDetailPageProps {
 const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen, onClose }) => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { user } = useAuth();
+  const { user, userDocument, isSuspendedUser } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
 
   // --- 상태(State) 선언 ---
@@ -158,22 +160,21 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const userAlreadyRequestedEncore = !!(user && product && hasRequestedEncore(product.id));
   
   const productActionState = useMemo<ProductActionState>(() => {
-    if (loading || stockLoading || !displayRound || !product || !selectedVariantGroup) {
+    if (loading || stockLoading || !displayRound || !product || !selectedVariantGroup || !selectedItem) {
       return 'LOADING';
     }
 
-    const now = new Date();
-
+    const now = dayjs();
     const publishAtDate = safeToDate(displayRound.publishAt);
-    if (displayRound.status === 'scheduled' && publishAtDate && now < publishAtDate) {
+
+    if (displayRound.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) {
       return 'SCHEDULED';
     }
     
-    // 판매 종료 시점을 픽업일 당일 오후 1시로 설정
     const pickupDate = safeToDate(displayRound.pickupDate);
-    const finalSaleDeadline = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0).toDate() : null;
+    const finalSaleDeadline = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0) : null;
 
-    if (finalSaleDeadline && now >= finalSaleDeadline) {
+    if (finalSaleDeadline && now.isAfter(finalSaleDeadline)) {
         return 'ENDED';
     }
 
@@ -183,15 +184,37 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : totalStock - reserved;
     const isSoldOut = remainingStock < (selectedItem?.stockDeductionAmount || 1);
     
-    const createdAtDate = safeToDate(displayRound.createdAt);
-    const firstPeriodDeadline = createdAtDate ? dayjs(createdAtDate).add(1, 'day').hour(13).minute(0).second(0).toDate() : null;
-    const isFirstPeriodActive = firstPeriodDeadline && now < firstPeriodDeadline;
+    // ProductListPage와 동일한 로직으로 '오늘의 공동구매' 기간을 계산합니다.
+    let salesStart, salesEnd;
+    const today1pm = now.clone().hour(13).minute(0).second(0);
+    let lastSat1pm = now.clone().day(6).hour(13).minute(0).second(0).millisecond(0);
+    if (lastSat1pm.isAfter(now)) {
+        lastSat1pm = lastSat1pm.subtract(1, 'week');
+    }
+    const weekendCycleEnd = lastSat1pm.add(2, 'days');
+    if (now.isAfter(lastSat1pm) && now.isBefore(weekendCycleEnd)) {
+        salesStart = lastSat1pm;
+        salesEnd = weekendCycleEnd;
+    } else {
+        if (now.isBefore(today1pm)) {
+            salesStart = today1pm.subtract(1, 'day');
+            salesEnd = today1pm;
+        } else {
+            salesStart = today1pm;
+            salesEnd = today1pm.add(1, 'day');
+        }
+    }
+    const createdAt = dayjs(safeToDate(displayRound.createdAt));
+    const isTodaysProduct = createdAt.isBetween(salesStart, salesEnd, null, '[)');
 
-    if (displayRound.status === 'selling') {
+    const isActuallySelling = displayRound.status === 'selling' || (displayRound.status === 'scheduled' && publishAtDate && now.isAfter(publishAtDate));
+
+    if (isActuallySelling) {
       if (!isSoldOut) {
         return 'PURCHASABLE';
       } else {
-        if (isFirstPeriodActive) {
+        // 품절 시, '오늘의 공동구매' 상품이면 '대기 가능', 아니면 '앵콜 요청'
+        if (isTodaysProduct) {
           return 'WAITLISTABLE';
         } else {
           return 'ENCORE_REQUESTABLE';
@@ -273,7 +296,9 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
       const reserved = reservedQuantities.get(reservedKey) || 0;
       const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
+      // totalGroupCode -> totalGroupStock으로 오타 수정 및 무한 재고 조건 수정
       const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
+      
       const maxPurchasable = Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1));
       
       const limitByItem = selectedItem.limitQuantity || 999;
@@ -313,6 +338,10 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
   const handleAddToCart = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
+    if (isSuspendedUser) {
+      toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
+      return;
+    }
     if (!product || !displayRound || !selectedVariantGroup || !selectedItem) { toast.error('상품 또는 옵션이 올바르지 않습니다.'); return; }
     if (productActionState !== 'PURCHASABLE') { toast.error('지금은 예약할 수 없는 상품입니다.'); return; }
     if (quantity < 1) { toast.error('1개 이상 선택해주세요.'); return; }
@@ -326,6 +355,9 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       toast.error(`죄송합니다. 재고가 부족합니다. (현재 ${Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1) )}개 예약 가능)`);
       return;
     }
+
+    const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
+    const prepaymentRequired = isWarningUser || (displayRound.isPrepaymentRequired ?? false);
 
     const itemToAdd: CartItem = {
       id: `reservation-${Date.now()}`,
@@ -345,15 +377,20 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       status: 'RESERVATION',
       deadlineDate: displayRound.deadlineDate,
       stockDeductionAmount: selectedItem.stockDeductionAmount,
+      isPrepaymentRequired: prepaymentRequired,
     };
 
     addToCart(itemToAdd);
     toast.success(`${product.groupName} ${quantity}개를 장바구니에 담았습니다.`);
     onClose();
-  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, reservedQuantities, productActionState]);
+  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, reservedQuantities, productActionState, isSuspendedUser, userDocument]);
 
   const handleEncoreRequest = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
+    if (isSuspendedUser) {
+      toast.error('현재 등급에서는 앵콜 요청을 할 수 없습니다.');
+      return;
+    }
     if (!product) return;
     if (userAlreadyRequestedEncore) { toast('이미 앵콜을 요청한 상품입니다.', { icon: '👏' }); return; }
 
@@ -364,10 +401,14 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       success: '앵콜 요청이 접수되었습니다!',
       error: '앵콜 요청에 실패했습니다.',
     });
-  }, [product, user, userAlreadyRequestedEncore, requestEncore, navigate, onClose]);
+  }, [product, user, userAlreadyRequestedEncore, requestEncore, navigate, onClose, isSuspendedUser]);
 
   const handleAddToWaitlist = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
+    if (isSuspendedUser) {
+      toast.error('반복적인 약속 불이행으로 대기 신청이 제한되었습니다.');
+      return;
+    }
     if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
     if (productActionState !== 'WAITLISTABLE') { toast.error('지금은 대기 신청을 할 수 없습니다.'); return; }
     
@@ -406,7 +447,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     } finally {
       setWaitlistLoading(false);
     }
-  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, user, navigate, onClose, productActionState]);
+  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, user, navigate, onClose, productActionState, isSuspendedUser]);
 
 
   const changeImage = useCallback((direction: 'prev' | 'next') => {
@@ -454,14 +495,12 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
   if (!isOpen) return null;
 
-  const renderContent = () => {
+const renderContent = () => {
     if (loading) return <ProductDetailSkeleton />;
     if (error || !product || !displayRound) {
       return (
         <div className="error-message-modal">
-          <AlertCircle className="error-icon" />
-          <p>{error || '상품 정보를 불러올 수 없습니다.'}</p>
-          <button onClick={onClose} className="error-close-btn">닫기</button>
+          <AlertCircle className="error-icon" /><p>{error || '상품 정보를 불러올 수 없습니다.'}</p><button onClick={onClose} className="error-close-btn">닫기</button>
         </div>
       );
     }
@@ -521,36 +560,18 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                     {stockLoading ? (
                         <span>확인중...</span>
                     ) : (
-                      <>
-                        {!isMultiGroup ? (
-                          (() => {
-                            if (!selectedVariantGroup) return null;
-                            const totalStock = selectedVariantGroup.totalPhysicalStock;
-                            const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
+                      <div className="stock-list">
+                        {displayRound.variantGroups.map(vg => {
+                            const totalStock = vg.totalPhysicalStock;
+                            const reservedKey = `${product.id}-${displayRound.roundId}-${vg.id}`;
                             const reserved = reservedQuantities.get(reservedKey) || 0;
-                            const remainingStock = totalStock === null || totalStock === -1 ? Infinity : totalStock - reserved;
-                            const stockText = remainingStock === Infinity ? '무제한' : `${remainingStock}개`;
-                            return <span className="stock-list-quantity single">{stockText}</span>;
-                          })()
-                        ) : (
-                          <div className="stock-list">
-                            {displayRound.variantGroups.map(vg => {
-                                const totalStock = vg.totalPhysicalStock;
-                                const reservedKey = `${product.id}-${displayRound.roundId}-${vg.id}`;
-                                const reserved = reservedQuantities.get(reservedKey) || 0;
-                                const remainingStock = totalStock === null || totalStock === -1 ? Infinity : totalStock - reserved;
-                                const stockText = remainingStock === Infinity ? '수량 무제한' : `${remainingStock}개`;
-
-                                return (
-                                    <div key={vg.id} className="stock-list-item">
-                                        <span className="stock-list-name">{vg.groupName}</span>
-                                        <span className="stock-list-quantity">{stockText}</span>
-                                    </div>
-                                );
-                            })}
-                          </div>
-                        )}
-                      </>
+                            const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
+                            const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
+                            return (
+                                <span key={vg.id} className="stock-list-quantity single">{stockText}</span>
+                            );
+                        })}
+                      </div>
                     )}
                 </div>
               </div>
@@ -559,11 +580,21 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         </div>
       </>
     );
-  };
+  };  
   
   const renderFooter = () => {
     if (!product || !displayRound || !selectedItem) {
         return null;
+    }
+    
+    if (isSuspendedUser) {
+      return (
+        <div className="product-purchase-footer">
+          <button className="sold-out-btn-fixed" disabled>
+            <ShieldX size={16} /> 참여 제한
+          </button>
+        </div>
+      );
     }
     
     const showQuantityControls = productActionState === 'PURCHASABLE' || productActionState === 'WAITLISTABLE';
@@ -620,7 +651,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
               )}
               {productActionState === 'WAITLISTABLE' && (
                   <button className="waitlist-btn-fixed" onClick={handleAddToWaitlist} disabled={waitlistLoading}>
-                      {waitlistLoading ? <InlineSodamallLoader /> : <><Hourglass size={14} />&nbsp;대기 신청</>}
+                      {waitlistLoading ? <InlineSodamallLoader /> : <><Hourglass size={14} />&nbsp;대기</>}
                   </button>
               )}
               {productActionState === 'ENCORE_REQUESTABLE' && (

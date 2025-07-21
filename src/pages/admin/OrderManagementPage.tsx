@@ -8,7 +8,7 @@ import {
     deleteOrder,
     updateOrderNotes,
     toggleOrderBookmark,
-    updateOrderStatusAndLoyalty
+    updateMultipleOrderStatuses // ✅ [수정] updateOrderStatusAndLoyalty -> updateMultipleOrderStatuses
 } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
 import { Timestamp } from 'firebase/firestore';
@@ -328,12 +328,16 @@ const OrderManagementPage: React.FC = () => {
 
     const handleStatusChange = useCallback(async (order: Order, newStatus: OrderStatus) => {
         if (order.status === newStatus) return;
+        
         const originalOrderState = { ...order };
         const updatedOrder = { ...order, status: newStatus };
         setOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
+        
         const toastId = toast.loading(`${order.customerInfo.name}님의 주문 처리 중...`);
         try {
-            await updateOrderStatusAndLoyalty(order, newStatus, 0, '관리자 상태 변경');
+            // ✅ [수정] 옛날 함수 호출을 새 함수 호출로 변경
+            await updateMultipleOrderStatuses([order.id], newStatus);
+            
             toast.success('성공적으로 처리되었습니다.', { id: toastId });
         } catch (error) {
             setOrders(prev => prev.map(o => o.id === order.id ? originalOrderState : o));

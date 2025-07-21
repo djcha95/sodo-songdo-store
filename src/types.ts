@@ -1,6 +1,15 @@
 // src/types.ts
 
-import type { Timestamp, FieldValue } from 'firebase/firestore';
+import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
+
+// =================================================================
+// 📌 [수정] 신뢰도 포인트 시스템 최종 기획 반영
+// =================================================================
+// 1. LoyaltyTier를 기획서의 등급명으로 최종 수정
+// 2. UserDocument에 isRestricted -> isSuspended로 명칭 변경 및 등급 필드 추가
+// 3. Notification의 isRead -> read로 필드명 변경 (다른 파일들과의 통일성)
+// =================================================================
+
 
 // =================================================================
 // 📌 공통 사용 타입 별칭 (Type Aliases)
@@ -13,32 +22,39 @@ export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
-
-export type LoyaltyTier = '조약돌' | '수정' | '에메랄드' | '다이아몬스';
+// ✅ [수정] 기획서의 등급 체계를 정확히 반영
+export type LoyaltyTier =
+  | '공구의 신'
+  | '공구왕'
+  | '공구요정'
+  | '공구새싹'
+  | '주의 요망'
+  | '참여 제한';
 
 export interface PointLog {
-  id: string;
+  id?: string;
   amount: number;
   reason: string;
-  createdAt: Timestamp;
-  expiresAt: Timestamp;
+  createdAt: Timestamp | FieldValue;
+  orderId?: string;
+  expiresAt?: Timestamp | null; // null을 허용하여 포인트 차감 내역과 구분
 }
 
 export type NotificationType =
-  | 'GENERAL'
+  | 'POINTS_EARNED'
+  | 'POINTS_USED'
   | 'WAITLIST_CONFIRMED'
   | 'PICKUP_REMINDER'
   | 'PICKUP_TODAY'
-  | 'NEW_INTERACTION'
-  | 'info'
+  | 'GENERAL_INFO'
+  | 'PAYMENT_CONFIRMED' // ✅ [추가] 선입금(결제) 확인 타입
   | 'success'
-  | 'warning'
   | 'error';
 
 export interface Notification {
   id: string;
   message: string;
-  isRead: boolean;
+  read: boolean; // ✅ [수정] isRead -> read
   timestamp: Timestamp;
   link?: string;
   type: NotificationType;
@@ -53,17 +69,17 @@ export interface ProductItem {
   id: string;
   name: string;
   price: number;
-  stock: number; // -1은 무제한
-  limitQuantity?: number | null; // 1인당 최대 구매 가능 수량 (null 허용)
+  stock: number;
+  limitQuantity?: number | null;
   stockDeductionAmount: number;
   expirationDate?: Timestamp | null;
 }
 
 export interface VariantGroup {
-  id: string;
+  id:string;
   groupName: string;
   items: ProductItem[];
-  totalPhysicalStock: number | null; // 그룹 전체가 공유하는 물리적 재고, null이면 개별 재고 사용
+  totalPhysicalStock: number | null;
   stockUnitType: string;
 }
 
@@ -73,6 +89,7 @@ export interface WaitlistEntry {
   timestamp: Timestamp;
   variantGroupId: string;
   itemId: string;
+  isPrioritized?: boolean; // ✨ [신규] 대기 순번 상승권 사용 여부
 }
 
 export interface SalesRound {
@@ -80,7 +97,7 @@ export interface SalesRound {
   roundName:string;
   status: SalesRoundStatus;
   variantGroups: VariantGroup[];
-  publishAt: Timestamp;
+  publishAt: Timestamp;         // ✅ 전체 공개 시간 (예: 오후 2시)
   deadlineDate: Timestamp;
   pickupDate: Timestamp;
   pickupDeadlineDate?: Timestamp | null;
@@ -88,8 +105,11 @@ export interface SalesRound {
   createdAt: Timestamp;
   waitlist?: WaitlistEntry[];
   waitlistCount?: number;
+  isPrepaymentRequired?: boolean;
+  preOrderTiers?: LoyaltyTier[];  // ✅ 선주문 가능 등급
+  preOrderEndDate?: Timestamp;    // ✅ 선주문 마감 시간
+  secretForTiers?: LoyaltyTier[]; // ✨ [신규] 시크릿 상품 대상 등급
 }
-
 export interface Product {
   id: string;
   groupName: string;
@@ -132,12 +152,13 @@ export interface CartItem {
   status: 'RESERVATION' | 'WAITLIST';
   deadlineDate: Timestamp | Date;
   stockDeductionAmount: number;
+  isPrepaymentRequired?: boolean; // ✅ [추가] 장바구니 상품의 선입금 필수 여부
 }
 
 export interface OrderItem extends Omit<CartItem, 'status'> {
   arrivalDate: Timestamp | Date | null;
-  pickupDeadlineDate: Timestamp | Date | null;
-  expirationDate?: Timestamp | Date | null; 
+  pickupDeadlineDate?: Timestamp | Date | null;
+  expirationDate?: Timestamp | Date | null;
 }
 
 export interface CustomerInfo {
@@ -162,6 +183,7 @@ export interface Order {
   notes?: string;
   isBookmarked?: boolean;
   canceledAt?: Timestamp;
+  wasPrepaymentRequired?: boolean; // ✅ [추가] 주문 생성 시 선입금이 필요했는지 여부 기록
 }
 
 export interface AggregatedOrderGroup {
@@ -189,17 +211,27 @@ export interface UserDocument {
   displayName: string | null;
   phone: string | null;
   photoURL?: string | null;
-  role: 'admin' | 'customer';
+  // ✨ [수정] master 역할을 추가하여 권한 세분화
+  role: 'master' | 'admin' | 'customer'; 
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
-  loyaltyPoints: number;
+  points: number;
+  pointHistory?: PointLog[];
+  loyaltyTier: LoyaltyTier;
   pickupCount: number;
   noShowCount: number;
   lastLoginDate: string;
-  isRestricted?: boolean;
+  isSuspended?: boolean;
   gender?: 'male' | 'female' | null;
   ageRange?: string | null;
-  loyaltyTier?: string;
+  totalOrders?: number;
+  pickedUpOrders?: number;
+  pickupRate?: number;
+  totalPriceSum?: number;
+  referralCode?: string;
+  referredBy?: string | null;
+  nickname?: string;
+  nicknameChanged?: boolean;
 }
 
 export interface Banner {
@@ -295,14 +327,20 @@ export interface TodayOngoingProductSummary {
     totalReservedQuantity: number;
 }
 
-export interface WaitlistItem {
+export interface WaitlistInfo {
   productId: string;
   productName: string;
+  roundId: string;
+  roundName: string;
+  variantGroupId: string;
+  itemId: string;
   itemName: string;
-  quantity: number;
   imageUrl: string;
+  quantity: number;
   timestamp: Timestamp;
+  isPrioritized?: boolean;
 }
+
 
 export interface UserProfile {
   uid: string;
@@ -311,17 +349,17 @@ export interface UserProfile {
   photoURL: string | null;
   phone?: string;
   isAdmin?: boolean;
-  loyaltyPoints?: number;
+  points?: number;
   loyaltyTier?: string;
   createdAt: Timestamp;
   lastLogin: Timestamp;
   encoreRequestedProductIds?: string[];
 }
 
-export interface LoyaltyLog {
-  id: string;
-  change: number;
-  reason: string;
-  timestamp: Timestamp;
-  orderId?: string;
+// =================================================================
+// 🚀 페이지네이션 관련 타입
+// =================================================================
+export interface PaginatedProductsResponse {
+  products: Product[];
+  lastVisible: DocumentData | null;
 }

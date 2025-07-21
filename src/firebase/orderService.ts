@@ -15,13 +15,27 @@ import {
   writeBatch,
   deleteField,
   limit,
+  arrayUnion,
+  Timestamp,
 } from 'firebase/firestore';
-import type { FieldValue, Timestamp } from 'firebase/firestore'; // Timestamp 타입 추가
-import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry } from '@/types';
-import { updateOrderStatusAndLoyalty } from './userService';
+import type { FieldValue } from 'firebase/firestore';
+import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument, PointLog } from '@/types';
+import { applyPointChangeByStatus, POINT_POLICIES } from './pointService';
+import { createNotification } from './notificationService';
+
+
+const safeToDate = (date: any): Date | null => {
+  if (!date) return null;
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+  }
+  return null;
+};
 
 /**
- * @description 주문을 생성하고 재고를 차감하는 트랜잭션.
+ * @description 주문을 생성하고, 재고를 차감하는 트랜잭션.
  */
 export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
@@ -34,68 +48,73 @@ export const submitOrder = async (
   let newOrderId: string | undefined = undefined;
 
   await runTransaction(db, async (transaction) => {
+    // ✅ [추가] 주문 생성 전, 사용자 등급을 확인하여 '참여 제한' 등급은 주문을 차단합니다.
+    const userRef = doc(db, 'users', orderData.userId);
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists()) {
+      throw new Error('주문 처리 중 사용자 정보를 찾을 수 없습니다.');
+    }
+    const userDoc = userSnap.data() as UserDocument;
+
+    if (userDoc.loyaltyTier === '참여 제한') {
+      throw new Error('반복적인 약속 불이행으로 인해 현재 공동구매 참여가 제한되었습니다.');
+    }
+    
     const itemsToReserve: OrderItem[] = [];
     const productUpdates = new Map<string, SalesRound[]>();
-
     const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => doc(db, 'products', id));
     const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-
     const productDataMap = new Map<string, Product>();
     for (const productSnap of productSnaps) {
-      if (!productSnap.exists()) {
-        throw new Error(`주문 처리 중 상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
-      }
+      if (!productSnap.exists()) throw new Error(`주문 처리 중 상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
       productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
     }
-
     for (const item of orderData.items) {
       const productData = productDataMap.get(item.productId);
       if (!productData) throw new Error(`상품 데이터를 처리할 수 없습니다: ${item.productName}`);
-
-      // 트랜잭션 내에서 동일 상품을 여러 번 처리할 경우를 대비해, 수정된 이력을 productUpdates 맵에서 가져와 사용
-      // 깊은 복사를 통해 원본 salesHistory를 변경하지 않도록 합니다.
       const salesHistoryForUpdate = productUpdates.has(item.productId) 
           ? productUpdates.get(item.productId)!
-          : JSON.parse(JSON.stringify(productData.salesHistory)); // 기존 로직 유지
-
+          : JSON.parse(JSON.stringify(productData.salesHistory));
       const roundIndex = salesHistoryForUpdate.findIndex((r: SalesRound) => r.roundId === item.roundId);
       if (roundIndex === -1) throw new Error(`판매 회차 정보를 찾을 수 없습니다: ${item.productName}`);
       const round = salesHistoryForUpdate[roundIndex];
-
       const groupIndex = round.variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-      if (groupIndex === -1) throw new Error(`옵션 그룹 정보를 찾을 수 없습니다: ${item.productName}`);
+      if (groupIndex === -1) throw new Error(`옵션 그룹 정보를 찾을 수 없습니다: ${item.itemName}`); // Changed from item.productName for more specific error
+      
       const variantGroup = round.variantGroups[groupIndex];
 
       const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
       if (itemIndex === -1) throw new Error(`세부 옵션 정보를 찾을 수 없습니다: ${item.itemName}`);
       const productItem = variantGroup.items[itemIndex];
-
       let availableStock = Infinity;
       if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) availableStock = Math.min(availableStock, variantGroup.totalPhysicalStock);
       if (productItem.stock !== -1) availableStock = Math.min(availableStock, productItem.stock);
 
+      // ✅ [추가] 선주문 최종 검증 로직
+      const now = new Date();
+      const publishAt = safeToDate(round.publishAt);
+      
+      if (publishAt && now < publishAt) { // 전체 공개 시간 전이라면
+        const preOrderEndDate = safeToDate(round.preOrderEndDate);
+        const preOrderTiers = round.preOrderTiers || [];
+
+        if (preOrderEndDate && now < preOrderEndDate && preOrderTiers.length > 0) { // 선주문 기간일 경우
+          // 선주문 기간일 경우, 등급 검사
+          if (!userDoc.loyaltyTier || !preOrderTiers.includes(userDoc.loyaltyTier)) {
+            throw new Error(`'${item.productName}' 상품은 현재 선주문 대상 등급이 아닙니다.`);
+          }
+        } else {
+          // 선주문 기간도 아니라면, 구매 불가
+          throw new Error(`'${item.productName}' 상품은 아직 구매할 수 없습니다.`);
+        }
+      }
+
       if (availableStock >= item.quantity) {
-        itemsToReserve.push({
-          ...item,
-          stockDeductionAmount: productItem.stockDeductionAmount || 1,
-          arrivalDate: round.arrivalDate ?? null,
-          deadlineDate: round.deadlineDate,
-          pickupDate: round.pickupDate,
-          pickupDeadlineDate: round.pickupDeadlineDate ?? null,
-        });
-
-        // 재고 차감 로직 복원
+        itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
         const deductionAmount = item.quantity * (productItem.stockDeductionAmount || 1);
-        if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-            variantGroup.totalPhysicalStock -= deductionAmount;
-        }
-        if (productItem.stock !== -1) {
-            productItem.stock -= item.quantity;
-        }
-        
-        // 수정된 판매 이력을 맵에 다시 저장
+        if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) variantGroup.totalPhysicalStock -= deductionAmount;
+        if (productItem.stock !== -1) productItem.stock -= item.quantity;
         productUpdates.set(item.productId, salesHistoryForUpdate);
-
       } else {
         throw new Error(`죄송합니다. ${item.productName}(${item.itemName})의 재고가 부족합니다.`);
       }
@@ -104,10 +123,9 @@ export const submitOrder = async (
     if (itemsToReserve.length > 0) {
       const newOrderRef = doc(collection(db, 'orders'));
       newOrderId = newOrderRef.id;
-      const reservedTotalPrice = itemsToReserve.reduce((total, i) => total + (i.unitPrice * i.quantity), 0);
-      const phoneLast4 = orderData.customerInfo.phone.slice(-4);
+      const originalTotalPrice = itemsToReserve.reduce((total, i) => total + (i.unitPrice * i.quantity), 0);
       
-      // 첫 번째 아이템의 라운드 정보를 기준으로 주문의 pickupDate 설정 (원래 로직 유지)
+      const phoneLast4 = orderData.customerInfo.phone.slice(-4);
       const firstItem = orderData.items[0];
       const productForRound = productDataMap.get(firstItem.productId);
       const roundForOrder = productForRound?.salesHistory.find(r => r.roundId === firstItem.roundId);
@@ -116,7 +134,7 @@ export const submitOrder = async (
         userId: orderData.userId,
         customerInfo: { ...orderData.customerInfo, phoneLast4 },
         items: itemsToReserve,
-        totalPrice: reservedTotalPrice,
+        totalPrice: originalTotalPrice,
         orderNumber: `SODOMALL-${Date.now()}`,
         status: 'RESERVED',
         createdAt: serverTimestamp(),
@@ -124,12 +142,12 @@ export const submitOrder = async (
         pickupDeadlineDate: roundForOrder!.pickupDeadlineDate ?? null,
         notes: orderData.notes ?? '',
         isBookmarked: orderData.isBookmarked ?? false,
+        wasPrepaymentRequired: orderData.wasPrepaymentRequired ?? false, // ✅ [추가] 선입금 필요 여부 플래그 저장
       };
       
       transaction.set(newOrderRef, newOrderData);
       reservedItemCount = itemsToReserve.reduce((sum, i) => sum + i.quantity, 0);
 
-      // productUpdates 맵에 있는 모든 상품의 salesHistory를 업데이트
       for (const [productId, updatedSalesHistory] of productUpdates.entries()) {
         const productRef = doc(db, 'products', productId);
         transaction.update(productRef, { salesHistory: updatedSalesHistory });
@@ -141,11 +159,9 @@ export const submitOrder = async (
 };
 
 /**
- * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 필요시 신뢰도 점수를 조정하는 함수
- * @param order - 취소할 주문 객체
- * @param isPenalty - 페널티(신뢰도 점수 차감)를 적용할지 여부
+ * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 신뢰도 점수를 조정하는 함수
  */
-export const cancelOrder = async (order: Order, isPenalty: boolean): Promise<void> => {
+export const cancelOrder = async (order: Order): Promise<void> => {
   const orderRef = doc(db, 'orders', order.id);
 
   await runTransaction(db, async (transaction) => {
@@ -159,9 +175,34 @@ export const cancelOrder = async (order: Order, isPenalty: boolean): Promise<voi
     }
 
     const now = new Date();
-    // 주문 객체에 최상위 pickupDate가 있을 경우를 대비해 첫 번째 아이템의 deadlineDate를 기준으로 검사
-    const deadlineDate = currentOrder.items[0]?.deadlineDate?.toDate();
-    if (deadlineDate && now > deadlineDate) throw new Error("예약 마감 시간이 지난 주문은 취소할 수 없습니다.");
+    const deadlineDate = safeToDate(currentOrder.items[0]?.deadlineDate);
+    
+    const pickupDate = safeToDate(currentOrder.pickupDate);
+    let penaltyPolicy: { points: number; reason: string } | null = null;
+    if (pickupDate && now.toDateString() === pickupDate.toDateString()) {
+        penaltyPolicy = POINT_POLICIES.CANCEL_ON_PICKUP_DAY;
+    } else if (deadlineDate && now > deadlineDate) { 
+        penaltyPolicy = POINT_POLICIES.CANCEL_AFTER_DEADLINE;
+    }
+
+    if (penaltyPolicy) {
+        const userRef = doc(db, 'users', currentOrder.userId);
+        const userSnap = await transaction.get(userRef);
+        if (userSnap.exists()) {
+            const userDoc = userSnap.data() as UserDocument;
+            const newPoints = (userDoc.points || 0) + penaltyPolicy.points;
+            const pointHistoryUpdate: Omit<PointLog, 'id'> = { 
+                amount: penaltyPolicy.points,
+                reason: penaltyPolicy.reason,
+                createdAt: serverTimestamp() as Timestamp,
+                orderId: currentOrder.id,
+            };
+            transaction.update(userRef, {
+                points: newPoints,
+                pointHistory: arrayUnion(pointHistoryUpdate),
+            });
+        }
+    }
 
 
     const productRefs = [...new Set(currentOrder.items.map(item => item.productId))].map(id => doc(db, 'products', id));
@@ -174,13 +215,12 @@ export const cancelOrder = async (order: Order, isPenalty: boolean): Promise<voi
       }
     }
 
-    transaction.update(orderRef, { status: 'CANCELED' });
+    transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
 
     for (const item of currentOrder.items) {
       const productData = productDataMap.get(item.productId);
       if (!productData) continue;
 
-      // 깊은 복사를 통해 원본 salesHistory를 변경하지 않도록 합니다.
       const newSalesHistory = JSON.parse(JSON.stringify(productData.salesHistory));
 
       const roundIndex = newSalesHistory.findIndex((r: SalesRound) => r.roundId === item.roundId);
@@ -207,14 +247,6 @@ export const cancelOrder = async (order: Order, isPenalty: boolean): Promise<voi
       transaction.update(productRef, { salesHistory: newSalesHistory });
     }
   });
-
-  if (isPenalty) {
-    // updateOrderStatusAndLoyalty는 Firestore 트랜잭션 외부에서 호출되어야 합니다.
-    // 이는 이 함수 내부에서 다시 트랜잭션을 실행하거나, 독립적인 업데이트를 수행하기 때문입니다.
-    await updateOrderStatusAndLoyalty(order, 'CANCELED', -10, '예약 마감 후 취소');
-  } else {
-    await updateOrderStatusAndLoyalty(order, 'CANCELED', 0, '일반 예약 취소');
-  }
 };
 
 /**
@@ -286,26 +318,50 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus): P
   await updateDoc(doc(db, 'orders', orderId), updateData);
 };
 
+/**
+ * @description 여러 주문의 상태를 일괄 변경하고, 신뢰도 포인트를 적용하며, 필요시 알림을 보냅니다.
+ */
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
-  const batch = writeBatch(db);
+  
+  const notificationsToSend: { userId: string; message: string; link: string }[] = [];
 
-  orderIds.forEach(orderId => {
-    const orderRef = doc(db, 'orders', orderId);
-    const updateData: { status: OrderStatus; pickedUpAt?: FieldValue; prepaidAt?: FieldValue } = { status };
+  await runTransaction(db, async (transaction) => {
+    for (const orderId of orderIds) {
+      const orderRef = doc(db, 'orders', orderId);
+      const orderDoc = await transaction.get(orderRef);
+      if (!orderDoc.exists()) continue;
 
-    if (status === 'PICKED_UP') {
-      updateData.pickedUpAt = serverTimestamp();
+      const order = { id: orderId, ...orderDoc.data() } as Order;
+      
+      // 포인트 적용 로직은 트랜잭션 내에서 처리
+      await applyPointChangeByStatus(transaction, order.userId, order, status);
+      
+      const updateData: { status: OrderStatus; pickedUpAt?: FieldValue; prepaidAt?: FieldValue } = { status };
+      if (status === 'PICKED_UP') updateData.pickedUpAt = serverTimestamp();
+      if (status === 'PREPAID') updateData.prepaidAt = serverTimestamp();
+      
+      transaction.update(orderRef, updateData);
+
+      // ✅ [추가] 선입금 확인 시 보낼 알림 정보를 수집
+      if (status === 'PREPAID') {
+        const productName = order.items[0]?.productName || '주문하신 상품';
+        notificationsToSend.push({
+          userId: order.userId,
+          message: `'${productName}' 상품의 선입금이 확인되어 예약이 확정되었습니다!`,
+          link: '/mypage/history'
+        });
+      }
     }
-    if (status === 'PREPAID') {
-      updateData.prepaidAt = serverTimestamp();
-    }
-    // NO_SHOW의 경우, 별도의 타임스탬프는 기록하지 않고 상태만 변경
-
-    batch.update(orderRef, updateData);
   });
 
-  await batch.commit();
-}
+  // ✅ [추가] 트랜잭션이 성공적으로 완료된 후, 수집된 알림들을 모두 발송
+  for (const notif of notificationsToSend) {
+    await createNotification(notif.userId, notif.message, {
+      type: 'PAYMENT_CONFIRMED',
+      link: notif.link,
+    });
+  }
+};
 
 /**
  * @description [신규] 특정 주문의 단일 품목 수량을 변경하고 총액을 재계산합니다.
@@ -367,7 +423,6 @@ export const revertOrderStatus = async (orderIds: string[], currentStatus: Order
     } else if (currentStatus === 'PREPAID') {
       updateData.prepaidAt = deleteField();
     }
-    // 'NO_SHOW'의 경우, 별도의 타임스탬프가 없으므로 상태만 변경
 
     batch.update(orderRef, updateData);
   });
@@ -418,19 +473,16 @@ export const deleteMultipleOrders = async (orderIds: string[]): Promise<void> =>
  */
 export const getReservedQuantities = async (): Promise<Record<string, number>> => {
   const quantities: Record<string, number> = {};
-  // 'RESERVED'와 'PREPAID' 상태 모두 예약된 수량으로 간주합니다.
   const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
-
   const querySnapshot = await getDocs(q);
-
   querySnapshot.forEach((doc) => {
     const order = doc.data() as Order;
-    order.items.forEach((item: OrderItem) => {
-      const itemKey = `${item.productId}_${item.roundId}_${item.itemId}`;
-      quantities[itemKey] = (quantities[itemKey] || 0) + item.quantity;
+    (order.items || []).forEach((item: OrderItem) => {
+      const key = `${item.productId}_${item.roundId}_${item.itemId}`;
+      // ✅ [오류 수정] 'itemKey'를 올바른 변수명 'key'로 수정했습니다.
+      quantities[key] = (quantities[key] || 0) + item.quantity;
     });
   });
-
   return quantities;
 };
 
@@ -444,79 +496,70 @@ export const submitOrderFromWaitlist = async (
   round: SalesRound
 ): Promise<void> => {
   const { userId, quantity, variantGroupId, itemId } = waitlistEntry;
-
   const vg = round.variantGroups.find(v => v.id === variantGroupId);
   const itemDetail = vg?.items.find(i => i.id === itemId);
-
   if (!vg || !itemDetail) {
     throw new Error(`주문 전환 실패: 상품(${product.groupName})의 옵션(ID: ${itemId})을 찾을 수 없습니다.`);
   }
-
   const userDoc = await getUserDocById(userId);
   const newOrderRef = doc(collection(db, 'orders'));
+  const newOrderId = newOrderRef.id;
   const phoneLast4 = userDoc?.phone?.slice(-4) || '';
+  
+  const orderItemPayload: OrderItem = { // ✅ [수정] 명확한 타입으로 분리
+    id: `${newOrderId}-${itemDetail.id}`, // ✅ [오류 수정] 누락되었던 id 필드 추가
+    productId: product.id,
+    productName: product.groupName,
+    imageUrl: product.imageUrls[0] || '',
+    roundId: round.roundId,
+    roundName: round.roundName,
+    variantGroupId: vg.id,
+    variantGroupName: vg.groupName,
+    itemId: itemDetail.id,
+    itemName: itemDetail.name,
+    quantity,
+    unitPrice: itemDetail.price,
+    stock: itemDetail.stock,
+    stockDeductionAmount: itemDetail.stockDeductionAmount || 1,
+    arrivalDate: round.arrivalDate ?? null,
+    deadlineDate: round.deadlineDate,
+    pickupDate: round.pickupDate,
+    pickupDeadlineDate: round.pickupDeadlineDate ?? null,
+    isPrepaymentRequired: round.isPrepaymentRequired ?? false,
+  };
 
   const orderData: Omit<Order, 'id'> = {
     userId,
-    orderNumber: `SODOMALL-W-${Date.now()}`,
-    items: [{
-      productId: product.id,
-      productName: product.groupName,
-      imageUrl: product.imageUrls[0] || '',
-      roundId: round.roundId,
-      roundName: round.roundName,
-      variantGroupId: vg.id,
-      variantGroupName: vg.groupName,
-      itemId: itemDetail.id,
-      itemName: itemDetail.name,
-      quantity,
-      unitPrice: itemDetail.price,
-      stock: itemDetail.stock,
-      stockDeductionAmount: itemDetail.stockDeductionAmount || 1,
-      arrivalDate: round.arrivalDate ?? null,
-      deadlineDate: round.deadlineDate,
-      pickupDate: round.pickupDate,
-      pickupDeadlineDate: round.pickupDeadlineDate ?? null,
-    }],
+    orderNumber: `SODOMALL-W-${newOrderId}`,
+    items: [orderItemPayload], // ✅ [수정] 생성된 payload 사용
     totalPrice: itemDetail.price * quantity,
     status: 'RESERVED',
     createdAt: serverTimestamp(),
     pickupDate: round.pickupDate,
     pickupDeadlineDate: round.pickupDeadlineDate ?? null,
-    customerInfo: {
-      name: userDoc?.displayName || '알 수 없음',
-      phone: userDoc?.phone || '',
-      phoneLast4,
-    },
+    customerInfo: { name: userDoc?.displayName || '알 수 없음', phone: userDoc?.phone || '', phoneLast4, },
     notes: '대기 신청에서 자동으로 전환된 주문입니다.',
+    wasPrepaymentRequired: round.isPrepaymentRequired ?? false, // ✅ [추가] 대기 전환 주문에도 선입금 여부 기록
   };
-
   transaction.set(newOrderRef, orderData);
 };
 
 /**
  * @description [수정] 전화번호 또는 고객 이름으로 주문을 통합 검색합니다.
- * @param searchTerm - 검색어 (숫자, 문자열 모두 가능)
  */
 export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> => {
   if (!searchTerm) return [];
-
   const isNumeric = /^\d+$/.test(searchTerm);
   const orderMap = new Map<string, Order>();
-
-  // 1. 전화번호 뒷자리로 검색
   if (isNumeric) {
     const phoneOrders = await getOrdersByPhoneLast4(searchTerm);
     phoneOrders.forEach(order => orderMap.set(order.id, order));
   }
-
-  // 2. 고객 이름으로 검색 (대소문자 구분 없이 '시작 문자' 기준)
-  // 이름 검색 시 orderBy를 제거하여 인덱싱 문제를 피하고, 클라이언트 측에서 정렬을 수행합니다.
   const nameQuery = query(
     collection(db, 'orders'),
     where('customerInfo.name', '>=', searchTerm),
     where('customerInfo.name', '<=', searchTerm + '\uf8ff'),
-    limit(50) // 이름 검색은 최대 50개로 제한
+    limit(50)
   );
   const nameSnapshot = await getDocs(nameQuery);
   nameSnapshot.forEach(doc => {
@@ -524,10 +567,7 @@ export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> 
       orderMap.set(doc.id, { id: doc.id, ...doc.data() } as Order);
     }
   });
-
   const combinedResults = Array.from(orderMap.values());
-  
-  // 최신순으로 정렬하여 반환
   return combinedResults.sort((a, b) => {
     const timeA = (a.createdAt as Timestamp)?.toMillis() || 0;
     const timeB = (b.createdAt as Timestamp)?.toMillis() || 0;
@@ -540,19 +580,14 @@ export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> 
  */
 export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> => {
   const quantitiesMap = new Map<string, number>();
-  // 'RESERVED'와 'PREPAID' 상태 모두 예약된 수량으로 간주합니다.
   const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
-
   const querySnapshot = await getDocs(q);
-
   querySnapshot.forEach((doc) => {
     const order = doc.data() as Order;
     (order.items || []).forEach((item: OrderItem) => {
-      // 상품 ID - 판매 회차 ID - 하위 그룹 ID 를 키로 사용
       const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
       quantitiesMap.set(key, (quantitiesMap.get(key) || 0) + item.quantity);
     });
   });
-
   return quantitiesMap;
 };
