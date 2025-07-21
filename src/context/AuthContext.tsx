@@ -4,22 +4,25 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db, recordDailyVisit } from '../firebase'; // recordDailyVisit은 그대로 사용
+import { auth, db } from '../firebase';
+import { recordDailyVisit } from '@/firebase/pointService';
 import type { UserDocument } from '../types';
 
-// AuthContextType에서 triggerConsent 제거
 interface AuthContextType {
   user: User | null;
   userDocument: UserDocument | null;
   isAdmin: boolean;
+  isMaster: boolean; // ✨ [추가] 마스터 권한 확인용
+  isSuspendedUser: boolean;
   loading: boolean;
 }
 
-// createContext 기본값에서 triggerConsent 제거
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userDocument: null,
   isAdmin: false,
+  isMaster: false, // ✨ [추가]
+  isSuspendedUser: false,
   loading: true,
 });
 
@@ -29,8 +32,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [userDocument, setUserDocument] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // isConsentRequired, triggerConsent 관련 로직 모두 제거
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -42,7 +43,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { uid: doc.id, ...doc.data() } as UserDocument;
             setUserDocument(userData);
             
-            // 일일 방문 포인트 지급은 그대로 유지
             recordDailyVisit(firebaseUser.uid);
 
           } else {
@@ -64,18 +64,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => unsubscribe();
   }, []);
 
-  const isAdmin = userDocument?.role === 'admin';
+  // ✨ [수정] 'master' 또는 'admin'일 경우 isAdmin을 true로 설정
+  const isAdmin = userDocument?.role === 'admin' || userDocument?.role === 'master';
+  // ✨ [추가] 'master' 역할인지 명확히 확인하는 변수
+  const isMaster = userDocument?.role === 'master';
+  const isSuspendedUser = userDocument?.loyaltyTier === '참여 제한';
 
-  // value에서 triggerConsent 제거
   const value = {
     user,
     userDocument,
     isAdmin,
+    isMaster, // ✨ [추가]
+    isSuspendedUser,
     loading,
   };
 
   return (
-    // PhoneNumberConsentModal 렌더링 로직 제거
     <AuthContext.Provider value={value}>
         {!loading && children}
     </AuthContext.Provider>

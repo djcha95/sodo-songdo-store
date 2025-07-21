@@ -1,5 +1,53 @@
 /* src/pages/customer/ProductListPage.css */
 
+.customer-page-container {
+  position: relative;
+  background-color: #f8f9fa; /* 배경색 추가 */
+}
+
+/* --- 당겨서 새로고침 스타일 --- */
+.pull-to-refresh-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  z-index: 1; /* 콘텐츠보다 아래에 있도록 */
+}
+
+.indicator-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #868e96;
+  font-size: 14px;
+}
+
+.arrow-icon {
+  transition: transform 0.2s ease-in-out;
+}
+
+.refreshing-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.pull-to-refresh-content {
+  background-color: var(--color-background);
+  position: relative;
+  z-index: 2; /* 인디케이터보다 위에 있도록 */
+  transition: transform 0.3s ease-out; /* 놓았을 때 되돌아오는 효과 */
+}
+
+/* --- 기존 스타일 --- */
 .banner-slider-container {
   margin-bottom: 0 !important;
 }
@@ -8,7 +56,6 @@
   margin-bottom: 16px; 
 }
 
-/* ✅ [수정] 기존 no-products-message를 placeholder 스타일로 변경 */
 .product-list-placeholder {
   width: 100%;
   display: flex;
@@ -18,7 +65,7 @@
   padding: 40px 20px;
   color: #adb5bd;
   text-align: center;
-  min-height: 200px; /* 카드가 있을 때와 높이 차이가 너무 나지 않도록 */
+  min-height: 200px;
 }
 
 .placeholder-icon {
@@ -37,4 +84,19 @@
   font-size: 0.9rem;
   color: #adb5bd;
   margin-top: 4px;
+}
+
+.infinite-scroll-loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem 0;
+  min-height: 80px;
+}
+
+.end-of-list-message {
+  text-align: center;
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-sm);
+  padding: 1rem 0;
 }

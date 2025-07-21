@@ -4,7 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import {
     searchOrdersUnified,
-    updateMultipleOrderStatuses,
+    updateMultipleOrderStatuses, // ✅ 이 함수가 이제 포인트 로직을 트리거합니다.
     deleteMultipleOrders,
     revertOrderStatus,
     updateOrderItemQuantity,
@@ -99,28 +99,37 @@ const QuickCheckPage: React.FC = () => {
     );
   };
 
-  const getSelectedOrderIds = () => {
-    return aggregatedResults
+  const getSelectedOriginalOrderIds = () => {
+    const allSelectedOrders = aggregatedResults
       .filter(group => selectedGroupKeys.includes(group.groupKey))
-      .flatMap(group => group.originalOrders.map(o => o.orderId));
+      .flatMap(group => group.originalOrders);
+    // 중복된 orderId 제거 (하나의 원본 주문이 여러 집계 그룹에 포함될 수 있기 때문)
+    return [...new Set(allSelectedOrders.map(o => o.orderId))];
   };
   
   const handleStatusUpdate = async (status: OrderStatus) => {
-    const orderIdsToUpdate = getSelectedOrderIds();
+    const orderIdsToUpdate = getSelectedOriginalOrderIds();
     if (orderIdsToUpdate.length === 0) return;
+    
+    // ✅ 이제 이 함수 호출만으로 주문 상태 변경과 포인트 적용이 모두 처리됩니다.
     const promise = updateMultipleOrderStatuses(orderIdsToUpdate, status).then(refreshAndDeselect);
-    toast.promise(promise, { loading: '처리 중...', success: '성공적으로 변경되었습니다!', error: '처리 중 오류가 발생했습니다.' });
+    
+    toast.promise(promise, { 
+        loading: '처리 중...', 
+        success: `'${status}' 상태로 성공적으로 변경되었습니다!`, 
+        error: '처리 중 오류가 발생했습니다.' 
+    });
   };
 
   const handleRevertStatus = async (statusToRevert: OrderStatus) => {
-    const orderIdsToRevert = getSelectedOrderIds();
+    const orderIdsToRevert = getSelectedOriginalOrderIds(); // revert도 원본 주문 ID 기준으로
     if (orderIdsToRevert.length === 0) return;
     const promise = revertOrderStatus(orderIdsToRevert, statusToRevert).then(refreshAndDeselect);
     toast.promise(promise, { loading: '처리 중...', success: '성공적으로 되돌렸습니다!', error: '처리 중 오류가 발생했습니다.' });
   };
 
   const handleDelete = () => {
-     const orderIdsToDelete = getSelectedOrderIds();
+     const orderIdsToDelete = getSelectedOriginalOrderIds(); // delete도 원본 주문 ID 기준으로
      if (orderIdsToDelete.length === 0) return;
      toast(t => (
         <div>

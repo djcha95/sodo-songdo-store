@@ -6,13 +6,16 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { addProductWithFirstRound, addNewSalesRound, getCategories, searchProductsByName } from '../../firebase';
 import type { Category, StorageType, SalesRound, Product, VariantGroup, ProductItem, SalesRoundStatus } from '../../types';
+import { LoyaltyTier } from '@/types';
 import toast from 'react-hot-toast';
-// ✅ [수정] Loader2 아이콘을 import합니다.
-import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle, Loader2 } from 'lucide-react';
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle, Loader2, Clock, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
 import SodamallLoader from '@/components/common/SodamallLoader';
+import Tippy from '@tippyjs/react';
+import 'tippy.js/dist/tippy.css';
 import './ProductAddAdminPage.css';
+
 
 // --- UI 타입 및 헬퍼 함수 ---
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
@@ -39,6 +42,134 @@ const getSmartDeadline = (): Date => {
     return deadline;
 };
 
+// 파일 업로드 최대 크기 설정 (5MB)
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+// --- 선주문 설정 모달 컴포넌트 ---
+interface PreOrderSettingsModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    isEnabled: boolean;
+    setIsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    tiers: LoyaltyTier[];
+    setTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
+}
+
+const PreOrderSettingsModal: React.FC<PreOrderSettingsModalProps> = ({ isOpen, onClose, isEnabled, setIsEnabled, tiers, setTiers }) => {
+    const handleTierChange = (tier: LoyaltyTier) => {
+        setTiers(prevTiers =>
+            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
+        );
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="admin-modal-overlay" onClick={onClose}>
+            <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="admin-modal-header">
+                    <h4><Clock size={20}/> 선주문 설정</h4>
+                    <button onClick={onClose} className="admin-modal-close-button"><X size={20}/></button>
+                </div>
+                <div className="admin-modal-body">
+                    <div className="form-group">
+                        <label className="preorder-toggle-label">
+                            <span>선주문 기능 사용</span>
+                            <div className={`toggle-switch ${isEnabled ? 'active' : ''}`} onClick={() => setIsEnabled(!isEnabled)}>
+                                <div className="toggle-handle"></div>
+                            </div>
+                        </label>
+                    </div>
+                    {isEnabled && (
+                        <div className="preorder-options active">
+                            <p className="preorder-info">
+                                <Info size={14} />
+상품 업로드 직후부터 발행일 오후 2시까지 선주문이 가능합니다                            </p>
+                            <div className="tier-checkbox-group">
+                                {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
+                                    <label key={tier} htmlFor={`modal-tier-${tier}`}>
+                                        <input
+                                            type="checkbox"
+                                            id={`modal-tier-${tier}`}
+                                            value={tier}
+                                            checked={tiers.includes(tier)}
+                                            onChange={() => handleTierChange(tier)}
+                                        />
+                                        {tier}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="admin-modal-footer">
+                    <button className="modal-button primary" onClick={onClose}>확인</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ✨ [신규] 시크릿 상품 설정 모달 컴포넌트
+interface SecretProductModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    isEnabled: boolean;
+    setIsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    tiers: LoyaltyTier[];
+    setTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
+}
+
+const SecretProductModal: React.FC<SecretProductModalProps> = ({ isOpen, onClose, isEnabled, setIsEnabled, tiers, setTiers }) => {
+    const handleTierChange = (tier: LoyaltyTier) => {
+        setTiers(prevTiers => 
+            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
+        );
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="admin-modal-overlay" onClick={onClose}>
+            <div className="admin-modal-content" onClick={e => e.stopPropagation()}>
+                <div className="admin-modal-header">
+                    <h4><Lock size={20}/> 시크릿 상품 설정</h4>
+                    <button onClick={onClose} className="admin-modal-close-button"><X size={24}/></button>
+                </div>
+                <div className="admin-modal-body">
+                    <div className="form-group">
+                        <label className="preorder-toggle-label">
+                            <span>시크릿 상품 기능 사용</span>
+                            <div className={`toggle-switch ${isEnabled ? 'active' : ''}`} onClick={() => setIsEnabled(!isEnabled)}>
+                                <div className="toggle-handle"></div>
+                            </div>
+                        </label>
+                    </div>
+                    {isEnabled && (
+                        <div className="preorder-options active">
+                            <p className="preorder-info">
+                                <Info size={14} />
+                                선택된 등급의 고객에게만 이 상품이 노출됩니다.
+                            </p>
+                            <div className="tier-checkbox-group">
+                                {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
+                                    <label key={tier} htmlFor={`secret-tier-${tier}`}>
+                                        <input type="checkbox" id={`secret-tier-${tier}`} value={tier} checked={tiers.includes(tier)} onChange={() => handleTierChange(tier)} />
+                                        {tier}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="admin-modal-footer">
+                    <button onClick={onClose} className="modal-button primary">확인</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- 메인 컴포넌트 ---
 const ProductAddAdminPage: React.FC = () => {
@@ -63,12 +194,20 @@ const ProductAddAdminPage: React.FC = () => {
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
     const [roundName, setRoundName] = useState('1차 판매');
     const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]);
-    const [publishOption, setPublishOption] = useState<'now' | 'schedule'>('now');
-    const [scheduledAt, setScheduledAt] = useState<Date>(() => new Date(new Date().setHours(13, 0, 0, 0)));
+    const [scheduledAt, setScheduledAt] = useState<Date>(() => new Date(new Date().setHours(14, 0, 0, 0)));
     const [deadlineDate, setDeadlineDate] = useState<Date | null>(() => getSmartDeadline());
     const [pickupDay, setPickupDay] = useState<Date | null>(null);
     const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
+    const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
 
+    const [isPreOrderModalOpen, setIsPreOrderModalOpen] = useState(false);
+    const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
+    const [preOrderTiers, setPreOrderTiers] = useState<LoyaltyTier[]>(['공구의 신', '공구왕']);
+
+    // ✨ [신규] 시크릿 상품 관련 상태
+    const [isSecretProductModalOpen, setIsSecretProductModalOpen] = useState(false);
+    const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false);
+    const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]);
 
     const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
     const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
@@ -86,6 +225,12 @@ const ProductAddAdminPage: React.FC = () => {
                     items: (vg.items || []).map((item: ProductItem) => ({ id: generateUniqueId(), name: item.name, price: item.price, limitQuantity: item.limitQuantity ?? '', deductionAmount: item.stockDeductionAmount, isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k)) }))
                 }));
                 setVariantGroups(mappedVGs);
+                setIsPrepaymentRequired(lastRound.isPrepaymentRequired ?? false); 
+                setIsPreOrderEnabled(lastRound.preOrderTiers && lastRound.preOrderTiers.length > 0);
+                setPreOrderTiers(lastRound.preOrderTiers || []);
+                // ✨ [수정] 기존 회차의 시크릿 정보 불러오기 (새 회차 추가 시에도 유지)
+                setIsSecretProductEnabled(!!lastRound.secretForTiers && lastRound.secretForTiers.length > 0);
+                setSecretTiers(lastRound.secretForTiers || []);
             }
         }
     }, [location.state]);
@@ -98,6 +243,8 @@ const ProductAddAdminPage: React.FC = () => {
     useEffect(() => {
         if (!pickupDay) { setPickupDeadlineDate(null); return; }
         const newPickupDeadline = new Date(pickupDay);
+        // [수정] 자정으로 설정 (date만 사용하므로 시간 정보는 0으로)
+        newPickupDeadline.setHours(0, 0, 0, 0); 
         if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); }
         setPickupDeadlineDate(newPickupDeadline);
     }, [pickupDay, selectedStorageType]);
@@ -152,30 +299,78 @@ const ProductAddAdminPage: React.FC = () => {
     const handlePriceChange = useCallback((vgId: string, itemId: string, value: string) => { const numericValue = parseFormattedNumber(value); setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: vg.items.map(item => item.id === itemId ? { ...item, price: numericValue } : item) } : vg)); }, []);
     const addNewItem = useCallback((vgId: string) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: [...vg.items, { id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] } : vg)); }, []);
     const removeItem = useCallback((vgId: string, itemId: string) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? (vg.items.length > 1 ? { ...vg, items: vg.items.filter(item => item.id !== itemId) } : vg) : vg)); }, []);
-    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { if (!e.target.files) return; const files = Array.from(e.target.files); setImageFiles(prev => [...prev, ...files]); files.forEach(file => setImagePreviews(prev => [...prev, URL.createObjectURL(file)])); e.target.value = ''; }, []);
-    const removeImage = useCallback((index: number) => { const urlToRemove = imagePreviews[index]; const fileIndex = imageFiles.findIndex(f => URL.createObjectURL(f) === urlToRemove); setImagePreviews(p => p.filter((_, i) => i !== index)); if (fileIndex > -1) setImageFiles(p => p.filter((_, i) => i !== fileIndex)); URL.revokeObjectURL(urlToRemove); }, [imagePreviews, imageFiles]);
-    const settingsSummary = useMemo(() => { const publishText = publishOption === 'now' ? '즉시 발행' : `예약 발행 (${formatToDateTimeLocal(scheduledAt).replace('T', ' ')})`; const deadlineText = deadlineDate ? `${formatToDateTimeLocal(deadlineDate).replace('T', ' ')} 까지` : '미설정'; const pickupText = pickupDay ? `${formatDateToYYYYMMDD(pickupDay)} 부터` : '미설정'; return { publishText, deadlineText, pickupText }; }, [publishOption, scheduledAt, deadlineDate, pickupDay]);
+    
+    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files) return;
 
-    const getSalesRoundData = (status: SalesRoundStatus): Omit<SalesRound, 'roundId' | 'createdAt'> => ({
-        roundName: roundName.trim(), status,
-        variantGroups: variantGroups.map(vg => ({
-            id: generateUniqueId(), groupName: (productType === 'single' && mode === 'newProduct') ? groupName.trim() : vg.groupName,
-            totalPhysicalStock: vg.totalPhysicalStock === '' ? null : Number(vg.totalPhysicalStock),
-            stockUnitType: vg.stockUnitType,
-            items: vg.items.map(item => ({
-                id: generateUniqueId(), name: item.name, price: Number(item.price) || 0, stock: -1,
-                limitQuantity: item.limitQuantity === '' ? null : Number(item.limitQuantity),
-                expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
-                stockDeductionAmount: Number(item.deductionAmount) || 1,
+        const selectedFiles = Array.from(e.target.files);
+        const validFiles: File[] = [];
+        const rejectedReasons: string[] = [];
+
+        selectedFiles.forEach(file => {
+            if (file.type === 'image/gif') {
+                rejectedReasons.push(`'${file.name}': GIF 파일은 업로드할 수 없습니다.`);
+            } else if (file.size > MAX_FILE_SIZE) {
+                rejectedReasons.push(`'${file.name}': 파일 크기가 너무 큽니다 (최대 5MB).`);
+            } else {
+                validFiles.push(file);
+            }
+        });
+
+        if (rejectedReasons.length > 0) {
+            toast.error(
+                <div>
+                    <p style={{ margin: 0, fontWeight: 'bold' }}>일부 파일을 업로드할 수 없습니다:</p>
+                    <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                        {rejectedReasons.map((reason, i) => <li key={i}>{reason}</li>)}
+                    </ul>
+                </div>, 
+                { duration: 5000 }
+            );
+        }
+
+        if (validFiles.length > 0) {
+            setImageFiles(prev => [...prev, ...validFiles]);
+            validFiles.forEach(file => {
+                setImagePreviews(prev => [...prev, URL.createObjectURL(file)]);
+            });
+        }
+        
+        e.target.value = '';
+    }, []);
+
+    const removeImage = useCallback((index: number) => { const urlToRemove = imagePreviews[index]; const fileIndex = imageFiles.findIndex(f => URL.createObjectURL(f) === urlToRemove); setImagePreviews(p => p.filter((_, i) => i !== index)); if (fileIndex > -1) setImageFiles(p => p.filter((_, i) => i !== fileIndex)); URL.revokeObjectURL(urlToRemove); }, [imagePreviews, imageFiles]);
+    const settingsSummary = useMemo(() => { const publishText = `예약 발행 (${formatToDateTimeLocal(scheduledAt).replace('T', ' ')})`; const deadlineText = deadlineDate ? `${formatToDateTimeLocal(deadlineDate).replace('T', ' ')} 까지` : '미설정'; const pickupText = pickupDay ? `${formatDateToYYYYMMDD(pickupDay)} 부터` : '미설정'; return { publishText, deadlineText, pickupText }; }, [scheduledAt, deadlineDate, pickupDay]);
+
+    const getSalesRoundData = (status: SalesRoundStatus): Omit<SalesRound, 'roundId' | 'createdAt'> => {
+        const publishDate = new Date(scheduledAt);
+        publishDate.setHours(14, 0, 0, 0);
+
+        return {
+            roundName: roundName.trim(), status,
+            variantGroups: variantGroups.map(vg => ({
+                id: generateUniqueId(), groupName: (productType === 'single' && mode === 'newProduct') ? groupName.trim() : vg.groupName,
+                totalPhysicalStock: vg.totalPhysicalStock === '' ? null : Number(vg.totalPhysicalStock),
+                stockUnitType: vg.stockUnitType,
+                items: vg.items.map(item => ({
+                    id: generateUniqueId(), name: item.name, price: Number(item.price) || 0, stock: -1,
+                    limitQuantity: item.limitQuantity === '' ? null : Number(item.limitQuantity),
+                    expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
+                    stockDeductionAmount: Number(item.deductionAmount) || 1,
+                })),
             })),
-        })),
-        publishAt: Timestamp.fromDate(status === 'scheduled' ? scheduledAt : new Date()),
-        deadlineDate: Timestamp.fromDate(deadlineDate!),
-        pickupDate: Timestamp.fromDate(pickupDay!),
-        pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
-        waitlist: [],
-        waitlistCount: 0,
-    });
+            publishAt: Timestamp.fromDate(publishDate),
+            deadlineDate: Timestamp.fromDate(deadlineDate!),
+            pickupDate: Timestamp.fromDate(pickupDay!),
+            pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
+            isPrepaymentRequired: isPrepaymentRequired,
+            waitlist: [],
+            waitlistCount: 0,
+            preOrderTiers: isPreOrderEnabled ? preOrderTiers : [],
+            preOrderEndDate: isPreOrderEnabled ? Timestamp.fromDate(publishDate) : undefined, 
+            secretForTiers: isSecretProductEnabled ? secretTiers : [], // ✨ [수정] 시크릿 상품 정보 저장
+        };
+    };
 
     const handleSubmit = async (isDraft: boolean = false) => {
         if (!isDraft) {
@@ -183,10 +378,11 @@ const ProductAddAdminPage: React.FC = () => {
             if (!deadlineDate || !pickupDay || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; }
         }
         setIsSubmitting(true);
+        
         const submissionPromise = new Promise<void>(async (resolve, reject) => {
             try {
                 const finalGroupName = (productType === 'group' || mode === 'newRound') ? groupName : (variantGroups[0]?.groupName || '단일 상품');
-                const status: SalesRoundStatus = isDraft ? 'draft' : (publishOption === 'now' ? 'selling' : 'scheduled');
+                const status: SalesRoundStatus = isDraft ? 'draft' : 'scheduled';
                 const salesRoundToSave = getSalesRoundData(status);
                 if (mode === 'newProduct') {
                     const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = {
@@ -201,6 +397,7 @@ const ProductAddAdminPage: React.FC = () => {
                 resolve();
             } catch (err) { reject(err); }
         });
+
         toast.promise(submissionPromise, {
             loading: '저장 중입니다...',
             success: () => {
@@ -213,107 +410,179 @@ const ProductAddAdminPage: React.FC = () => {
     };
 
     return (
-        <div className="product-add-page-wrapper smart-form">
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
-                <header className="product-add-header">
-                    <h1>{pageTitle}</h1>
-                    <div className="header-actions">
-                        <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
-                        <button type="submit" disabled={isSubmitting} className="save-button">
-                            <Save size={18} />
-                            {isSubmitting ? '저장 중...' : (mode === 'newProduct' ? '신규 상품 등록하기' : '새 회차 추가하기')}
-                        </button>
-                    </div>
-                </header>
-                <main className="main-content-grid-3-col-final">
-                    <div className="form-section">
-                        <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
-                        <p className="section-subtitle">상품의 기본 정보와 첫 판매 회차 이름을 설정합니다.</p>
+        <>
+            <PreOrderSettingsModal
+                isOpen={isPreOrderModalOpen}
+                onClose={() => setIsPreOrderModalOpen(false)}
+                isEnabled={isPreOrderEnabled}
+                setIsEnabled={setIsPreOrderEnabled}
+                tiers={preOrderTiers}
+                setTiers={setPreOrderTiers}
+            />
+            {/* ✨ [신규] 시크릿 상품 모달 렌더링 */}
+            <SecretProductModal
+                isOpen={isSecretProductModalOpen}
+                onClose={() => setIsSecretProductModalOpen(false)}
+                isEnabled={isSecretProductEnabled}
+                setIsEnabled={setIsSecretProductEnabled}
+                tiers={secretTiers}
+                setTiers={setSecretTiers}
+            />
+            <div className="product-add-page-wrapper smart-form">
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
+                    <header className="product-add-header">
+                        <h1>{pageTitle}</h1>
+                        <div className="header-actions">
+                            <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
+                            <button type="submit" disabled={isSubmitting} className="save-button">
+                                <Save size={18} />
+                                {isSubmitting ? '저장 중...' : (mode === 'newProduct' ? '신규 상품 등록하기' : '새 회차 추가하기')}
+                            </button>
+                        </div>
+                    </header>
+                    <main className="main-content-grid-3-col-final">
+                        <div className="form-section">
+                            <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
+                            <p className="section-subtitle">상품의 기본 정보와 첫 판매 회차 이름을 설정합니다.</p>
 
-                        <div className="form-group with-validation">
-                            <label>대표 상품명 *</label>
-                            <div className="input-wrapper">
-                                <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required disabled={mode === 'newRound'} />
-                                {/* ✅ [수정] 입력창 옆에 작은 아이콘 로더를 표시합니다. */}
-                                {isCheckingDuplicates && (
-                                    <div className="input-spinner-wrapper">
-                                        <Loader2 className="spinner-icon" />
+                            <div className="form-group with-validation">
+                                <label>대표 상품명 *</label>
+                                <div className="input-wrapper">
+                                    <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="예: 무농약 블루베리" required disabled={mode === 'newRound'} />
+                                    {isCheckingDuplicates && (
+                                        <div className="input-spinner-wrapper">
+                                            <Loader2 className="spinner-icon" />
+                                        </div>
+                                    )}
+                                </div>
+                                {similarProducts.length > 0 && (
+                                    <div className="similar-products-warning">
+                                        <AlertTriangle size={16} />
+                                        <span>유사한 이름의 상품이 이미 존재합니다.</span>
+                                        <ul>
+                                            {similarProducts.map(p => (
+                                                <li key={p.id}>
+                                                    <Link to={`/admin/products/edit/${p.id}/${p.salesHistory[0]?.roundId}`} target="_blank">{p.groupName}</Link>
+                                                </li>
+                                            ))}
+                                        </ul>
                                     </div>
                                 )}
                             </div>
-                            {similarProducts.length > 0 && (
-                                <div className="similar-products-warning">
-                                    <AlertTriangle size={16} />
-                                    <span>유사한 이름의 상품이 이미 존재합니다.</span>
-                                    <ul>
-                                        {similarProducts.map(p => (
-                                            <li key={p.id}>
-                                                <Link to={`/admin/products/edit/${p.id}/${p.salesHistory[0]?.roundId}`} target="_blank">{p.groupName}</Link>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
 
-                        <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
-                        <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
-                        {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="storage-type-select">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
+                            <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
+                            <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
+                            {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="settings-option-group">{/* CSS 변경으로 인한 클래스 변경 */}{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`settings-option-btn ${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
 
-                        <div className="form-group">
-                            <label>대표 이미지 *</label>
-                            <DragDropContext onDragEnd={onDragEnd}>
-                                <Droppable droppableId="image-previews" direction="horizontal">
-                                    {(provided) => (
-                                        <div className="compact-image-uploader" {...provided.droppableProps} ref={provided.innerRef}>
-                                            <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" style={{display:'none'}}/>
-                                            {imagePreviews.map((p, i) => (
-                                                <Draggable key={p+i} draggableId={p+i.toString()} index={i}>
-                                                    {(provided, snapshot) => (
-                                                        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`} style={{...provided.draggableProps.style}}>
-                                                            <img src={p} alt={`미리보기 ${i+1}`}/>
-                                                            <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>
-                                                        </div>
-                                                    )}
-                                                </Draggable>
-                                            ))}
-                                            {provided.placeholder}
-                                            {imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}
-                                        </div>
-                                    )}
-                                </Droppable>
-                            </DragDropContext>
-                        </div>
-                    </div>
-                    <div className="form-section">
-                        <div className="form-section-title"><div className="title-text-group"><Box size={20} className="icon-color-option"/><h3>판매 옵션 설정 *</h3></div></div><p className="section-subtitle">실제 판매될 상품의 옵션과 가격, 재고 등을 설정합니다.</p>
-                        {variantGroups.map(vg => (
-                            <div className="variant-group-card" key={vg.id}>
-                                <div className="variant-group-header"><div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div><div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div><div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>{productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><Trash2 size={14}/></button>}</div>
-                                {vg.items.map(item => (
-                                    <div className="option-item-section" key={item.id}>
-                                        <div className="option-item-grid-2x2"><div className="form-group-grid item-name"><label>선택지 *</label><input type="text" value={item.name} onChange={e=>handleItemChange(vg.id, item.id, 'name', e.target.value)} placeholder="예: 1개" required/></div><div className="form-group-grid item-price"><label>가격 *</label><div className="price-input-wrapper"><input type="text" value={formatNumberWithCommas(item.price)} onChange={e=>handlePriceChange(vg.id, item.id, e.target.value)} placeholder="0" required/><span>원</span></div></div><div className="form-group-grid item-limit"><label className="tooltip-container"><span>구매 제한</span><span className="tooltip-text">한 고객이 이 옵션을 구매할 수 있는 최대 수량입니다.</span></label><input type="number" value={item.limitQuantity} onChange={e=>handleItemChange(vg.id, item.id, 'limitQuantity', e.target.value)} placeholder="없음"/></div><div className="form-group-grid item-deduction"><label className="tooltip-container"><span>차감 단위 *</span><span className="tooltip-text">이 옵션 1개 판매 시, '그룹 총 재고'에서 차감될 수량입니다. (예: 1박스(12개입)은 12)</span></label><input type="number" value={item.deductionAmount} onChange={e=>handleItemChange(vg.id, item.id, 'deductionAmount', e.target.value)} placeholder={item.isBundleOption ? "예: 12" : "1"} required/></div></div>
-                                        {vg.items.length > 1 && <button type="button" onClick={()=>removeItem(vg.id,item.id)} className="remove-item-btn"><Trash2 size={14}/></button>}
-                                    </div>
-                                ))}
-                                <div className="option-item-actions"><button type="button" onClick={()=>addNewItem(vg.id)} className="add-item-btn">구매 옵션 추가</button></div>
+                            <div className="form-group">
+                                <label>대표 이미지 *</label>
+                                <DragDropContext onDragEnd={onDragEnd}>
+                                    <Droppable droppableId="image-previews" direction="horizontal">
+                                        {(provided) => (
+                                            <div className="compact-image-uploader" {...provided.droppableProps} ref={provided.innerRef}>
+                                                <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/png, image/jpeg" style={{display:'none'}}/>
+                                                {imagePreviews.map((p, i) => (
+                                                    <Draggable key={p+i} draggableId={p+i.toString()} index={i}>
+                                                        {(provided, snapshot) => (
+                                                            <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`} style={{...provided.draggableProps.style}}>
+                                                                <img src={p} alt={`미리보기 ${i+1}`}/>
+                                                                <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>
+                                                            </div>
+                                                        )}
+                                                    </Draggable>
+                                                ))}
+                                                {provided.placeholder}
+                                                {imagePreviews.length < 10 && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}
+                                            </div>
+                                        )}
+                                    </Droppable>
+                                </DragDropContext>
                             </div>
-                        ))}
-                        <div className="add-group-btn-wrapper">{productType === 'group' && variantGroups.length < 5 && <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>}</div>
-                    </div>
-                    <div className="form-section sticky-section">
-                        <div className="form-section-title"><div className="title-text-group"><SlidersHorizontal size={20} className="icon-color-settings"/><h3>발행 및 기간 설정</h3></div></div><p className="section-subtitle">상품의 판매 시점 및 기간을 설정합니다.</p>
-                        <div className="form-group"><label>발행 옵션</label><div className="publish-option-buttons"><button type="button" className={publishOption==='now'?'active':''} onClick={()=>setPublishOption('now')}><span>즉시 발행</span></button><button type="button" className={publishOption==='schedule'?'active':''} onClick={()=>setPublishOption('schedule')}><span>예약 발행</span></button></div></div>
-                        {publishOption === 'schedule' && <div className="form-group"><label>발행 예약 시간</label><input type="datetime-local" value={formatToDateTimeLocal(scheduledAt)} onChange={e=>setScheduledAt(new Date(e.target.value))}/></div>}
-                        <div className="form-group"><label>공동구매 마감일 *</label><input type="datetime-local" value={formatToDateTimeLocal(deadlineDate)} onChange={e=>setDeadlineDate(e.target.value?new Date(e.target.value):null)} required/></div>
-                        <div className="form-group"><label>픽업 시작일 *</label><input type="date" value={pickupDay ? formatDateToYYYYMMDD(pickupDay) : ''} onChange={e=>setPickupDay(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
-                        <div className="form-group"><label>픽업 마감일 *</label><input type="date" value={pickupDeadlineDate ? formatDateToYYYYMMDD(pickupDeadlineDate) : ''} onChange={e=>setPickupDeadlineDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
-                        <div className="settings-summary-card"><h4 className="summary-title"><Info size={16} /> 설정 요약</h4><ul><li><strong>발행:</strong> {settingsSummary.publishText}</li><li><strong>마감:</strong> {settingsSummary.deadlineText}</li><li><strong>픽업:</strong> {settingsSummary.pickupText}</li></ul></div>
-                    </div>
-                </main>
-            </form>
-            {isSubmitting && <SodamallLoader message="상품 정보를 저장하고 있습니다..." />}
-        </div>
+                        </div>
+                        <div className="form-section">
+                            <div className="form-section-title">
+                                <div className="title-text-group">
+                                    <Box size={20} className="icon-color-option"/>
+                                    <h3>판매 옵션 설정 *</h3>
+                                </div>
+                            </div>
+                            <p className="section-subtitle">실제 판매될 상품의 옵션과 가격, 재고 등을 설정합니다.</p>
+                            {variantGroups.map(vg => (
+                                <div className="variant-group-card" key={vg.id}>
+                                    <div className="variant-group-header"><div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div><div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div><div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleGroupDateBlur(vg.id, e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>{productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><Trash2 size={14}/></button>}</div>
+                                    {vg.items.map(item => (
+                                        <div className="option-item-section" key={item.id}>
+                                            <div className="option-item-grid-2x2"><div className="form-group-grid item-name"><label>선택지 *</label><input type="text" value={item.name} onChange={e=>handleItemChange(vg.id, item.id, 'name', e.target.value)} placeholder="예: 1개" required/></div><div className="form-group-grid item-price"><label>가격 *</label><div className="price-input-wrapper"><input type="text" value={formatNumberWithCommas(item.price)} onChange={e=>handlePriceChange(vg.id, item.id, e.target.value)} placeholder="0" required/><span>원</span></div></div><div className="form-group-grid item-limit"><label className="tooltip-container"><span>구매 제한</span><Tippy content="한 고객이 이 옵션을 구매할 수 있는 최대 수량입니다."><Info size={14} style={{ marginLeft: '4px', cursor: 'help' }} /></Tippy></label><input type="number" value={item.limitQuantity} onChange={e=>handleItemChange(vg.id, item.id, 'limitQuantity', e.target.value)} placeholder="없음"/></div><div className="form-group-grid item-deduction"><label className="tooltip-container"><span>차감 단위 *</span><Tippy content="이 옵션 1개 판매 시, '그룹 총 재고'에서 차감될 수량입니다. (예: 1박스(12개입)은 12)"><Info size={14} style={{ marginLeft: '4px', cursor: 'help' }} /></Tippy></label><input type="number" value={item.deductionAmount} onChange={e=>handleItemChange(vg.id, item.id, 'deductionAmount', e.target.value)} placeholder={item.isBundleOption ? "예: 12" : "1"} required/></div></div>
+                                            {vg.items.length > 1 && <button type="button" onClick={()=>removeItem(vg.id,item.id)} className="remove-item-btn"><Trash2 size={14}/></button>}
+                                        </div>
+                                    ))}
+                                    <div className="option-item-actions"><button type="button" onClick={()=>addNewItem(vg.id)} className="add-item-btn">구매 옵션 추가</button></div>
+                                </div>
+                            ))}
+                            <div className="variant-controls-footer">
+                                <div className="add-group-btn-wrapper">
+                                    {productType === 'group' && variantGroups.length < 5 && 
+                                        <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div className="form-section sticky-section">
+                            <div className="form-section-title">
+                                <div className="title-text-group">
+                                    <SlidersHorizontal size={20} className="icon-color-settings"/>
+                                    <h3>발행 및 기간 설정</h3>
+                                </div>
+                            </div>
+                            <p className="section-subtitle">상품의 판매 시점 및 기간을 설정합니다.</p>
+                            
+                            <div className="form-group">
+                                <label>예약 옵션</label>
+                                <div className="settings-option-group"> {/* reservation-options-group -> settings-option-group */}
+                                    <Tippy content="선입금 필수 상품으로 설정합니다.">
+                                        <button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}>
+                                            <Save size={16} /> 선입금
+                                        </button>
+                                    </Tippy>
+                                    <Tippy content="선주문 설정을 엽니다.">
+                                        <button type="button" className={`settings-option-btn ${isPreOrderEnabled ? 'active' : ''}`} onClick={() => setIsPreOrderModalOpen(true)}>
+                                            <Clock size={16} /> 선주문
+                                        </button>
+                                    </Tippy>
+                                    {/* ✨ [수정] 시크릿 상품 설정 버튼 클래스 변경 */}
+                                    <Tippy content="시크릿 상품 설정을 엽니다.">
+                                        <button type="button" className={`settings-option-btn ${isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSecretProductModalOpen(true)}>
+                                            <Lock size={16} /> 시크릿
+                                        </button>
+                                    </Tippy>
+                                </div>
+                            </div>
+                            
+                            <div className="form-group">
+                                <label>발행일 (오후 2시 공개)</label>
+                                <input 
+                                    type="date" 
+                                    value={formatDateToYYYYMMDD(scheduledAt)} 
+                                    onChange={e => {
+                                        const newDate = new Date(e.target.value + 'T00:00:00');
+                                        newDate.setHours(14, 0, 0, 0);
+                                        setScheduledAt(newDate);
+                                    }} 
+                                    required
+                                />
+                                <p className="input-description">선택한 날짜 오후 2시에 모든 고객에게 공개됩니다.</p>
+                            </div>
+
+                            <div className="form-group"><label>공동구매 마감일 *</label><input type="datetime-local" value={formatToDateTimeLocal(deadlineDate)} onChange={e=>setDeadlineDate(e.target.value?new Date(e.target.value):null)} required/></div>
+                            <div className="form-group"><label>픽업 시작일 *</label><input type="date" value={pickupDay ? formatDateToYYYYMMDD(pickupDay) : ''} onChange={e=>setPickupDay(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
+                            <div className="form-group"><label>픽업 마감일 *</label><input type="date" value={pickupDeadlineDate ? formatDateToYYYYMMDD(pickupDeadlineDate) : ''} onChange={e=>setPickupDeadlineDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
+                            <div className="settings-summary-card"><h4 className="summary-title"><Info size={16} /> 설정 요약</h4><ul><li><strong>발행:</strong> {settingsSummary.publishText}</li><li><strong>마감:</strong> {settingsSummary.deadlineText}</li><li><strong>픽업:</strong> {settingsSummary.pickupText}</li></ul></div>
+                        </div>
+                    </main>
+                </form>
+                {isSubmitting && <SodamallLoader message="상품 정보를 저장하고 있습니다..." />}
+            </div>
+        </>
     );
 };
 

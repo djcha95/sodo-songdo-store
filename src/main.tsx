@@ -11,7 +11,7 @@ import App from './App';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import SodamallLoader from './components/common/SodamallLoader'; 
 
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 // 더 이상 사용하지 않는 CSS 파일 import를 삭제합니다.
 // import './styles/toast-styles.css';
 
@@ -20,7 +20,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 // 레이아웃 컴포넌트
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
-const AdminRoute = React.lazy(() => import('./components/admin/AdminRoute'));
 
 // 고객 페이지
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
@@ -45,14 +44,15 @@ const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
 const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage'));
 const CategoryManagementPage = React.lazy(() => import('@/pages/admin/CategoryManagementPage'));
-const MinimalTestPage = React.lazy(() => import('@/pages/admin/MinimalTestPage'));
-const AiProductPage = React.lazy(() => import('@/pages/admin/AiProductPage'));
-const BoardAdminPage = React.lazy(() => import('@/pages/admin/BoardAdminPage'));
-const CouponAdminPage = React.lazy(() => import('@/pages/admin/CouponAdminPage'));
-const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage'));
+// ✨ [수정] 사용되지 않는 페이지 import 제거
+// const MinimalTestPage = React.lazy(() => import('@/pages/admin/MinimalTestPage')); 
+// const AiProductPage = React.lazy(() => import('@/pages/admin/AiProductPage'));
+// const BoardAdminPage = React.lazy(() => import('@/pages/admin/BoardAdminPage'));
+// const CouponAdminPage = React.lazy(() => import('@/pages/admin/CouponAdminPage'));
+// const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage'));
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
-const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
-const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
+// const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
+// const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 // 새로 만든 페이지 import
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
@@ -63,51 +63,25 @@ const ProductDetailPageWrapper = () => {
   return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
 };
 
-const RouterWrapper = () => {
-  const { loading } = useAuth(); 
 
-  if (loading) {
-    return <SodamallLoader />;
-  }
-
-  return <RouterProvider router={router} />;
-};
-
-
+// ✨ [수정] 라우팅 구조를 최신 표준에 맞게 재설계
 const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
     children: [
-      { path: "login", element: <LoginPage /> },
-      {
-        path: "terms",
-        element: (
-          <Suspense fallback={<SodamallLoader />}>
-            <TermsPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: "privacy",
-        element: (
-          <Suspense fallback={<SodamallLoader />}>
-            <PrivacyPolicyPage />
-          </Suspense>
-        ),
-      },
+      // --- 공용 경로 ---
+      { path: "login", element: <Suspense fallback={<SodamallLoader />}><LoginPage /></Suspense> },
+      { path: "terms", element: <Suspense fallback={<SodamallLoader />}><TermsPage /></Suspense> },
+      { path: "privacy", element: <Suspense fallback={<SodamallLoader />}><PrivacyPolicyPage /></Suspense> },
 
-      // --- 관리자 경로 ---
+      // --- 관리자 전용 경로 ---
       {
-        path: "admin",
-        element: (
-          <Suspense fallback={<SodamallLoader />}>
-            <AdminRoute />
-          </Suspense>
-        ),
+        element: <ProtectedRoute adminOnly={true} />,
         children: [
           {
-            element: <AdminLayout />,
+            path: "admin",
+            element: <Suspense fallback={<SodamallLoader />}><AdminLayout /></Suspense>,
             children: [
               { index: true, element: <Navigate to="/admin/dashboard" replace /> },
               { path: 'dashboard', element: <DashboardPage /> },
@@ -118,54 +92,49 @@ const router = createBrowserRouter([
               { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'categories', element: <CategoryManagementPage /> },
-              { path: 'encore-requests', element: <EncoreAdminPage /> },
-              { path: 'ai-product', element: <AiProductPage /> },
+              // ✨ [수정] 주석 처리된 경로 제거
+              // { path: 'encore-requests', element: <EncoreAdminPage /> },
+              // { path: 'ai-product', element: <AiProductPage /> },
               { path: 'orders', element: <OrderManagementPage /> },
-              { path: 'pickup', element: <PickupProcessingPage /> },
+              // { path: 'pickup', element: <PickupProcessingPage /> },
               { path: 'users', element: <UserListPage /> },
               { path: 'users/:userId', element: <UserDetailPage /> },
-              { path: 'coupons', element: <CouponAdminPage /> },
+              // { path: 'coupons', element: <CouponAdminPage /> },
               { path: 'banners', element: <BannerAdminPage /> },
-              { path: 'board', element: <BoardAdminPage /> },
-              { path: 'product-arrivals', element: <ProductArrivalCalendar /> },
-              { path: 'test', element: <MinimalTestPage /> },
+              // { path: 'board', element: <BoardAdminPage /> },
+              // { path: 'product-arrivals', element: <ProductArrivalCalendar /> },
+              // { path: 'test', element: <MinimalTestPage /> },
             ]
           }
         ]
       },
-      // --- End of Admin Routes ---
-
-      // --- 고객 페이지 레이아웃 ---
+      
+      // --- 로그인한 모든 사용자를 위한 경로 ---
       {
-        element: (
-          <ProtectedRoute>
-            <Suspense fallback={<SodamallLoader />}>
-              <CustomerLayout />
-            </Suspense>
-          </ProtectedRoute>
-        ),
+        element: <ProtectedRoute />,
         children: [
-          { index: true, element: <ProductListPage /> },
-          { path: "cart", element: <CartPage /> },
-          { path: "onsite-sale", element: <OnsiteSalePage /> },
-          { path: "customer-center", element: <CustomerCenterPage /> },
           {
-            path: "mypage",
+            element: <Suspense fallback={<SodamallLoader />}><CustomerLayout /></Suspense>,
             children: [
-              { index: true, element: <MyPage /> },
-              { path: "history", element: <OrderHistoryPage /> },
-              { path: "points", element: <PointHistoryPage /> },
+              { index: true, element: <ProductListPage /> },
+              { path: "cart", element: <CartPage /> },
+              { path: "onsite-sale", element: <OnsiteSalePage /> },
+              { path: "customer-center", element: <CustomerCenterPage /> },
+              {
+                path: "mypage",
+                children: [
+                  { index: true, element: <MyPage /> },
+                  { path: "history", element: <OrderHistoryPage /> },
+                  { path: "points", element: <PointHistoryPage /> },
+                ]
+              },
             ]
           },
+          {
+            path: "product/:productId",
+            element: <Suspense fallback={<SodamallLoader />}><ProductDetailPageWrapper /></Suspense>,
+          },
         ]
-      },
-      {
-        path: "product/:productId",
-        element: (
-          <Suspense fallback={<SodamallLoader />}>
-            <ProductDetailPageWrapper />
-          </Suspense>
-        ),
       },
     ],
   },
@@ -221,7 +190,9 @@ createRoot(document.getElementById('root')!).render(
       }}
     />
     <AuthProvider> 
-      <RouterWrapper />
+      <Suspense fallback={<SodamallLoader />}>
+        <RouterProvider router={router} />
+      </Suspense>
     </AuthProvider>
   </React.Fragment>
 );

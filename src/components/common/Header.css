@@ -1,225 +1,256 @@
-/* src/components/Header.css */
+/* src/components/common/Header.css */
 
-.main-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  height: 65px;
-  background-color: white;
-  border-bottom: 1px solid #f0f0f0;
-  box-sizing: border-box;
+.main-header.customer-header-sticky {
+    position: relative;
+    top: 0;
+    background-color: #fff;
+    z-index: 100;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f0f0f0;
+    min-height: 60px;
+    box-sizing: border-box;
 }
 
-/* ✅ 헤더 고정을 위한 sticky 속성 */
-.customer-header-sticky {
-  position: sticky;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 1000;
-}
-
-/* 각 영역 정렬 */
-.header-left, .header-right {
+.header-left,
+.header-right {
     display: flex;
     align-items: center;
-    flex: 1;
+    flex: 1 0 0;
+    z-index: 2;
 }
-.header-left {
-    justify-content: flex-start;
-}
+
 .header-right {
     justify-content: flex-end;
-    gap: 16px; /* 내부 요소 간격 */
-}
-.header-center {
-    flex-shrink: 0;
 }
 
-/* 좌측 날짜 버튼 */
-.header-date-button {
+.header-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    justify-content: center;
+    min-width: 0;
+}
+
+.header-back-button {
     background: none;
     border: none;
-    cursor: pointer;
     padding: 8px;
-    border-radius: 8px;
-    transition: background-color 0.2s;
+    margin: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: var(--text-color-dark);
 }
-.header-date-button:hover {
-    background-color: #f8f9fa;
-}
-.header-icon { color: var(--primary-color); }
-.current-date { font-size: 0.95rem; color: #343a40; font-weight: 600; }
 
-/* 중앙 로고 */
+.header-page-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .brand-text-logo-container {
+    --brand-name-font-size: 1.5rem;
+    --store-name-font-size: 0.85rem;
+
+    text-decoration: none;
+    color: inherit;
     display: flex;
     flex-direction: column;
     align-items: center;
-    line-height: 1.1;
-    text-decoration: none; /* Link 컴포넌트의 밑줄 제거 */
 }
 .brand-name {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--primary-color);
-}
-.store-name {
-    font-size: 0.8rem;
-    color: #868e96;
-    font-weight: 500;
-}
-
-/* ❗ [삭제] 기존 인사말 스타일 제거
-.greeting-message { ... }
-*/
-
-/* 뒤로가기 버튼 등 기타 */
-.header-page-title {
-    font-size: 1.2rem;
+    font-size: var(--brand-name-font-size);
     font-weight: 700;
-    color: #212529;
+    color: var(--primary-color);
+    line-height: 1.2; /* ✅ [수정] 줄 높이를 줄여 하단 여백 감소 */
 }
-.header-back-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: none;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-.header-back-button:hover { background-color: #f1f3f5; }
-.header-back-button svg { color: #495057; }
-
-
-/* ✅ [수정] 알림 기능 관련 스타일 */
-.notification-container {
-  position: relative;
+.store-name { 
+    font-size: var(--store-name-font-size);
+    color: var(--text-color-light);
+    margin-top: -6px; /* ✅ [수정] 상단 여백을 줄여 간격 좁힘 */
 }
 
-/* ✅ [추가] 새로운 알림 버튼 스타일 */
+.header-date-button,
 .new-notification-button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background-color: transparent;
-  border: 1px solid var(--border-color-light, #e9ecef);
-  padding: 6px 12px;
-  border-radius: var(--border-radius-lg, 8px);
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-color-dark, #343a40);
-  transition: background-color 0.2s, border-color 0.2s;
+    background-color: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 6px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-color-dark);
+    transition: background-color 0.2s;
 }
 
+.header-date-button:hover,
 .new-notification-button:hover {
-  background-color: var(--bg-color-light, #f8f9fa);
-  border-color: var(--border-color-medium, #dee2e6);
+    background-color: #e5e7eb;
 }
 
-.new-notification-button svg {
-  color: var(--text-color-medium, #495057);
+.new-notification-button {
+    position: relative;
 }
 
-/* ✅ [추가] 오늘 픽업 알림 '!' 표시 스타일 */
+.notification-badge,
 .pickup-indicator {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background-color: var(--danger-color, #e03131);
-  color: white;
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 20px;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  animation: bounce 1.5s ease-in-out infinite;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background-color: var(--danger-color);
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 50%;
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2px;
+    box-sizing: border-box;
+    border: 2px solid white;
+}
+.pickup-indicator {
+    background-color: #f59e0b;
 }
 
-@keyframes bounce {
-  0%, 20%, 50%, 80%, 100% {
-    transform: translateY(0);
-  }
-  40% {
-    transform: translateY(-5px);
-  }
-  60% {
-    transform: translateY(-2px);
-  }
+/* --- Mobile Notification Modal --- */
+.notification-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
 }
 
-.notification-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background-color: var(--primary-color);
-  color: white;
-  border-radius: 50%;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  font-size: 11px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  border: 2px solid var(--bg-color-white);
+.notification-modal-content {
+    background-color: #fff;
+    width: 90%;
+    max-width: 400px;
+    max-height: 80vh;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    animation: slideUp 0.3s ease-out;
 }
 
-.notification-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 8px;
-  background-color: var(--bg-color-white);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--box-shadow-lg);
-  width: 320px; /* 너비 약간 증가 */
-  max-height: 400px;
-  overflow-y: auto;
-  z-index: 1000;
-  border: 1px solid var(--border-color-light);
+.notification-modal-header {
+    padding: 16px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.notification-modal-header h4 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.modal-close-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--text-color-light);
 }
 
+.notification-modal-body {
+    padding: 8px 16px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.mark-all-read-btn-mobile {
+    width: 100%;
+    text-align: right;
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.notification-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
 .notification-item {
-  padding: 12px 16px;
-  font-size: 0.9rem;
-  color: var(--text-color-dark);
-  border-bottom: 1px solid var(--border-color-light);
-  cursor: pointer;
-  transition: background-color 0.2s;
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f2f2f2;
+    cursor: pointer;
+    transition: background-color 0.2s;
 }
-
-.notification-item:last-child {
-  border-bottom: none;
-}
-
 .notification-item:hover {
-  background-color: var(--bg-color-light);
+    background-color: #f9f9f9;
 }
-
-.notification-item.read {
-  color: var(--text-color-light);
-  background-color: var(--bg-color-light-gray);
+.notification-item.read { opacity: 0.6; }
+.notification-item:last-child { border-bottom: none; }
+.notification-item-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.notification-item-content {
+    flex-grow: 1;
+}
+.notification-message {
+    font-size: 0.9rem;
+    margin: 0 0 4px;
+    line-height: 1.4;
+}
+.notification-time {
+    font-size: 0.75rem;
+    color: var(--text-color-light);
 }
 
 .notification-item.no-notifications {
-  color: var(--text-color-light);
-  text-align: center;
-  padding: 24px;
-  cursor: default;
+    text-align: center;
+    padding: 40px 0;
+    color: #999;
 }
+
+.notification-modal-footer {
+    padding: 16px;
+    border-top: 1px solid #eee;
+    background-color: #f7f7f7;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.footer-points-section, .footer-tier-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+.footer-tier-section strong { color: var(--tier-color); }
+
+
+/* Animation keyframes */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0.7; } to { transform: translateY(0); opacity: 1; } }

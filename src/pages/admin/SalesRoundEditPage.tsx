@@ -5,13 +5,14 @@ import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById, updateSalesRound, getCategories, updateProductCoreInfo } from '../../firebase';
-import type { Category, StorageType, Product, SalesRoundStatus, VariantGroup, ProductItem } from '../../types';
+import type { Category, StorageType, Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, LoyaltyTier } from '../../types';
 import toast from 'react-hot-toast';
-import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText } from 'lucide-react';
-// ✅ [수정] 공용 로더 컴포넌트 import
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, Clock, Lock } from 'lucide-react';
 import SodamallLoader from '@/components/common/SodamallLoader';
 import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
-import './ProductAddAdminPage.css'; // 폼 스타일은 공유
+import Tippy from '@tippyjs/react';
+import 'tippy.js/dist/tippy.css';
+import './ProductAddAdminPage.css';
 
 // --- UI 상태 관리용 타입 정의 ---
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
@@ -20,13 +21,132 @@ interface VariantGroupUI { id: string; groupName: string; totalPhysicalStock: nu
 // --- 헬퍼 함수 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
 const formatToDateTimeLocal = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
-const formatDateToYYYYMMDD = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
+const formatDateToYYYYMMDD = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = date.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
 const parseDateString = (dateString: string): Date | null => { if (!dateString) return null; const cleaned = dateString.replace(/[^0-9]/g, ''); if (cleaned.length === 6) { const year = parseInt("20" + cleaned.substring(0, 2), 10); const month = parseInt(cleaned.substring(2, 4), 10) - 1; const day = parseInt(cleaned.substring(4, 6), 10); const date = new Date(year, month, day); if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) return date; } if (cleaned.length === 8) { const year = parseInt(cleaned.substring(0, 4), 10); const month = parseInt(cleaned.substring(4, 6), 10) - 1; const day = parseInt(cleaned.substring(6, 8), 10); const date = new Date(year, month, day); if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) return date; } return null; };
 const formatNumberWithCommas = (value: number | ''): string => { if (value === '' || value === null) return ''; return Number(value).toLocaleString('ko-KR'); };
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 
-// ❗ [제거] 로컬 LoadingSpinner 컴포넌트 제거
 const storageTypeOptions: { key: StorageType; name:string; className: string }[] = [{ key: 'ROOM', name: '실온', className: 'storage-btn-room' }, { key: 'FROZEN', name: '냉동', className: 'storage-btn-frozen' }, { key: 'COLD', name: '냉장', className: 'storage-btn-cold' }];
+
+
+// --- 선주문 설정 모달 컴포넌트 ---
+interface PreOrderSettingsModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    isEnabled: boolean;
+    setIsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    tiers: LoyaltyTier[];
+    setTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>; 
+}
+
+const PreOrderSettingsModal: React.FC<PreOrderSettingsModalProps> = ({ isOpen, onClose, isEnabled, setIsEnabled, tiers, setTiers }) => {
+    if (!isOpen) return null;
+
+    const handleTierChange = (tier: LoyaltyTier) => {
+        setTiers(prevTiers => 
+            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
+        );
+    };
+
+    return (
+        <div className="admin-modal-overlay" onClick={onClose}>
+            <div className="admin-modal-content" onClick={e => e.stopPropagation()}>
+                <div className="admin-modal-header">
+                    <h4><Clock size={20}/> 선주문 설정</h4> 
+                    <button onClick={onClose} className="admin-modal-close-button"><X size={24}/></button>
+                </div>
+                <div className="admin-modal-body">
+                    <div className="preorder-toggle-label">
+                        <span>선주문 기능 사용</span>
+                        <div className={`toggle-switch ${isEnabled ? 'active' : ''}`} onClick={() => setIsEnabled(!isEnabled)}>
+                            <div className="toggle-handle"></div>
+                        </div>
+                    </div>
+                    {isEnabled && (
+                        <div className="preorder-options active">
+                            <p className="preorder-info">
+                                <Info size={14} />
+                                선택된 등급은 상품 업로드 직후부터 발행일 오후 2시까지 선주문이 가능합니다.
+                            </p>
+                            <div className="tier-checkbox-group">
+                                {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
+                                    <label key={tier} htmlFor={`modal-tier-${tier}`}>
+                                        <input type="checkbox" id={`modal-tier-${tier}`} value={tier} checked={tiers.includes(tier)} onChange={() => handleTierChange(tier)} />
+                                        {tier}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="admin-modal-footer">
+                    <button onClick={onClose} className="modal-button primary">확인</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ✨ [신규] 시크릿 상품 설정 모달 컴포넌트
+interface SecretProductModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    isEnabled: boolean;
+    setIsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    tiers: LoyaltyTier[];
+    setTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
+}
+
+const SecretProductModal: React.FC<SecretProductModalProps> = ({ isOpen, onClose, isEnabled, setIsEnabled, tiers, setTiers }) => {
+    const handleTierChange = (tier: LoyaltyTier) => {
+        setTiers(prevTiers => 
+            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
+        );
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="admin-modal-overlay" onClick={onClose}>
+            <div className="admin-modal-content" onClick={e => e.stopPropagation()}>
+                <div className="admin-modal-header">
+                    <h4><Lock size={20}/> 시크릿 상품 설정</h4>
+                    <button onClick={onClose} className="admin-modal-close-button"><X size={24}/></button>
+                </div>
+                <div className="admin-modal-body">
+                    <div className="form-group">
+                        <label className="preorder-toggle-label">
+                            <span>시크릿 상품 기능 사용</span>
+                            <div className={`toggle-switch ${isEnabled ? 'active' : ''}`} onClick={() => setIsEnabled(!isEnabled)}>
+                                <div className="toggle-handle"></div>
+                            </div>
+                        </label>
+                    </div>
+                    {isEnabled && (
+                        <div className="preorder-options active">
+                            <p className="preorder-info">
+                                <Info size={14} />
+                                선택된 등급의 고객에게만 이 상품이 노출됩니다.
+                            </p>
+                            <div className="tier-checkbox-group">
+                                {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
+                                    <label key={tier} htmlFor={`secret-tier-${tier}`}>
+                                        <input type="checkbox" id={`secret-tier-${tier}`} value={tier} checked={tiers.includes(tier)} onChange={() => handleTierChange(tier)} />
+                                        {tier}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="admin-modal-footer">
+                    <button onClick={onClose} className="modal-button primary">확인</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- 메인 컴포넌트 ---
 const SalesRoundEditPage: React.FC = () => {
@@ -50,12 +170,23 @@ const SalesRoundEditPage: React.FC = () => {
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
     const [roundName, setRoundName] = useState('');
-    const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]);
-    const [publishOption, setPublishOption] = useState<'now' | 'schedule'>('now');
+    const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]); 
     const [scheduledAt, setScheduledAt] = useState<Date>(new Date());
     const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
     const [pickupDay, setPickupDay] = useState<Date | null>(null);
     const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
+    const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
+
+    const [isPreOrderModalOpen, setIsPreOrderModalOpen] = useState(false);
+    const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
+    const [preOrderTiers, setPreOrderTiers] = useState<LoyaltyTier[]>([]);
+
+    // ✨ [신규] 시크릿 상품 관련 상태
+    const [isSecretProductModalOpen, setIsSecretProductModalOpen] = useState(false);
+    const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false);
+    const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]);
+
+    const initialRoundData = useRef<SalesRound | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -67,6 +198,8 @@ const SalesRoundEditPage: React.FC = () => {
                 const round = product.salesHistory.find(r => r.roundId === roundId);
                 if (!round) { toast.error("판매 회차를 찾을 수 없습니다."); navigate('/admin/products'); return; }
                 
+                initialRoundData.current = round;
+
                 setCategories(fetchedCategories);
                 setGroupName(product.groupName);
                 setDescription(product.description);
@@ -88,11 +221,27 @@ const SalesRoundEditPage: React.FC = () => {
                     };
                 });
                 setVariantGroups(mappedVGs);
-                setPublishOption(round.status === 'selling' ? 'now' : 'schedule');
                 setScheduledAt(round.publishAt.toDate());
                 setDeadlineDate(round.deadlineDate.toDate());
                 setPickupDay(round.pickupDate.toDate());
                 setPickupDeadlineDate(round.pickupDeadlineDate?.toDate() || null);
+                setIsPrepaymentRequired(round.isPrepaymentRequired ?? false);
+
+                if (round.preOrderTiers !== undefined && round.preOrderTiers.length > 0) {
+                    setIsPreOrderEnabled(true);
+                    setPreOrderTiers(round.preOrderTiers);
+                } else if (round.preOrderTiers === undefined) {
+                    setIsPreOrderEnabled(true);
+                    setPreOrderTiers(['공구의 신', '공구왕']);
+                } else {
+                    setIsPreOrderEnabled(false);
+                    setPreOrderTiers([]);
+                }
+
+                // ✨ [신규] 불러온 데이터로 시크릿 상품 상태 초기화
+                setIsSecretProductEnabled(!!round.secretForTiers && round.secretForTiers.length > 0);
+                setSecretTiers(round.secretForTiers || []);
+
             } catch (err) { toast.error("정보를 불러오는 데 실패했습니다."); console.error(err); } 
             finally { setIsLoading(false); }
         };
@@ -102,7 +251,12 @@ const SalesRoundEditPage: React.FC = () => {
     useEffect(() => { if (!pickupDay) { setPickupDeadlineDate(null); return; } const newPickupDeadline = new Date(pickupDay); if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); } setPickupDeadlineDate(newPickupDeadline); }, [pickupDay, selectedStorageType]);
 
     const handleProductTypeChange = useCallback((newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); } }, [productType]);
-    const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === id ? { ...vg, [field]: value } : vg)); }, []);
+    const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => {
+        setVariantGroups(prev =>
+            prev.map(vg => (vg.id === id ? { ...vg, [field]: value } : vg))
+        );
+    }, []);
+
     const handleGroupDateBlur = useCallback((id: string, dateStr: string) => { const parsedDate = parseDateString(dateStr); if (dateStr && !parsedDate) { toast.error('유효하지 않은 날짜 형식입니다. (예: 250715 또는 20250715)'); return; } handleVariantGroupChange(id, 'expirationDate', parsedDate); handleVariantGroupChange(id, 'expirationDateInput', parsedDate ? formatDateToYYYYMMDD(parsedDate) : '');}, [handleVariantGroupChange]);
     const addNewVariantGroup = useCallback(() => { setVariantGroups(prev => [...prev, { id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); }, []);
     const removeVariantGroup = useCallback((id: string) => { if (variantGroups.length > 1) setVariantGroups(prev => prev.filter(vg => vg.id !== id)); else toast.error("최소 1개의 하위 그룹이 필요합니다."); }, [variantGroups.length]);
@@ -113,7 +267,7 @@ const SalesRoundEditPage: React.FC = () => {
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { if (!e.target.files) return; const files = Array.from(e.target.files); setNewImageFiles(prev => [...prev, ...files]); files.forEach(file => setImagePreviews(prev => [...prev, URL.createObjectURL(file)])); e.target.value = ''; }, []);
     const removeImage = useCallback((indexToRemove: number) => { const urlToRemove = imagePreviews[indexToRemove]; if (!urlToRemove) return; if (urlToRemove.startsWith('blob:')) { URL.revokeObjectURL(urlToRemove); setNewImageFiles(prev => prev.filter(f => URL.createObjectURL(f) !== urlToRemove)); } else { setCurrentImageUrls(prev => prev.filter(u => u !== urlToRemove)); } setImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove)); }, [imagePreviews]);
 
-    const settingsSummary = useMemo(() => { const publishText = publishOption === 'now' ? '즉시 발행' : `예약 발행 (${formatToDateTimeLocal(scheduledAt).replace('T', ' ')})`; const deadlineText = deadlineDate ? `${formatToDateTimeLocal(deadlineDate).replace('T', ' ')} 까지` : '미설정'; const pickupText = pickupDay ? `${formatDateToYYYYMMDD(pickupDay)} 부터` : '미설정'; return { publishText, deadlineText, pickupText }; }, [publishOption, scheduledAt, deadlineDate, pickupDay]);
+    const settingsSummary = useMemo(() => { const publishText = `예약 발행 (${formatToDateTimeLocal(scheduledAt).replace('T', ' ')})`; const deadlineText = deadlineDate ? `${formatToDateTimeLocal(deadlineDate).replace('T', ' ')} 까지` : '미설정'; const pickupText = pickupDay ? `${formatDateToYYYYMMDD(pickupDay)} 부터` : '미설정'; return { publishText, deadlineText, pickupText }; }, [scheduledAt, deadlineDate, pickupDay]);
 
     const handleSubmit = async (isDraft: boolean = false) => {
         if (!productId || !roundId) return;
@@ -123,7 +277,13 @@ const SalesRoundEditPage: React.FC = () => {
             const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '' };
             await updateProductCoreInfo(productId, productDataToUpdate, newImageFiles, currentImageUrls, initialImageUrls);
             
-            const status: SalesRoundStatus = isDraft ? 'draft' : (publishOption === 'now' ? 'selling' : 'scheduled');
+            const status: SalesRoundStatus = isDraft ? 'draft' : 'scheduled';
+            
+            const publishDateTime = new Date(scheduledAt);
+            publishDateTime.setHours(14, 0, 0, 0);
+            
+            const preOrderEndDateTime = isPreOrderEnabled ? publishDateTime : null;
+
             const salesRoundToUpdate = {
                 roundName: roundName.trim(), status,
                 variantGroups: variantGroups.map(vg => ({
@@ -137,10 +297,14 @@ const SalesRoundEditPage: React.FC = () => {
                         stockDeductionAmount: Number(item.deductionAmount) || 1,
                     })),
                 })),
-                publishAt: Timestamp.fromDate(status === 'scheduled' ? scheduledAt : new Date()),
+                publishAt: Timestamp.fromDate(publishDateTime),
                 deadlineDate: Timestamp.fromDate(deadlineDate!),
                 pickupDate: Timestamp.fromDate(pickupDay!),
                 pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
+                isPrepaymentRequired: isPrepaymentRequired,
+                preOrderTiers: isPreOrderEnabled ? preOrderTiers : [],
+                preOrderEndDate: preOrderEndDateTime ? Timestamp.fromDate(preOrderEndDateTime) : undefined,
+                secretForTiers: isSecretProductEnabled ? secretTiers : [], // ✨ [신규] 시크릿 상품 정보 저장
             };
             await updateSalesRound(productId, roundId, salesRoundToUpdate as any);
             toast.success(isDraft ? "수정 내용이 임시저장되었습니다." : "상품 정보가 성공적으로 수정되었습니다.");
@@ -149,24 +313,40 @@ const SalesRoundEditPage: React.FC = () => {
         } finally { setIsSubmitting(false); }
     };
   
-    // ✅ [수정] 페이지 전체 로딩 시 SodamallLoader 사용
-    if (isLoading) return <SodamallLoader />;
+    if (isLoading) return <SodamallLoader message="상품 정보를 불러오는 중입니다..." />;
 
     return (
-        <div className="product-add-page-wrapper smart-form">
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
-                <header className="product-add-header">
-                    <h1>판매 회차 수정</h1>
-                    <div className="header-actions">
-                        <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
-                        {/* ✅ [수정] 버튼 내 로딩 시 InlineSodamallLoader 사용 */}
-                        <button type="submit" disabled={isSubmitting} className="save-button">
-                            {isSubmitting ? <InlineSodamallLoader /> : <Save size={18} />}
-                            수정 내용 저장
-                        </button>
-                    </div>
-                </header>
-                <main className="main-content-grid-3-col-final">
+        <>
+            <PreOrderSettingsModal
+                isOpen={isPreOrderModalOpen}
+                onClose={() => setIsPreOrderModalOpen(false)}
+                isEnabled={isPreOrderEnabled}
+                setIsEnabled={setIsPreOrderEnabled}
+                tiers={preOrderTiers}
+                setTiers={setPreOrderTiers} 
+            />
+            {/* ✨ [신규] 시크릿 상품 모달 렌더링 */}
+            <SecretProductModal
+                isOpen={isSecretProductModalOpen}
+                onClose={() => setIsSecretProductModalOpen(false)}
+                isEnabled={isSecretProductEnabled}
+                setIsEnabled={setIsSecretProductEnabled}
+                tiers={secretTiers}
+                setTiers={setSecretTiers}
+            />
+            <div className="product-add-page-wrapper smart-form">
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
+                    <header className="product-add-header">
+                        <h1>판매 회차 수정</h1>
+                        <div className="header-actions">
+                            <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
+                            <button type="submit" disabled={isSubmitting} className="save-button">
+                                {isSubmitting ? <InlineSodamallLoader /> : <Save size={18} />}
+                                수정 내용 저장
+                            </button>
+                        </div>
+                    </header>
+                    <main className="main-content-grid-3-col-final">
                      <div className="form-section">
                         <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
                         <p className="section-subtitle">상품의 기본 정보는 모든 판매 회차에 공통 적용됩니다.</p>
@@ -197,13 +377,73 @@ const SalesRoundEditPage: React.FC = () => {
                                 <div className="option-item-actions"><button type="button" onClick={()=>addNewItem(vg.id)} className="add-item-btn">구매 옵션 추가</button></div>
                             </div>
                         ))}
-                        <div className="add-group-btn-wrapper">{productType === 'group' && variantGroups.length < 5 && <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>}</div>
+                        <div className="variant-controls-footer">
+                            <div className="add-group-btn-wrapper">
+                                {productType === 'group' && variantGroups.length < 5 && 
+                                    <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>
+                                }
+                            </div>
+                        </div>
                     </div>
+
                     <div className="form-section sticky-section">
-                        <div className="form-section-title"><div className="title-text-group"><SlidersHorizontal size={20} className="icon-color-settings"/><h3>발행 및 기간 설정</h3></div></div>
+                        <div className="form-section-title">
+                            <div className="title-text-group">
+                                <SlidersHorizontal size={20} className="icon-color-settings"/>
+                                <h3>발행 및 기간 설정</h3>
+                            </div>
+                        </div>
                         <p className="section-subtitle">상품의 판매 시점 및 기간을 설정합니다.</p>
-                        <div className="form-group"><label>발행 옵션</label><div className="publish-option-buttons"><button type="button" className={publishOption==='now'?'active':''} onClick={()=>setPublishOption('now')}><span>즉시 발행</span></button><button type="button" className={publishOption==='schedule'?'active':''} onClick={()=>setPublishOption('schedule')}><span>예약 발행</span></button></div></div>
-                        {publishOption === 'schedule' && <div className="form-group"><label>발행 예약 시간</label><input type="datetime-local" value={formatToDateTimeLocal(scheduledAt)} onChange={e=>setScheduledAt(new Date(e.target.value))}/></div>}
+                        
+                        {/* ✨ [수정] 새로운 버튼 그룹 UI 적용 */}
+                        <div className="form-group">
+                            <label>예약 옵션</label>
+                            <div className="settings-option-group">
+                                <Tippy content="선입금 필수 상품으로 설정합니다.">
+                                    <button
+                                        type="button"
+                                        className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`}
+                                        onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}
+                                    >
+                                        <Save size={16} /> 선입금
+                                    </button>
+                                </Tippy>
+                                <Tippy content="선주문 설정을 엽니다.">
+                                    <button
+                                        type="button"
+                                        className={`settings-option-btn ${isPreOrderEnabled ? 'active' : ''}`}
+                                        onClick={() => setIsPreOrderModalOpen(true)}
+                                    >
+                                        <Clock size={16} /> 선주문
+                                    </button>
+                                </Tippy>
+                                <Tippy content="시크릿 상품 설정을 엽니다.">
+                                    <button
+                                        type="button"
+                                        className={`settings-option-btn ${isSecretProductEnabled ? 'active' : ''}`}
+                                        onClick={() => setIsSecretProductModalOpen(true)}
+                                    >
+                                        <Lock size={16} /> 시크릿
+                                    </button>
+                                </Tippy>
+                            </div>
+                        </div>
+                        
+                        <div className="form-group">
+                            <label>발행일 (오후 2시 공개)</label>
+                            <input 
+                                type="date" 
+                                value={formatDateToYYYYMMDD(scheduledAt)} 
+                                onChange={e => {
+                                    const newDate = new Date(e.target.value + 'T00:00:00');
+                                    newDate.setHours(14, 0, 0, 0);
+                                    setScheduledAt(newDate);
+                                }} 
+                                required
+                            />
+                            <p className="input-description">선택한 날짜 오후 2시에 모든 고객에게 공개됩니다.</p>
+                        </div>
+
                         <div className="form-group"><label>공동구매 마감일 *</label><input type="datetime-local" value={formatToDateTimeLocal(deadlineDate)} onChange={e=>setDeadlineDate(e.target.value?new Date(e.target.value):null)} required/></div>
                         <div className="form-group"><label>픽업 시작일 *</label><input type="date" value={pickupDay ? formatDateToYYYYMMDD(pickupDay) : ''} onChange={e=>setPickupDay(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
                         <div className="form-group"><label>픽업 마감일 *</label><input type="date" value={pickupDeadlineDate ? formatDateToYYYYMMDD(pickupDeadlineDate) : ''} onChange={e=>setPickupDeadlineDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
@@ -211,9 +451,9 @@ const SalesRoundEditPage: React.FC = () => {
                     </div>
                 </main>
             </form>
-            {/* ✅ [수정] 폼 제출 시 SodamallLoader 사용 */}
             {isSubmitting && <SodamallLoader message="수정 내용을 저장하고 있습니다..." />}
         </div>
+        </>
     );
 };
 
