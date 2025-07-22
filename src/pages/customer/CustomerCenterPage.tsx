@@ -27,13 +27,26 @@ const CustomerCenterPage: React.FC = () => {
     setLoading(true);
     try {
       const fetchedInfo = await getStoreInfo();
+      // ✅ [수정] 초기 데이터 객체에 latitude와 longitude 필드를 추가합니다.
+      // 이렇게 하면 Firestore에 좌표 데이터가 없더라도 컴포넌트가 정상적으로 렌더링되고,
+      // 관리자는 빈 필드를 보고 값을 입력할 수 있습니다.
       const initialInfo: StoreInfo = fetchedInfo || {
-        name: '', businessNumber: '', representative: '', address: '', phoneNumber: '', email: '',
-        operatingHours: [], description: '', kakaotalkChannelId: '',
-        usageGuide: [], faq: [],
+        name: '',
+        businessNumber: '',
+        representative: '',
+        address: '',
+        phoneNumber: '',
+        email: '',
+        operatingHours: [],
+        description: '',
+        kakaotalkChannelId: '',
+        usageGuide: [],
+        faq: [],
+        latitude: undefined, // 또는 null
+        longitude: undefined, // 또는 null
       };
       setStoreInfo(initialInfo);
-      setEditableInfo({...initialInfo});
+      setEditableInfo({ ...initialInfo });
     } catch (err) {
       console.error("매장 정보 불러오기 오류:", err);
       setError("매장 정보를 불러오는 데 실패했습니다.");
@@ -52,53 +65,53 @@ const CustomerCenterPage: React.FC = () => {
 
   const updateGuideItem = useCallback((index: number, field: keyof GuideItem, value: string) => {
     setEditableInfo(prev => {
-        if (!prev) return null;
-        const newGuide = [...(prev.usageGuide || [])];
-        if (newGuide[index]) {
-            newGuide[index] = { ...newGuide[index], [field]: value };
-        }
-        return { ...prev, usageGuide: newGuide };
+      if (!prev) return null;
+      const newGuide = [...(prev.usageGuide || [])];
+      if (newGuide[index]) {
+        newGuide[index] = { ...newGuide[index], [field]: value };
+      }
+      return { ...prev, usageGuide: newGuide };
     });
   }, []);
 
   const addGuideItem = useCallback(() => {
     const newId = uuidv4();
     setEditableInfo(prev => prev ? {
-        ...prev,
-        usageGuide: [...(prev.usageGuide || []), {id: newId, title: '새로운 안내', content: '내용을 입력하세요.'}]
+      ...prev,
+      usageGuide: [...(prev.usageGuide || []), { id: newId, title: '새로운 안내', content: '내용을 입력하세요.' }]
     } : null);
   }, []);
 
   const removeGuideItem = useCallback((id: string) => {
     setEditableInfo(prev => prev ? {
-        ...prev,
-        usageGuide: (prev.usageGuide || []).filter(item => item.id !== id)
+      ...prev,
+      usageGuide: (prev.usageGuide || []).filter(item => item.id !== id)
     } : null);
   }, []);
 
   const updateFaqItem = useCallback((index: number, field: keyof FaqItem, value: string) => {
     setEditableInfo(prev => {
-        if (!prev) return null;
-        const newFaq = [...(prev.faq || [])];
-        if (newFaq[index]) {
-            newFaq[index] = { ...newFaq[index], [field]: value };
-        }
-        return { ...prev, faq: newFaq };
+      if (!prev) return null;
+      const newFaq = [...(prev.faq || [])];
+      if (newFaq[index]) {
+        newFaq[index] = { ...newFaq[index], [field]: value };
+      }
+      return { ...prev, faq: newFaq };
     });
   }, []);
 
   const addFaqItem = useCallback(() => {
     const newId = uuidv4();
     setEditableInfo(prev => prev ? {
-        ...prev,
-        faq: [...(prev.faq || []), {id: newId, question: '새로운 질문', answer: '답변을 입력하세요.'}]
+      ...prev,
+      faq: [...(prev.faq || []), { id: newId, question: '새로운 질문', answer: '답변을 입력하세요.' }]
     } : null);
   }, []);
 
   const removeFaqItem = useCallback((id: string) => {
     setEditableInfo(prev => prev ? {
-        ...prev,
-        faq: (prev.faq || []).filter(item => item.id !== id)
+      ...prev,
+      faq: (prev.faq || []).filter(item => item.id !== id)
     } : null);
   }, []);
 
@@ -110,11 +123,11 @@ const CustomerCenterPage: React.FC = () => {
       success: '성공적으로 저장되었습니다!',
       error: '저장 중 오류가 발생했습니다.',
     });
-    setStoreInfo({...editableInfo});
+    setStoreInfo({ ...editableInfo });
   };
 
   const handleCancel = () => {
-    if(storeInfo) setEditableInfo({...storeInfo});
+    if (storeInfo) setEditableInfo({ ...storeInfo });
   }
 
   // --- 렌더링 로직 ---
@@ -123,12 +136,12 @@ const CustomerCenterPage: React.FC = () => {
 
   return (
     <div className="customer-service-container">
-        {isAdmin && hasChanges && (
-            <div className="admin-edit-controls floating">
-                <button className="admin-action-btn cancel" onClick={handleCancel} title="변경 내용 취소"><X size={16}/> 취소</button>
-                <button className="admin-action-btn save" onClick={handleSave} title="변경 내용 저장"><Save size={16}/> 저장</button>
-            </div>
-        )}
+      {isAdmin && hasChanges && (
+        <div className="admin-edit-controls floating">
+          <button className="admin-action-btn cancel" onClick={handleCancel} title="변경 내용 취소"><X size={16} /> 취소</button>
+          <button className="admin-action-btn save" onClick={handleSave} title="변경 내용 저장"><Save size={16} /> 저장</button>
+        </div>
+      )}
 
       <section className="service-section quick-links">
         <div className="contact-buttons">
@@ -139,15 +152,15 @@ const CustomerCenterPage: React.FC = () => {
             className={`contact-button primary ${!storeInfo.kakaotalkChannelId ? 'disabled' : ''}`}
             onClick={(e) => { if (!storeInfo.kakaotalkChannelId) e.preventDefault(); }}
           >
-            <MessageSquare size={18}/> 카카오톡 1:1 문의
+            <MessageSquare size={18} /> 카카오톡 1:1 문의
           </a>
         </div>
       </section>
 
       <div className="service-tabs">
-        <button onClick={() => { startTransition(() => { setActiveTab('info'); }); }} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16}/> 매장 정보</button>
-        <button onClick={() => { startTransition(() => { setActiveTab('guide'); }); }} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16}/> 이용 안내</button>
-        <button onClick={() => { startTransition(() => { setActiveTab('faq'); }); }} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16}/> 자주 묻는 질문</button>
+        <button onClick={() => { startTransition(() => { setActiveTab('info'); }); }} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16} /> 매장 정보</button>
+        <button onClick={() => { startTransition(() => { setActiveTab('guide'); }); }} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16} /> 이용 안내</button>
+        <button onClick={() => { startTransition(() => { setActiveTab('faq'); }); }} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16} /> 자주 묻는 질문</button>
       </div>
 
       <div className="service-content">

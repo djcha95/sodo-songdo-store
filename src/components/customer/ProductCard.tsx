@@ -80,12 +80,13 @@ const QuantityInput: React.FC<{
 };
 
 
+// ✅ [수정] reservedQuantitiesMap prop을 제거
 interface ProductCardProps {
   product: Product;
-  reservedQuantitiesMap: Map<string, number>;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMap }) => {
+// ✅ [수정] prop 구조분해 할당에서 reservedQuantitiesMap을 제거
+const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { addToCart } = useCart();
@@ -123,11 +124,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
       storageType: product.storageType,
     };
   }, [product, userDocument]);
-
-  // ✨ [디버깅 코드 추가] 상태 결정 과정을 콘솔에 출력합니다.
-// ... useMemo 훅 시작 ...
+  
+  // ✅ [수정] reservedQuantitiesMap의 의존성을 제거하고, product 자체의 의존성으로 변경
   const actionState = useMemo<ProductActionState>(() => {
-    // 디버깅용 console.log가 모두 제거된 최종 로직입니다.
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg, singleOptionItem } = cardData;
 
@@ -163,7 +162,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     }
         
     const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
-    const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+    // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
+    const reserved = product.reservedQuantities?.[reservedKey] || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     if (totalStock !== null && totalStock !== -1) {
       const remainingStock = (totalStock || 0) - reserved;
@@ -173,9 +173,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     }
 
     return 'PURCHASABLE';
-  }, [cardData, product.phase, reservedQuantitiesMap]);
+  }, [cardData, product]); // 의존성 배열 수정
 
-// ... 이하 파일 내용은 모두 동일 ...  
   const handleCardClick = useCallback(() => { 
     if (isSuspendedUser) {
       toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
@@ -196,7 +195,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
     
     const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
-    const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+    // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
+    const reserved = product.reservedQuantities?.[reservedKey] || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
 
@@ -222,7 +222,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
     addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
-  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser, reservedQuantitiesMap]);
+  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser]); // 의존성 배열 수정
 
   const handleAddToWaitlist = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -274,7 +274,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
     switch (actionState) {
       case 'PURCHASABLE':
         const reservedKey = `${product.id}-${cardData.displayRound.roundId}-${cardData.singleOptionVg?.id}`;
-        const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+        // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
+        const reserved = product.reservedQuantities?.[reservedKey] || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
         const maxStockForUI = Math.floor(remainingStock / (cardData.singleOptionItem?.stockDeductionAmount || 1));
@@ -320,7 +321,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, reservedQuantitiesMa
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
         const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg.id}`;
-        const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+        // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
+        const reserved = product.reservedQuantities?.[reservedKey] || 0;
         const remaining = (totalStock || 0) - reserved;
         stockText = `${remaining}개 한정`;
       }

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { getProducts, getActiveBanners, getReservedQuantitiesMap } from '@/firebase';
+// getReservedQuantitiesMap 임포트 제거
+import { getProducts, getActiveBanners } from '@/firebase';
 import type { Product, Banner } from '@/types';
 import type { DocumentData } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -58,7 +59,7 @@ const ProductListPage: React.FC = () => {
   }, []);
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
+  // reservedQuantitiesMap 상태 제거
   const [countdown, setCountdown] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -75,12 +76,9 @@ const ProductListPage: React.FC = () => {
 
     try {
       if (isInitial) {
-        const [activeBanners, reservedMap] = await Promise.all([
-          getActiveBanners(),
-          getReservedQuantitiesMap()
-        ]);
+        // getReservedQuantitiesMap 호출 제거
+        const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
-        setReservedQuantitiesMap(reservedMap);
       }
 
       const response = await getProducts(false, PAGE_SIZE, isInitial ? null : lastVisible);
@@ -126,6 +124,7 @@ const ProductListPage: React.FC = () => {
     return () => { if (currentLoader) observer.unobserve(currentLoader); };
   }, [hasMore, loadingMore, loading, fetchProductsCallback]);
   
+  // reservedQuantitiesMap 의존성 제거
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = currentTime;
     const userTier = userDocument?.loyaltyTier;
@@ -154,12 +153,11 @@ const ProductListPage: React.FC = () => {
       const publishAtDate = convertTimestampToDate(round.publishAt);
       const primaryEndDate = convertTimestampToDate(round.deadlineDate);
       
-      // ✨ [최종 수정] 2차 공구 마감일을 pickupDate(픽업 시작일) 기준으로 다시 계산합니다.
       const pickupStartDate = convertTimestampToDate(round.pickupDate);
       let secondaryEndDate: Date | null = null;
       if (pickupStartDate) {
         const tempDate = new Date(pickupStartDate);
-        tempDate.setHours(13, 0, 0, 0); // 픽업 시작일의 오후 1시로 설정
+        tempDate.setHours(13, 0, 0, 0);
         secondaryEndDate = tempDate;
       }
 
@@ -196,7 +194,8 @@ const ProductListPage: React.FC = () => {
                 return false;
             }
             const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
-            const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+            // product.reservedQuantities 에서 직접 값을 읽도록 수정
+            const reserved = product.reservedQuantities?.[reservedKey] || 0;
             const remainingStock = totalStock - reserved;
             const minDeductionAmount = Math.min(...vg.items.map(item => item.stockDeductionAmount || 1));
             return remainingStock < minDeductionAmount;
@@ -247,7 +246,7 @@ const ProductListPage: React.FC = () => {
       pastProductsByDate: sortedPastGroups,
       primarySaleEndDate: firstPrimarySaleEndDate,
     };
-  }, [products, userDocument, currentTime, reservedQuantitiesMap]);
+  }, [products, userDocument, currentTime]);
   
   useEffect(() => {
     if (primarySaleProducts.length === 0 || !primarySaleEndDate) {
@@ -302,7 +301,8 @@ const ProductListPage: React.FC = () => {
           countdownText={primarySaleProducts.length > 0 ? countdown : null}
         >
           {primarySaleProducts.length > 0
-            ? primarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)
+            // ProductCard에 reservedQuantitiesMap prop 제거
+            ? primarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />)
             : !loading && (
               <div className="product-list-placeholder">
                 <PackageSearch size={48} className="placeholder-icon" />
@@ -315,7 +315,8 @@ const ProductListPage: React.FC = () => {
         
         {secondarySaleProducts.length > 0 && (
           <ProductSection title={<>⏰ 마감임박! 추가공구</>}>
-            {secondarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)}
+             {/* ProductCard에 reservedQuantitiesMap prop 제거 */}
+            {secondarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />)}
           </ProductSection>
         )}
 
@@ -330,7 +331,8 @@ const ProductListPage: React.FC = () => {
                 title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}
               >
                 {productsForDate.map(p => (
-                  <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />
+                   // ProductCard에 reservedQuantitiesMap prop 제거
+                  <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />
                 ))}
               </ProductSection>
             );

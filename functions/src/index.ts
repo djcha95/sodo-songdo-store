@@ -1,8 +1,12 @@
 // functions/src/index.ts
 
 import {onRequest} from "firebase-functions/v2/https";
-// ✨ [수정] onDocumentUpdated 추가
-import {onDocumentCreated, onDocumentUpdated} from "firebase-functions/v2/firestore";
+// ✨ [수정] onWrite를 제거하고 onDocumentDeleted를 추가했습니다.
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+  onDocumentDeleted,
+} from "firebase-functions/v2/firestore";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import {Response} from "express";
 import * as logger from "firebase-functions/logger";
@@ -10,6 +14,12 @@ import * as logger from "firebase-functions/logger";
 import {initializeApp, applicationDefault, AppOptions} from "firebase-admin/app";
 import {getAuth} from "firebase-admin/auth";
 import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
+// ✨ [수정] FirestoreEvent, DocumentSnapshot, Change 타입을 명시적으로 가져옵니다.
+import {
+  FirestoreEvent,
+  DocumentSnapshot,
+  Change,
+} from "firebase-functions/v2/firestore";
 
 import axios from "axios";
 import cors from "cors";
@@ -39,7 +49,7 @@ const corsHandler = cors({
   ],
 });
 
-// 공통 타입 정의 (프론트엔드 types.ts와 동기화)
+// ✨ [수정] 공통 타입을 명확하게 정의하여 타입 오류를 방지합니다.
 interface PointLog {
   amount: number;
   reason: string;
@@ -55,7 +65,21 @@ interface UserDocument {
   points: number;
   pickupCount?: number;
   referredBy?: string | null;
+  referralCode?: string; // 추천인 코드 필드 추가
   pointHistory?: PointLog[];
+}
+
+interface OrderItem {
+  productId: string;
+  roundId: string;
+  variantGroupId: string;
+  quantity: number;
+}
+
+interface Order {
+  userId: string;
+  status: "confirmed" | "cancelled" | "PICKED_UP";
+  items: OrderItem[];
 }
 
 // 등급 계산 로직 (Cloud Functions 환경에 맞게 재정의)
@@ -75,7 +99,7 @@ const POINT_POLICIES = {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// � 2. HTTP 함수 (클라이언트 요청 처리)
+// 🚀 2. HTTP 함수 (클라이언트 요청 처리)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const kakaoLogin = onRequest(
@@ -152,7 +176,7 @@ export const createNotificationOnPointChange = onDocumentCreated(
     }
 
     const {userId} = event.params;
-    const pointLog = snapshot.data();
+    const pointLog = snapshot.data() as PointLog;
     const {amount, reason} = pointLog;
 
     if (amount === 0) {
@@ -205,6 +229,141 @@ export const createNotificationOnPointChange = onDocumentCreated(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * @description 상품의 예약 수량을 업데이트하는 헬퍼 함수
+ * @param {Map<string, number>} quantityChanges - Key: `productId-roundId-variantGroupId`, Value: 변동 수량
+ */
+async function updateProductQuantities(quantityChanges: Map<string, number>) {
+  if (quantityChanges.size === 0) {
+    return;
+  }
+  
+  try {
+    await db.runTransaction(async (transaction) => {
+      const productUpdates = new Map<FirebaseFirestore.DocumentReference, Record<string, FieldValue>>();
+
+      for (const [key, changeAmount] of quantityChanges.entries()) {
+        const productId = key.split("-")[0];
+        if (!productId) continue;
+
+        const productRef = db.collection("products").doc(productId);
+
+        if (!productUpdates.has(productRef)) {
+          productUpdates.set(productRef, {});
+        }
+        
+        const fieldPath = `reservedQuantities.${key}`;
+        const currentUpdate = productUpdates.get(productRef)!;
+        currentUpdate[fieldPath] = FieldValue.increment(changeAmount);
+      }
+
+      for (const [ref, updateObject] of productUpdates.entries()) {
+        transaction.update(ref, updateObject);
+      }
+    });
+    logger.info("상품 예약 수량 업데이트 성공.");
+  } catch (error) {
+    logger.error("상품 예약 수량 업데이트 중 트랜잭션 실패:", error);
+  }
+}
+
+/**
+ * @description 주문이 신규 생성될 때 예약 수량을 증가시킵니다.
+ */
+export const onOrderCreated = onDocumentCreated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-northeast3",
+  },
+  async (event: FirestoreEvent<DocumentSnapshot | undefined, { orderId: string }>) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+
+    const order = snapshot.data() as Order;
+    if (order.status === "cancelled") return;
+
+    const quantityChanges = new Map<string, number>();
+    for (const item of order.items) {
+      const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+      quantityChanges.set(key, (quantityChanges.get(key) || 0) + item.quantity);
+    }
+    await updateProductQuantities(quantityChanges);
+  }
+);
+
+/**
+ * @description 주문이 삭제될 때 예약 수량을 감소시킵니다.
+ */
+export const onOrderDeleted = onDocumentDeleted(
+  {
+    document: "orders/{orderId}",
+    region: "asia-northeast3",
+  },
+  async (event: FirestoreEvent<DocumentSnapshot | undefined, { orderId: string }>) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    
+    const order = snapshot.data() as Order;
+    if (order.status === "cancelled") return;
+
+    const quantityChanges = new Map<string, number>();
+    for (const item of order.items) {
+      const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+      quantityChanges.set(key, (quantityChanges.get(key) || 0) - item.quantity);
+    }
+    await updateProductQuantities(quantityChanges);
+  }
+);
+
+
+/**
+ * @description 주문이 수정될 때 예약 수량 변동을 계산하여 반영합니다.
+ */
+export const onOrderUpdated = onDocumentUpdated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-northeast3",
+  },
+  async (event: FirestoreEvent<Change<DocumentSnapshot> | undefined, { orderId: string }>) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data() as Order;
+    const after = event.data.after.data() as Order;
+    const quantityChanges = new Map<string, number>();
+    
+    const beforeItems = new Map(before.items.map(item => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
+    const afterItems = new Map(after.items.map(item => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
+    
+    // Case 1: Active -> Cancelled (모든 수량 감소)
+    if (before.status !== 'cancelled' && after.status === 'cancelled') {
+        for (const [key, quantity] of beforeItems.entries()) {
+            quantityChanges.set(key, (quantityChanges.get(key) || 0) - quantity);
+        }
+    }
+    // Case 2: Cancelled -> Active (모든 수량 증가)
+    else if (before.status === 'cancelled' && after.status !== 'cancelled') {
+        for (const [key, quantity] of afterItems.entries()) {
+            quantityChanges.set(key, (quantityChanges.get(key) || 0) + quantity);
+        }
+    }
+    // Case 3: Active -> Active (아이템 변경분만 계산)
+    else if (before.status !== 'cancelled' && after.status !== 'cancelled') {
+        const allKeys = new Set([...beforeItems.keys(), ...afterItems.keys()]);
+        for (const key of allKeys) {
+            const beforeQty = beforeItems.get(key) || 0;
+            const afterQty = afterItems.get(key) || 0;
+            const diff = afterQty - beforeQty;
+            if (diff !== 0) {
+              quantityChanges.set(key, (quantityChanges.get(key) || 0) + diff);
+            }
+        }
+    }
+    
+    await updateProductQuantities(quantityChanges);
+  }
+);
+
+
+/**
  * @description 신규 유저가 첫 픽업을 완료했을 때, 추천인에게 보상 포인트를 지급합니다.
  */
 export const rewardReferrerOnFirstPickup = onDocumentUpdated(
@@ -218,8 +377,8 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
       return;
     }
 
-    const before = event.data.before.data();
-    const after = event.data.after.data();
+    const before = event.data.before.data() as Order;
+    const after = event.data.after.data() as Order;
 
     // 1. 주문 상태가 'PICKED_UP'으로 변경되었는지 확인
     if (before.status === "PICKED_UP" || after.status !== "PICKED_UP") {
