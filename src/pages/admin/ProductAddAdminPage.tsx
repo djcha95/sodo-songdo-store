@@ -32,20 +32,10 @@ const storageTypeOptions: { key: StorageType; name:string; className: string }[]
 const bundleUnitKeywords = ['묶음', '박스', '곽', '세트', '팩', '봉지'];
 const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'];
 
-const getSmartDeadline = (): Date => {
-    const now = new Date();
-    const deadline = new Date(now);
-    deadline.setHours(13, 0, 0, 0);
-    const dayOfWeek = now.getDay();
-    if (dayOfWeek === 6) { deadline.setDate(now.getDate() + 2); }
-    else { deadline.setDate(now.getDate() + 1); }
-    return deadline;
-};
-
 // 파일 업로드 최대 크기 설정 (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// --- 선주문 설정 모달 컴포넌트 ---
+// --- 선주문 설정 모달 컴포넌트 (변경 없음) ---
 interface PreOrderSettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -84,7 +74,8 @@ const PreOrderSettingsModal: React.FC<PreOrderSettingsModalProps> = ({ isOpen, o
                         <div className="preorder-options active">
                             <p className="preorder-info">
                                 <Info size={14} />
-상품 업로드 직후부터 발행일 오후 2시까지 선주문이 가능합니다                            </p>
+                                상품 업로드 직후부터 발행일 오후 2시까지 선주문이 가능합니다
+                            </p>
                             <div className="tier-checkbox-group">
                                 {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
                                     <label key={tier} htmlFor={`modal-tier-${tier}`}>
@@ -110,7 +101,7 @@ const PreOrderSettingsModal: React.FC<PreOrderSettingsModalProps> = ({ isOpen, o
     );
 };
 
-// ✨ [신규] 시크릿 상품 설정 모달 컴포넌트
+// --- 시크릿 상품 설정 모달 컴포넌트 (변경 없음) ---
 interface SecretProductModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -194,23 +185,52 @@ const ProductAddAdminPage: React.FC = () => {
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
     const [roundName, setRoundName] = useState('1차 판매');
     const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]);
-    const [scheduledAt, setScheduledAt] = useState<Date>(() => new Date(new Date().setHours(14, 0, 0, 0)));
-    const [deadlineDate, setDeadlineDate] = useState<Date | null>(() => getSmartDeadline());
-    const [pickupDay, setPickupDay] = useState<Date | null>(null);
-    const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
+    
+    const [publishDate, setPublishDate] = useState<Date>(() => new Date(new Date().setHours(14, 0, 0, 0)));
+    const [pickupDate, setPickupDate] = useState<Date | null>(null);
+    
+    const [deadlineDate, setDeadlineDate] = useState<Date | null>(null); // 1차 공구 마감
+    const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null); // 2차 공구 마감
+
     const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
 
     const [isPreOrderModalOpen, setIsPreOrderModalOpen] = useState(false);
     const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
     const [preOrderTiers, setPreOrderTiers] = useState<LoyaltyTier[]>(['공구의 신', '공구왕']);
 
-    // ✨ [신규] 시크릿 상품 관련 상태
     const [isSecretProductModalOpen, setIsSecretProductModalOpen] = useState(false);
     const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false);
     const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]);
 
     const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
     const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
+    useEffect(() => {
+        const newDeadline = new Date(publishDate);
+        const dayOfWeek = newDeadline.getDay(); // 0: Sunday, 1: Monday, ..., 6: Saturday
+
+        if (dayOfWeek === 6) { // Saturday
+            newDeadline.setDate(newDeadline.getDate() + 2); // To Monday
+        } else if (dayOfWeek === 0) { // Sunday
+            newDeadline.setDate(newDeadline.getDate() + 1); // To Monday
+        } else { // Weekdays
+            newDeadline.setDate(newDeadline.getDate() + 1); // To next day
+        }
+        
+        newDeadline.setHours(13, 0, 0, 0); // 오후 1시로 설정
+        setDeadlineDate(newDeadline);
+    }, [publishDate]);
+
+    useEffect(() => {
+        if (!pickupDate) {
+            setPickupDeadlineDate(null);
+            return;
+        }
+        const newPickupDeadline = new Date(pickupDate);
+        newPickupDeadline.setHours(13, 0, 0, 0); // 픽업일 오후 1시
+        setPickupDeadlineDate(newPickupDeadline);
+    }, [pickupDate]);
+
 
     useEffect(() => {
         const { productId, productGroupName, lastRound } = location.state || {};
@@ -228,7 +248,6 @@ const ProductAddAdminPage: React.FC = () => {
                 setIsPrepaymentRequired(lastRound.isPrepaymentRequired ?? false); 
                 setIsPreOrderEnabled(lastRound.preOrderTiers && lastRound.preOrderTiers.length > 0);
                 setPreOrderTiers(lastRound.preOrderTiers || []);
-                // ✨ [수정] 기존 회차의 시크릿 정보 불러오기 (새 회차 추가 시에도 유지)
                 setIsSecretProductEnabled(!!lastRound.secretForTiers && lastRound.secretForTiers.length > 0);
                 setSecretTiers(lastRound.secretForTiers || []);
             }
@@ -237,19 +256,8 @@ const ProductAddAdminPage: React.FC = () => {
 
     useEffect(() => { if (mode === 'newProduct' && variantGroups.length === 0) { setVariantGroups([{ id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); } }, [mode, variantGroups.length]);
     useEffect(() => { (async () => { try { setCategories(await getCategories()); } catch (err) { toast.error("카테고리 정보를 불러오는 데 실패했습니다."); } })(); }, []);
-
     useEffect(() => { if (mode === 'newProduct' && productType === 'single') { setVariantGroups(prev => prev.length > 0 ? [{ ...prev[0], groupName: groupName }] : prev); } }, [groupName, productType, mode]);
-
-    useEffect(() => {
-        if (!pickupDay) { setPickupDeadlineDate(null); return; }
-        const newPickupDeadline = new Date(pickupDay);
-        // [수정] 자정으로 설정 (date만 사용하므로 시간 정보는 0으로)
-        newPickupDeadline.setHours(0, 0, 0, 0); 
-        if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); }
-        setPickupDeadlineDate(newPickupDeadline);
-    }, [pickupDay, selectedStorageType]);
-
-
+    
     useEffect(() => {
         if (mode !== 'newProduct' || !groupName.trim()) {
             setSimilarProducts([]);
@@ -291,8 +299,32 @@ const ProductAddAdminPage: React.FC = () => {
     };
 
     const handleProductTypeChange = (newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); }};
-    const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === id ? { ...vg, [field]: value } : vg)); }, []);
-    const handleGroupDateBlur = useCallback((id: string, dateStr: string) => { const parsedDate = parseDateString(dateStr); if (dateStr && !parsedDate) { toast.error('유효하지 않은 날짜 형식입니다. (예: 250715 또는 20250715)'); return; } handleVariantGroupChange(id, 'expirationDate', parsedDate); handleVariantGroupChange(id, 'expirationDateInput', parsedDate ? formatDateToYYYYMMDD(parsedDate) : '');}, [handleVariantGroupChange]);
+    
+    // ✨ [수정] 필드 값 변경을 처리하는 함수. 유통기한 입력(onChange) 시 이 함수를 사용합니다.
+    const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { 
+        setVariantGroups(prev => prev.map(vg => vg.id === id ? { ...vg, [field]: value } : vg)); 
+    }, []);
+
+    // ✨ [개선] 유효성 검사 및 상태 업데이트 로직을 개선했습니다. 이제 하나의 상태 업데이트로 처리합니다.
+    const handleGroupDateBlur = useCallback((id: string, dateStr: string) => {
+        const parsedDate = parseDateString(dateStr);
+        if (dateStr && !parsedDate) {
+            toast.error('유효하지 않은 날짜 형식입니다. (예: 250715 또는 20250715)');
+            return;
+        }
+        setVariantGroups(prev =>
+            prev.map(vg =>
+                vg.id === id
+                    ? {
+                        ...vg,
+                        expirationDate: parsedDate,
+                        expirationDateInput: parsedDate ? formatDateToYYYYMMDD(parsedDate) : dateStr,
+                    }
+                    : vg
+            )
+        );
+    }, []);
+
     const addNewVariantGroup = useCallback(() => { setVariantGroups(prev => [...prev, { id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); }, []);
     const removeVariantGroup = useCallback((id: string) => { if (variantGroups.length > 1) setVariantGroups(prev => prev.filter(vg => vg.id !== id)); else toast.error("최소 1개의 하위 그룹이 필요합니다."); }, [variantGroups.length]);
     const handleItemChange = useCallback((vgId: string, itemId: string, field: keyof Omit<ProductItemUI, 'isBundleOption'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: vg.items.map(item => { if (item.id === itemId) { const updatedItem = { ...item, [field]: value }; if (field === 'name') { const isBundle = bundleUnitKeywords.some(k => String(value).includes(k)) || !singleUnitKeywords.some(k => String(value).includes(k)); updatedItem.isBundleOption = isBundle; updatedItem.deductionAmount = isBundle ? item.deductionAmount : 1;} return updatedItem; } return item; }) } : vg)); }, []);
@@ -340,11 +372,19 @@ const ProductAddAdminPage: React.FC = () => {
     }, []);
 
     const removeImage = useCallback((index: number) => { const urlToRemove = imagePreviews[index]; const fileIndex = imageFiles.findIndex(f => URL.createObjectURL(f) === urlToRemove); setImagePreviews(p => p.filter((_, i) => i !== index)); if (fileIndex > -1) setImageFiles(p => p.filter((_, i) => i !== fileIndex)); URL.revokeObjectURL(urlToRemove); }, [imagePreviews, imageFiles]);
-    const settingsSummary = useMemo(() => { const publishText = `예약 발행 (${formatToDateTimeLocal(scheduledAt).replace('T', ' ')})`; const deadlineText = deadlineDate ? `${formatToDateTimeLocal(deadlineDate).replace('T', ' ')} 까지` : '미설정'; const pickupText = pickupDay ? `${formatDateToYYYYMMDD(pickupDay)} 부터` : '미설정'; return { publishText, deadlineText, pickupText }; }, [scheduledAt, deadlineDate, pickupDay]);
+    
+    const settingsSummary = useMemo(() => {
+        const publishText = `${formatDateToYYYYMMDD(publishDate)} 오후 2시`;
+        const deadlineText = deadlineDate ? `${formatToDateTimeLocal(deadlineDate).replace('T', ' ')} (1차)` : '미설정';
+        const pickupText = pickupDate ? `${formatDateToYYYYMMDD(pickupDate)} 부터` : '미설정';
+        const pickupDeadlineText = pickupDeadlineDate ? `${formatToDateTimeLocal(pickupDeadlineDate).replace('T', ' ')} (최종)` : '미설정';
+        return { publishText, deadlineText, pickupText, pickupDeadlineText };
+    }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate]);
+
 
     const getSalesRoundData = (status: SalesRoundStatus): Omit<SalesRound, 'roundId' | 'createdAt'> => {
-        const publishDate = new Date(scheduledAt);
-        publishDate.setHours(14, 0, 0, 0);
+        const finalPublishDate = new Date(publishDate);
+        finalPublishDate.setHours(14, 0, 0, 0);
 
         return {
             roundName: roundName.trim(), status,
@@ -359,23 +399,23 @@ const ProductAddAdminPage: React.FC = () => {
                     stockDeductionAmount: Number(item.deductionAmount) || 1,
                 })),
             })),
-            publishAt: Timestamp.fromDate(publishDate),
+            publishAt: Timestamp.fromDate(finalPublishDate),
             deadlineDate: Timestamp.fromDate(deadlineDate!),
-            pickupDate: Timestamp.fromDate(pickupDay!),
+            pickupDate: Timestamp.fromDate(pickupDate!),
             pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
             isPrepaymentRequired: isPrepaymentRequired,
             waitlist: [],
             waitlistCount: 0,
             preOrderTiers: isPreOrderEnabled ? preOrderTiers : [],
-            preOrderEndDate: isPreOrderEnabled ? Timestamp.fromDate(publishDate) : undefined, 
-            secretForTiers: isSecretProductEnabled ? secretTiers : [], // ✨ [수정] 시크릿 상품 정보 저장
+            preOrderEndDate: isPreOrderEnabled ? Timestamp.fromDate(finalPublishDate) : undefined, 
+            secretForTiers: isSecretProductEnabled ? secretTiers : [],
         };
     };
 
     const handleSubmit = async (isDraft: boolean = false) => {
         if (!isDraft) {
             if (mode === 'newProduct' && imageFiles.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; }
-            if (!deadlineDate || !pickupDay || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; }
+            if (!deadlineDate || !pickupDate) { toast.error('발행일과 픽업 시작일을 모두 설정해주세요.'); return; }
         }
         setIsSubmitting(true);
         
@@ -419,7 +459,6 @@ const ProductAddAdminPage: React.FC = () => {
                 tiers={preOrderTiers}
                 setTiers={setPreOrderTiers}
             />
-            {/* ✨ [신규] 시크릿 상품 모달 렌더링 */}
             <SecretProductModal
                 isOpen={isSecretProductModalOpen}
                 onClose={() => setIsSecretProductModalOpen(false)}
@@ -442,6 +481,7 @@ const ProductAddAdminPage: React.FC = () => {
                     </header>
                     <main className="main-content-grid-3-col-final">
                         <div className="form-section">
+                            {/* --- 대표 상품 정보 섹션 (변경 없음) --- */}
                             <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div><div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div></div>
                             <p className="section-subtitle">상품의 기본 정보와 첫 판매 회차 이름을 설정합니다.</p>
 
@@ -472,7 +512,7 @@ const ProductAddAdminPage: React.FC = () => {
 
                             <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} placeholder="예: 1차 판매" required/></div>
                             <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="상품의 특징, 스토리 등을 작성해주세요."/></div>
-                            {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="settings-option-group">{/* CSS 변경으로 인한 클래스 변경 */}{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`settings-option-btn ${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
+                            {mode === 'newProduct' && <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="settings-option-group">{storageTypeOptions.map(opt=><button key={opt.key} type="button" className={`settings-option-btn ${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)}>{opt.name}</button>)}</div></div>}
 
                             <div className="form-group">
                                 <label>대표 이미지 *</label>
@@ -500,6 +540,7 @@ const ProductAddAdminPage: React.FC = () => {
                             </div>
                         </div>
                         <div className="form-section">
+                            {/* --- 판매 옵션 설정 섹션 (변경 없음) --- */}
                             <div className="form-section-title">
                                 <div className="title-text-group">
                                     <Box size={20} className="icon-color-option"/>
@@ -509,7 +550,17 @@ const ProductAddAdminPage: React.FC = () => {
                             <p className="section-subtitle">실제 판매될 상품의 옵션과 가격, 재고 등을 설정합니다.</p>
                             {variantGroups.map(vg => (
                                 <div className="variant-group-card" key={vg.id}>
-                                    <div className="variant-group-header"><div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div><div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div><div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleGroupDateBlur(vg.id, e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>{productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><Trash2 size={14}/></button>}</div>
+                                    <div className="variant-group-header"><div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div><div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div><div className="form-group"><label>유통기한</label>
+                                        {/* ✨ [수정] onChange는 입력값만 반영하고, onBlur(포커스 잃음) 시에만 유효성을 검사하도록 수정했습니다. */}
+                                        <input 
+                                            type="text" 
+                                            value={vg.expirationDateInput} 
+                                            onChange={e => handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} 
+                                            onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} 
+                                            placeholder="YYMMDD" 
+                                            maxLength={8}
+                                        />
+                                    </div>{productType === 'group' && variantGroups.length > 1 && <button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn"><Trash2 size={14}/></button>}</div>
                                     {vg.items.map(item => (
                                         <div className="option-item-section" key={item.id}>
                                             <div className="option-item-grid-2x2"><div className="form-group-grid item-name"><label>선택지 *</label><input type="text" value={item.name} onChange={e=>handleItemChange(vg.id, item.id, 'name', e.target.value)} placeholder="예: 1개" required/></div><div className="form-group-grid item-price"><label>가격 *</label><div className="price-input-wrapper"><input type="text" value={formatNumberWithCommas(item.price)} onChange={e=>handlePriceChange(vg.id, item.id, e.target.value)} placeholder="0" required/><span>원</span></div></div><div className="form-group-grid item-limit"><label className="tooltip-container"><span>구매 제한</span><Tippy content="한 고객이 이 옵션을 구매할 수 있는 최대 수량입니다."><Info size={14} style={{ marginLeft: '4px', cursor: 'help' }} /></Tippy></label><input type="number" value={item.limitQuantity} onChange={e=>handleItemChange(vg.id, item.id, 'limitQuantity', e.target.value)} placeholder="없음"/></div><div className="form-group-grid item-deduction"><label className="tooltip-container"><span>차감 단위 *</span><Tippy content="이 옵션 1개 판매 시, '그룹 총 재고'에서 차감될 수량입니다. (예: 1박스(12개입)은 12)"><Info size={14} style={{ marginLeft: '4px', cursor: 'help' }} /></Tippy></label><input type="number" value={item.deductionAmount} onChange={e=>handleItemChange(vg.id, item.id, 'deductionAmount', e.target.value)} placeholder={item.isBundleOption ? "예: 12" : "1"} required/></div></div>
@@ -538,7 +589,7 @@ const ProductAddAdminPage: React.FC = () => {
                             
                             <div className="form-group">
                                 <label>예약 옵션</label>
-                                <div className="settings-option-group"> {/* reservation-options-group -> settings-option-group */}
+                                <div className="settings-option-group">
                                     <Tippy content="선입금 필수 상품으로 설정합니다.">
                                         <button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}>
                                             <Save size={16} /> 선입금
@@ -549,7 +600,6 @@ const ProductAddAdminPage: React.FC = () => {
                                             <Clock size={16} /> 선주문
                                         </button>
                                     </Tippy>
-                                    {/* ✨ [수정] 시크릿 상품 설정 버튼 클래스 변경 */}
                                     <Tippy content="시크릿 상품 설정을 엽니다.">
                                         <button type="button" className={`settings-option-btn ${isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSecretProductModalOpen(true)}>
                                             <Lock size={16} /> 시크릿
@@ -562,21 +612,51 @@ const ProductAddAdminPage: React.FC = () => {
                                 <label>발행일 (오후 2시 공개)</label>
                                 <input 
                                     type="date" 
-                                    value={formatDateToYYYYMMDD(scheduledAt)} 
+                                    value={formatDateToYYYYMMDD(publishDate)} 
                                     onChange={e => {
                                         const newDate = new Date(e.target.value + 'T00:00:00');
                                         newDate.setHours(14, 0, 0, 0);
-                                        setScheduledAt(newDate);
+                                        setPublishDate(newDate);
                                     }} 
                                     required
                                 />
-                                <p className="input-description">선택한 날짜 오후 2시에 모든 고객에게 공개됩니다.</p>
+                            </div>
+                            
+                            <div className="form-group">
+                                <label>공동구매 마감일 (1차) *</label>
+                                <input 
+                                    type="datetime-local" 
+                                    value={formatToDateTimeLocal(deadlineDate)} 
+                                    onChange={e => setDeadlineDate(e.target.value ? new Date(e.target.value) : null)} 
+                                    required
+                                />
+                                <p className="input-description">
+                                    발행일에 따라 자동 계산되며, 공휴일 등 필요시 수동 변경 가능합니다.
+                                </p>
                             </div>
 
-                            <div className="form-group"><label>공동구매 마감일 *</label><input type="datetime-local" value={formatToDateTimeLocal(deadlineDate)} onChange={e=>setDeadlineDate(e.target.value?new Date(e.target.value):null)} required/></div>
-                            <div className="form-group"><label>픽업 시작일 *</label><input type="date" value={pickupDay ? formatDateToYYYYMMDD(pickupDay) : ''} onChange={e=>setPickupDay(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
-                            <div className="form-group"><label>픽업 마감일 *</label><input type="date" value={pickupDeadlineDate ? formatDateToYYYYMMDD(pickupDeadlineDate) : ''} onChange={e=>setPickupDeadlineDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
-                            <div className="settings-summary-card"><h4 className="summary-title"><Info size={16} /> 설정 요약</h4><ul><li><strong>발행:</strong> {settingsSummary.publishText}</li><li><strong>마감:</strong> {settingsSummary.deadlineText}</li><li><strong>픽업:</strong> {settingsSummary.pickupText}</li></ul></div>
+                            <div className="form-group">
+                                <label>픽업 시작일 *</label>
+                                <input 
+                                    type="date" 
+                                    value={pickupDate ? formatDateToYYYYMMDD(pickupDate) : ''} 
+                                    onChange={e => setPickupDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} 
+                                    required
+                                />
+                                <p className="input-description">
+                                    최종 마감일은 픽업 시작일 오후 1시로 자동 설정됩니다.
+                                </p>
+                            </div>
+                            
+                            <div className="settings-summary-card">
+                                <h4 className="summary-title"><Info size={16} /> 설정 요약</h4>
+                                <ul>
+                                    <li><strong>발행:</strong> {settingsSummary.publishText}</li>
+                                    <li><strong>1차 마감:</strong> {settingsSummary.deadlineText}</li>
+                                    <li><strong>픽업 시작:</strong> {settingsSummary.pickupText}</li>
+                                    <li><strong>최종 마감:</strong> {settingsSummary.pickupDeadlineText}</li>
+                                </ul>
+                            </div>
                         </div>
                     </main>
                 </form>

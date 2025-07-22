@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getProducts, getActiveBanners, getReservedQuantitiesMap } from '@/firebase';
-import { safeToDate, getDisplayRound } from '@/utils/productUtils';
 import type { Product, Banner } from '@/types';
 import type { DocumentData } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -25,15 +24,40 @@ import '@/styles/common.css';
 dayjs.extend(isBetween);
 dayjs.locale('ko');
 
+const convertTimestampToDate = (timestamp: any): Date | null => {
+  if (!timestamp) return null;
+  if (typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+  if (typeof timestamp.seconds === 'number') {
+    return new Date(timestamp.seconds * 1000);
+  }
+  return null;
+};
+
+
 interface ProductWithUIState extends Product {
-  isPreOrder?: boolean;
-  isTodaySoldOut?: boolean;
+  phase: 'primary' | 'secondary' | 'past';
+  deadlines: {
+    primaryEnd: Date | null;
+    secondaryEnd: Date | null;
+  }
 }
 
 const ProductListPage: React.FC = () => {
   const { userDocument } = useAuth();
-  const [products, setProducts] = useState<ProductWithUIState[]>([]);
+  
   const [banners, setBanners] = useState<Banner[]>([]);
+  
+  const [currentTime, setCurrentTime] = useState(dayjs());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(dayjs());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const [products, setProducts] = useState<Product[]>([]);
   const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
   const [countdown, setCountdown] = useState<string | null>(null);
 
@@ -42,16 +66,12 @@ const ProductListPage: React.FC = () => {
   const [lastVisible, setLastVisible] = useState<DocumentData | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const loader = useRef(null);
-  const pageContainerRef = useRef<HTMLDivElement>(null); // 메인 컨테이너 ref
+  const pageContainerRef = useRef<HTMLDivElement>(null);
 
-  const PAGE_SIZE = 9;
+  const PAGE_SIZE = 10;
 
   const fetchProductsCallback = useCallback(async (isInitial: boolean) => {
-    if (isInitial) {
-      // '당겨서 새로고침' 시에는 전체 로더를 띄우지 않기 위해 setLoading(true)를 isRefreshing 외부로 옮깁니다.
-    } else {
-      setLoadingMore(true);
-    }
+    if (!isInitial) setLoadingMore(true);
 
     try {
       if (isInitial) {
@@ -64,30 +84,24 @@ const ProductListPage: React.FC = () => {
       }
 
       const response = await getProducts(false, PAGE_SIZE, isInitial ? null : lastVisible);
-      const newProducts = response.products.map(p => ({ ...p }));
+      const newProducts = response.products;
 
       setProducts(prevProducts => isInitial ? newProducts : [...prevProducts, ...newProducts]);
       setLastVisible(response.lastVisible);
-
-      if (!response.lastVisible || response.products.length < PAGE_SIZE) {
+      if (!response.lastVisible || newProducts.length < PAGE_SIZE) {
         setHasMore(false);
       }
-
     } catch (error) {
       console.error(error);
       toast.error("데이터를 불러오는 중 문제가 발생했습니다.");
     } finally {
-      if (isInitial) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-      }
+      if (isInitial) setLoading(false);
+      else setLoadingMore(false);
     }
   }, [lastVisible]);
 
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({
     onRefresh: async () => {
-      // isInitial=true 이지만, setLoading(true)는 호출하지 않습니다.
       await fetchProductsCallback(true);
     },
   });
@@ -95,7 +109,7 @@ const ProductListPage: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     fetchProductsCallback(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -107,182 +121,142 @@ const ProductListPage: React.FC = () => {
       },
       { threshold: 1.0 }
     );
-
     const currentLoader = loader.current;
-    if (currentLoader) {
-      observer.observe(currentLoader);
-    }
-
-    return () => {
-      if (currentLoader) {
-        observer.unobserve(currentLoader);
-      }
-    };
+    if (currentLoader) observer.observe(currentLoader);
+    return () => { if (currentLoader) observer.unobserve(currentLoader); };
   }, [hasMore, loadingMore, loading, fetchProductsCallback]);
   
-  // ... (useMemo, countdown useEffect 등 나머지 로직은 동일) ...
-
-  const { todaysProducts, closingSoonProducts, pastProductsByDate, todaysSalesEnd } = useMemo(() => {
-    const now = dayjs();
+  const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
+    const now = currentTime;
     const userTier = userDocument?.loyaltyTier;
 
-    let salesStart, salesEnd;
-    const today1pm = now.clone().hour(13).minute(0).second(0);
-
-    let lastSat1pm = now.clone().day(6).hour(13).minute(0).second(0).millisecond(0);
-    if (lastSat1pm.isAfter(now)) {
-      lastSat1pm = lastSat1pm.subtract(1, 'week');
-    }
-    const weekendCycleEnd = lastSat1pm.add(2, 'days');
-
-    if (now.isAfter(lastSat1pm) && now.isBefore(weekendCycleEnd)) {
-      salesStart = lastSat1pm;
-      salesEnd = weekendCycleEnd;
-    } else {
-      if (now.isBefore(today1pm)) {
-        salesStart = today1pm.subtract(1, 'day');
-        salesEnd = today1pm;
-      } else {
-        salesStart = today1pm;
-        salesEnd = today1pm.add(1, 'day');
-      }
-    }
-
-    const tempTodays: ProductWithUIState[] = [];
-    const tempClosingSoon: ProductWithUIState[] = [];
+    const tempPrimary: ProductWithUIState[] = [];
+    const tempSecondary: ProductWithUIState[] = [];
     const tempPast: ProductWithUIState[] = [];
 
     products.forEach(product => {
-      const round = getDisplayRound(product);
+      if (!product.salesHistory || product.salesHistory.length === 0) return;
+      
+      const sortedHistory = [...product.salesHistory].sort((a, b) => {
+        const dateA = convertTimestampToDate(a.publishAt)?.getTime() || 0;
+        const dateB = convertTimestampToDate(b.publishAt)?.getTime() || 0;
+        return dateB - dateA;
+      });
+      
+      const round = sortedHistory[0];
       if (!round || round.status === 'draft') return;
-
+      
       const secretTiers = round.secretForTiers;
-      if (secretTiers && secretTiers.length > 0) {
-        if (!userTier || !secretTiers.includes(userTier)) {
-          return;
-        }
-      }
-
-      const publishAt = safeToDate(round.publishAt);
-      const preOrderEndDate = safeToDate(round.preOrderEndDate);
-      const preOrderStartDate = publishAt ? dayjs(publishAt).subtract(1, 'hour').toDate() : null;
-
-      let isVisible = false;
-      let isPreOrder = false;
-
-      if (publishAt && now.isAfter(publishAt)) {
-        isVisible = true;
-      } else if (userTier && preOrderStartDate && preOrderEndDate && round.preOrderTiers?.includes(userTier)) {
-        if (now.isAfter(preOrderStartDate) && now.isBefore(preOrderEndDate)) {
-          isVisible = true;
-          isPreOrder = true;
-        }
-      }
-
-      if (!isVisible) return;
-
-      const createdAtDate = safeToDate(round.createdAt);
-      const pickupDate = safeToDate(round.pickupDate);
-      if (!createdAtDate || !pickupDate) return;
-
-      const createdAt = dayjs(createdAtDate);
-      const finalDeadline = dayjs(pickupDate).hour(13).minute(0).second(0);
-
-      if (now.isAfter(finalDeadline) || round.status === 'ended' || round.status === 'sold_out') {
-        tempPast.push({ ...product, isPreOrder });
+      if (secretTiers && secretTiers.length > 0 && (!userTier || !secretTiers.includes(userTier))) {
         return;
       }
 
-      if (createdAt.isBetween(salesStart, salesEnd, null, '[)')) {
-        tempTodays.push({ ...product, isPreOrder });
-      } else if (round.status === 'selling') {
-        tempClosingSoon.push({ ...product, isPreOrder });
+      const publishAtDate = convertTimestampToDate(round.publishAt);
+      const primaryEndDate = convertTimestampToDate(round.deadlineDate);
+      
+      // ✨ [최종 수정] 2차 공구 마감일을 pickupDate(픽업 시작일) 기준으로 다시 계산합니다.
+      const pickupStartDate = convertTimestampToDate(round.pickupDate);
+      let secondaryEndDate: Date | null = null;
+      if (pickupStartDate) {
+        const tempDate = new Date(pickupStartDate);
+        tempDate.setHours(13, 0, 0, 0); // 픽업 시작일의 오후 1시로 설정
+        secondaryEndDate = tempDate;
       }
-    });
 
-    tempTodays.sort((a, b) => {
-      const getSortState = (p: Product) => {
-        const r = getDisplayRound(p)!;
-        const isMultiOption = (r.variantGroups?.length ?? 0) > 1 || (r.variantGroups?.[0]?.items?.length ?? 0) > 1;
+      if (!publishAtDate || !primaryEndDate || !secondaryEndDate) return;
+      
+      const publishAt = dayjs(publishAtDate);
+      const primaryEnd = dayjs(primaryEndDate);
+      const secondaryEnd = dayjs(secondaryEndDate);
+      
+      if (now.isBefore(publishAt)) return;
 
-        let sortGroup: number;
-        let remaining = Infinity;
-        let price = 0;
+      let currentPhase: 'primary' | 'secondary' | 'past';
+      if (now.isBefore(primaryEnd)) {
+        currentPhase = 'primary';
+      } else if (now.isBefore(secondaryEnd)) {
+        currentPhase = 'secondary';
+      } else {
+        currentPhase = 'past';
+      }
 
-        if (isMultiOption) {
-          sortGroup = 2;
-          price = r.variantGroups?.[0]?.items?.[0]?.price ?? 0;
-        } else {
-          const vg = r.variantGroups?.[0];
-          const item = vg?.items?.[0];
-          price = item?.price ?? 0;
-          const stock = vg?.totalPhysicalStock;
-
-          if (stock !== null && stock !== -1) {
-            sortGroup = 1;
-            remaining = stock;
-          } else {
-            sortGroup = 2;
-          }
-        }
-        return { sortGroup, remaining, price };
+      const productWithState: ProductWithUIState = {
+        ...product,
+        salesHistory: [round], 
+        phase: currentPhase,
+        deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate },
       };
 
-      const stateA = getSortState(a);
-      const stateB = getSortState(b);
+      if (currentPhase === 'primary') {
+        tempPrimary.push(productWithState);
+      } else if (currentPhase === 'secondary') {
+        const isSoldOut = round.variantGroups.every(vg => {
+            const totalStock = vg.totalPhysicalStock;
+            if (totalStock === null || totalStock === -1 || totalStock === 0) {
+                return false;
+            }
+            const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
+            const reserved = reservedQuantitiesMap.get(reservedKey) || 0;
+            const remainingStock = totalStock - reserved;
+            const minDeductionAmount = Math.min(...vg.items.map(item => item.stockDeductionAmount || 1));
+            return remainingStock < minDeductionAmount;
+        });
 
-      if (stateA.sortGroup !== stateB.sortGroup) {
-        return stateA.sortGroup - stateB.sortGroup;
+        if (!isSoldOut) {
+            tempSecondary.push(productWithState);
+        }
+      } else { // 'past'
+        if (now.diff(secondaryEnd, 'day') <= 7) {
+            tempPast.push(productWithState);
+        }
       }
-
-      if (stateA.sortGroup === 1 && stateA.remaining !== stateB.remaining) {
-        return stateA.remaining - stateB.remaining;
-      }
-
-      return stateB.price - stateA.price;
     });
 
-    tempClosingSoon.sort((a, b) => {
-      const pickupA = safeToDate(getDisplayRound(a)?.pickupDate)?.getTime() || Infinity;
-      const pickupB = safeToDate(getDisplayRound(b)?.pickupDate)?.getTime() || Infinity;
-      return pickupA - pickupB;
+    tempPrimary.sort((a, b) => {
+      return (a.deadlines.primaryEnd?.getTime() || 0) - (b.deadlines.primaryEnd?.getTime() || 0);
+    });
+    
+    tempSecondary.sort((a, b) => {
+      return (a.deadlines.secondaryEnd?.getTime() || 0) - (b.deadlines.secondaryEnd?.getTime() || 0);
     });
 
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
-      const round = getDisplayRound(p);
-      const uploadDate = safeToDate(round?.createdAt);
-      if (uploadDate) {
-        const dateKey = dayjs(uploadDate).format('YYYY-MM-DD');
-        if (!pastGroups[dateKey]) {
-          pastGroups[dateKey] = [];
-        }
-        pastGroups[dateKey].push(p);
+      const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
+      if (!pastGroups[dateKey]) {
+        pastGroups[dateKey] = [];
       }
+      pastGroups[dateKey].push(p);
+    });
+    
+    const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
+    const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
+    sortedPastKeys.forEach(key => {
+      sortedPastGroups[key] = pastGroups[key].sort((productA, productB) => {
+        const roundNameA = productA.salesHistory[0]?.roundName || '';
+        const roundNameB = productB.salesHistory[0]?.roundName || '';
+        return roundNameB.localeCompare(roundNameA);
+      });
     });
 
-    const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
-    const recentPastGroups: { [key: string]: ProductWithUIState[] } = {};
-    sortedPastKeys.forEach(key => {
-      recentPastGroups[key] = pastGroups[key];
-    });
+    const firstPrimarySaleEndDate = tempPrimary.length > 0 ? dayjs(tempPrimary[0].deadlines.primaryEnd) : null;
 
     return {
-      todaysProducts: tempTodays,
-      closingSoonProducts: tempClosingSoon,
-      pastProductsByDate: recentPastGroups,
-      todaysSalesEnd: salesEnd,
+      primarySaleProducts: tempPrimary,
+      secondarySaleProducts: tempSecondary,
+      pastProductsByDate: sortedPastGroups,
+      primarySaleEndDate: firstPrimarySaleEndDate,
     };
-  }, [products, userDocument]);
-
+  }, [products, userDocument, currentTime, reservedQuantitiesMap]);
+  
   useEffect(() => {
-    if (todaysProducts.length === 0 || !todaysSalesEnd) {
+    if (primarySaleProducts.length === 0 || !primarySaleEndDate) {
       setCountdown(null);
       return;
     }
     const countdownInterval = setInterval(() => {
       const now = dayjs();
-      const diff = todaysSalesEnd.diff(now, 'second');
+      const diff = primarySaleEndDate.diff(now, 'second');
 
       if (diff <= 0) {
         setCountdown("마감!");
@@ -297,7 +271,7 @@ const ProductListPage: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(countdownInterval);
-  }, [todaysProducts.length, todaysSalesEnd]);
+  }, [primarySaleProducts.length, primarySaleEndDate]);
 
   if (loading && !isRefreshing) return <SodamallLoader />;
 
@@ -308,20 +282,12 @@ const ProductListPage: React.FC = () => {
         style={{ height: `${pullDistance}px` }}
       >
         <div className="indicator-content">
-          {isRefreshing ? (
-            <RefreshCw size={24} className="refreshing-icon" />
-          ) : (
-            <>
-              <ArrowDown
-                size={20}
-                className="arrow-icon"
-                style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }}
-              />
-              <span className="indicator-text">
-                {isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}
-              </span>
-            </>
-          )}
+          {isRefreshing ? <RefreshCw size={24} className="refreshing-icon" />
+            : <>
+                <ArrowDown size={20} className="arrow-icon" style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+                <span className="indicator-text">{isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}</span>
+              </>
+          }
         </div>
       </div>
       <div
@@ -329,28 +295,27 @@ const ProductListPage: React.FC = () => {
         className="pull-to-refresh-content"
         style={{ transform: `translateY(${pullDistance}px)` }}
       >
-        {/* 기존 페이지 콘텐츠 */}
         <div className="page-section banner-section"><BannerSlider banners={banners} /></div>
 
         <ProductSection
           title={<>🔥 오늘의 공동구매</>}
-          countdownText={todaysProducts.length > 0 ? countdown : null}
+          countdownText={primarySaleProducts.length > 0 ? countdown : null}
         >
-          {todaysProducts.length > 0
-            ? todaysProducts.map(p => <ProductCard key={`${p.id}-${getDisplayRound(p)?.roundId}`} product={p} isPreOrder={p.isPreOrder} reservedQuantitiesMap={reservedQuantitiesMap} />)
+          {primarySaleProducts.length > 0
+            ? primarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)
             : !loading && (
               <div className="product-list-placeholder">
                 <PackageSearch size={48} className="placeholder-icon" />
-                <p className="placeholder-text">상품을 준비중입니다</p>
-                <span className="placeholder-subtext">매일 새로운 상품을 기대해주세요!</span>
+                <p className="placeholder-text">오늘의 상품을 준비중입니다</p>
+                <span className="placeholder-subtext">매일 오후 1시에 새로운 상품을 기대해주세요!</span>
               </div>
             )
           }
         </ProductSection>
-
-        {closingSoonProducts.length > 0 && (
+        
+        {secondarySaleProducts.length > 0 && (
           <ProductSection title={<>⏰ 마감임박! 추가공구</>}>
-            {closingSoonProducts.map(p => <ProductCard key={`${p.id}-${getDisplayRound(p)?.roundId}`} product={p} isPreOrder={p.isPreOrder} reservedQuantitiesMap={reservedQuantitiesMap} />)}
+            {secondarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />)}
           </ProductSection>
         )}
 
@@ -365,7 +330,7 @@ const ProductListPage: React.FC = () => {
                 title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}
               >
                 {productsForDate.map(p => (
-                  <ProductCard key={`${p.id}-${getDisplayRound(p)?.roundId}`} product={p} isPastProduct={true} reservedQuantitiesMap={reservedQuantitiesMap} />
+                  <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} reservedQuantitiesMap={reservedQuantitiesMap} />
                 ))}
               </ProductSection>
             );
@@ -375,9 +340,7 @@ const ProductListPage: React.FC = () => {
         <div ref={loader} className="infinite-scroll-loader">
           {loadingMore && <InlineSodamallLoader />}
           {!hasMore && products.length > PAGE_SIZE && (
-            <div className="end-of-list-message">
-              <p>모든 상품을 확인했어요!</p>
-            </div>
+            <div className="end-of-list-message"><p>모든 상품을 확인했어요!</p></div>
           )}
         </div>
       </div>

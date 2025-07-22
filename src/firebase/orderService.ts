@@ -15,10 +15,11 @@ import {
   writeBatch,
   deleteField,
   limit,
+  startAfter, // 추가된 부분
   arrayUnion,
   Timestamp,
 } from 'firebase/firestore';
-import type { FieldValue } from 'firebase/firestore';
+import type { FieldValue, DocumentData } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument, PointLog } from '@/types';
 import { applyPointChangeByStatus, POINT_POLICIES } from './pointService';
 import { createNotification } from './notificationService';
@@ -262,6 +263,83 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
+
+/**
+ * @description [주문일순] 특정 사용자의 주문 내역을 페이지 단위로 가져옵니다.
+ */
+export const getUserOrdersPaginated = async (
+  userId: string,
+  pageSize: number,
+  lastVisible: DocumentData | null
+): Promise<{ orders: Order[], lastDoc: DocumentData | null }> => {
+  if (!userId) return { orders: [], lastDoc: null };
+
+  let q = query(
+    collection(db, 'orders'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc'),
+    limit(pageSize)
+  );
+
+  if (lastVisible) {
+    q = query(
+      collection(db, 'orders'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      startAfter(lastVisible),
+      limit(pageSize)
+    );
+  }
+
+  const querySnapshot = await getDocs(q);
+  const orders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+  const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+  
+  return { orders, lastDoc };
+};
+
+
+/**
+ * @description [픽업일순] 특정 사용자의 주문 내역을 페이지 단위로 가져옵니다.
+ */
+export const getUserOrdersByPickupDatePaginated = async (
+  userId: string,
+  pageSize: number,
+  lastVisible: DocumentData | null
+): Promise<{ orders: Order[], lastDoc: DocumentData | null }> => {
+    if (!userId) return { orders: [], lastDoc: null };
+
+    // ✅ [수정] Firestore 색인 규칙에 맞게, 범위(<, >)나 'not-in' 필터는 정렬 필드와 다른 필드에 사용하지 않는 것이 좋습니다.
+    // 'in' 연산자는 최대 10개의 값을 가질 수 있으며, 복합 색인에 영향을 줍니다.
+    const baseConditions = [
+        where('userId', '==', userId),
+        where('status', 'in', ['RESERVED', 'PREPAID', 'PICKED_UP', 'COMPLETED', 'NO_SHOW']),
+    ];
+
+    let q = query(
+        collection(db, 'orders'),
+        ...baseConditions,
+        orderBy('pickupDate', 'desc'),
+        limit(pageSize)
+    );
+
+    if (lastVisible) {
+        q = query(
+            collection(db, 'orders'),
+            ...baseConditions,
+            orderBy('pickupDate', 'desc'),
+            startAfter(lastVisible),
+            limit(pageSize)
+        );
+    }
+
+    const querySnapshot = await getDocs(q);
+    const orders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+    const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+    
+    return { orders, lastDoc };
+};
+
 
 /**
  * @description 관리자를 위해 모든 주문 내역을 가져옵니다.

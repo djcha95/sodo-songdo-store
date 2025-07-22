@@ -97,19 +97,23 @@ export interface SalesRound {
   roundName:string;
   status: SalesRoundStatus;
   variantGroups: VariantGroup[];
-  publishAt: Timestamp;         // ✅ 전체 공개 시간 (예: 오후 2시)
-  deadlineDate: Timestamp;
-  pickupDate: Timestamp;
-  pickupDeadlineDate?: Timestamp | null;
+  publishAt: Timestamp;         // 발행일 (오후 2시)
+  deadlineDate: Timestamp;      // 1차 공구 마감일 (발행일 다음날 오후 1시)
+  
+  // ✨ [수정] 주석을 명확한 역할에 맞게 변경
+  pickupDate: Timestamp;        // 픽업 '시작일'. (2차 공구 판매 마감 시각은 이 날짜의 오후 1시가 됩니다)
+  pickupDeadlineDate: Timestamp | null; // 고객이 픽업할 수 있는 '최종 기한'
+  
   arrivalDate?: Timestamp | null;
   createdAt: Timestamp;
   waitlist?: WaitlistEntry[];
   waitlistCount?: number;
   isPrepaymentRequired?: boolean;
-  preOrderTiers?: LoyaltyTier[];  // ✅ 선주문 가능 등급
-  preOrderEndDate?: Timestamp;    // ✅ 선주문 마감 시간
-  secretForTiers?: LoyaltyTier[]; // ✨ [신규] 시크릿 상품 대상 등급
+  preOrderTiers?: LoyaltyTier[];
+  preOrderEndDate?: Timestamp;
+  secretForTiers?: LoyaltyTier[];
 }
+
 export interface Product {
   id: string;
   groupName: string;
