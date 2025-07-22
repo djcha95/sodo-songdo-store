@@ -57,25 +57,28 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   }, [user]);
 
   const unreadCount = useMemo(() => {
-    return notifications.filter(n => !n.isRead).length;
+    // ✅ [수정] n.isRead -> n.read
+    return notifications.filter(n => !n.read).length;
   }, [notifications]);
 
   const handleMarkAsRead = async (id: string) => {
     if (!user) return;
     const notifDocRef = doc(db, 'users', user.uid, 'notifications', id);
-    await updateDoc(notifDocRef, { isRead: true });
+    // ✅ [수정] isRead: true -> read: true
+    await updateDoc(notifDocRef, { read: true });
   };
   
 const markAllAsRead = async () => {
     if (!user || unreadCount === 0) return;
-    const unreadNotifications = notifications.filter(n => !n.isRead);
+    // ✅ [수정] n.isRead -> n.read
+    const unreadNotifications = notifications.filter(n => !n.read);
     
-    // ✅ [수정] const batch = db.batch() -> const batch = writeBatch(db)
     const batch = writeBatch(db); 
     
     unreadNotifications.forEach(n => {
         const notifDocRef = doc(db, 'users', user.uid, 'notifications', n.id);
-        batch.update(notifDocRef, { isRead: true });
+        // ✅ [수정] isRead: true -> read: true
+        batch.update(notifDocRef, { read: true });
     });
     
     await batch.commit();
