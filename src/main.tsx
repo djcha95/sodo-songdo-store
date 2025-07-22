@@ -33,6 +33,8 @@ const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryP
 const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
+// ✨ [추가] 픽업 캘린더 페이지 import
+const OrderCalendarPage = React.lazy(() => import('@/components/customer/OrderCalendar'));
 
 
 // 관리자 페이지
@@ -126,6 +128,8 @@ const router = createBrowserRouter([
                   { index: true, element: <MyPage /> },
                   { path: "history", element: <OrderHistoryPage /> },
                   { path: "points", element: <PointHistoryPage /> },
+                  // ✨ [추가] 픽업 캘린더 경로 추가
+                  { path: "orders", element: <OrderCalendarPage /> },
                 ]
               },
             ]

@@ -159,12 +159,13 @@ const Header: React.FC<HeaderConfig> = (props) => {
         return mainPages[pathname];
     }
     
-    const subPages: { [key: string]: string } = {
-        '/mypage/history': '예약 내역',
-        '/mypage/points': '포인트 내역',
-        '/mypage/waitlist': '대기 신청',
-        '/mypage/profile': '회원 정보',
-    };
+const subPages: { [key: string]: string } = {
+    '/mypage/history': '예약 내역',
+    '/mypage/points': '포인트 내역',
+    '/mypage/orders': '나의 픽업 캘린더', // ✅ 이 줄을 추가해주세요!
+    '/mypage/waitlist': '대기 신청',
+    '/mypage/profile': '회원 정보',
+};
 
     for (const path in subPages) {
         if (pathname.startsWith(path)) {

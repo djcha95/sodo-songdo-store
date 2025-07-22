@@ -296,7 +296,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
       const reserved = reservedQuantities.get(reservedKey) || 0;
       const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
-      // totalGroupCode -> totalGroupStock으로 오타 수정 및 무한 재고 조건 수정
       const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
       
       const maxPurchasable = Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1));
@@ -567,8 +566,13 @@ const renderContent = () => {
                             const reserved = reservedQuantities.get(reservedKey) || 0;
                             const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
                             const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
+                            
+                            // ✨ [개선] 그룹 상품일 경우 그룹명과 함께 재고를 표시하고, 단일 상품은 재고만 표시합니다.
+                            const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText;
+                            
+                            // ✨ [개선] 각 재고 항목을 div로 감싸 가독성을 높입니다.
                             return (
-                                <span key={vg.id} className="stock-list-quantity single">{stockText}</span>
+                                <div key={vg.id} className="stock-list-item">{displayText}</div>
                             );
                         })}
                       </div>

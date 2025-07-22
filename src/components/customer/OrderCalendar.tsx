@@ -1,261 +1,314 @@
 // src/components/customer/OrderCalendar.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Calendar from 'react-calendar';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import 'react-calendar/dist/Calendar.css';
 import './OrderCalendar.css';
+
 import { useAuth } from '../../context/AuthContext';
 import { getUserOrders } from '../../firebase';
-import type { Order, OrderItem } from '../../types';
-import Header from '../common/Header';
+import InlineSodamallLoader from '../common/InlineSodamallLoader';
+
 import Holidays from 'date-holidays';
-import { format } from 'date-fns';
+import { format, isSameDay, isSameMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import type { Timestamp } from 'firebase/firestore'; // 추가: Timestamp 타입 import
-import toast from 'react-hot-toast'; // [추가] react-hot-toast 임포트
+import { Timestamp } from 'firebase/firestore';
+import type { Order } from '../../types';
+import toast from 'react-hot-toast';
+import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target } from 'lucide-react';
+
+// =================================================================
+// 헬퍼 함수
+// =================================================================
 
 type ValuePiece = Date | null;
-type Value = ValuePiece | [ValuePiece, ValuePiece];
+type PickupStatus = 'pending' | 'completed' | 'noshow';
 
-interface OrderItemWithCategory extends OrderItem {
-    category?: string;
-}
-
-const holidays = new Holidays('KR'); // 한국 공휴일 설정
-
-// 요일 헤더를 '일, 월, 화...'로 표시하기 위한 컴포넌트
+const holidays = new Holidays('KR');
 const customWeekday = ['일', '월', '화', '수', '목', '금', '토'];
 
+const safeToDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (date instanceof Date) return date;
+    if (typeof date.toDate === 'function') return date.toDate();
+    if (typeof date === 'object' && date.seconds !== undefined) {
+        return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+    }
+    return null;
+};
+
+const getOrderStatusDisplay = (order: Order) => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const pickupDeadline = safeToDate(order.pickupDeadlineDate);
+    const isPickupDeadlinePassed = pickupDeadline && pickupDeadline.getTime() < now.getTime();
+
+    if (order.status === 'CANCELED') return { text: '취소됨', Icon: PackageX, className: 'status-cancelled', type: 'cancelled' };
+    if (order.status !== 'PICKED_UP' && isPickupDeadlinePassed) return { text: '노쇼', Icon: AlertCircle, className: 'status-no-show', type: 'noshow' };
+    if (order.status === 'PICKED_UP') return { text: '픽업 완료', Icon: PackageCheck, className: 'status-completed', type: 'completed' };
+    if (order.status === 'PREPAID') return { text: '결제 완료', Icon: PackageCheck, className: 'status-prepaid', type: 'pending' };
+    if (order.status === 'RESERVED') return { text: '예약중', Icon: Hourglass, className: 'status-reserved', type: 'pending' };
+    
+    return { text: order.status, Icon: Hourglass, className: '', type: 'pending' };
+};
+
+// =================================================================
+// 하위 컴포넌트
+// =================================================================
+
+const EmptyCalendarState: React.FC = () => {
+    const navigate = useNavigate();
+    return (
+        <div className="empty-calendar-container">
+            <CalendarX size={48} className="empty-icon" />
+            <h3 className="empty-title">아직 픽업할 내역이 없어요</h3>
+            <p className="empty-description">상품을 예약하고 캘린더에서 픽업일을 확인해보세요!</p>
+            <button className="go-to-shop-btn common-button" onClick={() => navigate('/')}>상품 보러 가기</button>
+        </div>
+    );
+};
+
+const DailyOrderCard: React.FC<{ order: Order }> = React.memo(({ order }) => {
+    const { text, Icon, className } = getOrderStatusDisplay(order);
+    const orderDate = safeToDate(order.createdAt);
+    return (
+        <li className="order-card-v2">
+            <div className="card-v2-header">
+                <div className={`status-badge-v2 ${className}`}><Icon size={14} /> {text}</div>
+                <span className="order-date-v2">{orderDate ? format(orderDate, 'yy.MM.dd HH:mm') : ''}</span>
+            </div>
+            <ul className="order-items-detail-v2">
+                {(order.items || []).map((item, idx) => (
+                    <li key={idx} className="order-item-detail-row-v2">
+                        <span className="product-name-qty">{item.itemName} ({item.quantity}개)</span>
+                        <span className="product-price">{(item.unitPrice * item.quantity).toLocaleString()}원</span>
+                    </li>
+                ))}
+            </ul>
+            <div className="card-v2-footer">
+                <span className="order-total-price">총 {order.totalPrice.toLocaleString()}원</span>
+            </div>
+        </li>
+    );
+});
+
+const sheetVariants: Variants = {
+    hidden: { y: "100%", opacity: 0.8 },
+    visible: { y: "0%", opacity: 1, transition: { type: "spring", damping: 30, stiffness: 250 } },
+    exit: { y: "100%", opacity: 0.8, transition: { duration: 0.2 } }
+};
+
+const DetailsBottomSheet: React.FC<{ selectedDate: Date; orders: Order[]; onClose: () => void; }> = ({ selectedDate, orders, onClose }) => {
+    return (
+        <>
+            <motion.div className="bottom-sheet-overlay" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+            <motion.div 
+                className="bottom-sheet-content" 
+                variants={sheetVariants} 
+                initial="hidden" animate="visible" exit="exit"
+                drag="y" dragConstraints={{ top: 0, bottom: 0 }}
+                onDragEnd={(_, info) => { if (info.offset.y > 100) onClose(); }}
+            >
+                <div className="sheet-header">
+                    <div className="sheet-grabber"></div>
+                    <h3 className="sheet-title">{format(selectedDate, 'M월 d일 (eee)', { locale: ko })} 픽업 내역</h3>
+                    <button onClick={onClose} className="sheet-close-btn" aria-label="닫기"><X size={20} /></button>
+                </div>
+                <div className="sheet-body">
+                    {orders.length > 0 ? (
+                        <ul className="order-list-v2">{orders.map(order => <DailyOrderCard key={order.id} order={order} />)}</ul>
+                    ) : (
+                        <div className="no-orders-message">
+                            <CalendarX size={32} />
+                            <span>해당 날짜에 픽업할 주문이 없습니다.</span>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        </>
+    );
+};
+
+const MonthlyChallenge: React.FC<{ orders: Order[], activeMonth: Date }> = ({ orders, activeMonth }) => {
+    const challenges = useMemo(() => {
+        const monthlyOrders = orders.filter(o => {
+            const pickupDate = safeToDate(o.pickupDate);
+            return pickupDate && isSameMonth(pickupDate, activeMonth);
+        });
+
+        const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
+        const noShowChallenge = {
+            icon: <ShieldCheck />,
+            title: "노쇼 없이 한 달 보내기",
+            progress: noShowCount === 0 ? 100 : 0,
+            label: noShowCount === 0 ? "달성 완료!" : `${noShowCount}회 발생`,
+        };
+
+        const pickupTarget = 5;
+        const pickupCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'completed').length;
+        const pickupChallenge = {
+            icon: <Target />,
+            title: `이 달에 ${pickupTarget}번 픽업하기`,
+            progress: Math.min((pickupCount / pickupTarget) * 100, 100),
+            label: `${pickupCount} / ${pickupTarget}회`,
+        };
+
+        return [noShowChallenge, pickupChallenge];
+    }, [orders, activeMonth]);
+
+    return (
+        <div className="monthly-challenge-container">
+            <h3 className="challenge-title"><Trophy size={18} /> 이달의 챌린지</h3>
+            <div className="challenge-list">
+                {challenges.map(c => (
+                    <div className="challenge-card" key={c.title}>
+                        <div className="challenge-info">
+                            <span className="challenge-icon">{c.icon}</span>
+                            <span className="challenge-text">{c.title}</span>
+                            <span className="challenge-label">{c.label}</span>
+                        </div>
+                        <div className="progress-bar-track">
+                            <motion.div 
+                                className="progress-bar-fill" 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${c.progress}%` }}
+                                transition={{ duration: 0.8, ease: "easeOut" }}
+                            />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// =================================================================
+// 메인 컴포넌트
+// =================================================================
+
 const OrderCalendar: React.FC = () => {
-  const { user } = useAuth();
-  const [value, onChange] = useState<Value>(new Date());
+  const { user, userDocument } = useAuth();
+  const [selectedDate, setSelectedDate] = useState<ValuePiece>(null);
+  const [activeMonth, setActiveMonth] = useState<Date>(new Date());
   const [userOrders, setUserOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      if (user?.uid) {
+    if (user?.uid) {
         setIsLoading(true);
-        setError(null);
-        try {
-          // Firebase에서 주문 내역을 가져옵니다.
-          const orders = await getUserOrders(user.uid);
-          setUserOrders(orders);
-          if (orders.length === 0) {
-            toast('아직 픽업할 주문 내역이 없습니다.', { icon: '🗓️' }); // [추가] 정보성 토스트 알림
-          }
-        } catch (err) {
-          console.error("사용자 주문 내역 불러오기 오류:", err);
-          setError("주문 내역을 불러오는 데 실패했습니다.");
-          toast.error("주문 내역을 불러오는 데 실패했습니다."); // [추가] toast 알림
-          setUserOrders([]);
-        } finally {
-          setIsLoading(false);
-        }
-      } else {
-        setIsLoading(false);
-        setError("로그인한 사용자 정보가 없습니다. 주문 내역을 볼 수 없습니다.");
-        toast.error("로그인 정보가 없습니다. 주문 내역을 보려면 로그인 해주세요."); // [추가] toast 알림
-        setUserOrders([]);
-      }
-    };
-
-    fetchOrders();
+        getUserOrders(user.uid)
+            .then(orders => setUserOrders(orders))
+            .catch(err => {
+                console.error("주문 내역 로딩 오류:", err);
+                setError("주문 내역을 불러오는 데 실패했습니다.");
+                toast.error("주문 내역을 불러오는 데 실패했습니다.");
+            })
+            .finally(() => setIsLoading(false));
+    }
   }, [user]);
 
-  // [개선] 픽업일이 있는 날짜 목록을 미리 계산
-  const pickupDates = useMemo(() => {
-    // orders 배열을 순회하며 pickupDate를 Date 객체로 변환하여 Set에 저장
-    const dates = new Set<string>();
+  const calendarDayMarkers = useMemo(() => {
+    const markers: { [key: string]: { status: PickupStatus } } = {};
+    const ordersByDate: { [key: string]: Order[] } = {};
+
     userOrders.forEach(order => {
-      let date: Date | null | undefined;
-      // pickupDate가 Timestamp 객체인지 확인
-      if (order.pickupDate && typeof (order.pickupDate as Timestamp).toDate === 'function') {
-          date = (order.pickupDate as Timestamp).toDate();
-      }
-      
-      if (date) {
-        // 'YYYY-MM-DD' 형식의 문자열로 저장하여 중복을 방지
-        dates.add(format(date, 'yyyy-MM-dd'));
-      }
+        const pickupDate = safeToDate(order.pickupDate);
+        if (pickupDate) {
+            const dateStr = format(pickupDate, 'yyyy-MM-dd');
+            if (!ordersByDate[dateStr]) ordersByDate[dateStr] = [];
+            ordersByDate[dateStr].push(order);
+        }
     });
-    return dates;
+
+    Object.keys(ordersByDate).forEach(dateStr => {
+        const ordersOnDate = ordersByDate[dateStr];
+        const statuses = ordersOnDate.map(o => getOrderStatusDisplay(o).type);
+
+        if (statuses.includes('noshow')) {
+            markers[dateStr] = { status: 'noshow' };
+        } else if (statuses.includes('pending')) {
+            markers[dateStr] = { status: 'pending' };
+        } else if (ordersOnDate.length > 0 && statuses.every(s => s === 'completed')) {
+            markers[dateStr] = { status: 'completed' };
+        }
+    });
+    return markers;
   }, [userOrders]);
 
-
-  // useMemo를 사용하여 selectedDateOrders를 최적화
   const selectedDateOrders = useMemo(() => {
-    const selectedDateValue = Array.isArray(value) ? value[0] : value;
-    if (!selectedDateValue) {
-      return [];
-    }
-    const selectedDateString = format(selectedDateValue, 'yyyy-MM-dd');
+    if (!selectedDate) return [];
+    const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+    return userOrders.filter(order => {
+        const pickupDate = safeToDate(order.pickupDate);
+        return pickupDate && format(pickupDate, 'yyyy-MM-dd') === selectedDateString;
+    }).sort((a, b) => (safeToDate(a.createdAt)?.getTime() ?? 0) - (safeToDate(b.createdAt)?.getTime() ?? 0));
+  }, [selectedDate, userOrders]);
 
-    // [수정] 미리 계산된 pickupDates Set을 활용
-    if (!pickupDates.has(selectedDateString)) {
-        return [];
-    }
-    
-    return userOrders.filter((order: Order) => {
-        const pickupDateValue = order.pickupDate;
-        let pickupDate: Date | null = null;
-        if (pickupDateValue && typeof (pickupDateValue as Timestamp).toDate === 'function') {
-            pickupDate = (pickupDateValue as Timestamp).toDate();
-        }
-        return pickupDate &&
-               format(pickupDate, 'yyyy-MM-dd') === selectedDateString;
-    });
-  }, [value, userOrders, pickupDates]);
-
-
-  const getOrderStatusDisplay = (order: Order) => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0); // 시간 정보 제거
-
-    const pickupDeadlineValue = order.pickupDeadlineDate;
-    let pickupDeadline: Date | undefined;
-    if (pickupDeadlineValue && typeof (pickupDeadlineValue as Timestamp).toDate === 'function') {
-        pickupDeadline = (pickupDeadlineValue as Timestamp).toDate();
-    }
-    const isPickupDeadlinePassed = pickupDeadline && pickupDeadline.getTime() < now.getTime();
-
-    // [수정] 우선순위: 취소 > 노쇼 > 픽업 완료 > 선입금 > 예약중 (types.ts의 OrderStatus 타입과 일치시킴)
-    if (order.status === 'CANCELED') {
-        return { text: '취소', className: 'status-cancelled' };
-    }
-    // '노쇼'는 마감일이 지났고, 픽업되지 않은 경우
-    if (order.status !== 'PICKED_UP' && isPickupDeadlinePassed) {
-        return { text: '노쇼', className: 'status-cancelled' };
-    }
-    if (order.status === 'PICKED_UP') {
-        return { text: '픽업 완료', className: 'status-delivered' };
-    }
-    if (order.status === 'PREPAID') {
-        return { text: '선입금', className: 'status-paid' };
-    }
-    if (order.status === 'RESERVED') {
-        return { text: '예약중', className: 'status-pending' };
-    }
-    return { text: order.status, className: '' };
-  };
-
-
-  const tileContent = ({ date, view }: { date: Date; view: string }) => {
-    if (view === 'month') {
-      const holidayInfo = holidays.isHoliday(date);
-      const hasPickupDate = pickupDates.has(format(date, 'yyyy-MM-dd'));
-      const holidayName = Array.isArray(holidayInfo) && holidayInfo.length > 0 ? holidayInfo[0].name : undefined;
-
-      // [수정] 타입 추론 오류를 막기 위해 배열 타입을 명시적으로 지정
-      const dots: React.ReactNode[] = [];
-      if (hasPickupDate) {
-          dots.push(<div key="pickup-dot" className="dot pickup-dot"></div>);
-      }
-      if (holidayName) {
-          dots.push(<div key="holiday-dot" className="dot holiday-dot" title={holidayName}></div>);
-      }
-
-      return dots.length > 0 ? <>{dots}</> : null;
-    }
-    return null;
-  };
-
-  const tileClassName = ({ date, view }: { date: Date; view: string }) => {
-    if (view === 'month') {
-      // [수정] 타입 추론 오류를 막기 위해 배열 타입을 명시적으로 지정
-      const classes: string[] = [];
-      const isHoliday = holidays.isHoliday(date);
-      if (Array.isArray(isHoliday) && isHoliday.length > 0) {
-        classes.push('holiday-tile');
-      }
-      if (date.getDay() === 6) {
-        classes.push('saturday-tile');
-      }
-      return classes.length > 0 ? classes.join(' ') : null;
-    }
-    return null;
-  };
-
-  const selectedDate = Array.isArray(value) ? value[0] : value;
+  if (isLoading) return <div className="order-calendar-page-container--loading"><InlineSodamallLoader /></div>;
+  if (error) return <div className="error-message">{error}</div>;
+  if (userOrders.length === 0) return <EmptyCalendarState />;
 
   return (
     <>
-      <Header title="나의 픽업 캘린더" />
       <div className="order-calendar-page-container">
-        {isLoading ? (
-          <div className="loading-message">주문 내역을 불러오는 중...</div>
-        ) : error ? (
-          <div className="error-message">{error}</div>
-        ) : (
-          <>
-            <div className="calendar-wrapper">
-              <Calendar
-                onChange={onChange}
-                value={value}
-                locale="ko-KR"
-                calendarType="gregory"
-                tileContent={tileContent}
-                tileClassName={tileClassName}
-                formatShortWeekday={(_locale, date) => customWeekday[date.getDay()]}
-                formatDay={(_locale: string | undefined, date: Date) => date.getDate().toString()}
-              />
-            </div>
+        <div className="calendar-wrapper">
+          <Calendar
+            onClickDay={(date) => selectedDate && isSameDay(date, selectedDate) ? setSelectedDate(null) : setSelectedDate(date)}
+            value={selectedDate}
+            onActiveStartDateChange={({ activeStartDate }) => setActiveMonth(activeStartDate || new Date())}
+            locale="ko-KR"
+            calendarType="gregory"
+            tileContent={({ date, view }) => {
+                if (view !== 'month') return null;
+                const isToday = isSameDay(date, new Date());
+                
+                // ✅ [수정] 날짜 비교 기준을 UTC로 통일하여 시간대 오류 해결
+                const todayUTCString = new Date().toISOString().split('T')[0];
+                const hasLoggedInToday = userDocument?.lastLoginDate === todayUTCString;
 
-            <div className="order-list-section">
-              <h3>{selectedDate ? `${format(selectedDate, 'yyyy년 M월 d일', { locale: ko })} 픽업 내역` : '날짜를 선택하세요'}</h3>
-              {selectedDateOrders.length > 0 ? (
-                <ul className="order-list">
-                  {selectedDateOrders.map((order: Order) => {
-                    const statusDisplay = getOrderStatusDisplay(order);
-                    // [수정] order.orderDate를 order.createdAt으로 변경
-                    const orderTimestamp = order.createdAt;
-                    let orderDateStr = '날짜 없음';
-                    if (orderTimestamp && typeof (orderTimestamp as Timestamp).toDate === 'function') {
-                        orderDateStr = (orderTimestamp as Timestamp).toDate().toLocaleDateString();
-                    }
-                    const pickupTimestamp = order.pickupDate;
-                    let pickupDateStr = '미정';
-                    if (pickupTimestamp && typeof pickupTimestamp.toDate === 'function') {
-                        pickupDateStr = pickupTimestamp.toDate().toLocaleDateString();
-                    }
-                    const pickupDeadlineTimestamp = order.pickupDeadlineDate;
-                    let pickupDeadlineStr = '';
-                    if (pickupDeadlineTimestamp && typeof pickupDeadlineTimestamp.toDate === 'function') {
-                        pickupDeadlineStr = ` (마감: ${pickupDeadlineTimestamp.toDate().toLocaleDateString()})`;
-                    }
-
-                    return (
-                      <li key={order.id} className="order-item-card">
-                        <div className="order-summary">
-                            <p className="order-date">주문일: {orderDateStr}</p>
-                            <p className={`order-status ${statusDisplay.className}`}>{statusDisplay.text}</p>
-                        </div>
-                        <ul className="order-items-detail">
-                            {(order.items as OrderItemWithCategory[] || []).map((item: OrderItemWithCategory, idx: number) => (
-                                <li key={idx} className="order-item-detail-row">
-                                    {/* [수정] item.name -> item.itemName, item.price -> item.unitPrice */}
-                                    <span className="product-name-qty">{item.itemName} ({item.quantity}개)</span>
-                                    <span className="product-category">[{item.category || '기타'}]</span>
-                                    <span className="product-price">{item.unitPrice.toLocaleString()}원</span>
-                                </li>
-                            ))}
-                        </ul>
-                        <p className="order-total-price">총 금액: {order.totalPrice.toLocaleString()}원</p>
-                        <p className="order-pickup-info">
-                            픽업 예정일: {pickupDateStr}{pickupDeadlineStr}
-                        </p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="no-orders-message">선택된 날짜에 픽업할 주문이 없습니다.</p>
-              )}
-            </div>
-          </>
-        )}
+                if (isToday && hasLoggedInToday) {
+                    return <div className="attendance-badge">출석✓</div>;
+                }
+                return null;
+            }}
+            tileClassName={({ date, view }) => {
+                if (view !== 'month') return null;
+                const classes: string[] = [];
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const marker = calendarDayMarkers[dateStr];
+                if (marker) classes.push(`pickup-tile--${marker.status}`);
+                if (holidays.isHoliday(date)) classes.push('holiday-tile');
+                if (date.getDay() === 6) classes.push('saturday-tile');
+                return classes.join(' ');
+            }}
+            formatDay={(_locale, date) => format(date, 'd')}
+            formatShortWeekday={(_locale, date) => customWeekday[date.getDay()]}
+            prev2Label={null}
+            next2Label={null}
+          />
+          <div className="calendar-legend">
+              <div className="legend-item"><span className="legend-color-box pending"></span> 픽업 예정</div>
+              <div className="legend-item"><span className="legend-color-box completed"></span> 픽업 완료</div>
+              <div className="legend-item"><span className="legend-color-box noshow"></span> 노쇼 발생</div>
+          </div>
+        </div>
+        
+        <MonthlyChallenge orders={userOrders} activeMonth={activeMonth} />
       </div>
+      <AnimatePresence>
+        {selectedDate && (
+          <DetailsBottomSheet
+            key={selectedDate.toString()}
+            selectedDate={selectedDate}
+            orders={selectedDateOrders}
+            onClose={() => setSelectedDate(null)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 };
