@@ -10,8 +10,8 @@ import * as bannerService from '@/firebase/bannerService';
 
 import BannerForm from '@/pages/admin/components/BannerForm';
 import BannerList from '@/pages/admin/components/BannerList';
-import Notification from '@/pages/admin/components/Notification';
-import SodamallLoader from '@/components/common/SodamallLoader'; // ✅ [수정] SodamallLoader로 변경
+// ✅ [삭제] 존재하지 않는 Notification 컴포넌트 import 제거
+import SodamallLoader from '@/components/common/SodamallLoader';
 
 import './BannerAdminPage.css';
 
@@ -21,7 +21,8 @@ const BannerAdminPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentBanner, setCurrentBanner] = useState<Banner | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  // ✅ [삭제] 삭제된 Notification 컴포넌트와 연결된 state 제거
+  // const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
@@ -43,6 +44,7 @@ const BannerAdminPage: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // react-hot-toast를 사용하므로 이 함수는 그대로 둡니다.
   const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
     switch (type) {
       case 'success':
@@ -127,11 +129,8 @@ const BannerAdminPage: React.FC = () => {
       );
     });
 
-    const confirmed = await toast.promise(confirmationPromise, {
-      loading: '삭제 여부를 확인 중...',
-      success: '선택이 확인되었습니다.',
-      error: '오류가 발생했습니다.',
-    });
+    // toast.promise는 확인/취소 로직에는 적합하지 않아, boolean 결과를 직접 처리합니다.
+    const confirmed = await confirmationPromise;
 
     if (confirmed) {
       const deletePromise = bannerService.deleteBanner(id);
@@ -209,13 +208,7 @@ const BannerAdminPage: React.FC = () => {
           onReorder={handleReorder}
         />
       </div>
-      {notification && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={() => setNotification(null)}
-        />
-      )}
+      {/* ✅ [삭제] 삭제된 Notification 컴포넌트를 렌더링하는 부분 제거 */}
     </div>
   );
 };
