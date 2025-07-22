@@ -1,13 +1,13 @@
-// src/components/common/InlineSodamallLoader.tsx
+// src/components/common/InlineSodomallLoader.tsx
 
 import React from 'react';
-import './InlineSodamallLoader.css';
+import './InlineSodomallLoader.css';
 
-interface InlineSodamallLoaderProps {
+interface InlineSodomallLoaderProps {
   message?: string;
 }
 
-const InlineSodamallLoader: React.FC<InlineSodamallLoaderProps> = ({ message = '콘텐츠 로딩 중...' }) => {
+const InlineSodomallLoader: React.FC<InlineSodomallLoaderProps> = ({ message = '콘텐츠 로딩 중...' }) => {
   return (
     <div className="inline-loader-wrapper">
       <div className="inline-loader-text">
@@ -20,4 +20,4 @@ const InlineSodamallLoader: React.FC<InlineSodamallLoaderProps> = ({ message = '
   );
 };
 
-export default InlineSodamallLoader;
+export default InlineSodomallLoader;

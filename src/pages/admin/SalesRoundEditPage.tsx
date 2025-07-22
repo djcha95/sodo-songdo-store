@@ -8,8 +8,8 @@ import { getProductById, updateSalesRound, getCategories, updateProductCoreInfo 
 import type { Category, StorageType, Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, LoyaltyTier } from '../../types';
 import toast from 'react-hot-toast';
 import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, Clock, Lock } from 'lucide-react';
-import SodamallLoader from '@/components/common/SodamallLoader';
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import './ProductAddAdminPage.css';
@@ -313,7 +313,7 @@ const SalesRoundEditPage: React.FC = () => {
         } finally { setIsSubmitting(false); }
     };
   
-    if (isLoading) return <SodamallLoader message="상품 정보를 불러오는 중입니다..." />;
+    if (isLoading) return <SodomallLoader message="상품 정보를 불러오는 중입니다..." />;
 
     return (
         <>
@@ -341,7 +341,7 @@ const SalesRoundEditPage: React.FC = () => {
                         <div className="header-actions">
                             <button type="button" onClick={() => handleSubmit(true)} disabled={isSubmitting} className="draft-save-button"><FileText size={18} /> 임시저장</button>
                             <button type="submit" disabled={isSubmitting} className="save-button">
-                                {isSubmitting ? <InlineSodamallLoader /> : <Save size={18} />}
+                                {isSubmitting ? <InlineSodomallLoader /> : <Save size={18} />}
                                 수정 내용 저장
                             </button>
                         </div>
@@ -451,7 +451,7 @@ const SalesRoundEditPage: React.FC = () => {
                     </div>
                 </main>
             </form>
-            {isSubmitting && <SodamallLoader message="수정 내용을 저장하고 있습니다..." />}
+            {isSubmitting && <SodomallLoader message="수정 내용을 저장하고 있습니다..." />}
         </div>
         </>
     );

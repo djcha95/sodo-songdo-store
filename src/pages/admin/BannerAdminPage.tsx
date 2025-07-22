@@ -11,7 +11,7 @@ import * as bannerService from '@/firebase/bannerService';
 import BannerForm from '@/pages/admin/components/BannerForm';
 import BannerList from '@/pages/admin/components/BannerList';
 // ✅ [삭제] 존재하지 않는 Notification 컴포넌트 import 제거
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 
 import './BannerAdminPage.css';
 
@@ -186,7 +186,7 @@ const BannerAdminPage: React.FC = () => {
   };
 
   if (isLoading) {
-    return <SodamallLoader />;
+    return <SodomallLoader />;
   }
 
   return (

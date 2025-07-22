@@ -4,8 +4,8 @@ import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/produc
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
-// ✅ [수정] SodamallLoader를 사용합니다.
-import SodamallLoader from '@/components/common/SodamallLoader';
+// ✅ [수정] SodomallLoader를 사용합니다.
+import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
 import { TrendingUp, SaveAll } from 'lucide-react';
 import './DashboardPage.css';
@@ -162,8 +162,8 @@ const DashboardPage: React.FC = () => {
     fetchData();
   };
 
-  // ✅ [수정] 페이지 로딩 시 SodamallLoader를 사용합니다.
-  if (loading) return <SodamallLoader />;
+  // ✅ [수정] 페이지 로딩 시 SodomallLoader를 사용합니다.
+  if (loading) return <SodomallLoader />;
 
   return (
     <div className="dashboard-container">

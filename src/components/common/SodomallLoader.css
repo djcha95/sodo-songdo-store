@@ -1,6 +1,6 @@
-/* src/components/common/SodamallLoader.css */
+/* src/components/common/SodomallLoader.css */
 
-.sodamall-loader-overlay {
+.Sodomall-loader-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -13,28 +13,28 @@
   z-index: 9999;
 }
 
-.sodamall-loader-container {
+.Sodomall-loader-container {
   text-align: center;
 }
 
-.sodamall-loader-text {
+.Sodomall-loader-text {
   font-size: 3rem;
   font-weight: 800;
   color: var(--primary-color, #3b82f6);
 }
 
-.sodamall-loader-text span {
+.Sodomall-loader-text span {
   display: inline-block;
   animation: wave 1.6s infinite;
   animation-delay: var(--delay);
 }
 
 /* 글자별로 애니메이션 지연 시간 설정 */
-.sodamall-loader-text span:nth-child(1) { --delay: 0.1s; }
-.sodamall-loader-text span:nth-child(2) { --delay: 0.2s; }
-.sodamall-loader-text span:nth-child(3) { --delay: 0.3s; }
+.Sodomall-loader-text span:nth-child(1) { --delay: 0.1s; }
+.Sodomall-loader-text span:nth-child(2) { --delay: 0.2s; }
+.Sodomall-loader-text span:nth-child(3) { --delay: 0.3s; }
 
-.sodamall-loader-message {
+.Sodomall-loader-message {
   margin-top: 1.5rem;
   font-size: 1.1rem;
   color: #495057;

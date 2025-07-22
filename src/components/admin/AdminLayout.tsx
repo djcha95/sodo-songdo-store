@@ -2,8 +2,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
-// ✅ [추가] InlineSodamallLoader를 import 합니다.
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+// ✅ [추가] InlineSodomallLoader를 import 합니다.
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './AdminLayout.css';
 
 // ❗ [제거] 로컬 LoadingSpinner 컴포넌트는 더 이상 사용하지 않으므로 제거합니다.
@@ -40,8 +40,8 @@ const AdminLayout = () => {
         toggleSidebar={toggleSidebar}
       />
       <main className="admin-main-content">
-        {/* ✅ [수정] Suspense의 fallback을 InlineSodamallLoader로 교체합니다. */}
-        <Suspense fallback={<InlineSodamallLoader />}>
+        {/* ✅ [수정] Suspense의 fallback을 InlineSodomallLoader로 교체합니다. */}
+        <Suspense fallback={<InlineSodomallLoader />}>
           {/* 자식 라우트(각 관리자 페이지)가 여기에 렌더링됩니다. */}
           <Outlet />
         </Suspense>

@@ -9,7 +9,7 @@ import './index.css';
 
 import App from './App';
 import ProtectedRoute from './components/common/ProtectedRoute';
-import SodamallLoader from './components/common/SodamallLoader'; 
+import SodomallLoader from './components/common/SodomallLoader'; 
 
 import { AuthProvider } from './context/AuthContext';
 // 더 이상 사용하지 않는 CSS 파일 import를 삭제합니다.
@@ -73,9 +73,9 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       // --- 공용 경로 ---
-      { path: "login", element: <Suspense fallback={<SodamallLoader />}><LoginPage /></Suspense> },
-      { path: "terms", element: <Suspense fallback={<SodamallLoader />}><TermsPage /></Suspense> },
-      { path: "privacy", element: <Suspense fallback={<SodamallLoader />}><PrivacyPolicyPage /></Suspense> },
+      { path: "login", element: <Suspense fallback={<SodomallLoader />}><LoginPage /></Suspense> },
+      { path: "terms", element: <Suspense fallback={<SodomallLoader />}><TermsPage /></Suspense> },
+      { path: "privacy", element: <Suspense fallback={<SodomallLoader />}><PrivacyPolicyPage /></Suspense> },
 
       // --- 관리자 전용 경로 ---
       {
@@ -83,7 +83,7 @@ const router = createBrowserRouter([
         children: [
           {
             path: "admin",
-            element: <Suspense fallback={<SodamallLoader />}><AdminLayout /></Suspense>,
+            element: <Suspense fallback={<SodomallLoader />}><AdminLayout /></Suspense>,
             children: [
               { index: true, element: <Navigate to="/admin/dashboard" replace /> },
               { path: 'dashboard', element: <DashboardPage /> },
@@ -116,7 +116,7 @@ const router = createBrowserRouter([
         element: <ProtectedRoute />,
         children: [
           {
-            element: <Suspense fallback={<SodamallLoader />}><CustomerLayout /></Suspense>,
+            element: <Suspense fallback={<SodomallLoader />}><CustomerLayout /></Suspense>,
             children: [
               { index: true, element: <ProductListPage /> },
               { path: "cart", element: <CartPage /> },
@@ -136,7 +136,7 @@ const router = createBrowserRouter([
           },
           {
             path: "product/:productId",
-            element: <Suspense fallback={<SodamallLoader />}><ProductDetailPageWrapper /></Suspense>,
+            element: <Suspense fallback={<SodomallLoader />}><ProductDetailPageWrapper /></Suspense>,
           },
         ]
       },
@@ -194,7 +194,7 @@ createRoot(document.getElementById('root')!).render(
       }}
     />
     <AuthProvider> 
-      <Suspense fallback={<SodamallLoader />}>
+      <Suspense fallback={<SodomallLoader />}>
         <RouterProvider router={router} />
       </Suspense>
     </AuthProvider>

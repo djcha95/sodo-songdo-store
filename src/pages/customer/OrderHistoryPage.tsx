@@ -20,7 +20,7 @@ import {
   PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './OrderHistoryPage.css';
 
@@ -530,7 +530,7 @@ const OrderHistoryPage: React.FC = () => {
 
   const renderContent = () => {
     const loading = (viewMode === 'orders' && ordersLoading) || (viewMode === 'pickup' && pickupLoading) || (viewMode === 'waitlist' && waitlistLoading);
-    if (loading) return (<div className="loading-spinner-container"><InlineSodamallLoader /></div>);
+    if (loading) return (<div className="loading-spinner-container"><InlineSodomallLoader /></div>);
     // error 상태는 fetchOrders에서 이미 토스트로 처리하므로 별도 UI는 생략
 
     if (viewMode === 'waitlist') {
@@ -589,7 +589,7 @@ const OrderHistoryPage: React.FC = () => {
         </div>
 
         {/* ✅ [추가] 로딩 스피너 및 마지막 메시지 */}
-        {loadingMore && <div className="loading-more-spinner"><InlineSodamallLoader /></div>}
+        {loadingMore && <div className="loading-more-spinner"><InlineSodomallLoader /></div>}
         {!hasMore && currentOrders.length > 0 && (viewMode === 'orders' || viewMode === 'pickup') && <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>}
       </>
     );

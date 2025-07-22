@@ -2,7 +2,7 @@
 
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
 import { useEffect } from 'react';
 
@@ -19,7 +19,7 @@ const AdminRoute = () => {
 
 
   if (loading) {
-    return <SodamallLoader message="권한을 확인하는 중입니다..." />;
+    return <SodomallLoader message="권한을 확인하는 중입니다..." />;
   }
 
   // 관리자면 관리자 페이지(자식 라우트)를 보여주고, 아니면 홈페이지로 이동시킵니다.

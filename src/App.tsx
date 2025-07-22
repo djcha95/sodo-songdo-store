@@ -10,7 +10,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import './App.css';
 import './styles/variables.css';
 import './styles/common.css';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import ReferralCodeModal from '@/components/auth/ReferralCodeModal'; // ✨ [신규] 추천인 코드 모달 import
 
 const App: React.FC = () => {
@@ -41,7 +41,7 @@ const App: React.FC = () => {
   };
 
   if (loading) {
-    return <SodamallLoader />;
+    return <SodomallLoader />;
   }
 
   return (

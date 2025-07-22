@@ -8,8 +8,8 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
 import { PlusCircle, Edit, Trash2, X, Check, GripVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
-// ✅ [추가] SodamallLoader import
-import SodamallLoader from '@/components/common/SodamallLoader';
+// ✅ [추가] SodomallLoader import
+import SodomallLoader from '@/components/common/SodomallLoader';
 import './CategoryManagementPage.css';
 
 const CategoryManagementPage: React.FC = () => {
@@ -161,8 +161,8 @@ const CategoryManagementPage: React.FC = () => {
 
   return (
     <div className="category-management-container">
-      {/* ✅ [수정] loading 상태일 때 SodamallLoader를 사용합니다. */}
-      {loading && <SodamallLoader message="데이터 처리 중..." />}
+      {/* ✅ [수정] loading 상태일 때 SodomallLoader를 사용합니다. */}
+      {loading && <SodomallLoader message="데이터 처리 중..." />}
       {error && <div className="error-message-banner">{error}</div>}
 
       <div className="category-form-section section-card">

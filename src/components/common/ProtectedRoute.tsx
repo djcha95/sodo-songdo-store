@@ -3,7 +3,7 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 // ✨ [수정] 사용하지 않는 toast import 제거
 
 interface ProtectedRouteProps {
@@ -15,7 +15,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ adminOnly = false }) =>
   const location = useLocation();
 
   if (loading) {
-    return <SodamallLoader message="사용자 정보를 확인하는 중..." />;
+    return <SodomallLoader message="사용자 정보를 확인하는 중..." />;
   }
 
   if (!user) {

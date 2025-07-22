@@ -6,8 +6,8 @@ import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase
 import type { Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import './BoardAdminPage.css';
-// ✅ [추가] SodamallLoader import
-import SodamallLoader from '@/components/common/SodamallLoader';
+// ✅ [추가] SodomallLoader import
+import SodomallLoader from '@/components/common/SodomallLoader';
 
 type RequestStatus = '요청' | '검토중' | '공구확정' | '반려';
 interface RequestPost {
@@ -58,9 +58,9 @@ const BoardAdminPage = () => {
     }
   };
   
-  // ✅ [수정] LoadingSpinner를 SodamallLoader로 교체
+  // ✅ [수정] LoadingSpinner를 SodomallLoader로 교체
   if (isLoading) {
-    return <SodamallLoader message="게시판 데이터를 불러오는 중..." />;
+    return <SodomallLoader message="게시판 데이터를 불러오는 중..." />;
   }
 
   return (

@@ -9,8 +9,8 @@ import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore
 import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import SodamallLoader from '@/components/common/SodamallLoader';
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './ProductListPageAdmin.css';
 
 // =================================================================
@@ -388,7 +388,7 @@ const WaitlistModal: React.FC<{
                     <button onClick={onClose} className="modal-close-button">&times;</button>
                 </div>
                 <div className="waitlist-modal-body">
-                    {loading && <div className="modal-inline-loader"><InlineSodamallLoader /></div>}
+                    {loading && <div className="modal-inline-loader"><InlineSodomallLoader /></div>}
                     {error && <p className="error-text">{error}</p>}
                     {!loading && !error && (
                         waitlist.length > 0 ? (
@@ -666,7 +666,7 @@ const ProductListPageAdmin: React.FC = () => {
 
   const isAllSelected = enrichedRounds.length > 0 && selectedItems.size === enrichedRounds.length;
   
-  if (loading) return <SodamallLoader />;
+  if (loading) return <SodomallLoader />;
 
   return (
     <div className="admin-page-container product-list-admin-container">

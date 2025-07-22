@@ -12,7 +12,7 @@ import {
 } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
 import { Timestamp } from 'firebase/firestore';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import './OrderManagementPage.css';
 
@@ -469,7 +469,7 @@ const OrderManagementPage: React.FC = () => {
     }, [filteredAndSortedRows, currentPage, itemsPerPage]);
 
 
-    if (loading) return <SodamallLoader message="예약 목록을 불러오는 중..." />;
+    if (loading) return <SodomallLoader message="예약 목록을 불러오는 중..." />;
 
     return (
         <div className="admin-page-container order-management-container">
