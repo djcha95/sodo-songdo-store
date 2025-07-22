@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle, Loader2, Clock, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import './ProductAddAdminPage.css';
@@ -660,7 +660,7 @@ const ProductAddAdminPage: React.FC = () => {
                         </div>
                     </main>
                 </form>
-                {isSubmitting && <SodamallLoader message="상품 정보를 저장하고 있습니다..." />}
+                {isSubmitting && <SodomallLoader message="상품 정보를 저장하고 있습니다..." />}
             </div>
         </>
     );

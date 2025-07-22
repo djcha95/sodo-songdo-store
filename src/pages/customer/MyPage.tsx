@@ -13,7 +13,7 @@ import {
 import './MyPage.css';
 import toast from 'react-hot-toast';
 import type { LoyaltyTier, UserDocument } from '@/types';
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 
 // =================================================================
 // 헬퍼 함수 및 데이터
@@ -240,7 +240,7 @@ const MyPage = () => {
   if (!user || !userDocument) {
     return (
       <div className="mypage-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-        <InlineSodamallLoader />
+        <InlineSodomallLoader />
       </div>
     )
   }

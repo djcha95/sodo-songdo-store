@@ -9,7 +9,7 @@ import {
     Crown, Gem, Sparkles, ShieldAlert, ShieldX, 
     Search, ArrowUpDown, Database, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import PointManagementModal from '@/components/admin/PointManagementModal';
 import { formatPhoneNumber } from '@/utils/formatUtils';
 import type { UserDocument as AppUser, LoyaltyTier } from '@/types';
@@ -155,7 +155,7 @@ const UserListPage = () => {
         setIsModalOpen(true);
     };
 
-    if (isLoading) return <SodamallLoader message="고객 정보를 불러오는 중..." />;
+    if (isLoading) return <SodomallLoader message="고객 정보를 불러오는 중..." />;
 
     return (
         <>

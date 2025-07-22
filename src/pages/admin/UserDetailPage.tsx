@@ -9,7 +9,7 @@ import { updateUserRole } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';
 import { getUserWaitlist } from '@/firebase/productService';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import SodamallLoader from '@/components/common/SodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
 import { 
     Crown, Gem, Sparkles, ShieldAlert, ShieldX, ArrowLeft, Edit, Save, X, Database, 
@@ -106,7 +106,7 @@ const UserDetailPage = () => {
             (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()
         ), [orders]);
 
-    if (isLoading) return <SodamallLoader message="고객 상세 정보를 불러오는 중..." />;
+    if (isLoading) return <SodomallLoader message="고객 상세 정보를 불러오는 중..." />;
     if (!user) return null;
 
     const renderTabContent = () => {

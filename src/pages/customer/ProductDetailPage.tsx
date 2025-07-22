@@ -14,7 +14,7 @@ import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
   Tag, AlertCircle, PackageCheck, Hourglass, ShieldX
 } from 'lucide-react';
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './ProductDetailPage.css';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
@@ -655,12 +655,12 @@ const renderContent = () => {
               )}
               {productActionState === 'WAITLISTABLE' && (
                   <button className="waitlist-btn-fixed" onClick={handleAddToWaitlist} disabled={waitlistLoading}>
-                      {waitlistLoading ? <InlineSodamallLoader /> : <><Hourglass size={14} />&nbsp;대기</>}
+                      {waitlistLoading ? <InlineSodomallLoader /> : <><Hourglass size={14} />&nbsp;대기</>}
                   </button>
               )}
               {productActionState === 'ENCORE_REQUESTABLE' && (
                  <button className="encore-request-btn-fixed" onClick={handleEncoreRequest} disabled={userAlreadyRequestedEncore || encoreLoading}>
-                    {encoreLoading ? <InlineSodamallLoader /> : userAlreadyRequestedEncore ? '요청 완료' : '앵콜 요청'}
+                    {encoreLoading ? <InlineSodomallLoader /> : userAlreadyRequestedEncore ? '요청 완료' : '앵콜 요청'}
                  </button>
               )}
               {(productActionState === 'SCHEDULED' || productActionState === 'ENDED') && (

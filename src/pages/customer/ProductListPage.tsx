@@ -6,8 +6,8 @@ import { getProducts, getActiveBanners, getReservedQuantitiesMap } from '@/fireb
 import type { Product, Banner } from '@/types';
 import type { DocumentData } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import SodamallLoader from '@/components/common/SodamallLoader';
-import InlineSodamallLoader from '@/components/common/InlineSodamallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
 import BannerSlider from '@/components/common/BannerSlider';
 import ProductCard from '@/components/customer/ProductCard';
@@ -273,7 +273,7 @@ const ProductListPage: React.FC = () => {
     return () => clearInterval(countdownInterval);
   }, [primarySaleProducts.length, primarySaleEndDate]);
 
-  if (loading && !isRefreshing) return <SodamallLoader />;
+  if (loading && !isRefreshing) return <SodomallLoader />;
 
   return (
     <div className="customer-page-container">
@@ -338,7 +338,7 @@ const ProductListPage: React.FC = () => {
         </div>
 
         <div ref={loader} className="infinite-scroll-loader">
-          {loadingMore && <InlineSodamallLoader />}
+          {loadingMore && <InlineSodomallLoader />}
           {!hasMore && products.length > PAGE_SIZE && (
             <div className="end-of-list-message"><p>모든 상품을 확인했어요!</p></div>
           )}

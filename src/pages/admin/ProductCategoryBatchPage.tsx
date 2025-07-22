@@ -7,8 +7,8 @@ import type { Product, Category } from '@/types';
 import toast from 'react-hot-toast';
 import { ArrowLeftRight, Search, ChevronsRight, FileWarning, FolderSymlink } from 'lucide-react';
 // ✅ [수정] 경로를 찾지 못하는 문제를 해결하기 위해 절대 경로 별칭 대신 상대 경로를 사용합니다.
-import SodamallLoader from '../../components/common/SodamallLoader';
-import InlineSodamallLoader from '../../components/common/InlineSodamallLoader';
+import SodomallLoader from '../../components/common/SodomallLoader';
+import InlineSodomallLoader from '../../components/common/InlineSodomallLoader';
 import './ProductCategoryBatchPage.css';
 
 // '분류 없음'을 나타내는 특수 상수
@@ -135,7 +135,7 @@ const ProductCategoryBatchPage = () => {
   );
 
   if (loadingCategories) {
-    return <SodamallLoader message="페이지 구성 중..." />;
+    return <SodomallLoader message="페이지 구성 중..." />;
   }
 
   return (
@@ -190,7 +190,7 @@ const ProductCategoryBatchPage = () => {
         </div>
         <div className="product-table-container">
           {loadingProducts ? (
-            <InlineSodamallLoader message="상품 목록을 불러오는 중..." />
+            <InlineSodomallLoader message="상품 목록을 불러오는 중..." />
           ) : filteredProducts.length === 0 ? (
             <div className="empty-list-indicator">
               <FileWarning size={40} />

@@ -10,7 +10,7 @@ import './OrderCalendar.css';
 
 import { useAuth } from '../../context/AuthContext';
 import { getUserOrders } from '../../firebase';
-import InlineSodamallLoader from '../common/InlineSodamallLoader';
+import InlineSodomallLoader from '../common/InlineSodomallLoader';
 
 import Holidays from 'date-holidays';
 import { format, isSameDay, isSameMonth } from 'date-fns';
@@ -248,7 +248,7 @@ const OrderCalendar: React.FC = () => {
     }).sort((a, b) => (safeToDate(a.createdAt)?.getTime() ?? 0) - (safeToDate(b.createdAt)?.getTime() ?? 0));
   }, [selectedDate, userOrders]);
 
-  if (isLoading) return <div className="order-calendar-page-container--loading"><InlineSodamallLoader /></div>;
+  if (isLoading) return <div className="order-calendar-page-container--loading"><InlineSodomallLoader /></div>;
   if (error) return <div className="error-message">{error}</div>;
   if (userOrders.length === 0) return <EmptyCalendarState />;
 
