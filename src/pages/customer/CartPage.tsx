@@ -5,7 +5,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import type { CartItem, Order, OrderItem } from '@/types';
-// ✅ [수정] addWaitlistEntry 함수 import
 import { submitOrder, getLiveStockForItems, getReservedQuantitiesMap, addWaitlistEntry } from '@/firebase';
 import { Timestamp } from 'firebase/firestore';
 import { ShoppingCart as CartIcon, ArrowRight, Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
@@ -31,9 +30,13 @@ const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-const showToast = (type: 'success' | 'error' | 'info' | 'blank', message: string | React.ReactNode, duration: number = 4000) => {
+// ✅ [수정] 각 토스트 알림이 독립적으로 3초 후에 확실히 사라지도록 구현을 변경합니다.
+const showToast = (type: 'success' | 'error' | 'info' | 'blank', message: string | React.ReactNode, duration: number = 3000) => {
+  // 고유한 ID로 토스트를 생성하고, setTimeout으로 직접 해제하여 타이머 충돌을 방지합니다.
   const toastId = toast[type](message, { duration: Infinity });
-  setTimeout(() => { toast.dismiss(toastId); }, duration);
+  setTimeout(() => {
+    toast.dismiss(toastId);
+  }, duration);
 };
 
 const CartItemCard: React.FC<{ item: CartItem; isSelected: boolean; onSelect: (id: string) => void; onImageClick: (e: React.MouseEvent, id: string) => void; isStockExceeded?: boolean; }> = ({ item, isSelected, onSelect, onImageClick, isStockExceeded = false }) => {
@@ -219,7 +222,6 @@ const CartPage: React.FC = () => {
     return reservationItems.some(item => item.isPrepaymentRequired);
   }, [reservationItems]);
 
-  // ✅ [수정] 대기상품 등록과 예약 주문을 함께 처리하는 로직
   const handleConfirmReservation = async () => {
     if (!user || !user.uid) {
       showToast('error', '요청을 확정하려면 로그인이 필요합니다.');
@@ -237,7 +239,6 @@ const CartPage: React.FC = () => {
 
     setIsProcessingOrder(true);
 
-    // 1. 예약 주문 Payload 생성
     const orderPayload = reservationItems.length > 0 ? (() => {
       const orderItems: OrderItem[] = reservationItems.map(item => ({ ...item, arrivalDate: null, pickupDeadlineDate: null }));
       const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
@@ -252,7 +253,6 @@ const CartPage: React.FC = () => {
       } as Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>;
     })() : null;
 
-    // 2. 모든 요청(예약+대기)을 Promise 배열로 만듦
     const allPromises: Promise<any>[] = [];
     if (orderPayload) {
       allPromises.push(submitOrder(orderPayload));
@@ -261,13 +261,11 @@ const CartPage: React.FC = () => {
       allPromises.push(addWaitlistEntry(item.productId, item.roundId, user.uid, item.quantity, item.variantGroupId, item.itemId));
     });
 
-    // 3. Promise 실행
     toast.promise(Promise.all(allPromises), {
       loading: '요청을 처리하는 중입니다...',
       success: () => {
         const prepaymentRequired = orderPayload?.wasPrepaymentRequired ?? false;
         if (prepaymentRequired) {
-          // 선입금 모달 표시
           toast.custom((t) => (
             <div className="prepayment-modal-overlay">
               <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
@@ -289,7 +287,7 @@ const CartPage: React.FC = () => {
                   onClick={() => {
                     toast.dismiss(t.id);
                     startTransition(() => {
-                      removeItems(allItems.map(i => i.id)); // 전체 아이템 삭제
+                      removeItems(allItems.map(i => i.id));
                       navigate('/mypage/history');
                     });
                   }}
@@ -299,10 +297,10 @@ const CartPage: React.FC = () => {
               </div>
             </div>
           ), { id: 'prepayment-toast', duration: Infinity });
-          return ''; // 기본 성공 토스트는 띄우지 않음
+          return '';
         } else {
           startTransition(() => {
-            removeItems(allItems.map(i => i.id)); // 전체 아이템 삭제
+            removeItems(allItems.map(i => i.id));
             navigate('/mypage/history');
           });
           const message = reservationItems.length > 0 && waitlistItems.length > 0
@@ -315,8 +313,8 @@ const CartPage: React.FC = () => {
       },
       error: (err) => (err as Error).message || '요청 처리 중 오류가 발생했습니다.',
     }, {
-      success: { duration: 4000 },
-      error: { duration: 4000 }
+      success: { duration: 3000 },
+      error: { duration: 3000 }
     }).finally(() => {
       setIsProcessingOrder(false);
     });
@@ -359,7 +357,6 @@ const CartPage: React.FC = () => {
     ), { id: 'order-confirmation', style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
   };
   
-  // ✅ [수정] 버튼 텍스트와 활성화 조건을 동적으로 변경
   const getButtonInfo = () => {
     if (isSuspendedUser) return { text: <><ShieldX size={20} /> 참여 제한</>, disabled: true };
     if (isProcessingOrder || isSyncing) return { text: '처리 중...', disabled: true };

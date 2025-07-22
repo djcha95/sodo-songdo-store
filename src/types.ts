@@ -131,6 +131,8 @@ export interface Product {
   subCategory?: string;
   updatedAt?: Timestamp;
   tags?: string[];
+  // ✅ [수정] Cloud Function이 계산한 예약 수량을 저장할 필드 추가
+  reservedQuantities?: { [key: string]: number };
 }
 
 
