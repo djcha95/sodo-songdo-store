@@ -36,6 +36,7 @@
     "react-router-dom": "^6.30.1",
     "rehype-raw": "^7.0.0",
     "swiper": "^11.2.10",
+    "swiper": "^11.2.10",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
