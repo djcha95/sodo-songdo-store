@@ -36,40 +36,141 @@ const safeToDate = (date: any): Date | null => {
 };
 
 /**
- * @description ✅ [수정] Firestore 트랜잭션 규칙(읽기 후 쓰기)을 준수하도록 로직 순서를 변경합니다.
+ * @description 주문을 생성하고, 재고를 차감하는 트랜잭션.
+ */
+export const submitOrder = async (
+  orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
+): Promise<{
+  reservedCount: number;
+  orderId?: string
+}> => {
+
+  let reservedItemCount = 0;
+  let newOrderId: string | undefined = undefined;
+
+  await runTransaction(db, async (transaction) => {
+    // ✅ [추가] 주문 생성 전, 사용자 등급을 확인하여 '참여 제한' 등급은 주문을 차단합니다.
+    const userRef = doc(db, 'users', orderData.userId);
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists()) {
+      throw new Error('주문 처리 중 사용자 정보를 찾을 수 없습니다.');
+    }
+    const userDoc = userSnap.data() as UserDocument;
+
+    if (userDoc.loyaltyTier === '참여 제한') {
+      throw new Error('반복적인 약속 불이행으로 인해 현재 공동구매 참여가 제한되었습니다.');
+    }
+    
+    const itemsToReserve: OrderItem[] = [];
+    const productUpdates = new Map<string, SalesRound[]>();
+    const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => doc(db, 'products', id));
+    const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+    const productDataMap = new Map<string, Product>();
+    for (const productSnap of productSnaps) {
+      if (!productSnap.exists()) throw new Error(`주문 처리 중 상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
+      productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
+    }
+    for (const item of orderData.items) {
+      const productData = productDataMap.get(item.productId);
+      if (!productData) throw new Error(`상품 데이터를 처리할 수 없습니다: ${item.productName}`);
+      const salesHistoryForUpdate = productUpdates.has(item.productId) 
+          ? productUpdates.get(item.productId)!
+          : JSON.parse(JSON.stringify(productData.salesHistory));
+      const roundIndex = salesHistoryForUpdate.findIndex((r: SalesRound) => r.roundId === item.roundId);
+      if (roundIndex === -1) throw new Error(`판매 회차 정보를 찾을 수 없습니다: ${item.productName}`);
+      const round = salesHistoryForUpdate[roundIndex];
+      const groupIndex = round.variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
+      if (groupIndex === -1) throw new Error(`옵션 그룹 정보를 찾을 수 없습니다: ${item.itemName}`); // Changed from item.productName for more specific error
+      
+      const variantGroup = round.variantGroups[groupIndex];
+
+      const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
+      if (itemIndex === -1) throw new Error(`세부 옵션 정보를 찾을 수 없습니다: ${item.itemName}`);
+      const productItem = variantGroup.items[itemIndex];
+      let availableStock = Infinity;
+      if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) availableStock = Math.min(availableStock, variantGroup.totalPhysicalStock);
+      if (productItem.stock !== -1) availableStock = Math.min(availableStock, productItem.stock);
+
+      // ✅ [추가] 선주문 최종 검증 로직
+      const now = new Date();
+      const publishAt = safeToDate(round.publishAt);
+      
+      if (publishAt && now < publishAt) { // 전체 공개 시간 전이라면
+        const preOrderEndDate = safeToDate(round.preOrderEndDate);
+        const preOrderTiers = round.preOrderTiers || [];
+
+        if (preOrderEndDate && now < preOrderEndDate && preOrderTiers.length > 0) { // 선주문 기간일 경우
+          // 선주문 기간일 경우, 등급 검사
+          if (!userDoc.loyaltyTier || !preOrderTiers.includes(userDoc.loyaltyTier)) {
+            throw new Error(`'${item.productName}' 상품은 현재 선주문 대상 등급이 아닙니다.`);
+          }
+        } else {
+          // 선주문 기간도 아니라면, 구매 불가
+          throw new Error(`'${item.productName}' 상품은 아직 구매할 수 없습니다.`);
+        }
+      }
+
+      if (availableStock >= item.quantity) {
+        itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
+        const deductionAmount = item.quantity * (productItem.stockDeductionAmount || 1);
+        if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) variantGroup.totalPhysicalStock -= deductionAmount;
+        if (productItem.stock !== -1) productItem.stock -= item.quantity;
+        productUpdates.set(item.productId, salesHistoryForUpdate);
+      } else {
+        throw new Error(`죄송합니다. ${item.productName}(${item.itemName})의 재고가 부족합니다.`);
+      }
+    }
+
+    if (itemsToReserve.length > 0) {
+      const newOrderRef = doc(collection(db, 'orders'));
+      newOrderId = newOrderRef.id;
+      const originalTotalPrice = itemsToReserve.reduce((total, i) => total + (i.unitPrice * i.quantity), 0);
+      
+      const phoneLast4 = orderData.customerInfo.phone.slice(-4);
+      const firstItem = orderData.items[0];
+      const productForRound = productDataMap.get(firstItem.productId);
+      const roundForOrder = productForRound?.salesHistory.find(r => r.roundId === firstItem.roundId);
+
+      const newOrderData: Omit<Order, 'id'> = {
+        userId: orderData.userId,
+        customerInfo: { ...orderData.customerInfo, phoneLast4 },
+        items: itemsToReserve,
+        totalPrice: originalTotalPrice,
+        orderNumber: `SODOMALL-${Date.now()}`,
+        status: 'RESERVED',
+        createdAt: serverTimestamp(),
+        pickupDate: roundForOrder!.pickupDate,
+        pickupDeadlineDate: roundForOrder!.pickupDeadlineDate ?? null,
+        notes: orderData.notes ?? '',
+        isBookmarked: orderData.isBookmarked ?? false,
+        wasPrepaymentRequired: orderData.wasPrepaymentRequired ?? false, // ✅ [추가] 선입금 필요 여부 플래그 저장
+      };
+      
+      transaction.set(newOrderRef, newOrderData);
+      reservedItemCount = itemsToReserve.reduce((sum, i) => sum + i.quantity, 0);
+
+      for (const [productId, updatedSalesHistory] of productUpdates.entries()) {
+        const productRef = doc(db, 'products', productId);
+        transaction.update(productRef, { salesHistory: updatedSalesHistory });
+      }
+    }
+  });
+
+  return { reservedCount: reservedItemCount, orderId: newOrderId };
+};
+
+/**
+ * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 신뢰도 점수를 조정하는 함수
  */
 export const cancelOrder = async (order: Order): Promise<void> => {
   const orderRef = doc(db, 'orders', order.id);
 
   await runTransaction(db, async (transaction) => {
-    // --- 1단계: 모든 데이터 읽기 ---
-
-    // 1. 주문 정보 읽기
     const orderDoc = await transaction.get(orderRef);
-    if (!orderDoc.exists()) {
-      throw new Error("주문 정보를 찾을 수 없습니다.");
-    }
+    if (!orderDoc.exists()) throw new Error("주문 정보를 찾을 수 없습니다.");
     const currentOrder = orderDoc.data() as Order;
 
-    // 2. 사용자 정보 읽기
-    const userRef = doc(db, 'users', currentOrder.userId);
-    const userSnap = await transaction.get(userRef);
-
-    // 3. 관련 상품 정보 모두 읽기
-    const productRefs = [...new Set(currentOrder.items.map(item => item.productId))].map(id => doc(db, 'products', id));
-    const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-    const productDataMap = new Map<string, Product>();
-    for (const productSnap of productSnaps) {
-      if (productSnap.exists()) {
-        productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
-      }
-    }
-
-    // --- 2단계: 데이터 유효성 검사 및 준비 ---
-
-    if (currentOrder.userId !== order.userId) {
-      throw new Error("본인의 주문만 취소할 수 있습니다.");
-    }
+    if (currentOrder.userId !== order.userId) throw new Error("본인의 주문만 취소할 수 있습니다.");
     if (currentOrder.status !== 'RESERVED' && currentOrder.status !== 'PREPAID') {
       throw new Error("예약 또는 결제 완료 상태의 주문만 취소할 수 있습니다.");
     }
@@ -88,22 +189,38 @@ export const cancelOrder = async (order: Order): Promise<void> => {
         penaltyPolicy = POINT_POLICIES.CANCEL_AFTER_DEADLINE;
     }
 
-    if (penaltyPolicy && userSnap.exists()) {
-        const userDoc = userSnap.data() as UserDocument;
-        const newPoints = (userDoc.points || 0) + penaltyPolicy.points;
-        const pointHistoryUpdate: Omit<PointLog, 'id'> = { 
-            amount: penaltyPolicy.points,
-            reason: penaltyPolicy.reason,
-            createdAt: Timestamp.now(),
-            orderId: order.id,
-        };
-        transaction.update(userRef, {
-            points: newPoints,
-            pointHistory: arrayUnion(pointHistoryUpdate),
-        });
+    if (penaltyPolicy) {
+        const userRef = doc(db, 'users', currentOrder.userId);
+        const userSnap = await transaction.get(userRef);
+        if (userSnap.exists()) {
+            const userDoc = userSnap.data() as UserDocument;
+            const newPoints = (userDoc.points || 0) + penaltyPolicy.points;
+            const pointHistoryUpdate: Omit<PointLog, 'id'> = { 
+                amount: penaltyPolicy.points,
+                reason: penaltyPolicy.reason,
+                createdAt: serverTimestamp() as Timestamp,
+                orderId: currentOrder.id,
+            };
+            transaction.update(userRef, {
+                points: newPoints,
+                pointHistory: arrayUnion(pointHistoryUpdate),
+            });
+        }
     }
 
-    // 2. 상품 재고 복구
+
+    const productRefs = [...new Set(currentOrder.items.map(item => item.productId))].map(id => doc(db, 'products', id));
+    const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+
+    const productDataMap = new Map<string, Product>();
+    for (const productSnap of productSnaps) {
+      if (productSnap.exists()) {
+        productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
+      }
+    }
+
+    transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
+
     for (const item of currentOrder.items) {
       const productData = productDataMap.get(item.productId);
       if (!productData) continue;
