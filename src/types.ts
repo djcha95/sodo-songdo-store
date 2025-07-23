@@ -369,3 +369,4 @@ export interface PaginatedProductsResponse {
   products: Product[];
   lastVisible: DocumentData | null;
 }
+

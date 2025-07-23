@@ -61,7 +61,64 @@
   position: sticky;
   top: 0;
   align-self: flex-start;
+  /* ✨ [수정] Swiper가 정사각형 비율을 유지하도록 설정 */
+  aspect-ratio: 1 / 1;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden; /* 자식 요소인 Swiper가 둥근 모서리를 따르도록 함 */
 }
+
+/* ✨ [삭제] 기존 .image-gallery는 Swiper로 대체되어 삭제 */
+
+/* ✨ [추가] Swiper 컴포넌트 스타일 */
+.product-swiper {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.product-swiper .swiper-slide {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #fff;
+}
+
+.product-swiper img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+/* ✨ [추가] Swiper 페이지네이션(점) 스타일 */
+.product-swiper .swiper-pagination {
+  bottom: 12px !important;
+}
+
+.product-swiper .swiper-pagination-bullet {
+  background-color: rgba(255, 255, 255, 0.7);
+  width: 8px;
+  height: 8px;
+  opacity: 1;
+  transition: all 0.2s ease;
+}
+
+.product-swiper .swiper-pagination-bullet-active {
+  background-color: #ffffff;
+  width: 16px;
+  border-radius: 4px;
+}
+
+
+/* ✨ [삭제] Swiper로 대체되어 더 이상 사용하지 않는 스타일 */
+/*
+.image-nav-btn { ... }
+.image-indicator { ... }
+*/
 
 .product-info-area {
   flex: 1;
@@ -70,59 +127,6 @@
   gap: 16px;
 }
 
-.image-gallery {
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
-  aspect-ratio: 1 / 1;
-}
-
-.image-gallery img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  cursor: pointer;
-}
-
-.image-nav-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(30, 30, 30, 0.5);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  cursor: pointer;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-.image-nav-btn.prev {
-  left: 10px;
-}
-.image-nav-btn.next {
-  right: 10px;
-}
-.image-nav-btn:hover {
-  background: rgba(30, 30, 30, 0.8);
-}
-.image-indicator {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.9em;
-}
 
 .product-info-header {
   margin-bottom: 0;
@@ -181,7 +185,7 @@
 .info-value.storage-type-FROZEN {
   color: #3b82f6;
 }
-.info-value.storage-type-CHILLED {
+.info-value.storage-type-COLD { /* ✨ [수정] CHILLED -> COLD */
   color: #ef4444;
 }
 
@@ -287,7 +291,7 @@
   border-radius: 8px;
   overflow: hidden;
   height: 48px;
-  flex-grow: 1; 
+  flex-grow: 1;
 }
 
 .quantity-btn {
@@ -306,7 +310,7 @@
 
 .quantity-input-fixed,
 .quantity-display-fixed {
-  flex: 1; /* ✨ 변경: width: 100% 대신 flex: 1을 사용하여 유연하게 너비 조절 */
+  flex: 1;
   text-align: center;
   font-size: 18px;
   font-weight: 600;
@@ -323,8 +327,8 @@
 .footer-total-price-fixed {
   font-size: 18px;
   font-weight: 700;
-  flex-shrink: 0; 
-  min-width: 95px; 
+  flex-shrink: 0;
+  min-width: 95px;
   text-align: right;
 }
 
@@ -338,7 +342,7 @@
   background-color: #007bff;
   color: white;
   border: none;
-  padding: 14px 16px; /* ✨ 변경: 좌우 패딩을 20px에서 16px로 축소 */
+  padding: 14px 16px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 16px;
@@ -397,23 +401,33 @@
   align-items: center;
   z-index: 1002;
 }
-.image-lightbox-content {
+
+/* ✨ [삭제] .image-lightbox-content는 .lightbox-swiper로 대체 */
+
+/* ✨ [추가] Lightbox Swiper 스타일 */
+.lightbox-swiper {
   width: 100%;
   height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
 }
-.image-lightbox-content img {
+
+.lightbox-swiper .swiper-slide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-swiper img {
   display: block;
-  max-width: 90%;
-  max-height: 90%;
+  max-width: 90vw;
+  max-height: 80vh;
   object-fit: contain;
 }
-.modal-close-btn-lightbox,
-.image-nav-btn-lightbox {
+
+
+.modal-close-btn-lightbox {
   position: absolute;
+  top: 20px;
+  right: 20px;
   background: rgba(30, 30, 30, 0.5);
   color: #fff;
   border: none;
@@ -421,25 +435,46 @@
   cursor: pointer;
   z-index: 1003;
   transition: background-color 0.2s;
-}
-.modal-close-btn-lightbox {
-  top: 20px;
-  right: 20px;
   width: 44px;
   height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+
+/* ✨ [수정] Lightbox 내비게이션 버튼 스타일 */
 .image-nav-btn-lightbox {
+  position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 48px;
-  height: 48px;
+  background-color: rgba(0, 0, 0, 0.3);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1500; /* Swiper 위에 표시되도록 z-index 조정 */
 }
+
 .image-nav-btn-lightbox.prev {
-  left: 20px;
+  left: 15px;
 }
+
 .image-nav-btn-lightbox.next {
-  right: 20px;
+  right: 15px;
 }
+
+.image-nav-btn-lightbox:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+
+/* ✨ [수정] Lightbox 페이지 표시 스타일 */
 .image-indicator-lightbox {
   position: absolute;
   bottom: 20px;
@@ -450,7 +485,7 @@
   padding: 8px 15px;
   border-radius: 16px;
   font-size: 1em;
-  z-index: 1003;
+  z-index: 1500; /* Swiper 위에 표시되도록 z-index 조정 */
 }
 
 .error-message-modal {
@@ -531,12 +566,12 @@
   }
   .main-content-area {
     flex-direction: column;
-    padding: 0;
-    box-sizing: border-box;
+    /* ✨ [삭제] Swiper 구현 방식 변경으로 불필요해진 padding:0 제거 */
   }
   .image-gallery-wrapper {
     margin-right: 0;
     position: static;
+    border-radius: 0; /* 모바일에서는 화면 전체를 차지하므로 radius 제거 */
   }
   .product-info-area {
     padding: 20px;
@@ -548,7 +583,7 @@
     margin-top: 1rem;
   }
   .product-key-info {
-    padding: 12px;
+    /* ✨ [삭제] 상위 요소에서 padding이 관리되므로 제거 또는 조정 가능 */
   }
   .info-row {
     font-size: 0.85em;
@@ -557,7 +592,8 @@
   }
 
   .modal-scroll-area {
-    padding-bottom: auto;
+    padding: 0; /* ✨ [수정] 스크롤 영역의 패딩을 제거하고 하위에서 관리 */
+    padding-bottom: 100px; /* 푸터 높이만큼 패딩 추가 */
   }
 }
 

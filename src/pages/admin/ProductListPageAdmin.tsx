@@ -191,6 +191,19 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
     onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs, onOpenWaitlistModal
 }) => {
     const navigate = useNavigate();
+
+    // ✅ [수정] 옵션 그룹이 없는 경우에 대한 방어 코드 추가
+    if (!item.enrichedVariantGroups || item.enrichedVariantGroups.length === 0) {
+        return (
+            <tr className="master-row error-row">
+                <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
+                <td>{index + 1}</td>
+                <td colSpan={10}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td>
+                <td><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></td>
+            </tr>
+        );
+    }
+
     const isExpandable = item.enrichedVariantGroups.length > 1;
 
     // 단일 상품 행 렌더링
@@ -466,7 +479,6 @@ const ProductListPageAdmin: React.FC = () => {
             getDocs(query(collection(db, 'orders'), where('status', '==', 'PICKED_UP'))),
         ]);
 
-        // ✅ [수정] Firestore에서 모든 'products' 문서를 직접 가져옵니다.
         const productsQuery = query(collection(db, "products"));
         const productsSnapshot = await getDocs(productsQuery);
         const allFetchedProducts = productsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Product));
@@ -501,6 +513,12 @@ const ProductListPageAdmin: React.FC = () => {
     let flatRounds: EnrichedRoundItem[] = [];
     (allProducts || []).forEach(p => {
         (p.salesHistory || []).forEach(r => {
+            // ✅ [수정] 옵션 그룹이 없는 회차는 건너뛰도록 방어 코드 추가
+            if (!r.variantGroups || r.variantGroups.length === 0) {
+                console.warn(`Skipping round without variant groups: Product ID ${p.id}, Round ID ${r.roundId}`);
+                return;
+            }
+
             const enrichedVariantGroups: EnrichedVariantGroup[] = r.variantGroups.map(vg => {
                 const key = `${p.id}-${r.roundId}-${vg.id}`;
                 const reservedQuantity = reservedQuantitiesMap.get(key) || 0;

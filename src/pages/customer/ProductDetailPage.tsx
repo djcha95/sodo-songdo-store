@@ -14,6 +14,18 @@ import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
   Tag, AlertCircle, PackageCheck, Hourglass, ShieldX
 } from 'lucide-react';
+
+// Swiper React components
+import { Swiper, SwiperSlide } from 'swiper/react';
+// Swiper modules
+import { Pagination, Navigation } from 'swiper/modules';
+
+// Swiper styles
+import 'swiper/css';
+import 'swiper/css/pagination';
+import 'swiper/css/navigation';
+
+
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './ProductDetailPage.css';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
@@ -73,7 +85,7 @@ const getLatestRoundFromHistory = (product: Product | null): SalesRound | null =
 
   const nowSellingScheduled = product.salesHistory
     .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! <= now)
-    .sort((a, b) => safeToDate(b.publishAt)!.getTime() - safeToDate(a.publishAt)!.getTime());
+    .sort((a, b) => safeToDate(b.publishAt)!.getTime() - safeToDate(b.publishAt)!.getTime());
   if (nowSellingScheduled.length > 0) return nowSellingScheduled[0];
   
   const futureScheduledRounds = product.salesHistory
@@ -143,6 +155,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const quantityInputRef = useRef<HTMLInputElement>(null);
   const [reservedQuantities, setReservedQuantities] = useState<Map<string, number>>(new Map());
   const [stockLoading, setStockLoading] = useState(true);
+  const swiperRef = useRef<any>(null); // Swiper 인스턴스를 위한 ref
+  const lightboxSwiperRef = useRef<any>(null); // Lightbox Swiper 인스턴스를 위한 ref
 
   // --- 메모이제이션(useMemo) 로직 ---
   
@@ -257,6 +271,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         setProduct(productData);
         setReservedQuantities(reservedQtyMap);
         setDisplayRound(latestRound);
+        setCurrentImageIndex(0); // 상품이 바뀌면 첫 이미지로 초기화
 
         const firstVg = latestRound.variantGroups?.[0];
         const firstItem = firstVg?.items?.[0];
@@ -284,6 +299,12 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   useEffect(() => {
     setCurrentTotalPrice((selectedItem?.price ?? 0) * quantity);
   }, [selectedItem, quantity]);
+  
+  useEffect(() => {
+    if (isImageModalOpen && lightboxSwiperRef.current) {
+        lightboxSwiperRef.current.swiper.slideTo(currentImageIndex, 0);
+    }
+  }, [isImageModalOpen, currentImageIndex]);
 
 
   // --- 핸들러 함수들 ---
@@ -448,17 +469,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     }
   }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, user, navigate, onClose, productActionState, isSuspendedUser]);
 
-
-  const changeImage = useCallback((direction: 'prev' | 'next') => {
-    if (!product?.imageUrls) return;
-    const totalImages = product.imageUrls.length;
-    setCurrentImageIndex(prevIndex => {
-      if (direction === 'next') return (prevIndex + 1) % totalImages;
-      if (direction === 'prev') return (prevIndex - 1 + totalImages) % totalImages;
-      return prevIndex;
-    });
-  }, [product]);
-
   const handleOptionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>): void => {
     const selectedIndex = parseInt(e.target.value, 10);
     const selected = allAvailableOptions?.[selectedIndex];
@@ -512,21 +522,29 @@ const renderContent = () => {
       <>
         <div className="main-content-area">
           <div className="image-gallery-wrapper">
-            <div className="image-gallery">
-              <img
-                src={getOptimizedImageUrl(product.imageUrls?.[currentImageIndex], "1080x1080")}
-                alt={`${product.groupName} 이미지 ${currentImageIndex + 1}`}
-                onClick={openImageModal}
-                fetchpriority="high"
-              />
-              {product.imageUrls?.length > 1 && (
-                <>
-                  <button onClick={() => changeImage('prev')} className="image-nav-btn prev"><ChevronLeft /></button>
-                  <button onClick={() => changeImage('next')} className="image-nav-btn next"><ChevronRight /></button>
-                  <div className="image-indicator">{currentImageIndex + 1} / {product.imageUrls.length}</div>
-                </>
-              )}
-            </div>
+             {/* ✨ [개선] Swiper 컴포넌트로 교체 */}
+            <Swiper
+              ref={swiperRef}
+              modules={[Pagination, Navigation]}
+              spaceBetween={0}
+              slidesPerView={1}
+              pagination={{
+                clickable: true,
+                dynamicBullets: true,
+              }}
+              onSlideChange={(swiper) => setCurrentImageIndex(swiper.activeIndex)}
+              className="product-swiper"
+            >
+              {(product.imageUrls ?? []).map((url, index) => (
+                <SwiperSlide key={index} onClick={openImageModal}>
+                  <img
+                    src={getOptimizedImageUrl(url, "1080x1080")}
+                    alt={`${product.groupName} 이미지 ${index + 1}`}
+                    fetchpriority={index === 0 ? "high" : "auto"}
+                  />
+                </SwiperSlide>
+              ))}
+            </Swiper>
           </div>
           <div className="product-info-area">
             <div className="product-info-header">
@@ -567,10 +585,8 @@ const renderContent = () => {
                             const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
                             const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
                             
-                            // ✨ [개선] 그룹 상품일 경우 그룹명과 함께 재고를 표시하고, 단일 상품은 재고만 표시합니다.
                             const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText;
                             
-                            // ✨ [개선] 각 재고 항목을 div로 감싸 가독성을 높입니다.
                             return (
                                 <div key={vg.id} className="stock-list-item">{displayText}</div>
                             );
@@ -686,14 +702,39 @@ const renderContent = () => {
       </div>
 
       {isImageModalOpen && product && (
-         <div className="image-lightbox-overlay" onClick={closeImageModal}>
-            <button className="modal-close-btn-lightbox" onClick={closeImageModal}><X size={28} /></button>
-            <img src={getOptimizedImageUrl(product.imageUrls[currentImageIndex], "1080x1080")} alt="확대 이미지" />
-            {product.imageUrls.length > 1 && (<>
-                <button onClick={(e) => { e.stopPropagation(); changeImage('prev'); }} className="image-nav-btn-lightbox prev"><ChevronLeft /></button>
-                <button onClick={(e) => { e.stopPropagation(); changeImage('next'); }} className="image-nav-btn-lightbox next"><ChevronRight /></button>
-                <div className="image-indicator-lightbox">{currentImageIndex + 1} / {product.imageUrls.length}</div>
-            </>)}
+        <div className="image-lightbox-overlay" onClick={closeImageModal}>
+          <button className="modal-close-btn-lightbox" onClick={closeImageModal}><X size={28} /></button>
+          {/* ✨ [개선] Lightbox에도 Swiper 적용 */}
+          <Swiper
+            ref={lightboxSwiperRef}
+            modules={[Pagination, Navigation]}
+            initialSlide={currentImageIndex}
+            navigation={{
+              nextEl: '.image-nav-btn-lightbox.next',
+              prevEl: '.image-nav-btn-lightbox.prev',
+            }}
+            pagination={{
+              type: 'fraction',
+              el: '.image-indicator-lightbox'
+            }}
+            onSlideChange={(swiper) => setCurrentImageIndex(swiper.activeIndex)}
+            className="lightbox-swiper"
+          >
+            {(product.imageUrls ?? []).map((url, index) => (
+              <SwiperSlide key={index}>
+                <img src={getOptimizedImageUrl(url, "1080x1080")} alt={`확대 이미지 ${index + 1}`} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+          
+          {/* Swiper 외부의 커스텀 네비게이션 버튼 및 인디케이터 */}
+          {(product.imageUrls?.length ?? 0) > 1 && (
+            <>
+              <button onClick={(e) => e.stopPropagation()} className="image-nav-btn-lightbox prev"><ChevronLeft /></button>
+              <button onClick={(e) => e.stopPropagation()} className="image-nav-btn-lightbox next"><ChevronRight /></button>
+              <div className="image-indicator-lightbox"></div>
+            </>
+          )}
         </div>
       )}
     </div>
