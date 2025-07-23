@@ -4,8 +4,10 @@ import React, { useState, useMemo, useRef, useEffect, useCallback, startTransiti
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
-import type { CartItem, Order, OrderItem } from '@/types';
-import { submitOrder, getLiveStockForItems, getReservedQuantitiesMap, addWaitlistEntry } from '@/firebase';
+import type { CartItem, OrderItem } from '@/types';
+import { addWaitlistEntry } from '@/firebase';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Timestamp } from 'firebase/firestore';
 import { ShoppingCart as CartIcon, ArrowRight, Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
@@ -30,16 +32,31 @@ const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// ✅ [수정] 각 토스트 알림이 독립적으로 3초 후에 확실히 사라지도록 구현을 변경합니다.
-const showToast = (type: 'success' | 'error' | 'info' | 'blank', message: string | React.ReactNode, duration: number = 3000) => {
-  // 고유한 ID로 토스트를 생성하고, setTimeout으로 직접 해제하여 타이머 충돌을 방지합니다.
-  const toastId = toast[type](message, { duration: Infinity });
-  setTimeout(() => {
-    toast.dismiss(toastId);
-  }, duration);
-};
+// ✨ [수정] showToast 헬퍼 함수를 라이브러리 기본 동작을 사용하도록 간결하게 변경합니다.
+// ✨ [수정] showToast 헬퍼 함수를 타입 오류에 안전하게 변경합니다.
+// ✨ [수정] showToast 헬퍼 함수를 타입 오류에 안전하게 변경합니다.
+const showToast = (type: 'success' | 'error' | 'info', message: string | React.ReactNode, duration: number = 3000) => {
+  // message가 null 또는 undefined일 경우 빈 문자열을 사용하도록 하여 오류를 방지합니다.
+  const content = message ?? '';
+  // message를 JSX Fragment(<></>)로 감싸서 라이브러리가 허용하는 타입으로 전달합니다.
+  const toastContent = <>{content}</>;
 
-const CartItemCard: React.FC<{ item: CartItem; isSelected: boolean; onSelect: (id: string) => void; onImageClick: (e: React.MouseEvent, id: string) => void; isStockExceeded?: boolean; }> = ({ item, isSelected, onSelect, onImageClick, isStockExceeded = false }) => {
+  switch (type) {
+    case 'success':
+      toast.success(toastContent, { duration });
+      break;
+    case 'error':
+      toast.error(toastContent, { duration });
+      break;
+    case 'info':
+      toast(toastContent, { duration, icon: 'ℹ️' });
+      break;
+    default:
+      toast(toastContent, { duration });
+      break;
+  }
+};
+const CartItemCard: React.FC<{ item: CartItem; isSelected: boolean; onSelect: (id: string) => void; onImageClick: (e: React.MouseEvent, id: string) => void; }> = ({ item, isSelected, onSelect, onImageClick }) => {
   const { updateCartItemQuantity } = useCart();
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState(item.quantity.toString());
@@ -82,7 +99,7 @@ const CartItemCard: React.FC<{ item: CartItem; isSelected: boolean; onSelect: (i
   }
 
   return (
-    <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${isStockExceeded ? 'stock-exceeded' : ''}`} onClick={() => onSelect(item.id)}>
+    <div className={`cart-item-card ${isSelected ? 'selected' : ''}`} onClick={() => onSelect(item.id)}>
       <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
         <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
       </div>
@@ -125,47 +142,63 @@ const CartPage: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(true);
   const [selectedReservationKeys, setSelectedReservationKeys] = useState<Set<string>>(new Set());
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
-  const [stockExceededKeys, setStockExceededKeys] = useState<Set<string>>(new Set());
+  
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const checkCartStockCallable = httpsCallable<{ items: CartItem[] }, { updatedItems: { id: string, newQuantity: number }[], removedItemIds: string[], isSufficient: boolean }>(functions, 'checkCartStock');
+  const submitOrderCallable = httpsCallable<any, { success: boolean, orderId: string }>(functions, 'submitOrder');
+
+
+  const syncCartWithServerStock = useCallback(async (itemsToCheck: CartItem[]): Promise<boolean> => {
+    if (itemsToCheck.length === 0) {
+      setIsSyncing(false);
+      return true;
+    }
+    
+    setIsSyncing(true);
+    try {
+      const { data } = await checkCartStockCallable({ items: itemsToCheck });
+      
+      if (data.updatedItems.length > 0 || data.removedItemIds.length > 0) {
+        startTransition(() => {
+          data.updatedItems.forEach(item => {
+            updateCartItemQuantity(item.id, item.newQuantity);
+            const originalItem = itemsToCheck.find(i => i.id === item.id);
+            if (originalItem) {
+                showToast('error', `'${originalItem.variantGroupName}' 재고 부족으로 수량이 ${item.newQuantity}개로 자동 조정되었습니다.`);
+            }
+          });
+          if (data.removedItemIds.length > 0) {
+            removeItems(data.removedItemIds);
+            showToast('error', `재고가 모두 소진된 ${data.removedItemIds.length}개 상품이 장바구니에서 삭제됩니다.`);
+          }
+        });
+      }
+      
+      if (!data.isSufficient) {
+        toast.error('일부 상품의 재고가 부족하여 주문을 진행할 수 없습니다.');
+      }
+
+      return data.isSufficient;
+
+    } catch (error: any) {
+      console.error("Cloud Function 호출 중 오류:", error);
+      toast.error(error.message || "재고를 확인하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [checkCartStockCallable, removeItems, updateCartItemQuantity]);
+  
 
   useEffect(() => {
-    if (reservationItems.length === 0) {
+    if (reservationItems.length > 0) {
+      syncCartWithServerStock(reservationItems);
+    } else {
       setIsSyncing(false);
-      return;
     }
-    const checkStockAndAdjust = async () => {
-      setIsSyncing(true);
-      setStockExceededKeys(new Set()); 
-      try {
-        const [liveStockInfo, reservedMap] = await Promise.all([ getLiveStockForItems(reservationItems), getReservedQuantitiesMap() ]);
-        const exceededKeys = new Set<string>();
-        for (const item of reservationItems) {
-          const itemKey = item.id;
-          const productStockInfo = liveStockInfo[`${item.productId}-${item.variantGroupId}-${item.itemId}`];
-          const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-          const groupTotalStock = productStockInfo?.groupStock;
-          const groupReservedQuantity = reservedMap.get(groupReservedKey) || 0;
-          let availableStock = Infinity;
-          if(groupTotalStock !== null && groupTotalStock !== -1) availableStock = groupTotalStock - groupReservedQuantity;
-          if (item.quantity > availableStock) {
-            const adjustedQuantity = Math.max(0, Math.floor(availableStock));
-            if (adjustedQuantity > 0) {
-              updateCartItemQuantity(itemKey, adjustedQuantity);
-              showToast('error', `'${item.variantGroupName}' 재고 부족으로 수량이 ${adjustedQuantity}개로 자동 조정되었습니다.`);
-            } else {
-               removeItems([itemKey]);
-               showToast('error', `'${item.variantGroupName}' 재고가 모두 소진되어 장바구니에서 삭제됩니다.`);
-            }
-            exceededKeys.add(itemKey);
-          }
-        }
-        setStockExceededKeys(exceededKeys);
-      } catch (error) {
-        console.error("재고 확인 중 오류:", error);
-        showToast('error', "재고를 확인하는 중 문제가 발생했습니다.");
-      } finally { setIsSyncing(false); }
-    };
-    checkStockAndAdjust();
-  }, [allItems.length, removeItems, reservationItems, updateCartItemQuantity]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
     const setter = type === 'reservation' ? setSelectedReservationKeys : setSelectedWaitlistKeys;
@@ -193,31 +226,6 @@ const CartPage: React.FC = () => {
 
   const handleImageClick = useCallback((e: React.MouseEvent, productId: string) => { e.stopPropagation(); navigate(`/product/${productId}`); }, [navigate]);
   
-  const finalStockCheck = async (): Promise<boolean> => {
-    if (reservationItems.length === 0) return true; // 예약 상품 없으면 재고 체크 통과
-    setIsSyncing(true);
-    try {
-      const [liveStockInfo, reservedMap] = await Promise.all([ getLiveStockForItems(reservationItems), getReservedQuantitiesMap() ]);
-      for (const item of reservationItems) {
-        const productStockInfo = liveStockInfo[`${item.productId}-${item.variantGroupId}-${item.itemId}`];
-        const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-        const groupTotalStock = productStockInfo?.groupStock;
-        const groupReservedQuantity = reservedMap.get(groupReservedKey) || 0;
-        let availableStock = Infinity;
-        if (groupTotalStock !== null && groupTotalStock !== -1) availableStock = groupTotalStock - groupReservedQuantity;
-        if (item.quantity > availableStock) {
-          showToast('error', (<div style={{ textAlign: 'center' }}><p style={{ margin: 0, fontWeight: '600' }}>'{item.variantGroupName}' 재고가 부족합니다.</p><p style={{ margin: '4px 0 0', fontWeight: 400, opacity: 0.8 }}>(현재 ${availableStock}개 구매 가능)</p></div>));
-          return false;
-        }
-      }
-      return true;
-    } catch (error) {
-      console.error("최종 재고 확인 중 오류:", error);
-      showToast('error', "재고 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-      return false;
-    } finally { setIsSyncing(false); }
-  };
-
   const doesCartRequirePrepayment = useMemo(() => {
     return reservationItems.some(item => item.isPrepaymentRequired);
   }, [reservationItems]);
@@ -234,28 +242,50 @@ const CartPage: React.FC = () => {
     }
     if (isProcessingOrder || allItems.length === 0) return;
 
-    const isStockSufficient = await finalStockCheck();
+    const isStockSufficient = await syncCartWithServerStock(reservationItems);
     if (!isStockSufficient) return;
 
     setIsProcessingOrder(true);
 
     const orderPayload = reservationItems.length > 0 ? (() => {
-      const orderItems: OrderItem[] = reservationItems.map(item => ({ ...item, arrivalDate: null, pickupDeadlineDate: null }));
+      const orderItems: OrderItem[] = reservationItems.map(item => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.productName,
+        imageUrl: item.imageUrl,
+        roundId: item.roundId,
+        roundName: item.roundName,
+        variantGroupId: item.variantGroupId,
+        variantGroupName: item.variantGroupName,
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        stock: item.stock,
+        stockDeductionAmount: item.stockDeductionAmount,
+        arrivalDate: (item as any).arrivalDate ?? null,
+        pickupDate: item.pickupDate,
+        deadlineDate: item.deadlineDate,
+        isPrepaymentRequired: item.isPrepaymentRequired,
+      }));
+
       const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
       const prepaymentRequired = isWarningUser || doesCartRequirePrepayment;
+      
       return {
-        userId: user!.uid,
+        userId: user.uid,
         items: orderItems,
         totalPrice: reservationTotal,
-        customerInfo: { name: user!.displayName || '미상', phone: userDocument?.phone || '' },
+        customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
         pickupDate: reservationItems[0].pickupDate,
         wasPrepaymentRequired: prepaymentRequired,
-      } as Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>;
+        notes: ''
+      };
     })() : null;
 
     const allPromises: Promise<any>[] = [];
     if (orderPayload) {
-      allPromises.push(submitOrder(orderPayload));
+      allPromises.push(submitOrderCallable(orderPayload));
     }
     waitlistItems.forEach(item => {
       allPromises.push(addWaitlistEntry(item.productId, item.roundId, user.uid, item.quantity, item.variantGroupId, item.itemId));
@@ -263,15 +293,18 @@ const CartPage: React.FC = () => {
 
     toast.promise(Promise.all(allPromises), {
       loading: '요청을 처리하는 중입니다...',
-      success: () => {
+      success: (results) => {
+        const orderResult = results[0];
+        if (orderResult && orderResult.data && !orderResult.data.success) {
+            throw new Error('서버에서 주문 처리에 실패했습니다.');
+        }
+
         const prepaymentRequired = orderPayload?.wasPrepaymentRequired ?? false;
         if (prepaymentRequired) {
           toast.custom((t) => (
             <div className="prepayment-modal-overlay">
               <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
-                <div className="toast-icon-wrapper">
-                  <Banknote size={48} />
-                </div>
+                <div className="toast-icon-wrapper"><Banknote size={48} /></div>
                 <h4>⚠️ 선입금 후 예약이 확정됩니다</h4>
                 <p>
                   '주의 요망' 등급이거나 선입금 필수 상품이 포함되어 있습니다. <br/>
@@ -311,7 +344,9 @@ const CartPage: React.FC = () => {
           return message;
         }
       },
-      error: (err) => (err as Error).message || '요청 처리 중 오류가 발생했습니다.',
+      error: (err) => {
+          return err.message || '요청 처리 중 오류가 발생했습니다.';
+      },
     }, {
       success: { duration: 3000 },
       error: { duration: 3000 }
@@ -377,7 +412,7 @@ const CartPage: React.FC = () => {
               {selectedReservationKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}><XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})</button>)}
             </div>
             {reservationItems.length > 0 ? (
-              <div className="cart-items-list">{reservationItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedReservationKeys.has(item.id)} onSelect={(key) => handleItemSelect(key, 'reservation')} onImageClick={handleImageClick} isStockExceeded={stockExceededKeys.has(item.id)} />)}</div>
+              <div className="cart-items-list">{reservationItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedReservationKeys.has(item.id)} onSelect={(key) => handleItemSelect(key, 'reservation')} onImageClick={handleImageClick} />)}</div>
             ) : (<div className="info-box"><p>장바구니에 담긴 예약 상품이 없습니다.</p></div>)}
 
             <div className="waitlist-section">

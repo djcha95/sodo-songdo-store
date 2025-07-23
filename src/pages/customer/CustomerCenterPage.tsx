@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, startTransition } from 'react'
 import { getStoreInfo, updateStoreInfo } from '@/firebase';
 import { useAuth } from '@/context/AuthContext';
 import type { StoreInfo, GuideItem, FaqItem } from '@/types';
+// ✅ [수정] 사용하지 않는 Gift, Award, Users 아이콘 제거
 import { AlertTriangle, MapPin, BookOpen, HelpCircle, Save, X, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,6 +13,42 @@ import GuideTab from '@/components/customer/GuideTab';
 import FaqTab from '@/components/customer/FaqTab';
 import { isEqual } from 'lodash';
 import './CustomerCenterPage.css';
+
+const defaultUsageGuide: GuideItem[] = [
+  {
+    id: uuidv4(),
+    title: '✨ 신뢰도 포인트 시스템 안내',
+    content: `저희 소도몰은 고객님과의 신뢰를 가장 중요하게 생각합니다.\n\n고객님의 활동(정상 픽업, 로그인, 친구 초대 등)에 따라 신뢰도 포인트가 적립되며, 누적된 포인트에 따라 '공구의 신'부터 '새싹'까지 6단계의 등급이 부여됩니다.\n\n높은 등급의 고객님께는 '시크릿 상품 구매', '선주문' 등 특별한 혜택이 제공됩니다.\n\n반대로, 예약 후 픽업하지 않는 '노쇼(No-Show)' 발생 시 포인트가 크게 차감되며, 등급에 따라 '선입금 필수' 또는 '참여 제한' 등의 페널티가 적용될 수 있으니 신중한 예약을 부탁드립니다.`
+  },
+  {
+    id: uuidv4(),
+    title: '🎁 친구 초대 리워드 프로그램',
+    content: `소도몰을 친구에게 추천하고 함께 포인트를 받아보세요!\n\n1. 마이페이지에서 나의 고유 초대 코드를 복사합니다.\n2. 친구에게 코드를 공유하고, 친구가 회원가입 시 해당 코드를 입력합니다.\n3. 친구가 가입 즉시 +30P, 추천인은 친구가 '첫 픽업'을 완료하는 시점에 +30P를 받게 됩니다.\n\n*신규 가입자는 가입 후 한 번만 추천인 코드를 입력할 수 있습니다.`
+  },
+];
+
+const defaultFaq: FaqItem[] = [
+  {
+    id: uuidv4(),
+    question: '포인트는 어떻게 얻을 수 있나요?',
+    answer: '포인트는 정상적인 상품 픽업 완료 시, 매일 첫 로그인 시, 친구 초대 성공 시 등 다양한 활동을 통해 적립됩니다. 자세한 정책은 이용 안내를 참고해주세요.'
+  },
+  {
+    id: uuidv4(),
+    question: '포인트는 언제 소멸되나요?',
+    answer: '획득한 포인트는 1년(365일)간 유효합니다. 매일 자정, 획득한 지 1년이 지난 포인트는 자동으로 소멸되니 기간 내에 사용하시는 것을 권장합니다.'
+  },
+  {
+    id: uuidv4(),
+    question: '품절된 상품의 대기 순번을 올릴 수 있나요?',
+    answer: '네, 가능합니다. 마이페이지의 \'대기 목록\'에서 50 포인트를 사용하여 \'대기 순번 상승권\'을 사용하면 해당 상품의 대기 순번을 가장 위로 올릴 수 있습니다. 만약 재고가 확보되지 않아 최종 구매에 실패할 경우, 사용했던 50 포인트는 자동으로 환불됩니다.'
+  },
+  {
+    id: uuidv4(),
+    question: '주문 취소는 언제까지 가능한가요?',
+    answer: '주문 취소 정책은 상품의 재고 유형(한정/무제한)과 공동구매 마감일에 따라 다릅니다. \'마이페이지 > 예약 내역\'에서 각 주문별 현재 취소 가능 상태(자유 취소/신중 취소/취소 불가)를 직접 확인하실 수 있습니다.'
+  }
+];
 
 const CustomerCenterPage: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -27,24 +64,29 @@ const CustomerCenterPage: React.FC = () => {
     setLoading(true);
     try {
       const fetchedInfo = await getStoreInfo();
-      // ✅ [수정] 초기 데이터 객체에 latitude와 longitude 필드를 추가합니다.
-      // 이렇게 하면 Firestore에 좌표 데이터가 없더라도 컴포넌트가 정상적으로 렌더링되고,
-      // 관리자는 빈 필드를 보고 값을 입력할 수 있습니다.
+      
       const initialInfo: StoreInfo = fetchedInfo || {
-        name: '',
-        businessNumber: '',
-        representative: '',
-        address: '',
-        phoneNumber: '',
-        email: '',
-        operatingHours: [],
-        description: '',
-        kakaotalkChannelId: '',
-        usageGuide: [],
-        faq: [],
-        latitude: undefined, // 또는 null
-        longitude: undefined, // 또는 null
+        name: '소도몰 (SodoMall)',
+        businessNumber: '123-45-67890',
+        representative: '홍길동',
+        address: '온라인 기반 매장입니다.',
+        phoneNumber: '010-1234-5678',
+        email: 'contact@sodomall.com',
+        operatingHours: ['평일: 10:00 - 18:00', '주말 및 공휴일 휴무'],
+        description: '신뢰 기반의 즐거운 공동구매 커뮤니티',
+        kakaotalkChannelId: '_xotxje', // 예시 ID
+        usageGuide: defaultUsageGuide,
+        faq: defaultFaq,
+        latitude: undefined,
+        longitude: undefined,
       };
+      if (!initialInfo.usageGuide || initialInfo.usageGuide.length === 0) {
+        initialInfo.usageGuide = defaultUsageGuide;
+      }
+      if (!initialInfo.faq || initialInfo.faq.length === 0) {
+        initialInfo.faq = defaultFaq;
+      }
+      
       setStoreInfo(initialInfo);
       setEditableInfo({ ...initialInfo });
     } catch (err) {
@@ -130,7 +172,6 @@ const CustomerCenterPage: React.FC = () => {
     if (storeInfo) setEditableInfo({ ...storeInfo });
   }
 
-  // --- 렌더링 로직 ---
   if (loading) return <div className="customer-service-container centered-message"><p>고객센터 정보를 불러오는 중...</p></div>;
   if (error || !storeInfo || !editableInfo) return <div className="customer-service-container centered-message"><div className="info-error-card"><AlertTriangle size={40} className="error-icon" /><p>{error || '정보를 불러올 수 없습니다.'}</p></div></div>;
 

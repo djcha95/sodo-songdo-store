@@ -67,7 +67,8 @@ export const processUserSignIn = async (
       const initialPointLog: Omit<PointLog, 'id'> = {
         amount: signupPoints,
         reason: signupReason,
-        createdAt: serverTimestamp(),
+        // ✨ [수정] Firestore 배열 규칙 위반 오류를 해결하기 위해 serverTimestamp()를 Timestamp.now()로 변경합니다.
+        createdAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expirationDate),
       };
 
@@ -80,7 +81,7 @@ export const processUserSignIn = async (
         role: 'customer',
         createdAt: serverTimestamp(),
         points: signupPoints,
-        loyaltyTier: '공구요정', // ✨ 기획서 기준 '공구요정'으로 변경
+        loyaltyTier: '공구요정', 
         pickupCount: 0,
         noShowCount: 0,
         lastLoginDate: new Date().toISOString().split('T')[0],
@@ -90,7 +91,6 @@ export const processUserSignIn = async (
         pointHistory: [initialPointLog as PointLog],
         referralCode: generateReferralCode(),
         referredBy: null,
-        // ✨ [추가] 닉네임 필드 초기화
         nickname: '',
         nicknameChanged: false,
       };
@@ -141,7 +141,8 @@ export const submitReferralCode = async (newUserId: string, referralCode: string
     const pointLog: Omit<PointLog, 'id'> = {
         amount: bonusPoints,
         reason: bonusReason,
-        createdAt: serverTimestamp(),
+        // ✨ [수정] Firestore 배열 규칙 위반 오류를 해결하기 위해 serverTimestamp()를 Timestamp.now()로 변경합니다.
+        createdAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expirationDate)
     };
     

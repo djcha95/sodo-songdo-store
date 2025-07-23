@@ -7,7 +7,7 @@ service cloud.firestore {
     function isAdmin() {
       // users 컬렉션에서 현재 로그인한 사용자의 문서를 가져와
       // role 필드가 'admin'인지 확인합니다.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'master'];
     }
 
     // --- 공개 정보 (누구나 읽기 가능, 쓰기는 관리자만) ---

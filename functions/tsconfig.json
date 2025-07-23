@@ -13,5 +13,7 @@
   "compileOnSave": true,
   "include": [
     "src"
+    // ✨ [수정] "src"가 포함되어 있으므로 이 줄은 불필요하여 제거합니다.
+    // "src/types.ts"
   ]
 }

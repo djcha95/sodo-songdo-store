@@ -1,7 +1,6 @@
 // functions/src/index.ts
 
 import {onRequest} from "firebase-functions/v2/https";
-// ✨ [수정] onWrite를 제거하고 onDocumentDeleted를 추가했습니다.
 import {
   onDocumentCreated,
   onDocumentUpdated,
@@ -14,24 +13,26 @@ import * as logger from "firebase-functions/logger";
 import {initializeApp, applicationDefault, AppOptions} from "firebase-admin/app";
 import {getAuth} from "firebase-admin/auth";
 import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
-// ✨ [수정] FirestoreEvent, DocumentSnapshot, Change 타입을 명시적으로 가져옵니다.
 import {
   FirestoreEvent,
   DocumentSnapshot,
   Change,
 } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 import axios from "axios";
 import cors from "cors";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✨ 1. 초기 설정 및 공통 타입/함수 정의
-// ─────────────────────────────────────────────────────────────────────────────
+// ✨ [수정] WaitlistInfo 타입을 추가로 import 합니다.
+import type { PointLog, UserDocument, Order, OrderItem, CartItem, WaitlistInfo } from "./types.js";
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. 초기 설정
+// ─────────────────────────────────────────────────────────────────────────────
 if (process.env.FUNCTIONS_EMULATOR) {
   process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 }
-
 const appOptions: AppOptions = { projectId: "sso-do" };
 if (!process.env.FUNCTIONS_EMULATOR) {
   appOptions.credential = applicationDefault();
@@ -42,47 +43,9 @@ const auth = getAuth();
 const db = getFirestore();
 
 const corsHandler = cors({
-  origin: [
-    "http://localhost:5173",
-    "http://sodo-songdo.store",
-    "https://sodomall.vercel.app",
-  ],
+  origin: [ "http://localhost:5173", "http://sodo-songdo.store", "https://sodomall.vercel.app", ],
 });
 
-// ✨ [수정] 공통 타입을 명확하게 정의하여 타입 오류를 방지합니다.
-interface PointLog {
-  amount: number;
-  reason: string;
-  createdAt: Timestamp;
-  orderId?: string;
-  expiresAt?: Timestamp | null;
-  isExpired?: boolean;
-}
-
-interface UserDocument {
-  uid: string;
-  displayName: string | null;
-  points: number;
-  pickupCount?: number;
-  referredBy?: string | null;
-  referralCode?: string; // 추천인 코드 필드 추가
-  pointHistory?: PointLog[];
-}
-
-interface OrderItem {
-  productId: string;
-  roundId: string;
-  variantGroupId: string;
-  quantity: number;
-}
-
-interface Order {
-  userId: string;
-  status: "confirmed" | "cancelled" | "PICKED_UP";
-  items: OrderItem[];
-}
-
-// 등급 계산 로직 (Cloud Functions 환경에 맞게 재정의)
 const calculateTier = (points: number): string => {
   if (points >= 500) return "공구의 신";
   if (points >= 200) return "공구왕";
@@ -92,14 +55,329 @@ const calculateTier = (points: number): string => {
   return "참여 제한";
 };
 
-// ✨ [신규] 함수 내에서 사용할 포인트 정책
 const POINT_POLICIES = {
   FRIEND_INVITED: { points: 30, reason: "친구 초대 성공" },
 };
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🚀 2. HTTP 함수 (클라이언트 요청 처리)
+// 2. 클라이언트 호출 가능 함수 (onCall)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const checkCartStock = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "The function must be called while authenticated."
+      );
+    }
+    
+    const cartItems = request.data.items as CartItem[];
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      return {
+        updatedItems: [],
+        removedItemIds: [],
+        isSufficient: true,
+      };
+    }
+
+    try {
+      const productIds = [...new Set(cartItems.map(item => item.productId))];
+      const productSnapshots = await Promise.all(
+        productIds.map(id => db.collection("products").doc(id).get())
+      );
+      const productsMap = new Map<string, any>();
+      productSnapshots.forEach(snap => {
+        if (snap.exists) {
+            productsMap.set(snap.id, { id: snap.id, ...snap.data() });
+        }
+      });
+      
+      const ordersSnapshot = await db.collection("orders")
+        .where("status", "in", ["RESERVED", "PREPAID"])
+        .get();
+
+      const reservedMap = new Map<string, number>();
+      ordersSnapshot.forEach(doc => {
+        const order = doc.data();
+        (order.items || []).forEach((item: any) => {
+            const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+            reservedMap.set(key, (reservedMap.get(key) || 0) + item.quantity);
+        });
+      });
+
+      const updatedItems: { id: string; newQuantity: number }[] = [];
+      const removedItemIds: string[] = [];
+      let isSufficient = true;
+
+      for (const item of cartItems) {
+        const product = productsMap.get(item.productId);
+        const round = product?.salesHistory.find((r: any) => r.roundId === item.roundId);
+        const group = round?.variantGroups.find((vg: any) => vg.id === item.variantGroupId);
+        
+        if (!group) continue;
+        
+        const groupTotalStock = group.totalPhysicalStock;
+        const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+        const groupReservedQuantity = reservedMap.get(groupReservedKey) || 0;
+        
+        let availableStock = Infinity;
+        if (groupTotalStock !== null && groupTotalStock !== -1) {
+          availableStock = groupTotalStock - groupReservedQuantity;
+        }
+
+        if (item.quantity > availableStock) {
+          isSufficient = false;
+          const adjustedQuantity = Math.max(0, Math.floor(availableStock));
+          if (adjustedQuantity > 0) {
+            updatedItems.push({ id: item.id, newQuantity: adjustedQuantity });
+          } else {
+            removedItemIds.push(item.id);
+          }
+        }
+      }
+      
+      return { updatedItems, removedItemIds, isSufficient };
+
+    } catch (error) {
+      logger.error("Error checking stock:", error);
+      throw new HttpsError("internal", "Error while checking stock.");
+    }
+  }
+);
+
+export const submitOrder = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+    }
+
+    const orderData = request.data as Order;
+    const userId = request.auth.uid;
+    
+    try {
+      const result = await db.runTransaction(async (transaction) => {
+        // 1. 사용자 등급 확인 ('참여 제한' 등급은 주문 차단)
+        const userRef = db.collection('users').doc(userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists) {
+          throw new HttpsError('not-found', '사용자 정보를 찾을 수 없습니다.');
+        }
+        const userDoc = userSnap.data() as UserDocument;
+        if (userDoc.loyaltyTier === '참여 제한') {
+          throw new HttpsError('permission-denied', '반복적인 약속 불이행으로 인해 현재 공동구매 참여가 제한되었습니다.');
+        }
+
+        // 2. 주문할 상품들의 최신 정보 가져오기
+        const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => db.collection('products').doc(id));
+        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+        const productDataMap = new Map<string, any>();
+        for (const productSnap of productSnaps) {
+            if (!productSnap.exists) throw new HttpsError('not-found', `상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
+            productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() });
+        }
+
+        // 3. 재고 확인 로직
+        const itemsToReserve: OrderItem[] = [];
+        for (const item of orderData.items) {
+          const productData = productDataMap.get(item.productId);
+          if (!productData) throw new HttpsError('internal', `상품 데이터를 처리할 수 없습니다: ${item.productId}`);
+          
+          const salesHistory = productData.salesHistory;
+          const roundIndex = salesHistory.findIndex((r: any) => r.roundId === item.roundId);
+          if (roundIndex === -1) throw new HttpsError('not-found', `판매 회차 정보를 찾을 수 없습니다.`);
+          const round = salesHistory[roundIndex];
+
+          const groupIndex = round.variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
+          if (groupIndex === -1) throw new HttpsError('not-found', `옵션 그룹 정보를 찾을 수 없습니다.`);
+          const variantGroup = round.variantGroups[groupIndex];
+          
+          let availableStock = Infinity;
+          if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
+              availableStock = variantGroup.totalPhysicalStock;
+          }
+          
+          // 트랜잭션 내에서 실시간 예약 수량을 다시 계산합니다.
+          const reservedOrdersSnapshot = await transaction.get(
+              db.collection("orders")
+                  .where("status", "in", ["RESERVED", "PREPAID"])
+                  .where("items", "array-contains", { productId: item.productId, roundId: item.roundId, variantGroupId: item.variantGroupId })
+          );
+          
+          let reservedQuantity = 0;
+          reservedOrdersSnapshot.forEach(doc => {
+              const order = doc.data() as Order;
+              order.items.forEach(orderedItem => {
+                  if (orderedItem.productId === item.productId && orderedItem.roundId === item.roundId && orderedItem.variantGroupId === item.variantGroupId) {
+                      reservedQuantity += orderedItem.quantity;
+                  }
+              });
+          });
+
+          const currentAvailableStock = availableStock - reservedQuantity;
+
+          if (currentAvailableStock < item.quantity) {
+              throw new HttpsError('resource-exhausted', `죄송합니다. 상품의 재고가 부족합니다. (남은 수량: ${currentAvailableStock}개)`);
+          }
+            
+          itemsToReserve.push({ ...item });
+        }
+        
+        // 4. 주문 문서 생성
+        if (itemsToReserve.length > 0) {
+            const newOrderRef = db.collection('orders').doc();
+            const originalTotalPrice = itemsToReserve.reduce((total, i: OrderItem) => total + (i.unitPrice * i.quantity), 0);
+            
+            const phoneLast4 = orderData.customerInfo.phone.slice(-4);
+            const firstItem = orderData.items[0];
+            const productForRound = productDataMap.get(firstItem.productId);
+            const roundForOrder = productForRound?.salesHistory.find((r: any) => r.roundId === firstItem.roundId);
+            
+            // pickupDate가 존재하는지 확인하는 방어 코드
+            if (!roundForOrder?.pickupDate) {
+              throw new HttpsError('invalid-argument', '주문하려는 상품의 픽업 날짜 정보가 설정되지 않았습니다.');
+            }
+
+            const newOrderData: Order = {
+              userId: userId,
+              customerInfo: { ...orderData.customerInfo, phoneLast4 },
+              items: itemsToReserve,
+              totalPrice: originalTotalPrice,
+              orderNumber: `SODOMALL-${Date.now()}`,
+              status: 'RESERVED',
+              createdAt: Timestamp.fromDate(new Date()),
+              pickupDate: roundForOrder.pickupDate,
+              pickupDeadlineDate: roundForOrder.pickupDeadlineDate ?? null,
+              notes: orderData.notes ?? '',
+              isBookmarked: false,
+              wasPrepaymentRequired: orderData.wasPrepaymentRequired ?? false,
+            };
+          
+            transaction.set(newOrderRef, newOrderData);
+            return { success: true, orderId: newOrderRef.id };
+        }
+        return { success: false };
+      });
+      return result;
+    } catch (error) {
+      logger.error("Order submission failed", error);
+      if (error instanceof HttpsError) {
+          throw error;
+      }
+      throw new HttpsError("internal", "주문 처리 중 알 수 없는 오류가 발생했습니다.");
+    }
+  }
+);
+// ✨ [신규] 로그인한 사용자의 주문 내역을 페이지 단위로 가져오는 함수
+export const getUserOrders = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+    }
+    const userId = request.auth.uid;
+    const { pageSize, lastVisible: lastVisibleData, orderByField } = request.data as { pageSize: number, lastVisible?: number, orderByField: 'createdAt' | 'pickupDate' };
+    
+    let queryBuilder = db.collection('orders')
+        .where('userId', '==', userId)
+        .orderBy(orderByField, 'desc')
+        .limit(pageSize);
+
+    // 페이지네이션 커서 처리
+    if (lastVisibleData) {
+      if (orderByField === 'createdAt' || orderByField === 'pickupDate') {
+        // Timestamp 필드 기준
+        queryBuilder = queryBuilder.startAfter(Timestamp.fromMillis(lastVisibleData));
+      } else {
+        // 다른 필드 기준 (필요시 확장)
+        queryBuilder = queryBuilder.startAfter(lastVisibleData);
+      }
+    }
+    
+    try {
+      const snapshot = await queryBuilder.get();
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      
+      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+      let newLastVisible = null;
+      if (lastDoc) {
+        const lastDocData = lastDoc.data();
+        if (orderByField === 'createdAt' || orderByField === 'pickupDate') {
+          // Timestamp 필드는 toMillis()로 변환하여 클라이언트에 전달
+          newLastVisible = (lastDocData[orderByField] as Timestamp)?.toMillis() || null;
+        } else {
+          newLastVisible = lastDocData[orderByField] || null;
+        }
+      }
+      
+      return { data: orders, lastDoc: newLastVisible };
+    } catch (error) {
+      logger.error('Error fetching user orders:', error);
+      throw new HttpsError('internal', '주문 내역을 가져오는 중 오류가 발생했습니다.');
+    }
+  }
+);
+
+
+// ✨ [신규] 로그인한 사용자의 대기 목록 전체를 가져오는 함수
+export const getUserWaitlist = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+    }
+    const userId = request.auth.uid;
+    
+    try {
+      const allProductsSnapshot = await db.collection('products').where('isArchived', '==', false).get();
+      // ✨ [수정] userWaitlist의 타입을 명확하게 지정합니다.
+      const userWaitlist: WaitlistInfo[] = [];
+
+      allProductsSnapshot.forEach(doc => {
+        const product = { id: doc.id, ...doc.data() } as any;
+        (product.salesHistory || []).forEach((round: any) => {
+          (round.waitlist || []).forEach((entry: any) => {
+            if (entry.userId === userId) {
+              const vg = (round.variantGroups || []).find((v: any) => v.id === entry.variantGroupId);
+              const item = (vg?.items || []).find((i: any) => i.id === entry.itemId);
+
+              userWaitlist.push({
+                productId: product.id,
+                productName: product.groupName,
+                roundId: round.roundId,
+                roundName: round.roundName,
+                variantGroupId: entry.variantGroupId,
+                itemId: entry.itemId,
+                itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
+                imageUrl: product.imageUrls?.[0] || '',
+                quantity: entry.quantity,
+                timestamp: entry.timestamp,
+                isPrioritized: entry.isPrioritized || false,
+              });
+            }
+          });
+        });
+      });
+      
+      const sortedWaitlist = userWaitlist.sort((a, b) => {
+        if (a.isPrioritized && !b.isPrioritized) return -1;
+        if (!a.isPrioritized && b.isPrioritized) return 1;
+        return b.timestamp.toMillis() - a.timestamp.toMillis();
+      });
+      
+      return { data: sortedWaitlist, lastDoc: null };
+    } catch (error) {
+      logger.error('Error fetching user waitlist:', error);
+      throw new HttpsError('internal', '대기 목록을 가져오는 중 오류가 발생했습니다.');
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. HTTP 함수 (단순 요청/응답)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const kakaoLogin = onRequest(
@@ -160,7 +438,7 @@ export const kakaoLogin = onRequest(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔥 3. Firestore 단순 트리거 함수 (단일 문서 변경 감지)
+// 4. Firestore 트리거 함수 (DB 변경 감지)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const createNotificationOnPointChange = onDocumentCreated(
@@ -222,11 +500,6 @@ export const createNotificationOnPointChange = onDocumentCreated(
     }
   }
 );
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ✨ 4. Firestore 복합 트리거 함수 (여러 문서 조회/수정)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * @description 상품의 예약 수량을 업데이트하는 헬퍼 함수
@@ -330,8 +603,8 @@ export const onOrderUpdated = onDocumentUpdated(
     const after = event.data.after.data() as Order;
     const quantityChanges = new Map<string, number>();
     
-    const beforeItems = new Map(before.items.map(item => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
-    const afterItems = new Map(after.items.map(item => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
+    const beforeItems = new Map<string, number>(before.items.map((item: OrderItem) => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
+    const afterItems = new Map<string, number>(after.items.map((item: OrderItem) => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
     
     // Case 1: Active -> Cancelled (모든 수량 감소)
     if (before.status !== 'cancelled' && after.status === 'cancelled') {
@@ -461,7 +734,7 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🗓️ 5. 스케줄링 함수 (주기적 실행)
+// 5. 스케줄링 함수 (주기적 실행)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -492,7 +765,7 @@ export const expirePointsScheduled = onSchedule(
       const pointHistory = user.pointHistory || [];
       let totalExpiredAmount = 0;
 
-      const newPointHistory = pointHistory.map((log) => {
+      const newPointHistory = pointHistory.map((log: PointLog) => {
         if (
           log.amount > 0 &&
           log.expiresAt &&
