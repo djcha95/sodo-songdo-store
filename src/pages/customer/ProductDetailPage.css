@@ -51,26 +51,22 @@
 }
 
 .main-content-area {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
 }
 
 .image-gallery-wrapper {
-  flex: 1;
-  margin-right: 24px;
   position: sticky;
-  top: 0;
-  align-self: flex-start;
-  /* ✨ [수정] Swiper가 정사각형 비율을 유지하도록 설정 */
+  top: 20px;
   aspect-ratio: 1 / 1;
   background-color: #f0f0f0;
   border-radius: 8px;
-  overflow: hidden; /* 자식 요소인 Swiper가 둥근 모서리를 따르도록 함 */
+  overflow: hidden;
+  width: 100%;
 }
 
-/* ✨ [삭제] 기존 .image-gallery는 Swiper로 대체되어 삭제 */
-
-/* ✨ [추가] Swiper 컴포넌트 스타일 */
 .product-swiper {
   width: 100%;
   height: 100%;
@@ -90,11 +86,10 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   cursor: pointer;
 }
 
-/* ✨ [추가] Swiper 페이지네이션(점) 스타일 */
 .product-swiper .swiper-pagination {
   bottom: 12px !important;
 }
@@ -113,30 +108,24 @@
   border-radius: 4px;
 }
 
-
-/* ✨ [삭제] Swiper로 대체되어 더 이상 사용하지 않는 스타일 */
-/*
-.image-nav-btn { ... }
-.image-indicator { ... }
-*/
-
 .product-info-area {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
-
 
 .product-info-header {
   margin-bottom: 0;
 }
+
 .product-name {
   font-size: 1.6em;
   font-weight: 700;
   margin-bottom: 8px;
   line-height: 1.3;
 }
+
 .product-description {
   color: #555;
   font-size: 1em;
@@ -185,7 +174,7 @@
 .info-value.storage-type-FROZEN {
   color: #3b82f6;
 }
-.info-value.storage-type-COLD { /* ✨ [수정] CHILLED -> COLD */
+.info-value.storage-type-COLD {
   color: #ef4444;
 }
 
@@ -388,7 +377,6 @@
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
-
 .image-lightbox-overlay {
   position: fixed;
   top: 0;
@@ -402,9 +390,6 @@
   z-index: 1002;
 }
 
-/* ✨ [삭제] .image-lightbox-content는 .lightbox-swiper로 대체 */
-
-/* ✨ [추가] Lightbox Swiper 스타일 */
 .lightbox-swiper {
   width: 100%;
   height: 100%;
@@ -422,7 +407,6 @@
   max-height: 80vh;
   object-fit: contain;
 }
-
 
 .modal-close-btn-lightbox {
   position: absolute;
@@ -442,8 +426,6 @@
   justify-content: center;
 }
 
-
-/* ✨ [수정] Lightbox 내비게이션 버튼 스타일 */
 .image-nav-btn-lightbox {
   position: absolute;
   top: 50%;
@@ -473,8 +455,6 @@
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-
-/* ✨ [수정] Lightbox 페이지 표시 스타일 */
 .image-indicator-lightbox {
   position: absolute;
   bottom: 20px;
@@ -564,42 +544,59 @@
     max-height: 100%;
     border-radius: 0;
   }
+  
+  .modal-scroll-area {
+    padding: 0;
+    padding-bottom: 100px;
+  }
+
   .main-content-area {
-    flex-direction: column;
-    /* ✨ [삭제] Swiper 구현 방식 변경으로 불필요해진 padding:0 제거 */
+    display: grid; /* Grid 구조로 유지 */
+    grid-template-columns: 1fr;
+    gap: 0;
   }
+
+  /* ✨ [최종 수정] height를 직접 지정하여 1:1 박스를 만듭니다. */
   .image-gallery-wrapper {
-    margin-right: 0;
-    position: static;
-    border-radius: 0; /* 모바일에서는 화면 전체를 차지하므로 radius 제거 */
+    position: relative; /* 자식인 Swiper의 기준점이 되도록 relative 설정 */
+    width: 100%;
+    height: 100vw; /* 높이를 화면 너비와 동일하게 만들어 1:1 비율을 강제 */
+    background-color: #f9f9f9; /* 이미지가 꽉 차지 않을 경우의 배경색 */
+    border-radius: 0;
+    overflow: hidden; /* 내부 요소가 넘치지 않도록 hidden 유지 */
+    aspect-ratio: unset; 
   }
+
+  /* ✨ [최종 수정] Swiper는 기본 스타일을 따르도록 모바일 전용 규칙을 초기화합니다. */
+  .product-swiper {
+    /* 부모(.image-gallery-wrapper)를 기준으로 꽉 채우는 기본 스타일을 그대로 사용합니다. */
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    aspect-ratio: unset; 
+  }
+  
+  .product-swiper img {
+    /* 이미지는 1:1 박스 안에서 잘리지 않게 표시됩니다. */
+    object-fit: contain;
+  }
+
   .product-info-area {
-    padding: 20px;
-    padding-bottom: 0;
+    /* 이미지가 고정 크기를 가지므로, 설명 영역의 상단 여백을 일관되게 설정합니다. */
+    padding: 24px 20px 20px;
   }
+  
   .product-name {
     font-size: 1.4em;
     text-align: center;
-    margin-top: 1rem;
+    margin-top: 0; 
   }
-  .product-key-info {
-    /* ✨ [삭제] 상위 요소에서 padding이 관리되므로 제거 또는 조정 가능 */
-  }
+
   .info-row {
     font-size: 0.85em;
     grid-template-columns: 90px 1fr;
     gap: 8px;
   }
-
-  .modal-scroll-area {
-    padding: 0; /* ✨ [수정] 스크롤 영역의 패딩을 제거하고 하위에서 관리 */
-    padding-bottom: 100px; /* 푸터 높이만큼 패딩 추가 */
-  }
-}
-
-.encore-request-btn.waitlist-btn {
-  background-color: #10b981;
-}
-.encore-request-btn.waitlist-btn:hover:not(:disabled) {
-  background-color: #0f9d6e;
 }

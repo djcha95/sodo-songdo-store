@@ -64,6 +64,7 @@ const POINT_POLICIES = {
 // 2. 클라이언트 호출 가능 함수 (onCall)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// [수정] checkCartStock: 새로운 reservedCount 방식으로 재고 확인 로직 최적화
 export const checkCartStock = onCall(
   { region: "asia-northeast3" },
   async (request) => {
@@ -95,19 +96,6 @@ export const checkCartStock = onCall(
         }
       });
       
-      const ordersSnapshot = await db.collection("orders")
-        .where("status", "in", ["RESERVED", "PREPAID"])
-        .get();
-
-      const reservedMap = new Map<string, number>();
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data();
-        (order.items || []).forEach((item: any) => {
-            const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-            reservedMap.set(key, (reservedMap.get(key) || 0) + item.quantity);
-        });
-      });
-
       const updatedItems: { id: string; newQuantity: number }[] = [];
       const removedItemIds: string[] = [];
       let isSufficient = true;
@@ -117,15 +105,20 @@ export const checkCartStock = onCall(
         const round = product?.salesHistory.find((r: any) => r.roundId === item.roundId);
         const group = round?.variantGroups.find((vg: any) => vg.id === item.variantGroupId);
         
-        if (!group) continue;
+        if (!product || !round || !group) {
+            // 상품, 라운드, 그룹 정보가 없으면 해당 아이템 제거
+            removedItemIds.push(item.id);
+            isSufficient = false;
+            continue;
+        }
         
-        const groupTotalStock = group.totalPhysicalStock;
-        const groupReservedKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-        const groupReservedQuantity = reservedMap.get(groupReservedKey) || 0;
+        const totalStock = group.totalPhysicalStock;
+        // reservedCount 사용
+        const reservedQuantity = group.reservedCount || 0; 
         
         let availableStock = Infinity;
-        if (groupTotalStock !== null && groupTotalStock !== -1) {
-          availableStock = groupTotalStock - groupReservedQuantity;
+        if (totalStock !== null && totalStock !== -1) {
+          availableStock = totalStock - reservedQuantity;
         }
 
         if (item.quantity > availableStock) {
@@ -148,6 +141,7 @@ export const checkCartStock = onCall(
   }
 );
 
+// [수정] submitOrder: 새로운 reservedCount 방식으로 재고 확인 로직 최적화
 export const submitOrder = onCall(
   { region: "asia-northeast3" },
   async (request) => {
@@ -173,54 +167,33 @@ export const submitOrder = onCall(
 
         // 2. 주문할 상품들의 최신 정보 가져오기
         const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => db.collection('products').doc(id));
-        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+        const productSnaps = await transaction.getAll(...productRefs);
         const productDataMap = new Map<string, any>();
         for (const productSnap of productSnaps) {
             if (!productSnap.exists) throw new HttpsError('not-found', `상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
             productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() });
         }
-
-        // 3. 재고 확인 로직
+        
+        // 3. 재고 확인 및 주문 아이템 준비
         const itemsToReserve: OrderItem[] = [];
         for (const item of orderData.items) {
           const productData = productDataMap.get(item.productId);
           if (!productData) throw new HttpsError('internal', `상품 데이터를 처리할 수 없습니다: ${item.productId}`);
           
-          const salesHistory = productData.salesHistory;
-          const roundIndex = salesHistory.findIndex((r: any) => r.roundId === item.roundId);
-          if (roundIndex === -1) throw new HttpsError('not-found', `판매 회차 정보를 찾을 수 없습니다.`);
-          const round = salesHistory[roundIndex];
+          const round = productData.salesHistory.find((r: any) => r.roundId === item.roundId);
+          if (!round) throw new HttpsError('not-found', `판매 회차 정보를 찾을 수 없습니다.`);
 
-          const groupIndex = round.variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-          if (groupIndex === -1) throw new HttpsError('not-found', `옵션 그룹 정보를 찾을 수 없습니다.`);
-          const variantGroup = round.variantGroups[groupIndex];
+          const variantGroup = round.variantGroups.find((vg: any) => vg.id === item.variantGroupId);
+          if (!variantGroup) throw new HttpsError('not-found', `옵션 그룹 정보를 찾을 수 없습니다.`);
           
           let availableStock = Infinity;
           if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-              availableStock = variantGroup.totalPhysicalStock;
+              const reservedCount = variantGroup.reservedCount || 0;
+              availableStock = variantGroup.totalPhysicalStock - reservedCount;
           }
-          
-          // 트랜잭션 내에서 실시간 예약 수량을 다시 계산합니다.
-          const reservedOrdersSnapshot = await transaction.get(
-              db.collection("orders")
-                  .where("status", "in", ["RESERVED", "PREPAID"])
-                  .where("items", "array-contains", { productId: item.productId, roundId: item.roundId, variantGroupId: item.variantGroupId })
-          );
-          
-          let reservedQuantity = 0;
-          reservedOrdersSnapshot.forEach(doc => {
-              const order = doc.data() as Order;
-              order.items.forEach(orderedItem => {
-                  if (orderedItem.productId === item.productId && orderedItem.roundId === item.roundId && orderedItem.variantGroupId === item.variantGroupId) {
-                      reservedQuantity += orderedItem.quantity;
-                  }
-              });
-          });
 
-          const currentAvailableStock = availableStock - reservedQuantity;
-
-          if (currentAvailableStock < item.quantity) {
-              throw new HttpsError('resource-exhausted', `죄송합니다. 상품의 재고가 부족합니다. (남은 수량: ${currentAvailableStock}개)`);
+          if (availableStock < item.quantity) {
+              throw new HttpsError('resource-exhausted', `죄송합니다. ${productData.groupName} 상품의 재고가 부족합니다. (남은 수량: ${Math.max(0, availableStock)}개)`);
           }
             
           itemsToReserve.push({ ...item });
@@ -236,7 +209,6 @@ export const submitOrder = onCall(
             const productForRound = productDataMap.get(firstItem.productId);
             const roundForOrder = productForRound?.salesHistory.find((r: any) => r.roundId === firstItem.roundId);
             
-            // pickupDate가 존재하는지 확인하는 방어 코드
             if (!roundForOrder?.pickupDate) {
               throw new HttpsError('invalid-argument', '주문하려는 상품의 픽업 날짜 정보가 설정되지 않았습니다.');
             }
@@ -259,7 +231,7 @@ export const submitOrder = onCall(
             transaction.set(newOrderRef, newOrderData);
             return { success: true, orderId: newOrderRef.id };
         }
-        return { success: false };
+        return { success: false, message: "주문할 상품이 없습니다." };
       });
       return result;
     } catch (error) {
@@ -501,47 +473,10 @@ export const createNotificationOnPointChange = onDocumentCreated(
   }
 );
 
-/**
- * @description 상품의 예약 수량을 업데이트하는 헬퍼 함수
- * @param {Map<string, number>} quantityChanges - Key: `productId-roundId-variantGroupId`, Value: 변동 수량
- */
-async function updateProductQuantities(quantityChanges: Map<string, number>) {
-  if (quantityChanges.size === 0) {
-    return;
-  }
-  
-  try {
-    await db.runTransaction(async (transaction) => {
-      const productUpdates = new Map<FirebaseFirestore.DocumentReference, Record<string, FieldValue>>();
 
-      for (const [key, changeAmount] of quantityChanges.entries()) {
-        const productId = key.split("-")[0];
-        if (!productId) continue;
+// [삭제] 기존의 updateProductQuantities 헬퍼 함수를 삭제합니다.
 
-        const productRef = db.collection("products").doc(productId);
-
-        if (!productUpdates.has(productRef)) {
-          productUpdates.set(productRef, {});
-        }
-        
-        const fieldPath = `reservedQuantities.${key}`;
-        const currentUpdate = productUpdates.get(productRef)!;
-        currentUpdate[fieldPath] = FieldValue.increment(changeAmount);
-      }
-
-      for (const [ref, updateObject] of productUpdates.entries()) {
-        transaction.update(ref, updateObject);
-      }
-    });
-    logger.info("상품 예약 수량 업데이트 성공.");
-  } catch (error) {
-    logger.error("상품 예약 수량 업데이트 중 트랜잭션 실패:", error);
-  }
-}
-
-/**
- * @description 주문이 신규 생성될 때 예약 수량을 증가시킵니다.
- */
+// [재작성] onOrderCreated: 새로운 reservedCount 방식으로 재고 관리
 export const onOrderCreated = onDocumentCreated(
   {
     document: "orders/{orderId}",
@@ -554,18 +489,58 @@ export const onOrderCreated = onDocumentCreated(
     const order = snapshot.data() as Order;
     if (order.status === "cancelled") return;
 
-    const quantityChanges = new Map<string, number>();
+    // 상품별로 변경사항을 그룹화
+    const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
     for (const item of order.items) {
-      const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-      quantityChanges.set(key, (quantityChanges.get(key) || 0) + item.quantity);
+        const currentChanges = changesByProduct.get(item.productId) || [];
+        currentChanges.push({
+            roundId: item.roundId,
+            variantGroupId: item.variantGroupId,
+            delta: item.quantity,
+        });
+        changesByProduct.set(item.productId, currentChanges);
     }
-    await updateProductQuantities(quantityChanges);
+
+    // 트랜잭션을 사용하여 각 상품의 reservedCount를 업데이트
+    try {
+        await db.runTransaction(async (transaction) => {
+            for (const [productId, changes] of changesByProduct.entries()) {
+                const productRef = db.collection("products").doc(productId);
+                const productDoc = await transaction.get(productRef);
+
+                if (!productDoc.exists) {
+                    logger.error(`Product ${productId} not found during order creation.`);
+                    continue; // 다음 상품으로 넘어감
+                }
+                
+                const productData = productDoc.data();
+                const newSalesHistory = productData?.salesHistory?.map((round: any) => {
+                    const relevantChanges = changes.filter(c => c.roundId === round.roundId);
+                    if (relevantChanges.length > 0) {
+                        const newVariantGroups = round.variantGroups.map((vg: any) => {
+                            const change = relevantChanges.find(c => c.variantGroupId === vg.id);
+                            if (change) {
+                                const currentReserved = vg.reservedCount || 0;
+                                vg.reservedCount = currentReserved + change.delta;
+                            }
+                            return vg;
+                        });
+                        return { ...round, variantGroups: newVariantGroups };
+                    }
+                    return round;
+                }) || [];
+
+                transaction.update(productRef, { salesHistory: newSalesHistory });
+            }
+        });
+        logger.info(`Successfully updated reservedCount for order ${event.params.orderId}`);
+    } catch (error) {
+        logger.error(`Transaction failed for order ${event.params.orderId} creation:`, error);
+    }
   }
 );
 
-/**
- * @description 주문이 삭제될 때 예약 수량을 감소시킵니다.
- */
+// [재작성] onOrderDeleted: 새로운 reservedCount 방식으로 재고 관리
 export const onOrderDeleted = onDocumentDeleted(
   {
     document: "orders/{orderId}",
@@ -578,19 +553,57 @@ export const onOrderDeleted = onDocumentDeleted(
     const order = snapshot.data() as Order;
     if (order.status === "cancelled") return;
 
-    const quantityChanges = new Map<string, number>();
+    const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
     for (const item of order.items) {
-      const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-      quantityChanges.set(key, (quantityChanges.get(key) || 0) - item.quantity);
+        const currentChanges = changesByProduct.get(item.productId) || [];
+        currentChanges.push({
+            roundId: item.roundId,
+            variantGroupId: item.variantGroupId,
+            delta: -item.quantity, // 삭제이므로 수량을 뺌
+        });
+        changesByProduct.set(item.productId, currentChanges);
     }
-    await updateProductQuantities(quantityChanges);
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            for (const [productId, changes] of changesByProduct.entries()) {
+                const productRef = db.collection("products").doc(productId);
+                const productDoc = await transaction.get(productRef);
+
+                if (!productDoc.exists) {
+                    logger.error(`Product ${productId} not found during order deletion.`);
+                    continue;
+                }
+                
+                const productData = productDoc.data();
+                const newSalesHistory = productData?.salesHistory?.map((round: any) => {
+                    const relevantChanges = changes.filter(c => c.roundId === round.roundId);
+                    if (relevantChanges.length > 0) {
+                        const newVariantGroups = round.variantGroups.map((vg: any) => {
+                            const change = relevantChanges.find(c => c.variantGroupId === vg.id);
+                            if (change) {
+                                const currentReserved = vg.reservedCount || 0;
+                                vg.reservedCount = Math.max(0, currentReserved + change.delta); // 0 미만으로 내려가지 않도록 방지
+                            }
+                            return vg;
+                        });
+                        return { ...round, variantGroups: newVariantGroups };
+                    }
+                    return round;
+                }) || [];
+
+                transaction.update(productRef, { salesHistory: newSalesHistory });
+            }
+        });
+        logger.info(`Successfully updated reservedCount for deleted order ${event.params.orderId}`);
+    } catch (error) {
+        logger.error(`Transaction failed for order ${event.params.orderId} deletion:`, error);
+    }
   }
 );
 
 
-/**
- * @description 주문이 수정될 때 예약 수량 변동을 계산하여 반영합니다.
- */
+// [재작성] onOrderUpdated: 새로운 reservedCount 방식으로 재고 관리
 export const onOrderUpdated = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -601,37 +614,78 @@ export const onOrderUpdated = onDocumentUpdated(
 
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
-    const quantityChanges = new Map<string, number>();
+    const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
+
+    const beforeItemsMap = new Map<string, number>();
+    if(before.status !== 'cancelled') {
+        before.items.forEach(item => {
+            const key = `${item.productId}:${item.roundId}:${item.variantGroupId}`;
+            beforeItemsMap.set(key, item.quantity);
+        });
+    }
+
+    const afterItemsMap = new Map<string, number>();
+    if(after.status !== 'cancelled') {
+        after.items.forEach(item => {
+            const key = `${item.productId}:${item.roundId}:${item.variantGroupId}`;
+            afterItemsMap.set(key, item.quantity);
+        });
+    }
+
+    const allKeys = new Set([...beforeItemsMap.keys(), ...afterItemsMap.keys()]);
     
-    const beforeItems = new Map<string, number>(before.items.map((item: OrderItem) => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
-    const afterItems = new Map<string, number>(after.items.map((item: OrderItem) => [`${item.productId}-${item.roundId}-${item.variantGroupId}`, item.quantity]));
-    
-    // Case 1: Active -> Cancelled (모든 수량 감소)
-    if (before.status !== 'cancelled' && after.status === 'cancelled') {
-        for (const [key, quantity] of beforeItems.entries()) {
-            quantityChanges.set(key, (quantityChanges.get(key) || 0) - quantity);
+    for (const key of allKeys) {
+        const [productId, roundId, variantGroupId] = key.split(':');
+        const beforeQty = beforeItemsMap.get(key) || 0;
+        const afterQty = afterItemsMap.get(key) || 0;
+        const delta = afterQty - beforeQty;
+
+        if (delta !== 0) {
+            const currentChanges = changesByProduct.get(productId) || [];
+            currentChanges.push({ roundId, variantGroupId, delta });
+            changesByProduct.set(productId, currentChanges);
         }
     }
-    // Case 2: Cancelled -> Active (모든 수량 증가)
-    else if (before.status === 'cancelled' && after.status !== 'cancelled') {
-        for (const [key, quantity] of afterItems.entries()) {
-            quantityChanges.set(key, (quantityChanges.get(key) || 0) + quantity);
-        }
+    
+    if (changesByProduct.size === 0) {
+        logger.info(`No stock changes needed for order update ${event.params.orderId}`);
+        return;
     }
-    // Case 3: Active -> Active (아이템 변경분만 계산)
-    else if (before.status !== 'cancelled' && after.status !== 'cancelled') {
-        const allKeys = new Set([...beforeItems.keys(), ...afterItems.keys()]);
-        for (const key of allKeys) {
-            const beforeQty = beforeItems.get(key) || 0;
-            const afterQty = afterItems.get(key) || 0;
-            const diff = afterQty - beforeQty;
-            if (diff !== 0) {
-              quantityChanges.set(key, (quantityChanges.get(key) || 0) + diff);
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            for (const [productId, changes] of changesByProduct.entries()) {
+                const productRef = db.collection("products").doc(productId);
+                const productDoc = await transaction.get(productRef);
+
+                if (!productDoc.exists) {
+                    logger.error(`Product ${productId} not found during order update.`);
+                    continue;
+                }
+                
+                const productData = productDoc.data();
+                const newSalesHistory = productData?.salesHistory?.map((round: any) => {
+                    const relevantChanges = changes.filter(c => c.roundId === round.roundId);
+                    if (relevantChanges.length > 0) {
+                        const newVariantGroups = round.variantGroups.map((vg: any) => {
+                            const change = relevantChanges.find(c => c.variantGroupId === vg.id);
+                            if (change) {
+                                const currentReserved = vg.reservedCount || 0;
+                                vg.reservedCount = Math.max(0, currentReserved + change.delta);
+                            }
+                            return vg;
+                        });
+                        return { ...round, variantGroups: newVariantGroups };
+                    }
+                    return round;
+                }) || [];
+                transaction.update(productRef, { salesHistory: newSalesHistory });
             }
-        }
+        });
+        logger.info(`Successfully updated reservedCount for updated order ${event.params.orderId}`);
+    } catch (error) {
+        logger.error(`Transaction failed for order ${event.params.orderId} update:`, error);
     }
-    
-    await updateProductQuantities(quantityChanges);
   }
 );
 

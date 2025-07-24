@@ -1,0 +1,72 @@
+/* src/components/customer/GuideTab.css */
+
+.guide-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 48px; 
+}
+
+.guide-item-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.guide-item-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1c1c1c;
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.guide-item-content {
+  font-size: 0.94rem;
+  color: #3e3e3e;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+/* ✅ [추가] 관리자가 수정할 수 있음을 알려주는 호버 효과 */
+.guide-item-title.editable:hover,
+.guide-item-content.editable:hover {
+  background-color: #f0f8ff; /* 연한 파란색 배경 */
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* ✅ [추가] 인라인 편집 입력창 스타일 */
+.guide-item-title-edit,
+.guide-item-content-edit {
+  width: 100%;
+  padding: 8px;
+  border: 2px solid #007bff;
+  border-radius: 4px;
+  font-family: inherit;
+  box-sizing: border-box; /* 패딩과 테두리가 너비에 포함되도록 */
+}
+.guide-item-title-edit {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.guide-item-content-edit {
+  font-size: 0.94rem;
+  line-height: 1.9;
+  resize: vertical; /* 세로 크기 조절 가능 */
+}
+
+@media (max-width: 768px) {
+  .guide-view-container {
+    gap: 40px;
+  }
+  .guide-item-title, .guide-item-title-edit {
+    font-size: 1.125rem;
+  }
+  .guide-item-content, .guide-item-content-edit {
+    font-size: 0.88rem;
+  }
+}

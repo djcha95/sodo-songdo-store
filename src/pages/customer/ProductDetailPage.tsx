@@ -3,10 +3,18 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import type { Product, ProductItem, CartItem, StorageType, VariantGroup, SalesRound } from '@/types';
+// [수정] 타입 import 방식 변경 및 로컬 타입 정의 추가
+import type { 
+  Product, 
+  ProductItem, 
+  CartItem, 
+  StorageType, 
+  VariantGroup as OriginalVariantGroup, 
+  SalesRound as OriginalSalesRound 
+} from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById } from '@/firebase/productService';
-import { getReservedQuantitiesMap } from '@/firebase/orderService';
+// [수정] getReservedQuantitiesMap 임포트 제거
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
@@ -32,6 +40,15 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
+
+// [수정] 로컬에서 타입 확장하여 'reservedCount' 문제 해결
+interface VariantGroup extends OriginalVariantGroup {
+  reservedCount?: number;
+}
+
+interface SalesRound extends OriginalSalesRound {
+    variantGroups: VariantGroup[];
+}
 
 // --- 유틸리티 및 헬퍼 함수 ---
 dayjs.extend(isBetween);
@@ -73,36 +90,62 @@ const storageIcons: Record<StorageType, React.ReactNode> = {
   FROZEN: <Snowflake size={16} />,
 };
 
+// [수정] Linter 경고 해결 및 가독성/안정성 향상을 위해 getLatestRoundFromHistory 함수 리팩토링
 const getLatestRoundFromHistory = (product: Product | null): SalesRound | null => {
   if (!product || !product.salesHistory || product.salesHistory.length === 0) return null;
 
+  // 1. 현재 판매 중인 라운드 (최신 생성 순)
   const sellingRounds = product.salesHistory.filter(r => r.status === 'selling');
   if (sellingRounds.length > 0) {
-    return sellingRounds.sort((a, b) => safeToDate(b.createdAt)!.getTime() - safeToDate(a.createdAt)!.getTime())[0];
+    return sellingRounds.sort((roundA, roundB) => {
+      const timeA = safeToDate(roundA.createdAt)?.getTime() ?? 0;
+      const timeB = safeToDate(roundB.createdAt)?.getTime() ?? 0;
+      return timeB - timeA; // 내림차순 (최신순)
+    })[0] as SalesRound;
   }
   
   const now = new Date();
 
+  // 2. 현재 시간이 판매 시작 시간 이후인 '판매 예정' 라운드 (가장 최근에 시작된 순)
   const nowSellingScheduled = product.salesHistory
     .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! <= now)
-    .sort((a, b) => safeToDate(b.publishAt)!.getTime() - safeToDate(b.publishAt)!.getTime());
-  if (nowSellingScheduled.length > 0) return nowSellingScheduled[0];
+    .sort((roundA, roundB) => {
+      const timeA = safeToDate(roundA.publishAt)?.getTime() ?? 0;
+      const timeB = safeToDate(roundB.publishAt)?.getTime() ?? 0;
+      return timeB - timeA; // 내림차순 (가장 최근에 시작된 순)
+    });
+  if (nowSellingScheduled.length > 0) return nowSellingScheduled[0] as SalesRound;
   
+  // 3. 아직 시작되지 않은 '판매 예정' 라운드 (가장 빨리 시작될 순)
   const futureScheduledRounds = product.salesHistory
     .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! > now)
-    .sort((a, b) => safeToDate(a.publishAt)!.getTime() - safeToDate(b.publishAt)!.getTime());
-  if (futureScheduledRounds.length > 0) return futureScheduledRounds[0];
+    .sort((roundA, roundB) => {
+      const timeA = safeToDate(roundA.publishAt)?.getTime() ?? 0;
+      const timeB = safeToDate(roundB.publishAt)?.getTime() ?? 0;
+      return timeA - timeB; // 오름차순 (가장 빨리 시작될 순)
+    });
+  if (futureScheduledRounds.length > 0) return futureScheduledRounds[0] as SalesRound;
 
+  // 4. 종료된 라운드 (가장 최근에 마감된 순)
   const pastRounds = product.salesHistory
     .filter(r => r.status === 'ended' || r.status === 'sold_out')
-    .sort((a, b) => safeToDate(b.deadlineDate)!.getTime() - safeToDate(a.deadlineDate)!.getTime());
-  if (pastRounds.length > 0) return pastRounds[0];
+    .sort((roundA, roundB) => {
+      const timeA = safeToDate(roundA.deadlineDate)?.getTime() ?? 0;
+      const timeB = safeToDate(roundB.deadlineDate)?.getTime() ?? 0;
+      return timeB - timeA; // 내림차순 (최신 마감순)
+    });
+  if (pastRounds.length > 0) return pastRounds[0] as SalesRound;
 
+  // 5. 위 모든 조건에 해당하지 않을 경우, 임시저장이 아닌 라운드 중 최신 라운드 반환
   const nonDraftRounds = product.salesHistory
     .filter(r => r.status !== 'draft')
-    .sort((a,b) => safeToDate(b.createdAt)!.getTime() - safeToDate(a.createdAt)!.getTime());
+    .sort((roundA, roundB) => {
+      const timeA = safeToDate(roundA.createdAt)?.getTime() ?? 0;
+      const timeB = safeToDate(roundB.createdAt)?.getTime() ?? 0;
+      return timeB - timeA; // 내림차순 (최신순)
+    });
 
-  return nonDraftRounds[0] || null;
+  return (nonDraftRounds[0] as SalesRound) || null;
 };
 
 
@@ -153,8 +196,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [isQuantityEditing, setIsQuantityEditing] = useState(false);
   const quantityInputRef = useRef<HTMLInputElement>(null);
-  const [reservedQuantities, setReservedQuantities] = useState<Map<string, number>>(new Map());
-  const [stockLoading, setStockLoading] = useState(true);
+  // [수정] reservedQuantities 및 stockLoading 상태 제거
   const swiperRef = useRef<any>(null); // Swiper 인스턴스를 위한 ref
   const lightboxSwiperRef = useRef<any>(null); // Lightbox Swiper 인스턴스를 위한 ref
 
@@ -174,7 +216,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const userAlreadyRequestedEncore = !!(user && product && hasRequestedEncore(product.id));
   
   const productActionState = useMemo<ProductActionState>(() => {
-    if (loading || stockLoading || !displayRound || !product || !selectedVariantGroup || !selectedItem) {
+    // [수정] stockLoading 조건 제거
+    if (loading || !displayRound || !product || !selectedVariantGroup || !selectedItem) {
       return 'LOADING';
     }
 
@@ -192,8 +235,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         return 'ENDED';
     }
 
-    const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
-    const reserved = reservedQuantities.get(reservedKey) || 0;
+    // [수정] reservedQuantities.get 대신 selectedVariantGroup.reservedCount 사용
+    const reserved = selectedVariantGroup.reservedCount || 0;
     const totalStock = selectedVariantGroup.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : totalStock - reserved;
     const isSoldOut = remainingStock < (selectedItem?.stockDeductionAmount || 1);
@@ -242,20 +285,17 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
     return 'ENDED';
 
-  }, [loading, stockLoading, displayRound, product, selectedVariantGroup, selectedItem, reservedQuantities]);
+  }, [loading, displayRound, product, selectedVariantGroup, selectedItem]); // [수정] 의존성 배열에서 reservedQuantities, stockLoading 제거
 
   // --- 데이터 로딩 및 상태 업데이트 로직 (useEffect) ---
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
-      setStockLoading(true);
       setError(null);
 
       try {
-        const [productData, reservedQtyMap] = await Promise.all([
-          getProductById(productId),
-          getReservedQuantitiesMap()
-        ]);
+        // [수정] getReservedQuantitiesMap() 호출 제거
+        const productData = await getProductById(productId);
 
         if (!productData) {
           setError('상품 정보를 찾을 수 없습니다.');
@@ -269,9 +309,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         }
 
         setProduct(productData);
-        setReservedQuantities(reservedQtyMap);
         setDisplayRound(latestRound);
-        setCurrentImageIndex(0); // 상품이 바뀌면 첫 이미지로 초기화
+        setCurrentImageIndex(0);
 
         const firstVg = latestRound.variantGroups?.[0];
         const firstItem = firstVg?.items?.[0];
@@ -284,10 +323,13 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
       } catch (e) {
         console.error("Error fetching product data:", e);
-        setError('데이터를 불러오는 중 오류가 발생했습니다.');
+        if ((e as any).code === 'permission-denied') {
+            setError('상품 정보를 불러올 권한이 없습니다. 관리자에게 문의하세요.');
+        } else {
+            setError('데이터를 불러오는 중 오류가 발생했습니다.');
+        }
       } finally {
         setLoading(false);
-        setStockLoading(false);
       }
     };
 
@@ -314,8 +356,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     setQuantity(prev => {
       const newQuantity = prev + delta;
       
-      const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
-      const reserved = reservedQuantities.get(reservedKey) || 0;
+      // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
+      const reserved = selectedVariantGroup.reservedCount || 0;
       const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
       const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
       
@@ -336,8 +378,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
     const value = parseInt(e.target.value);
     if (!isNaN(value) && value > 0) {
-      const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
-      const reserved = reservedQuantities.get(reservedKey) || 0;
+      // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
+      const reserved = selectedVariantGroup.reservedCount || 0;
       const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
       const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
       const maxPurchasable = Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1));
@@ -347,7 +389,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       
       setQuantity(Math.min(value, limitByItem, limitByStock));
     }
-  }, [product, displayRound, selectedVariantGroup, selectedItem, reservedQuantities, productActionState]);
+  }, [product, displayRound, selectedVariantGroup, selectedItem, productActionState]);
 
   const handleQuantityInputBlur = useCallback(() => {
     setIsQuantityEditing(false);
@@ -366,8 +408,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     if (productActionState !== 'PURCHASABLE') { toast.error('지금은 예약할 수 없는 상품입니다.'); return; }
     if (quantity < 1) { toast.error('1개 이상 선택해주세요.'); return; }
 
-    const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
-    const reserved = reservedQuantities.get(reservedKey) || 0;
+    // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
+    const reserved = selectedVariantGroup.reservedCount || 0;
     const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
     const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
 
@@ -403,7 +445,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     addToCart(itemToAdd);
     toast.success(`${product.groupName} ${quantity}개를 장바구니에 담았습니다.`);
     onClose();
-  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, reservedQuantities, productActionState, isSuspendedUser, userDocument]);
+  }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, productActionState, isSuspendedUser, userDocument]);
 
   const handleEncoreRequest = useCallback(async () => {
     if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
@@ -489,8 +531,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         return quantity >= (selectedItem.limitQuantity || 999);
     }
   
-    const reservedKey = `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}`;
-    const reserved = reservedQuantities.get(reservedKey) || 0;
+    // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
+    const reserved = selectedVariantGroup.reservedCount || 0;
     const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
     const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
     const maxPurchasable = Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1));
@@ -499,12 +541,12 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     if (selectedItem.limitQuantity && quantity >= selectedItem.limitQuantity) return true;
   
     return false;
-  }, [quantity, selectedItem, selectedVariantGroup, product, displayRound, reservedQuantities, productActionState]);
+  }, [quantity, selectedItem, selectedVariantGroup, product, displayRound, productActionState]);
 
 
   if (!isOpen) return null;
 
-const renderContent = () => {
+  const renderContent = () => {
     if (loading) return <ProductDetailSkeleton />;
     if (error || !product || !displayRound) {
       return (
@@ -522,7 +564,6 @@ const renderContent = () => {
       <>
         <div className="main-content-area">
           <div className="image-gallery-wrapper">
-             {/* ✨ [개선] Swiper 컴포넌트로 교체 */}
             <Swiper
               ref={swiperRef}
               modules={[Pagination, Navigation]}
@@ -574,25 +615,20 @@ const renderContent = () => {
                     <PackageCheck size={16} />잔여 수량
                 </div>
                 <div className="info-value">
-                    {stockLoading ? (
-                        <span>확인중...</span>
-                    ) : (
-                      <div className="stock-list">
-                        {displayRound.variantGroups.map(vg => {
-                            const totalStock = vg.totalPhysicalStock;
-                            const reservedKey = `${product.id}-${displayRound.roundId}-${vg.id}`;
-                            const reserved = reservedQuantities.get(reservedKey) || 0;
-                            const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
-                            const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
-                            
-                            const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText;
-                            
-                            return (
-                                <div key={vg.id} className="stock-list-item">{displayText}</div>
-                            );
-                        })}
-                      </div>
-                    )}
+                  <div className="stock-list">
+                    {displayRound.variantGroups.map(vg => {
+                        const totalStock = vg.totalPhysicalStock;
+                        const reserved = vg.reservedCount || 0;
+                        const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
+                        const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
+                        
+                        const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText;
+                        
+                        return (
+                            <div key={vg.id} className="stock-list-item">{displayText}</div>
+                        );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -603,7 +639,7 @@ const renderContent = () => {
   };  
   
   const renderFooter = () => {
-    if (!product || !displayRound || !selectedItem) {
+    if (loading ||!product || !displayRound || !selectedItem) {
         return null;
     }
     
