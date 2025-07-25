@@ -8,7 +8,8 @@ import { addProductWithFirstRound, addNewSalesRound, getCategories, searchProduc
 import type { Category, StorageType, SalesRound, Product, VariantGroup, ProductItem, SalesRoundStatus } from '../../types';
 import { LoyaltyTier } from '@/types';
 import toast from 'react-hot-toast';
-import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle, Loader2, Clock, Lock } from 'lucide-react';
+// ✅ [수정] 사용하지 않는 Clock, Lock 아이콘 제거
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, AlertTriangle, Loader2, Users, ShieldCheck } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
 import SodomallLoader from '@/components/common/SodomallLoader';
@@ -35,133 +36,9 @@ const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g'
 // 파일 업로드 최대 크기 설정 (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// --- 선주문 설정 모달 컴포넌트 (변경 없음) ---
-interface PreOrderSettingsModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    isEnabled: boolean;
-    setIsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-    tiers: LoyaltyTier[];
-    setTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
-}
-
-const PreOrderSettingsModal: React.FC<PreOrderSettingsModalProps> = ({ isOpen, onClose, isEnabled, setIsEnabled, tiers, setTiers }) => {
-    const handleTierChange = (tier: LoyaltyTier) => {
-        setTiers(prevTiers =>
-            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
-        );
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="admin-modal-overlay" onClick={onClose}>
-            <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
-                <div className="admin-modal-header">
-                    <h4><Clock size={20}/> 선주문 설정</h4>
-                    <button onClick={onClose} className="admin-modal-close-button"><X size={20}/></button>
-                </div>
-                <div className="admin-modal-body">
-                    <div className="form-group">
-                        <label className="preorder-toggle-label">
-                            <span>선주문 기능 사용</span>
-                            <div className={`toggle-switch ${isEnabled ? 'active' : ''}`} onClick={() => setIsEnabled(!isEnabled)}>
-                                <div className="toggle-handle"></div>
-                            </div>
-                        </label>
-                    </div>
-                    {isEnabled && (
-                        <div className="preorder-options active">
-                            <p className="preorder-info">
-                                <Info size={14} />
-                                상품 업로드 직후부터 발행일 오후 2시까지 선주문이 가능합니다
-                            </p>
-                            <div className="tier-checkbox-group">
-                                {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
-                                    <label key={tier} htmlFor={`modal-tier-${tier}`}>
-                                        <input
-                                            type="checkbox"
-                                            id={`modal-tier-${tier}`}
-                                            value={tier}
-                                            checked={tiers.includes(tier)}
-                                            onChange={() => handleTierChange(tier)}
-                                        />
-                                        {tier}
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="admin-modal-footer">
-                    <button className="modal-button primary" onClick={onClose}>확인</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- 시크릿 상품 설정 모달 컴포넌트 (변경 없음) ---
-interface SecretProductModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    isEnabled: boolean;
-    setIsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-    tiers: LoyaltyTier[];
-    setTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
-}
-
-const SecretProductModal: React.FC<SecretProductModalProps> = ({ isOpen, onClose, isEnabled, setIsEnabled, tiers, setTiers }) => {
-    const handleTierChange = (tier: LoyaltyTier) => {
-        setTiers(prevTiers => 
-            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
-        );
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="admin-modal-overlay" onClick={onClose}>
-            <div className="admin-modal-content" onClick={e => e.stopPropagation()}>
-                <div className="admin-modal-header">
-                    <h4><Lock size={20}/> 시크릿 상품 설정</h4>
-                    <button onClick={onClose} className="admin-modal-close-button"><X size={24}/></button>
-                </div>
-                <div className="admin-modal-body">
-                    <div className="form-group">
-                        <label className="preorder-toggle-label">
-                            <span>시크릿 상품 기능 사용</span>
-                            <div className={`toggle-switch ${isEnabled ? 'active' : ''}`} onClick={() => setIsEnabled(!isEnabled)}>
-                                <div className="toggle-handle"></div>
-                            </div>
-                        </label>
-                    </div>
-                    {isEnabled && (
-                        <div className="preorder-options active">
-                            <p className="preorder-info">
-                                <Info size={14} />
-                                선택된 등급의 고객에게만 이 상품이 노출됩니다.
-                            </p>
-                            <div className="tier-checkbox-group">
-                                {(['공구의 신', '공구왕'] as LoyaltyTier[]).map(tier => (
-                                    <label key={tier} htmlFor={`secret-tier-${tier}`}>
-                                        <input type="checkbox" id={`secret-tier-${tier}`} value={tier} checked={tiers.includes(tier)} onChange={() => handleTierChange(tier)} />
-                                        {tier}
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="admin-modal-footer">
-                    <button onClick={onClose} className="modal-button primary">확인</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
+// ✅ [수정] LoyaltyTier 타입에 맞게 배열을 수정합니다. '공구의달인'이 타입에 없다면 제거해야 합니다.
+// 만약 '공구의달인'이 실제 등급이라면 types.ts의 LoyaltyTier 타입에 추가해야 합니다.
+const ALL_LOYALTY_TIERS: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹'];
 // --- 메인 컴포넌트 ---
 const ProductAddAdminPage: React.FC = () => {
     useDocumentTitle('새 상품 등록');
@@ -193,17 +70,18 @@ const ProductAddAdminPage: React.FC = () => {
     const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null); // 2차 공구 마감
 
     const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
-
-    const [isPreOrderModalOpen, setIsPreOrderModalOpen] = useState(false);
-    const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
-    const [preOrderTiers, setPreOrderTiers] = useState<LoyaltyTier[]>(['공구의 신', '공구왕']);
-
-    const [isSecretProductModalOpen, setIsSecretProductModalOpen] = useState(false);
-    const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false);
-    const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]);
+    
+    const [isParticipationRestricted, setIsParticipationRestricted] = useState(false);
+    const [allowedTiers, setAllowedTiers] = useState<LoyaltyTier[]>([]);
 
     const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
     const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
+    const handleTierChange = (tier: LoyaltyTier) => {
+        setAllowedTiers(prevTiers =>
+            prevTiers.includes(tier) ? prevTiers.filter(t => t !== tier) : [...prevTiers, tier]
+        );
+    };
 
     useEffect(() => {
         const newDeadline = new Date(publishDate);
@@ -246,10 +124,15 @@ const ProductAddAdminPage: React.FC = () => {
                 }));
                 setVariantGroups(mappedVGs);
                 setIsPrepaymentRequired(lastRound.isPrepaymentRequired ?? false); 
-                setIsPreOrderEnabled(lastRound.preOrderTiers && lastRound.preOrderTiers.length > 0);
-                setPreOrderTiers(lastRound.preOrderTiers || []);
-                setIsSecretProductEnabled(!!lastRound.secretForTiers && lastRound.secretForTiers.length > 0);
-                setSecretTiers(lastRound.secretForTiers || []);
+                
+                const lastAllowedTiers = lastRound.allowedTiers || [];
+                if (lastAllowedTiers.length > 0) {
+                    setIsParticipationRestricted(true);
+                    setAllowedTiers(lastAllowedTiers);
+                } else {
+                    setIsParticipationRestricted(false);
+                    setAllowedTiers([]);
+                }
             }
         }
     }, [location.state]);
@@ -300,12 +183,10 @@ const ProductAddAdminPage: React.FC = () => {
 
     const handleProductTypeChange = (newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); }};
     
-    // ✨ [수정] 필드 값 변경을 처리하는 함수. 유통기한 입력(onChange) 시 이 함수를 사용합니다.
     const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { 
         setVariantGroups(prev => prev.map(vg => vg.id === id ? { ...vg, [field]: value } : vg)); 
     }, []);
 
-    // ✨ [개선] 유효성 검사 및 상태 업데이트 로직을 개선했습니다. 이제 하나의 상태 업데이트로 처리합니다.
     const handleGroupDateBlur = useCallback((id: string, dateStr: string) => {
         const parsedDate = parseDateString(dateStr);
         if (dateStr && !parsedDate) {
@@ -406,9 +287,7 @@ const ProductAddAdminPage: React.FC = () => {
             isPrepaymentRequired: isPrepaymentRequired,
             waitlist: [],
             waitlistCount: 0,
-            preOrderTiers: isPreOrderEnabled ? preOrderTiers : [],
-            preOrderEndDate: isPreOrderEnabled ? Timestamp.fromDate(finalPublishDate) : undefined, 
-            secretForTiers: isSecretProductEnabled ? secretTiers : [],
+            allowedTiers: isParticipationRestricted ? allowedTiers : [],
         };
     };
 
@@ -416,6 +295,10 @@ const ProductAddAdminPage: React.FC = () => {
         if (!isDraft) {
             if (mode === 'newProduct' && imageFiles.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; }
             if (!deadlineDate || !pickupDate) { toast.error('발행일과 픽업 시작일을 모두 설정해주세요.'); return; }
+            if (isParticipationRestricted && allowedTiers.length === 0) {
+                toast.error("'특정 등급만 참여'를 선택하셨습니다. 참여 가능한 등급을 1개 이상 선택해주세요.");
+                return;
+            }
         }
         setIsSubmitting(true);
         
@@ -451,22 +334,6 @@ const ProductAddAdminPage: React.FC = () => {
 
     return (
         <>
-            <PreOrderSettingsModal
-                isOpen={isPreOrderModalOpen}
-                onClose={() => setIsPreOrderModalOpen(false)}
-                isEnabled={isPreOrderEnabled}
-                setIsEnabled={setIsPreOrderEnabled}
-                tiers={preOrderTiers}
-                setTiers={setPreOrderTiers}
-            />
-            <SecretProductModal
-                isOpen={isSecretProductModalOpen}
-                onClose={() => setIsSecretProductModalOpen(false)}
-                isEnabled={isSecretProductEnabled}
-                setIsEnabled={setIsSecretProductEnabled}
-                tiers={secretTiers}
-                setTiers={setSecretTiers}
-            />
             <div className="product-add-page-wrapper smart-form">
                 <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
                     <header className="product-add-header">
@@ -551,7 +418,6 @@ const ProductAddAdminPage: React.FC = () => {
                             {variantGroups.map(vg => (
                                 <div className="variant-group-card" key={vg.id}>
                                     <div className="variant-group-header"><div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div><div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div><div className="form-group"><label>유통기한</label>
-                                        {/* ✨ [수정] onChange는 입력값만 반영하고, onBlur(포커스 잃음) 시에만 유효성을 검사하도록 수정했습니다. */}
                                         <input 
                                             type="text" 
                                             value={vg.expirationDateInput} 
@@ -585,27 +451,57 @@ const ProductAddAdminPage: React.FC = () => {
                                     <h3>발행 및 기간 설정</h3>
                                 </div>
                             </div>
-                            <p className="section-subtitle">상품의 판매 시점 및 기간을 설정합니다.</p>
+                            <p className="section-subtitle">상품의 판매 시점 및 참여 조건을 설정합니다.</p>
                             
                             <div className="form-group">
-                                <label>예약 옵션</label>
+                                <label>참여 조건 설정</label>
                                 <div className="settings-option-group">
-                                    <Tippy content="선입금 필수 상품으로 설정합니다.">
-                                        <button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}>
-                                            <Save size={16} /> 선입금
-                                        </button>
-                                    </Tippy>
-                                    <Tippy content="선주문 설정을 엽니다.">
-                                        <button type="button" className={`settings-option-btn ${isPreOrderEnabled ? 'active' : ''}`} onClick={() => setIsPreOrderModalOpen(true)}>
-                                            <Clock size={16} /> 선주문
-                                        </button>
-                                    </Tippy>
-                                    <Tippy content="시크릿 상품 설정을 엽니다.">
-                                        <button type="button" className={`settings-option-btn ${isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSecretProductModalOpen(true)}>
-                                            <Lock size={16} /> 시크릿
-                                        </button>
-                                    </Tippy>
+                                    <button
+                                        type="button"
+                                        className={`settings-option-btn ${!isParticipationRestricted ? 'active' : ''}`}
+                                        onClick={() => setIsParticipationRestricted(false)}
+                                    >
+                                        <Users size={16} /> 모두 참여 가능
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`settings-option-btn ${isParticipationRestricted ? 'active' : ''}`}
+                                        onClick={() => setIsParticipationRestricted(true)}
+                                    >
+                                        <ShieldCheck size={16} /> 특정 등급만 참여
+                                    </button>
                                 </div>
+                            </div>
+
+                            {isParticipationRestricted && (
+                                <div className="preorder-options active" style={{marginTop: '16px'}}>
+                                    <div className="tier-checkbox-group">
+                                        {ALL_LOYALTY_TIERS.map(tier => (
+                                            <label key={tier} htmlFor={`tier-${tier}`}>
+                                                <input
+                                                    type="checkbox"
+                                                    id={`tier-${tier}`}
+                                                    value={tier}
+                                                    checked={allowedTiers.includes(tier)}
+                                                    onChange={() => handleTierChange(tier)}
+                                                />
+                                                {tier}
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <p className="input-description" style={{marginTop: '12px'}}>
+                                        선택된 등급의 회원에게만 이 상품이 노출되고 예약이 가능합니다.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="form-group" style={{marginTop: '24px'}}>
+                                <label className="preorder-toggle-label" style={{padding: 0, background: 'none'}}>
+                                    <span>선입금 필수</span>
+                                    <div className={`toggle-switch ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}>
+                                        <div className="toggle-handle"></div>
+                                    </div>
+                                </label>
                             </div>
                             
                             <div className="form-group">
@@ -655,6 +551,7 @@ const ProductAddAdminPage: React.FC = () => {
                                     <li><strong>1차 마감:</strong> {settingsSummary.deadlineText}</li>
                                     <li><strong>픽업 시작:</strong> {settingsSummary.pickupText}</li>
                                     <li><strong>최종 마감:</strong> {settingsSummary.pickupDeadlineText}</li>
+                                    <li><strong>참여 조건:</strong> {isParticipationRestricted ? `${allowedTiers.join(', ')} 등급만` : '모든 등급'}</li>
                                 </ul>
                             </div>
                         </div>
