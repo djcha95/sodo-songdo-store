@@ -49,7 +49,7 @@ export const submitOrder = async (
   let newOrderId: string | undefined = undefined;
 
   await runTransaction(db, async (transaction) => {
-    // ✅ [추가] 주문 생성 전, 사용자 등급을 확인하여 '참여 제한' 등급은 주문을 차단합니다.
+    // ✅ [1순위 검증] '참여 제한' 등급은 모든 주문을 차단합니다.
     const userRef = doc(db, 'users', orderData.userId);
     const userSnap = await transaction.get(userRef);
     if (!userSnap.exists()) {
@@ -79,8 +79,17 @@ export const submitOrder = async (
       const roundIndex = salesHistoryForUpdate.findIndex((r: SalesRound) => r.roundId === item.roundId);
       if (roundIndex === -1) throw new Error(`판매 회차 정보를 찾을 수 없습니다: ${item.productName}`);
       const round = salesHistoryForUpdate[roundIndex];
+
+      // ✅ [2순위 검증] 상품별 참여 등급 제한을 확인합니다.
+      const allowedTiers = round.allowedTiers || [];
+      if (allowedTiers.length > 0) { // 참여 등급 제한이 있는 경우
+          if (!userDoc.loyaltyTier || !allowedTiers.includes(userDoc.loyaltyTier)) {
+              throw new Error(`'${item.productName}' 상품은 지정된 등급의 회원만 구매할 수 있습니다.`);
+          }
+      }
+
       const groupIndex = round.variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-      if (groupIndex === -1) throw new Error(`옵션 그룹 정보를 찾을 수 없습니다: ${item.itemName}`); // Changed from item.productName for more specific error
+      if (groupIndex === -1) throw new Error(`옵션 그룹 정보를 찾을 수 없습니다: ${item.itemName}`);
       
       const variantGroup = round.variantGroups[groupIndex];
 
@@ -91,24 +100,7 @@ export const submitOrder = async (
       if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) availableStock = Math.min(availableStock, variantGroup.totalPhysicalStock);
       if (productItem.stock !== -1) availableStock = Math.min(availableStock, productItem.stock);
 
-      // ✅ [추가] 선주문 최종 검증 로직
-      const now = new Date();
-      const publishAt = safeToDate(round.publishAt);
-      
-      if (publishAt && now < publishAt) { // 전체 공개 시간 전이라면
-        const preOrderEndDate = safeToDate(round.preOrderEndDate);
-        const preOrderTiers = round.preOrderTiers || [];
-
-        if (preOrderEndDate && now < preOrderEndDate && preOrderTiers.length > 0) { // 선주문 기간일 경우
-          // 선주문 기간일 경우, 등급 검사
-          if (!userDoc.loyaltyTier || !preOrderTiers.includes(userDoc.loyaltyTier)) {
-            throw new Error(`'${item.productName}' 상품은 현재 선주문 대상 등급이 아닙니다.`);
-          }
-        } else {
-          // 선주문 기간도 아니라면, 구매 불가
-          throw new Error(`'${item.productName}' 상품은 아직 구매할 수 없습니다.`);
-        }
-      }
+      // ✅ [삭제] 기존의 복잡했던 선주문 기간 검증 로직을 제거하고, 위의 통합된 'allowedTiers' 검증으로 대체합니다.
 
       if (availableStock >= item.quantity) {
         itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
@@ -143,7 +135,7 @@ export const submitOrder = async (
         pickupDeadlineDate: roundForOrder!.pickupDeadlineDate ?? null,
         notes: orderData.notes ?? '',
         isBookmarked: orderData.isBookmarked ?? false,
-        wasPrepaymentRequired: orderData.wasPrepaymentRequired ?? false, // ✅ [추가] 선입금 필요 여부 플래그 저장
+        wasPrepaymentRequired: orderData.wasPrepaymentRequired ?? false,
       };
       
       transaction.set(newOrderRef, newOrderData);

@@ -1,6 +1,7 @@
 // src/firebase/productService.ts
 
 import { db, storage } from './firebaseConfig';
+// ✅ [수정] import 경로 오류 수정
 import {
   collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
   writeBatch,
@@ -10,8 +11,7 @@ import {
 import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-// ✨ [수정] PaginatedProductsResponse 타입 추가
-import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem, WaitlistInfo, UserDocument, PointLog, PaginatedProductsResponse } from '@/types';
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem, WaitlistInfo, UserDocument, PointLog, PaginatedProductsResponse, LoyaltyTier } from '@/types';
 import { getUserDocById } from './userService';
 import { submitOrderFromWaitlist } from './orderService';
 import { calculateTier } from '@/utils/loyaltyUtils';
@@ -145,6 +145,7 @@ export const addNewSalesRound = async (
     createdAt: Timestamp.now(),
     waitlist: [],
     waitlistCount: 0,
+    allowedTiers: newRoundData.allowedTiers || [], 
   };
 
   await updateDoc(productRef, {
@@ -171,7 +172,11 @@ export const updateSalesRound = async (
     const product = productSnap.data() as Product;
     const newSalesHistory = product.salesHistory.map(round => {
       if (round.roundId === roundId) {
-        return { ...round, ...updatedData };
+        const finalUpdatedData = { ...round, ...updatedData };
+        if ('allowedTiers' in updatedData) {
+            finalUpdatedData.allowedTiers = updatedData.allowedTiers || [];
+        }
+        return finalUpdatedData;
       }
       return round;
     });
@@ -745,7 +750,7 @@ export const getWaitlistForRound = async (productId: string, roundId: string): P
   const sortedWaitlist = round.waitlist.sort((a, b) => {
     if (a.isPrioritized && !b.isPrioritized) return -1;
     if (!a.isPrioritized && b.isPrioritized) return 1;
-    return b.timestamp.toMillis() - a.timestamp.toMillis();
+    return b.timestamp.toMillis() - b.timestamp.toMillis();
   });
 
   const detailedWaitlist = await Promise.all(

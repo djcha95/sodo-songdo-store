@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, Clock, ShoppingCart, Hourglass } from 'lucide-react';
+import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCart, Hourglass } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
@@ -107,22 +107,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     const singleOptionVg: VariantGroup | undefined = !isMultiOption ? displayRound.variantGroups?.[0] : undefined;
     const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
-    const now = dayjs();
-    const publishAt = safeToDate(displayRound.publishAt);
-    const preOrderEndDate = safeToDate(displayRound.preOrderEndDate);
-    const userTier = userDocument?.loyaltyTier;
-    const isPreOrder = !!(publishAt && now.isBefore(publishAt) && preOrderEndDate && now.isBefore(preOrderEndDate) && userTier && displayRound.preOrderTiers?.includes(userTier));
-
     return {
       displayRound,
       isMultiOption,
       singleOptionItem,
       singleOptionVg,
-      isPreOrder,
       price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
       pickupDateFormatted: dayjs(safeToDate(displayRound.pickupDate)).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
+
   }, [product, userDocument]);
   
   // ✅ [수정] reservedQuantitiesMap의 의존성을 제거하고, product 자체의 의존성으로 변경
@@ -254,7 +248,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   if (!cardData) return null;
 
-  const { pickupDateFormatted, storageType, isPreOrder } = cardData;
+  const { pickupDateFormatted, storageType } = cardData;
 
   const getStorageTypeInfo = (type: typeof product.storageType) => {
     switch (type) {
@@ -341,10 +335,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <div className="product-card-wrapper">
       <div className="product-card-final" onClick={handleCardClick}>
-        {isPreOrder && actionState !== 'ENDED' && actionState !== 'SCHEDULED' && product.phase !== 'past' &&(
-          <div className="preorder-badge"><Clock size={12} /> 선주문</div>
-        )}
-        <TopBadge />
+
+          <TopBadge />
         <div className="card-image-container">
           <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
           {(product.phase === 'past' || actionState === 'ENCORE_REQUEST_AVAILABLE') && <div className="card-overlay-badge">예약 마감</div>}

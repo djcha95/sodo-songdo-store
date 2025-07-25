@@ -142,14 +142,20 @@ const ProductListPage: React.FC = () => {
         return dateB - dateA;
       });
       
-      const round = sortedHistory[0];
-      if (!round || round.status === 'draft') return;
-      
-      const secretTiers = round.secretForTiers;
-      if (secretTiers && secretTiers.length > 0 && (!userTier || !secretTiers.includes(userTier))) {
-        return;
-      }
+     const round = sortedHistory[0];
+if (!round || round.status === 'draft') return;
 
+// ▼ 이렇게 변경됩니다.
+// 1. 상품의 참여 가능 등급(allowedTiers) 정보를 가져옵니다.
+const allowedTiers = round.allowedTiers || [];
+
+// 2. 만약 참여 등급 제한이 있는데 (allowedTiers 배열에 값이 있는데),
+if (allowedTiers.length > 0) {
+  // 3. 사용자가 로그인을 안했거나, 사용자의 등급이 참여 가능 등급에 포함되지 않으면,
+  if (!userTier || !allowedTiers.includes(userTier)) {
+    return; // 이 상품을 목록에 표시하지 않고 건너뜁니다.
+  }
+}
       const publishAtDate = convertTimestampToDate(round.publishAt);
       const primaryEndDate = convertTimestampToDate(round.deadlineDate);
       
