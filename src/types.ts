@@ -212,7 +212,6 @@ export interface UserDocument {
   displayName: string | null;
   phone: string | null;
   photoURL?: string | null;
-  // ✨ [수정] master 역할을 추가하여 권한 세분화
   role: 'master' | 'admin' | 'customer'; 
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
@@ -222,6 +221,7 @@ export interface UserDocument {
   pickupCount: number;
   noShowCount: number;
   lastLoginDate: string;
+  consecutiveLoginDays?: number; // ✅ [추가] 연속 출석일수 추적
   isSuspended?: boolean;
   gender?: 'male' | 'female' | null;
   ageRange?: string | null;
@@ -364,4 +364,3 @@ export interface PaginatedProductsResponse {
   products: Product[];
   lastVisible: DocumentData | null;
 }
-

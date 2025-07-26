@@ -13,12 +13,12 @@ import type { FirebaseStorage } from 'firebase/storage';
 
 // .env 파일에서 실제 운영 서버의 설정 값을 읽어옵니다.
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_API_KEY as string,
-  authDomain: import.meta.env.VITE_AUTH_DOMAIN as string,
-  projectId: import.meta.env.VITE_PROJECT_ID as string,
-  storageBucket: import.meta.env.VITE_STORAGE_BUCKET as string,
-  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID as string,
-  appId: import.meta.env.VITE_APP_ID as string,
+  apiKey: (import.meta.env?.VITE_API_KEY || process.env.VITE_API_KEY) as string,
+  authDomain: (import.meta.env?.VITE_AUTH_DOMAIN || process.env.VITE_AUTH_DOMAIN) as string,
+  projectId: (import.meta.env?.VITE_PROJECT_ID || process.env.VITE_PROJECT_ID) as string,
+  storageBucket: (import.meta.env?.VITE_STORAGE_BUCKET || process.env.VITE_STORAGE_BUCKET) as string,
+  messagingSenderId: (import.meta.env?.VITE_MESSAGING_SENDER_ID || process.env.VITE_MESSAGING_SENDER_ID) as string,
+  appId: (import.meta.env?.VITE_APP_ID || process.env.VITE_APP_ID) as string,
 };
 
 // Firebase 앱을 초기화합니다.

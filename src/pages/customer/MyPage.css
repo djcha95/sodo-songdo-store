@@ -3,15 +3,18 @@
 /* --- 전체 레이아웃 --- */
 .mypage-container {
   padding: var(--spacing-md);
-  padding-bottom: var(--spacing-xxl);
+  /* ✅ [수정] 하단 여백을 늘려 로그아웃 버튼이 잘리지 않도록 합니다. */
+  padding-bottom: 120px;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+  position: relative;
+  min-height: calc(100vh - 60px - 70px); /* 헤더, 바텀네비 제외 최소 높이 확보 */
 }
 
 /* --- 1. 통합 프로필 카드 --- */
 .unified-profile-card {
-  background: linear-gradient(135deg, var(--tier-color, #475569), #343a40);
+  /* ✅ [수정] 기본 배경은 등급별 클래스에서 지정하도록 제거합니다. */
   color: white;
   border-radius: var(--border-radius-xl);
   padding: var(--spacing-lg);
@@ -22,6 +25,29 @@
   position: relative;
   overflow: hidden;
 }
+
+/* ✅ [추가] 등급별 프로필 카드 배경 스타일 */
+.unified-profile-card.tier-god {
+  background: linear-gradient(135deg, #e6c869, #3a301c);
+}
+.unified-profile-card.tier-king {
+  background: linear-gradient(135deg, #a7b4c4, #3e4a5a);
+}
+.unified-profile-card.tier-fairy {
+  background: linear-gradient(135deg, #e08ee9, #6a4f9b);
+}
+.unified-profile-card.tier-sprout {
+  background: linear-gradient(135deg, #48bb78, #2f855a);
+}
+.unified-profile-card.tier-warning {
+  background: linear-gradient(135deg, #ed8936, #7b341e);
+}
+.unified-profile-card.tier-restricted,
+.unified-profile-card.tier-default {
+  background: linear-gradient(135deg, #4a5568, #1a202c);
+}
+
+
 .unified-profile-card.loading {
   height: 200px;
   background: var(--bg-color-medium);
@@ -309,24 +335,33 @@
 
 
 /* --- 로그아웃 --- */
-.logout-section { text-align: center; margin-top: var(--spacing-lg); }
-.logout-button {
-  background: none;
-  border: none;
-  color: var(--text-color-medium);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: var(--border-radius-full);
-  transition: color 0.2s, background-color 0.2s;
-}
-.logout-button:hover {
-  color: var(--danger-color);
-  background-color: var(--danger-color-light);
+/* ✅ [수정] 로그아웃 버튼을 하단에 고정된 형태로 변경 */
+.logout-section {
+  position: absolute;
+  bottom: 75px; /* 하단 네비게이션 바 위 */
+  left: 16px; /* container padding */
+  right: 16px; /* container padding */
+  z-index: 10;
 }
 
-/* --- 닉네임 변경 모달 (기존 스타일 활용) --- */
-/* (이전 버전의 모달 스타일은 닉네임 설정 섹션에 직접 통합되어 더 이상 사용되지 않습니다.) */
+.logout-button {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #868e96;
+  background-color: #f1f3f5;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.logout-button:hover {
+  background-color: #e9ecef;
+  color: #495057;
+}

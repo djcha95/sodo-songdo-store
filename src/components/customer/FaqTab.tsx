@@ -1,10 +1,47 @@
 // src/components/customer/FaqTab.tsx
 
-import React, { useState } from 'react';
+import React, { useState, Fragment } from 'react'; // Fragment 추가
 import type { FaqItem } from '@/types';
 import { ChevronDown, PlusCircle, Pencil, Check, X } from 'lucide-react';
 import { Disclosure } from '@headlessui/react';
 import './FaqTab.css';
+
+// ✅ [추가] 서식을 렌더링하기 위한 헬퍼 컴포넌트
+const FormattedContent: React.FC<{ text: string }> = ({ text = '' }) => {
+  return (
+    <>
+      {text.split('\n').map((line, lineIndex) => {
+        // `- `로 시작하는 줄을 목록 아이템으로 처리
+        if (line.trim().startsWith('- ')) {
+          return (
+            <div key={lineIndex} className="list-item">
+              <span className="list-bullet">•</span>
+              <span className="list-text">
+                {/* `**`를 기준으로 텍스트를 분리하여 strong 태그 적용 */}
+                {line.substring(2).split(/(\*\*.*?\*\*)/g).map((part, partIndex) => 
+                  part.startsWith('**') ? 
+                  <strong key={partIndex}>{part.slice(2, -2)}</strong> : 
+                  <Fragment key={partIndex}>{part}</Fragment>
+                )}
+              </span>
+            </div>
+          );
+        }
+        // 일반 텍스트 문단 처리
+        return (
+          <div key={lineIndex} className="paragraph-item">
+            {line.split(/(\*\*.*?\*\*)/g).map((part, partIndex) => 
+              part.startsWith('**') ? 
+              <strong key={partIndex}>{part.slice(2, -2)}</strong> : 
+              <Fragment key={partIndex}>{part}</Fragment>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
 
 interface FaqTabProps {
   items: FaqItem[];
@@ -15,7 +52,6 @@ interface FaqTabProps {
 }
 
 const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateItem: FaqTabProps['updateItem'] }> = ({ id, question, answer, index, isAdmin, updateItem }) => {
-  // ✅ [개선] FAQ 항목의 수정 모드를 관리하는 state
   const [isEditing, setIsEditing] = useState(false);
   const [editedQuestion, setEditedQuestion] = useState(question);
   const [editedAnswer, setEditedAnswer] = useState(answer);
@@ -35,7 +71,7 @@ const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateI
   return (
     <div className="faq-item-wrapper">
       {isEditing ? (
-        // --- 수정 모드 UI ---
+        // --- 수정 모드 UI (기존과 동일) ---
         <div className="faq-item-edit-view">
           <div className="faq-edit-field">
             <label>질문</label>
@@ -73,7 +109,10 @@ const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateI
               <Disclosure.Panel as="div" className="faq-answer-wrapper">
                 <div className="faq-answer-header">
                   <span className="faq-icon-a">A</span>
-                  <p className="faq-answer-text">{answer}</p>
+                   {/* ✅ [수정] p 태그 대신 FormattedContent 컴포넌트를 사용하여 렌더링 */}
+                  <div className="faq-answer-text">
+                    <FormattedContent text={answer} />
+                  </div>
                 </div>
               </Disclosure.Panel>
             </>

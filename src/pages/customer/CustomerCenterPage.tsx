@@ -4,8 +4,8 @@ import React, { useEffect, useState, useCallback, startTransition } from 'react'
 import { getStoreInfo, updateStoreInfo } from '@/firebase';
 import { useAuth } from '@/context/AuthContext';
 import type { StoreInfo, GuideItem, FaqItem } from '@/types';
-// ✅ [수정] 사용하지 않는 Gift, Award, Users 아이콘 제거
-import { AlertTriangle, MapPin, BookOpen, HelpCircle, Save, X, MessageSquare } from 'lucide-react';
+// ✅ [수정] Users 아이콘 추가
+import { AlertTriangle, MapPin, BookOpen, HelpCircle, Save, X, MessageSquare, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 import InfoTab from '@/components/customer/InfoTab';
@@ -60,33 +60,20 @@ const CustomerCenterPage: React.FC = () => {
 
   const hasChanges = !isEqual(storeInfo, editableInfo);
 
+  // 데이터 로딩 및 관리 로직 (기존과 동일)
   const fetchStoreInformation = useCallback(async () => {
     setLoading(true);
     try {
       const fetchedInfo = await getStoreInfo();
-      
       const initialInfo: StoreInfo = fetchedInfo || {
-        name: '소도몰 (SodoMall)',
-        businessNumber: '123-45-67890',
-        representative: '홍길동',
-        address: '온라인 기반 매장입니다.',
-        phoneNumber: '010-1234-5678',
-        email: 'contact@sodomall.com',
+        name: '소도몰 (SodoMall)', businessNumber: '123-45-67890', representative: '홍길동',
+        address: '온라인 기반 매장입니다.', phoneNumber: '010-1234-5678', email: 'contact@sodomall.com',
         operatingHours: ['평일: 10:00 - 18:00', '주말 및 공휴일 휴무'],
-        description: '신뢰 기반의 즐거운 공동구매 커뮤니티',
-        kakaotalkChannelId: '_xotxje', // 예시 ID
-        usageGuide: defaultUsageGuide,
-        faq: defaultFaq,
-        latitude: undefined,
-        longitude: undefined,
+        description: '신뢰 기반의 즐거운 공동구매 커뮤니티', kakaotalkChannelId: '_xotxje',
+        usageGuide: defaultUsageGuide, faq: defaultFaq, latitude: undefined, longitude: undefined,
       };
-      if (!initialInfo.usageGuide || initialInfo.usageGuide.length === 0) {
-        initialInfo.usageGuide = defaultUsageGuide;
-      }
-      if (!initialInfo.faq || initialInfo.faq.length === 0) {
-        initialInfo.faq = defaultFaq;
-      }
-      
+      if (!initialInfo.usageGuide || initialInfo.usageGuide.length === 0) initialInfo.usageGuide = defaultUsageGuide;
+      if (!initialInfo.faq || initialInfo.faq.length === 0) initialInfo.faq = defaultFaq;
       setStoreInfo(initialInfo);
       setEditableInfo({ ...initialInfo });
     } catch (err) {
@@ -97,117 +84,66 @@ const CustomerCenterPage: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchStoreInformation();
-  }, [fetchStoreInformation]);
+  useEffect(() => { fetchStoreInformation(); }, [fetchStoreInformation]);
 
-  const updateField = useCallback((field: keyof StoreInfo, value: any) => {
-    setEditableInfo(prev => prev ? { ...prev, [field]: value } : null);
-  }, []);
+  const updateField = useCallback((field: keyof StoreInfo, value: any) => { setEditableInfo(prev => prev ? { ...prev, [field]: value } : null); }, []);
+  const updateGuideItem = useCallback((index: number, field: keyof GuideItem, value: string) => { setEditableInfo(prev => { if (!prev) return null; const newGuide = [...(prev.usageGuide || [])]; if (newGuide[index]) { newGuide[index] = { ...newGuide[index], [field]: value }; } return { ...prev, usageGuide: newGuide }; }); }, []);
+  const addGuideItem = useCallback(() => { const newId = uuidv4(); setEditableInfo(prev => prev ? { ...prev, usageGuide: [...(prev.usageGuide || []), { id: newId, title: '새로운 안내', content: '내용을 입력하세요.' }] } : null); }, []);
+  const removeGuideItem = useCallback((id: string) => { setEditableInfo(prev => prev ? { ...prev, usageGuide: (prev.usageGuide || []).filter(item => item.id !== id) } : null); }, []);
+  const updateFaqItem = useCallback((index: number, field: keyof FaqItem, value: string) => { setEditableInfo(prev => { if (!prev) return null; const newFaq = [...(prev.faq || [])]; if (newFaq[index]) { newFaq[index] = { ...newFaq[index], [field]: value }; } return { ...prev, faq: newFaq }; }); }, []);
+  const addFaqItem = useCallback(() => { const newId = uuidv4(); setEditableInfo(prev => prev ? { ...prev, faq: [...(prev.faq || []), { id: newId, question: '새로운 질문', answer: '답변을 입력하세요.' }] } : null); }, []);
+  const removeFaqItem = useCallback((id: string) => { setEditableInfo(prev => prev ? { ...prev, faq: (prev.faq || []).filter(item => item.id !== id) } : null); }, []);
+  const handleSave = async () => { if (!editableInfo) return; const promise = updateStoreInfo(editableInfo); await toast.promise(promise, { loading: '정보를 저장하는 중...', success: '성공적으로 저장되었습니다!', error: '저장 중 오류가 발생했습니다.', }); setStoreInfo({ ...editableInfo }); };
+  const handleCancel = () => { if (storeInfo) setEditableInfo({ ...storeInfo }); }
 
-  const updateGuideItem = useCallback((index: number, field: keyof GuideItem, value: string) => {
-    setEditableInfo(prev => {
-      if (!prev) return null;
-      const newGuide = [...(prev.usageGuide || [])];
-      if (newGuide[index]) {
-        newGuide[index] = { ...newGuide[index], [field]: value };
-      }
-      return { ...prev, usageGuide: newGuide };
-    });
-  }, []);
-
-  const addGuideItem = useCallback(() => {
-    const newId = uuidv4();
-    setEditableInfo(prev => prev ? {
-      ...prev,
-      usageGuide: [...(prev.usageGuide || []), { id: newId, title: '새로운 안내', content: '내용을 입력하세요.' }]
-    } : null);
-  }, []);
-
-  const removeGuideItem = useCallback((id: string) => {
-    setEditableInfo(prev => prev ? {
-      ...prev,
-      usageGuide: (prev.usageGuide || []).filter(item => item.id !== id)
-    } : null);
-  }, []);
-
-  const updateFaqItem = useCallback((index: number, field: keyof FaqItem, value: string) => {
-    setEditableInfo(prev => {
-      if (!prev) return null;
-      const newFaq = [...(prev.faq || [])];
-      if (newFaq[index]) {
-        newFaq[index] = { ...newFaq[index], [field]: value };
-      }
-      return { ...prev, faq: newFaq };
-    });
-  }, []);
-
-  const addFaqItem = useCallback(() => {
-    const newId = uuidv4();
-    setEditableInfo(prev => prev ? {
-      ...prev,
-      faq: [...(prev.faq || []), { id: newId, question: '새로운 질문', answer: '답변을 입력하세요.' }]
-    } : null);
-  }, []);
-
-  const removeFaqItem = useCallback((id: string) => {
-    setEditableInfo(prev => prev ? {
-      ...prev,
-      faq: (prev.faq || []).filter(item => item.id !== id)
-    } : null);
-  }, []);
-
-  const handleSave = async () => {
-    if (!editableInfo) return;
-    const promise = updateStoreInfo(editableInfo);
-    await toast.promise(promise, {
-      loading: '정보를 저장하는 중...',
-      success: '성공적으로 저장되었습니다!',
-      error: '저장 중 오류가 발생했습니다.',
-    });
-    setStoreInfo({ ...editableInfo });
-  };
-
-  const handleCancel = () => {
-    if (storeInfo) setEditableInfo({ ...storeInfo });
-  }
-
-  if (loading) return <div className="customer-service-container centered-message"><p>고객센터 정보를 불러오는 중...</p></div>;
-  if (error || !storeInfo || !editableInfo) return <div className="customer-service-container centered-message"><div className="info-error-card"><AlertTriangle size={40} className="error-icon" /><p>{error || '정보를 불러올 수 없습니다.'}</p></div></div>;
+  if (loading) return <div className="customer-center-page centered-message"><p>고객센터 정보를 불러오는 중...</p></div>;
+  if (error || !storeInfo || !editableInfo) return <div className="customer-center-page centered-message"><div className="info-error-card"><AlertTriangle size={40} className="error-icon" /><p>{error || '정보를 불러올 수 없습니다.'}</p></div></div>;
 
   return (
-    <div className="customer-service-container">
-      {isAdmin && hasChanges && (
-        <div className="admin-edit-controls floating">
-          <button className="admin-action-btn cancel" onClick={handleCancel} title="변경 내용 취소"><X size={16} /> 취소</button>
-          <button className="admin-action-btn save" onClick={handleSave} title="변경 내용 저장"><Save size={16} /> 저장</button>
+    <div className="customer-center-page">
+      <div className="customer-center-scrollable-content">
+        {isAdmin && hasChanges && (
+          <div className="admin-edit-controls floating">
+            <button className="admin-action-btn cancel" onClick={handleCancel} title="변경 내용 취소"><X size={16} /> 취소</button>
+            <button className="admin-action-btn save" onClick={handleSave} title="변경 내용 저장"><Save size={16} /> 저장</button>
+          </div>
+        )}
+
+        <section className="service-section quick-links">
+          <div className="contact-buttons">
+            {/* ✅ [추가] 카카오톡 채널 바로가기 버튼 */}
+            <a
+              href={storeInfo.kakaotalkChannelId ? `http://pf.kakao.com/${storeInfo.kakaotalkChannelId}` : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`contact-button primary ${!storeInfo.kakaotalkChannelId ? 'disabled' : ''}`}
+              onClick={(e) => { if (!storeInfo.kakaotalkChannelId) e.preventDefault(); }}
+            >
+              <Users size={18} /> 채널 바로가기
+            </a>
+            <a
+              href={storeInfo.kakaotalkChannelId ? `http://pf.kakao.com/${storeInfo.kakaotalkChannelId}/chat` : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`contact-button primary ${!storeInfo.kakaotalkChannelId ? 'disabled' : ''}`}
+              onClick={(e) => { if (!storeInfo.kakaotalkChannelId) e.preventDefault(); }}
+            >
+              <MessageSquare size={18} /> 1:1 문의
+            </a>
+          </div>
+        </section>
+
+        <div className="service-tabs">
+          <button onClick={() => { startTransition(() => { setActiveTab('info'); }); }} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16} /> 매장 정보</button>
+          <button onClick={() => { startTransition(() => { setActiveTab('guide'); }); }} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16} /> 이용 안내</button>
+          <button onClick={() => { startTransition(() => { setActiveTab('faq'); }); }} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16} /> 자주 묻는 질문</button>
         </div>
-      )}
 
-      <section className="service-section quick-links">
-        <div className="contact-buttons">
-          <a
-            href={storeInfo.kakaotalkChannelId ? `http://pf.kakao.com/${storeInfo.kakaotalkChannelId}/chat` : '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`contact-button primary ${!storeInfo.kakaotalkChannelId ? 'disabled' : ''}`}
-            onClick={(e) => { if (!storeInfo.kakaotalkChannelId) e.preventDefault(); }}
-          >
-            <MessageSquare size={18} /> 카카오톡 1:1 문의
-          </a>
+        <div className="service-content">
+          {activeTab === 'info' && <InfoTab editableInfo={editableInfo} updateField={updateField} isAdmin={isAdmin} />}
+          {activeTab === 'guide' && <GuideTab items={editableInfo.usageGuide || []} isAdmin={isAdmin} updateItem={updateGuideItem} addItem={addGuideItem} removeItem={removeGuideItem} />}
+          {activeTab === 'faq' && <FaqTab items={editableInfo.faq || []} isAdmin={isAdmin} updateItem={updateFaqItem} addItem={addFaqItem} removeItem={removeFaqItem} />}
         </div>
-      </section>
-
-      <div className="service-tabs">
-        <button onClick={() => { startTransition(() => { setActiveTab('info'); }); }} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16} /> 매장 정보</button>
-        <button onClick={() => { startTransition(() => { setActiveTab('guide'); }); }} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16} /> 이용 안내</button>
-        <button onClick={() => { startTransition(() => { setActiveTab('faq'); }); }} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16} /> 자주 묻는 질문</button>
-      </div>
-
-      <div className="service-content">
-        {activeTab === 'info' && <InfoTab editableInfo={editableInfo} updateField={updateField} isAdmin={isAdmin} />}
-        {activeTab === 'guide' && <GuideTab items={editableInfo.usageGuide || []} isAdmin={isAdmin} updateItem={updateGuideItem} addItem={addGuideItem} removeItem={removeGuideItem} />}
-        {activeTab === 'faq' && <FaqTab items={editableInfo.faq || []} isAdmin={isAdmin} updateItem={updateFaqItem} addItem={addFaqItem} removeItem={removeFaqItem} />}
       </div>
     </div>
   );

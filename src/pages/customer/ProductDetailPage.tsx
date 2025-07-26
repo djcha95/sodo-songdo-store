@@ -3,24 +3,23 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-// [수정] 타입 import 방식 변경 및 로컬 타입 정의 추가
 import type { 
   Product, 
   ProductItem, 
   CartItem, 
   StorageType, 
   VariantGroup as OriginalVariantGroup, 
-  SalesRound as OriginalSalesRound 
+  SalesRound as OriginalSalesRound,
+  LoyaltyTier
 } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { getProductById } from '@/firebase/productService';
-// [수정] getReservedQuantitiesMap 임포트 제거
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
-  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX
+  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 
 // Swiper React components
@@ -40,8 +39,9 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
+import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
+import type { ProductActionState } from '@/utils/productUtils';
 
-// [수정] 로컬에서 타입 확장하여 'reservedCount' 문제 해결
 interface VariantGroup extends OriginalVariantGroup {
   reservedCount?: number;
 }
@@ -52,21 +52,6 @@ interface SalesRound extends OriginalSalesRound {
 
 // --- 유틸리티 및 헬퍼 함수 ---
 dayjs.extend(isBetween);
-
-const safeToDate = (date: any): Date | null => {
-  if (!date) return null;
-  if (date instanceof Date) return date;
-  if (typeof date.toDate === 'function') return date.toDate();
-  if (typeof date === 'object' && date.seconds !== undefined) {
-    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
-  }
-  if (typeof date === 'string') {
-    const parsedDate = new Date(date);
-    if (!isNaN(parsedDate.getTime())) return parsedDate;
-  }
-  console.warn("Unsupported date format in ProductDetailPage:", date);
-  return null;
-};
 
 const formatDateWithDay = (date: Date | Timestamp | null | undefined): string => {
   const d = safeToDate(date);
@@ -90,64 +75,6 @@ const storageIcons: Record<StorageType, React.ReactNode> = {
   FROZEN: <Snowflake size={16} />,
 };
 
-// [수정] Linter 경고 해결 및 가독성/안정성 향상을 위해 getLatestRoundFromHistory 함수 리팩토링
-const getLatestRoundFromHistory = (product: Product | null): SalesRound | null => {
-  if (!product || !product.salesHistory || product.salesHistory.length === 0) return null;
-
-  // 1. 현재 판매 중인 라운드 (최신 생성 순)
-  const sellingRounds = product.salesHistory.filter(r => r.status === 'selling');
-  if (sellingRounds.length > 0) {
-    return sellingRounds.sort((roundA, roundB) => {
-      const timeA = safeToDate(roundA.createdAt)?.getTime() ?? 0;
-      const timeB = safeToDate(roundB.createdAt)?.getTime() ?? 0;
-      return timeB - timeA; // 내림차순 (최신순)
-    })[0] as SalesRound;
-  }
-  
-  const now = new Date();
-
-  // 2. 현재 시간이 판매 시작 시간 이후인 '판매 예정' 라운드 (가장 최근에 시작된 순)
-  const nowSellingScheduled = product.salesHistory
-    .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! <= now)
-    .sort((roundA, roundB) => {
-      const timeA = safeToDate(roundA.publishAt)?.getTime() ?? 0;
-      const timeB = safeToDate(roundB.publishAt)?.getTime() ?? 0;
-      return timeB - timeA; // 내림차순 (가장 최근에 시작된 순)
-    });
-  if (nowSellingScheduled.length > 0) return nowSellingScheduled[0] as SalesRound;
-  
-  // 3. 아직 시작되지 않은 '판매 예정' 라운드 (가장 빨리 시작될 순)
-  const futureScheduledRounds = product.salesHistory
-    .filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! > now)
-    .sort((roundA, roundB) => {
-      const timeA = safeToDate(roundA.publishAt)?.getTime() ?? 0;
-      const timeB = safeToDate(roundB.publishAt)?.getTime() ?? 0;
-      return timeA - timeB; // 오름차순 (가장 빨리 시작될 순)
-    });
-  if (futureScheduledRounds.length > 0) return futureScheduledRounds[0] as SalesRound;
-
-  // 4. 종료된 라운드 (가장 최근에 마감된 순)
-  const pastRounds = product.salesHistory
-    .filter(r => r.status === 'ended' || r.status === 'sold_out')
-    .sort((roundA, roundB) => {
-      const timeA = safeToDate(roundA.deadlineDate)?.getTime() ?? 0;
-      const timeB = safeToDate(roundB.deadlineDate)?.getTime() ?? 0;
-      return timeB - timeA; // 내림차순 (최신 마감순)
-    });
-  if (pastRounds.length > 0) return pastRounds[0] as SalesRound;
-
-  // 5. 위 모든 조건에 해당하지 않을 경우, 임시저장이 아닌 라운드 중 최신 라운드 반환
-  const nonDraftRounds = product.salesHistory
-    .filter(r => r.status !== 'draft')
-    .sort((roundA, roundB) => {
-      const timeA = safeToDate(roundA.createdAt)?.getTime() ?? 0;
-      const timeB = safeToDate(roundB.createdAt)?.getTime() ?? 0;
-      return timeB - timeA; // 내림차순 (최신순)
-    });
-
-  return (nonDraftRounds[0] as SalesRound) || null;
-};
-
 
 const ProductDetailSkeleton = () => (
     <div className="main-content-area skeleton">
@@ -166,9 +93,6 @@ const ProductDetailSkeleton = () => (
         </div>
     </div>
 );
-
-type ProductActionState = 'LOADING' | 'PURCHASABLE' | 'WAITLISTABLE' | 'ENCORE_REQUESTABLE' | 'SCHEDULED' | 'ENDED';
-
 
 interface ProductDetailPageProps {
   productId: string;
@@ -196,9 +120,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [isQuantityEditing, setIsQuantityEditing] = useState(false);
   const quantityInputRef = useRef<HTMLInputElement>(null);
-  // [수정] reservedQuantities 및 stockLoading 상태 제거
-  const swiperRef = useRef<any>(null); // Swiper 인스턴스를 위한 ref
-  const lightboxSwiperRef = useRef<any>(null); // Lightbox Swiper 인스턴스를 위한 ref
+  const swiperRef = useRef<any>(null);
+  const lightboxSwiperRef = useRef<any>(null);
 
   // --- 메모이제이션(useMemo) 로직 ---
   
@@ -215,77 +138,20 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   
   const userAlreadyRequestedEncore = !!(user && product && hasRequestedEncore(product.id));
   
-  const productActionState = useMemo<ProductActionState>(() => {
-    // [수정] stockLoading 조건 제거
+const productActionState = useMemo<ProductActionState>(() => {
     if (loading || !displayRound || !product || !selectedVariantGroup || !selectedItem) {
       return 'LOADING';
     }
-
-    const now = dayjs();
-    const publishAtDate = safeToDate(displayRound.publishAt);
-
-    if (displayRound.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) {
-      return 'SCHEDULED';
-    }
     
-    const pickupDate = safeToDate(displayRound.pickupDate);
-    const finalSaleDeadline = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0) : null;
-
-    if (finalSaleDeadline && now.isAfter(finalSaleDeadline)) {
-        return 'ENDED';
-    }
-
-    // [수정] reservedQuantities.get 대신 selectedVariantGroup.reservedCount 사용
-    const reserved = selectedVariantGroup.reservedCount || 0;
-    const totalStock = selectedVariantGroup.totalPhysicalStock;
-    const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : totalStock - reserved;
-    const isSoldOut = remainingStock < (selectedItem?.stockDeductionAmount || 1);
-    
-    // ProductListPage와 동일한 로직으로 '오늘의 공동구매' 기간을 계산합니다.
-    let salesStart, salesEnd;
-    const today1pm = now.clone().hour(13).minute(0).second(0);
-    let lastSat1pm = now.clone().day(6).hour(13).minute(0).second(0).millisecond(0);
-    if (lastSat1pm.isAfter(now)) {
-        lastSat1pm = lastSat1pm.subtract(1, 'week');
-    }
-    const weekendCycleEnd = lastSat1pm.add(2, 'days');
-    if (now.isAfter(lastSat1pm) && now.isBefore(weekendCycleEnd)) {
-        salesStart = lastSat1pm;
-        salesEnd = weekendCycleEnd;
-    } else {
-        if (now.isBefore(today1pm)) {
-            salesStart = today1pm.subtract(1, 'day');
-            salesEnd = today1pm;
-        } else {
-            salesStart = today1pm;
-            salesEnd = today1pm.add(1, 'day');
-        }
-    }
-    const createdAt = dayjs(safeToDate(displayRound.createdAt));
-    const isTodaysProduct = createdAt.isBetween(salesStart, salesEnd, null, '[)');
-
-    const isActuallySelling = displayRound.status === 'selling' || (displayRound.status === 'scheduled' && publishAtDate && now.isAfter(publishAtDate));
-
-    if (isActuallySelling) {
-      if (!isSoldOut) {
-        return 'PURCHASABLE';
-      } else {
-        // 품절 시, '오늘의 공동구매' 상품이면 '대기 가능', 아니면 '앵콜 요청'
-        if (isTodaysProduct) {
-          return 'WAITLISTABLE';
-        } else {
-          return 'ENCORE_REQUESTABLE';
-        }
-      }
-    }
-    
-    if (displayRound.status === 'ended' || displayRound.status === 'sold_out') {
-      return 'ENCORE_REQUESTABLE';
-    }
-
-    return 'ENDED';
-
-  }, [loading, displayRound, product, selectedVariantGroup, selectedItem]); // [수정] 의존성 배열에서 reservedQuantities, stockLoading 제거
+    // ✅ productUtils의 통합 함수를 사용하여 상태를 결정합니다.
+    return determineActionState(
+      displayRound,
+      product,
+      userDocument,
+      selectedItem,
+      selectedVariantGroup
+    );
+  }, [loading, displayRound, product, selectedVariantGroup, selectedItem, userDocument]);
 
   // --- 데이터 로딩 및 상태 업데이트 로직 (useEffect) ---
   useEffect(() => {
@@ -294,7 +160,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       setError(null);
 
       try {
-        // [수정] getReservedQuantitiesMap() 호출 제거
         const productData = await getProductById(productId);
 
         if (!productData) {
@@ -302,14 +167,14 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           return;
         }
 
-        const latestRound = getLatestRoundFromHistory(productData);
+const latestRound = getDisplayRound(productData);
         if (!latestRound) {
           setError('판매 정보를 찾을 수 없습니다.');
           return;
         }
 
         setProduct(productData);
-        setDisplayRound(latestRound);
+        setDisplayRound(latestRound as SalesRound);
         setCurrentImageIndex(0);
 
         const firstVg = latestRound.variantGroups?.[0];
@@ -356,7 +221,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     setQuantity(prev => {
       const newQuantity = prev + delta;
       
-      // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
       const reserved = selectedVariantGroup.reservedCount || 0;
       const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
       const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
@@ -378,7 +242,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
     const value = parseInt(e.target.value);
     if (!isNaN(value) && value > 0) {
-      // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
       const reserved = selectedVariantGroup.reservedCount || 0;
       const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
       const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
@@ -408,7 +271,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     if (productActionState !== 'PURCHASABLE') { toast.error('지금은 예약할 수 없는 상품입니다.'); return; }
     if (quantity < 1) { toast.error('1개 이상 선택해주세요.'); return; }
 
-    // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
     const reserved = selectedVariantGroup.reservedCount || 0;
     const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
     const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
@@ -531,7 +393,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         return quantity >= (selectedItem.limitQuantity || 999);
     }
   
-    // [수정] reservedQuantities 대신 variantGroup.reservedCount 사용
     const reserved = selectedVariantGroup.reservedCount || 0;
     const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
     const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
@@ -610,6 +471,29 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                 <div className="info-label">{storageIcons?.[product.storageType]}보관 방법</div>
                 <div className={`info-value storage-type-${product.storageType}`}>{storageLabels?.[product.storageType]}</div>
               </div>
+              
+              {/* ✅ [수정] 선입금 필요 여부 표시 */}
+              {displayRound.isPrepaymentRequired && (
+                <div className="info-row">
+                  <div className="info-label"><AlertTriangle size={16} />결제 조건</div>
+                  <div className="info-value">
+                    <span className="prepayment-badge">선입금 필수</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* ✅ [추가] 참여 등급 표시 UI */}
+              {(displayRound.allowedTiers && displayRound.allowedTiers.length > 0) && (
+                <div className="info-row">
+                  <div className="info-label"><ShieldCheck size={16} />참여 등급</div>
+                  <div className="info-value">
+                    <span className="tier-badge-group">
+                      {(displayRound.allowedTiers as LoyaltyTier[]).map(tier => <span key={tier} className="tier-badge">{tier}</span>)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}>
                 <div className="info-label">
                     <PackageCheck size={16} />잔여 수량
@@ -648,6 +532,17 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         <div className="product-purchase-footer">
           <button className="sold-out-btn-fixed" disabled>
             <ShieldX size={16} /> 참여 제한
+          </button>
+        </div>
+      );
+    }
+    
+    // ✅ [추가] 참여 자격 없음(INELIGIBLE) 상태 처리
+    if (productActionState === 'INELIGIBLE') {
+      return (
+        <div className="product-purchase-footer">
+          <button className="sold-out-btn-fixed" disabled>
+            <ShieldX size={16} /> 참여 등급이 아닙니다
           </button>
         </div>
       );
@@ -740,7 +635,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       {isImageModalOpen && product && (
         <div className="image-lightbox-overlay" onClick={closeImageModal}>
           <button className="modal-close-btn-lightbox" onClick={closeImageModal}><X size={28} /></button>
-          {/* ✨ [개선] Lightbox에도 Swiper 적용 */}
           <Swiper
             ref={lightboxSwiperRef}
             modules={[Pagination, Navigation]}
@@ -763,7 +657,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
             ))}
           </Swiper>
           
-          {/* Swiper 외부의 커스텀 네비게이션 버튼 및 인디케이터 */}
           {(product.imageUrls?.length ?? 0) > 1 && (
             <>
               <button onClick={(e) => e.stopPropagation()} className="image-nav-btn-lightbox prev"><ChevronLeft /></button>

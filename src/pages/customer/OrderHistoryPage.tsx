@@ -12,10 +12,10 @@ import useLongPress from '@/hooks/useLongPress';
 import type { Order, OrderItem, OrderStatus, WaitlistInfo } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
-import dayjs from 'dayjs'; // ✅ dayjs 임포트
+import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap, Loader2,
+  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -85,6 +85,9 @@ const formatPickupDateShort = (date: Date): string => {
   const dayOfWeek = week[(date.getDay())];
   return `${date.getMonth() + 1}/${date.getDate()}(${dayOfWeek})`;
 };
+
+// ✅ [수정] 무한 루프를 방지하기 위해 빈 페이로드 상수를 정의합니다.
+const EMPTY_PAYLOAD = {};
 
 // =================================================================
 // 📌 커스텀 훅
@@ -160,7 +163,8 @@ const usePaginatedData = <T,>(
     fetchData(false);
   }, [fetchData]);
 
-  return { data, setData, loading, loadingMore, hasMore, loadMore };
+  // ✅ [수정] loadingMore 상태를 loading 상태와 병합하여 반환
+  return { data, setData, loading: loading || loadingMore, hasMore, loadMore };
 };
 
 
@@ -336,8 +340,9 @@ const OrderHistoryPage: React.FC = () => {
   const { data: orders, setData: setOrders, loading: ordersLoading, hasMore: hasMoreOrders, loadMore: loadMoreOrders } =
     usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'orders' || viewMode === 'pickup');
 
+  // ✅ [수정] 인라인 {} 대신 상수를 사용하여 무한 재렌더링을 방지합니다.
   const { data: waitlist, setData: setWaitlist, loading: waitlistLoading, loadMore: loadMoreWaitlist, hasMore: hasMoreWaitlist } =
-    usePaginatedData<WaitlistInfo>(user?.uid, getUserWaitlistCallable, {}, viewMode === 'waitlist');
+    usePaginatedData<WaitlistInfo>(user?.uid, getUserWaitlistCallable, EMPTY_PAYLOAD, viewMode === 'waitlist');
   
   const aggregateOrders = useCallback((ordersToAggregate: Order[], groupBy: 'orderDate' | 'pickupDate'): { [date: string]: AggregatedItem[] } => {
     const aggregated: { [key: string]: AggregatedItem } = {};
@@ -346,7 +351,6 @@ const OrderHistoryPage: React.FC = () => {
       const date = groupBy === 'orderDate' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
       if (!date) return;
 
-      // ✅ [수정] UTC 대신 현지 시간 기준으로 날짜 키를 생성합니다.
       const dateStr = dayjs(date).format('YYYY-MM-DD');
 
       (order.items || []).forEach((item: OrderItem) => {
@@ -384,8 +388,7 @@ const OrderHistoryPage: React.FC = () => {
       if (!firstOrder) return;
       const date = groupBy === 'orderDate' ? safeToDate(firstOrder.createdAt) : safeToDate(firstOrder.pickupDate);
       if (!date) return;
-
-      // ✅ [수정] UTC 대신 현지 시간 기준으로 날짜 키를 생성합니다.
+      
       const dateStr = dayjs(date).format('YYYY-MM-DD');
 
       if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
@@ -570,17 +573,15 @@ const OrderHistoryPage: React.FC = () => {
   return (
     <div className="customer-page-container">
       <div className="order-history-page">
+        {/* ✅ [수정] 탭 버튼에서 개별 로더 제거 */}
         <div className="view-toggle-container">
           <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => setViewMode('orders')}>
-             {viewMode === 'orders' && ordersLoading && <Loader2 className="spinner" size={16}/>}
             <ListOrdered size={18} /> 주문일순
           </button>
           <button className={`toggle-btn ${viewMode === 'pickup' ? 'active' : ''}`} onClick={() => setViewMode('pickup')}>
-            {viewMode === 'pickup' && ordersLoading && <Loader2 className="spinner" size={16}/>}
             <Truck size={18} /> 픽업일순
           </button>
           <button className={`toggle-btn ${viewMode === 'waitlist' ? 'active' : ''}`} onClick={() => setViewMode('waitlist')}>
-            {viewMode === 'waitlist' && waitlistLoading && <Loader2 className="spinner" size={16}/>}
             <Hourglass size={18} /> 대기목록
           </button>
         </div>
@@ -597,8 +598,20 @@ const OrderHistoryPage: React.FC = () => {
             </motion.div>
         </AnimatePresence>
         
-        {(ordersLoading && orders.length > 0) && <div className="loading-more-spinner"><InlineSodomallLoader /></div>}
-        {(!hasMoreOrders && orders.length > 0 && (viewMode === 'orders' || viewMode === 'pickup')) && <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>}
+        {/* ✅ [수정] 하단 로더 및 메시지 로직을 각 탭에 맞게 분리 */}
+        {(viewMode === 'orders' || viewMode === 'pickup') && ordersLoading && orders.length > 0 && (
+          <div className="loading-more-spinner"><InlineSodomallLoader /></div>
+        )}
+        {(viewMode === 'orders' || viewMode === 'pickup') && !hasMoreOrders && orders.length > 0 && (
+          <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>
+        )}
+
+        {viewMode === 'waitlist' && waitlistLoading && waitlist.length > 0 && (
+          <div className="loading-more-spinner"><InlineSodomallLoader /></div>
+        )}
+        {viewMode === 'waitlist' && !hasMoreWaitlist && waitlist.length > 0 && (
+          <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>
+        )}
       </div>
     </div>
   );

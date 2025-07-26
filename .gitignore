@@ -71,3 +71,6 @@ sodomall-service-key.json
 # ---------------------------------
 # 최근 git pull 시 문제를 일으켰던 자동 백업 폴더를 무시합니다.
 /functions/firebase-export-*
+
+# Secret files
+serviceAccountKey.json

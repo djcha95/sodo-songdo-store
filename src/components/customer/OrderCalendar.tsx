@@ -7,25 +7,41 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import 'react-calendar/dist/Calendar.css';
 import './OrderCalendar.css';
+// ✅ [추가] 예약 내역 페이지의 카드 스타일을 가져옵니다.
+import '../../pages/customer/OrderHistoryPage.css';
+
 
 import { useAuth } from '../../context/AuthContext';
 import { getUserOrders } from '../../firebase';
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
+import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
 import Holidays from 'date-holidays';
 import { format, isSameDay, isSameMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
-import type { Order } from '../../types';
+import type { Order, OrderStatus } from '../../types';
 import toast from 'react-hot-toast';
-import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target } from 'lucide-react';
-
+import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck } from 'lucide-react';
 // =================================================================
-// 헬퍼 함수
+// 헬퍼 함수 및 타입
 // =================================================================
 
 type ValuePiece = Date | null;
 type PickupStatus = 'pending' | 'completed' | 'noshow';
+
+// ✅ [추가] 예약 내역 페이지와 동일한 집계 아이템 타입
+interface AggregatedItem {
+  id: string; 
+  productName: string;
+  variantGroupName: string;
+  itemName:string;
+  totalQuantity: number;
+  imageUrl: string;
+  originalOrders: Order[];
+  status: OrderStatus;
+  wasPrepaymentRequired: boolean;
+}
 
 const holidays = new Holidays('KR');
 const customWeekday = ['일', '월', '화', '수', '목', '금', '토'];
@@ -55,6 +71,41 @@ const getOrderStatusDisplay = (order: Order) => {
     return { text: order.status, Icon: Hourglass, className: '', type: 'pending' };
 };
 
+// ✅ [추가] 예약 내역 페이지의 집계 로직을 가져와 캘린더에 맞게 수정
+const aggregateOrdersForDate = (ordersToAggregate: Order[]): AggregatedItem[] => {
+    const aggregated: { [key: string]: AggregatedItem } = {};
+
+    ordersToAggregate.forEach(order => {
+        (order.items || []).forEach((item: any) => {
+            const aggregationKey = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
+            
+            if (!aggregated[aggregationKey]) {
+                aggregated[aggregationKey] = {
+                    id: aggregationKey,
+                    productName: item.productName,
+                    variantGroupName: item.variantGroupName,
+                    itemName: item.itemName,
+                    totalQuantity: 0,
+                    imageUrl: item.imageUrl,
+                    originalOrders: [],
+                    status: order.status,
+                    wasPrepaymentRequired: order.wasPrepaymentRequired ?? false,
+                };
+            }
+            aggregated[aggregationKey].totalQuantity += item.quantity;
+            aggregated[aggregationKey].originalOrders.push(order);
+        });
+    });
+
+    Object.values(aggregated).forEach(item => {
+      const sortedOrders = [...item.originalOrders].sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0));
+      item.status = sortedOrders[0]?.status ?? 'RESERVED';
+    });
+
+    return Object.values(aggregated);
+};
+
+
 // =================================================================
 // 하위 컴포넌트
 // =================================================================
@@ -71,28 +122,47 @@ const EmptyCalendarState: React.FC = () => {
     );
 };
 
-const DailyOrderCard: React.FC<{ order: Order }> = React.memo(({ order }) => {
-    const { text, Icon, className } = getOrderStatusDisplay(order);
-    const orderDate = safeToDate(order.createdAt);
-    return (
-        <li className="order-card-v2">
-            <div className="card-v2-header">
-                <div className={`status-badge-v2 ${className}`}><Icon size={14} /> {text}</div>
-                <span className="order-date-v2">{orderDate ? format(orderDate, 'yy.MM.dd HH:mm') : ''}</span>
-            </div>
-            <ul className="order-items-detail-v2">
-                {(order.items || []).map((item, idx) => (
-                    <li key={idx} className="order-item-detail-row-v2">
-                        <span className="product-name-qty">{item.itemName} ({item.quantity}개)</span>
-                        <span className="product-price">{(item.unitPrice * item.quantity).toLocaleString()}원</span>
-                    </li>
-                ))}
-            </ul>
-            <div className="card-v2-footer">
-                <span className="order-total-price">총 {order.totalPrice.toLocaleString()}원</span>
-            </div>
-        </li>
-    );
+// ✅ [추가] 예약 내역 페이지와 동일한 디자인의 카드 컴포넌트 (읽기 전용)
+const CalendarItemCard: React.FC<{ item: AggregatedItem }> = React.memo(({ item }) => {
+  const { statusText, StatusIcon, statusClass } = useMemo(() => {
+    if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
+      return { statusText: '선입금 필요', StatusIcon: CreditCard, statusClass: 'status-prepayment_required' };
+    }
+    const textMap: Record<OrderStatus, string> = { RESERVED: '예약 완료', PREPAID: '선입금 완료', PICKED_UP: '픽업 완료', COMPLETED: '처리 완료', CANCELED: '취소됨', NO_SHOW: '노쇼' };
+    const iconMap: Record<OrderStatus, React.ElementType> = { RESERVED: Hourglass, PREPAID: PackageCheck, PICKED_UP: PackageCheck, COMPLETED: CircleCheck, CANCELED: PackageX, NO_SHOW: AlertCircle };
+    return {
+      statusText: textMap[item.status] || '알 수 없음',
+      StatusIcon: iconMap[item.status] || AlertCircle,
+      statusClass: `status-${item.status.toLowerCase()}`
+    }
+  }, [item.status, item.wasPrepaymentRequired]);
+
+  return (
+    <motion.div 
+      className="order-card-v3"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeInOut" }}
+    >
+      <div className="card-v3-body">
+        <div className="item-image-wrapper">
+          <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
+        </div>
+        <div className="item-aggregated-info">
+          <div className="info-top-row">
+            <span className="product-name-top">{item.variantGroupName}</span>
+            <span className={`status-badge ${statusClass}`}><StatusIcon size={14} /> {statusText}</span>
+          </div>
+          <div className="info-bottom-row">
+            <span className="item-options-quantity">
+              <span className="item-option-name">{item.itemName}</span>
+              <span className="item-quantity">({item.totalQuantity}개)</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
 });
 
 const sheetVariants: Variants = {
@@ -102,6 +172,9 @@ const sheetVariants: Variants = {
 };
 
 const DetailsBottomSheet: React.FC<{ selectedDate: Date; orders: Order[]; onClose: () => void; }> = ({ selectedDate, orders, onClose }) => {
+    
+    const aggregatedItems = useMemo(() => aggregateOrdersForDate(orders), [orders]);
+
     return (
         <>
             <motion.div className="bottom-sheet-overlay" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
@@ -118,8 +191,11 @@ const DetailsBottomSheet: React.FC<{ selectedDate: Date; orders: Order[]; onClos
                     <button onClick={onClose} className="sheet-close-btn" aria-label="닫기"><X size={20} /></button>
                 </div>
                 <div className="sheet-body">
-                    {orders.length > 0 ? (
-                        <ul className="order-list-v2">{orders.map(order => <DailyOrderCard key={order.id} order={order} />)}</ul>
+                    {/* ✅ [수정] 집계된 아이템을 새로운 카드로 렌더링합니다. */}
+                    {aggregatedItems.length > 0 ? (
+                        <div className="order-cards-grid">
+                            {aggregatedItems.map(item => <CalendarItemCard key={item.id} item={item} />)}
+                        </div>
                     ) : (
                         <div className="no-orders-message">
                             <CalendarX size={32} />
@@ -266,7 +342,6 @@ const OrderCalendar: React.FC = () => {
                 if (view !== 'month') return null;
                 const isToday = isSameDay(date, new Date());
                 
-                // ✅ [수정] 날짜 비교 기준을 UTC로 통일하여 시간대 오류 해결
                 const todayUTCString = new Date().toISOString().split('T')[0];
                 const hasLoggedInToday = userDocument?.lastLoginDate === todayUTCString;
 

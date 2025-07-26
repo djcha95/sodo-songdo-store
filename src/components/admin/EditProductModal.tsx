@@ -142,7 +142,7 @@ const EditProductModal = ({ isOpen, onClose, productToEdit, roundIdToEdit, onSav
 
         <div style={{ marginTop: '2rem', textAlign: 'right' }}>
           <button onClick={onClose} style={{ marginRight: '1rem', padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>취소</button>
-          <button onClick={handleSave} style={{ padding: '10px 20px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>저장하기</button>
+          <button onClick={handleSave} style={{ padding: '10px 20px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>저장하기</button>
         </div>
       </div>
     </div>

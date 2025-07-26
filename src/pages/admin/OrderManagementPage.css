@@ -456,3 +456,52 @@
     font-weight: var(--font-weight-bold);
     box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
 }
+
+/* ✅ [모바일] 반응형 디자인 추가 */
+@media (max-width: 768px) {
+    .admin-page-container {
+        padding: var(--spacing-md, 1rem);
+    }
+    
+    .admin-page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-md, 1rem);
+    }
+    .admin-page-title {
+        font-size: var(--font-size-xl, 1.5rem);
+    }
+    
+    .list-controls-v3 {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-sort-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group-v2 {
+        justify-content: space-between;
+    }
+    
+    .control-select-v2 {
+        flex-grow: 1;
+    }
+
+    .pagination-container {
+        flex-direction: column;
+        gap: var(--spacing-lg, 1.5rem);
+    }
+
+    .pagination-center {
+        order: -1; /* 페이지 번호를 위로 올림 */
+        width: 100%;
+    }
+
+    .pagination-left, .pagination-right {
+        width: 100%;
+        justify-content: center;
+    }
+}

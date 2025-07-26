@@ -330,3 +330,52 @@
 .action-button.edit-button:hover { background-color: #e6f2ff; border-color: var(--primary-color); }
 .action-button.delete-button { color: var(--danger-color, #dc3545); }
 .action-button.delete-button:hover { background-color: #f8d7da; border-color: var(--danger-color); }
+
+/* ✅ [모바일] 반응형 디자인 추가 */
+@media (max-width: 768px) {
+    .banner-admin-page-container h1 {
+        font-size: 1.8rem;
+        margin-bottom: 24px;
+    }
+
+    .admin-page-grid-container {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+
+    .banner-form-section {
+        position: static; /* 모바일에서는 고정 해제 */
+    }
+
+    .section-card {
+        padding: 20px;
+    }
+
+    .banner-list {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .banner-item {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px;
+    }
+
+    .banner-thumbnail-wrapper {
+        width: 100%;
+        height: 120px; /* 모바일에서 이미지 높이 확보 */
+    }
+
+    .banner-info {
+        padding-right: 0;
+        padding-top: 12px;
+        border-top: 1px solid var(--border-color-light);
+    }
+
+    .banner-actions {
+        padding-top: 12px;
+        border-top: 1px solid var(--border-color-light);
+        justify-content: space-around;
+    }
+}

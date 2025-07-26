@@ -161,3 +161,41 @@
     color: #868e96;
     font-size: 1.1rem;
 }
+
+/* ✅ [모바일] 반응형 디자인 추가 */
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: 16px;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .header-title-area h1 {
+        font-size: 1.5rem;
+    }
+
+    .bulk-save-button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .group-title {
+        padding: 12px 16px;
+        font-size: 1.05rem;
+    }
+
+    .dashboard-table th,
+    .dashboard-table td {
+        padding: 10px 12px;
+        font-size: 0.85rem;
+    }
+
+    .final-stock-input {
+        width: 90px;
+    }
+}
