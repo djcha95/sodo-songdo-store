@@ -2,7 +2,7 @@
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, useParams, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import './index.css';
@@ -35,6 +35,8 @@ const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
 // ✨ [추가] 픽업 캘린더 페이지 import
 const OrderCalendarPage = React.lazy(() => import('@/components/customer/OrderCalendar'));
+// ✅ [추가] 앵콜 페이지 import
+const EncorePage = React.lazy(() => import('./pages/customer/EncorePage'));
 
 
 // 관리자 페이지
@@ -85,27 +87,20 @@ const router = createBrowserRouter([
             path: "admin",
             element: <Suspense fallback={<SodomallLoader />}><AdminLayout /></Suspense>,
             children: [
-              { index: true, element: <Navigate to="/admin/dashboard" replace /> },
+              // ✅ [수정] Redirect 대신 QuickCheckPage를 직접 index 컴포넌트로 렌더링합니다.
+              { index: true, element: <QuickCheckPage /> },
               { path: 'dashboard', element: <DashboardPage /> },
-              // 빠른 예약확인 페이지 경로 추가
+              // '빠른 예약 확인' 페이지는 /admin 경로에서도 접근 가능하도록 유지합니다.
               { path: 'quick-check', element: <QuickCheckPage /> },
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
               { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'categories', element: <CategoryManagementPage /> },
-              // ✨ [수정] 주석 처리된 경로 제거
-              // { path: 'encore-requests', element: <EncoreAdminPage /> },
-              // { path: 'ai-product', element: <AiProductPage /> },
               { path: 'orders', element: <OrderManagementPage /> },
-              // { path: 'pickup', element: <PickupProcessingPage /> },
               { path: 'users', element: <UserListPage /> },
               { path: 'users/:userId', element: <UserDetailPage /> },
-              // { path: 'coupons', element: <CouponAdminPage /> },
               { path: 'banners', element: <BannerAdminPage /> },
-              // { path: 'board', element: <BoardAdminPage /> },
-              // { path: 'product-arrivals', element: <ProductArrivalCalendar /> },
-              // { path: 'test', element: <MinimalTestPage /> },
             ]
           }
         ]
@@ -122,6 +117,8 @@ const router = createBrowserRouter([
               { path: "cart", element: <CartPage /> },
               { path: "onsite-sale", element: <OnsiteSalePage /> },
               { path: "customer-center", element: <CustomerCenterPage /> },
+              // ✅ [추가] 앵콜 페이지 경로 추가
+              { path: "encore", element: <EncorePage /> },
               {
                 path: "mypage",
                 children: [
@@ -156,12 +153,8 @@ createRoot(document.getElementById('root')!).render(
   <React.Fragment>
     <Toaster
       position="top-center"
-      // 전체 토스트 옵션을 재설정합니다.
       toastOptions={{
-        // 모든 정보성 토스트의 기본 지속시간
         duration: 4000, 
-        
-        // 흰색 배경의 깔끔한 기본 스타일
         style: {
           background: '#fff',
           color: 'var(--text-color-dark, #343a40)',
@@ -172,22 +165,19 @@ createRoot(document.getElementById('root')!).render(
           fontSize: '1rem',
           fontWeight: '500',
         },
-
-        // 타입별 아이콘 색상 설정
         success: {
           iconTheme: {
-            primary: 'var(--accent-color, #28a745)', // 초록색
+            primary: 'var(--accent-color, #28a745)',
             secondary: '#fff',
           },
         },
         error: {
           iconTheme: {
-            primary: 'var(--danger-color, #dc3545)', // 빨간색
+            primary: 'var(--danger-color, #dc3545)',
             secondary: '#fff',
           },
         },
       }}
-      // 모바일 렌더링 안정성 유지를 위한 스타일
       containerStyle={{
         zIndex: 9999,
         transform: 'translateZ(0)',

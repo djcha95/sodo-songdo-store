@@ -1,12 +1,46 @@
 /* src/pages/customer/CustomerCenterPage.css */
 
+
+/* ✅ [구조] Flexbox 레이아웃으로 페이지 전체 구조화 */
+.customer-center-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 60px); /* 헤더 높이를 제외한 전체 높이 */
+  background-color: var(--background-color);
+  /* ✅ [수정] 하단 네비게이션 바(60px)에 가려지지 않도록 충분한 여백 추가 */
+  padding-bottom: 80px; 
+}
+
+.customer-center-scrollable-content {
+  flex-grow: 1; /* 이 부분이 남은 공간을 모두 차지하여 커짐 */
+}
+
+/* ✅ [수정] 부모에 하단 여백이 생겼으므로, 푸터 자체의 여백은 위쪽만 주도록 변경 */
+.customer-center-footer {
+  flex-shrink: 0; /* 이 부분은 줄어들지 않음 */
+  padding: 20px var(--page-padding) 0;
+}
+
+.customer-center-header {
+  padding: 20px var(--page-padding);
+  border-bottom: 1px solid var(--border-color);
+  background-color: #fff;
+}
+
+.customer-center-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0;
+}
+
 /* --- Base & Font --- */
 .customer-service-container {
   padding: 16px;
   background-color: #f7f8fa;
-  min-height: calc(100vh - 60px - 70px);
+  min-height: calc(100vh - 60px - 70px); /* 헤더와 하단 네비게이션 높이를 제외한 최소 높이 */
   position: relative;
-  padding-bottom: 90px;
+  /* ✅ [수정] 로그아웃 버튼이 가려지지 않도록 하단 여백을 120px로 늘립니다. */
+  padding-bottom: 120px; 
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Roboto', 'Noto Sans KR', 'Segoe UI', 'Malgun Gothic', 'Dotum', sans-serif;
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
@@ -31,8 +65,15 @@
   border: 1px solid #f0f0f0;
 }
 
+/* ✅ [추가] 두 버튼을 나란히 배치하기 위한 컨테이너 스타일 */
+.contact-buttons {
+  display: flex;
+  gap: 12px;
+}
+
 /* --- KakaoTalk Button --- */
 .contact-button.primary {
+  flex: 1; /* ✅ [추가] 버튼이 공간을 균등하게 차지하도록 설정 */
   display: flex;
   align-items: center;
   justify-content: center;

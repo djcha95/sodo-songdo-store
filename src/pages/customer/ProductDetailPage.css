@@ -217,7 +217,7 @@
 
 .round-name-badge {
   display: inline-block;
-  background-color: #4338ca;
+  background-color: #1d4ed8;
   color: white;
   font-size: 0.9em;
   font-weight: 700;
@@ -488,7 +488,7 @@
   color: #374151;
 }
 .error-close-btn {
-  background-color: #4f46e5;
+  background-color: #1d4ed8;
   color: white;
   border: none;
   border-radius: 8px;
@@ -499,7 +499,7 @@
   transition: background-color 0.2s;
 }
 .error-close-btn:hover {
-  background-color: #4338ca;
+  background-color: #1d4ed8;
 }
 
 .main-content-area.skeleton {
@@ -599,4 +599,14 @@
     grid-template-columns: 90px 1fr;
     gap: 8px;
   }
+}
+
+.prepayment-badge {
+  color: var(--danger-color);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  background-color: var(--danger-background-color);
+  padding: 3px 8px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--danger-border-color);
 }

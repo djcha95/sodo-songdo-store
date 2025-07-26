@@ -1,25 +1,35 @@
-// scripts/migrateParticipationTiers.ts
-
-import { db } from '../src/firebase/firebaseConfig';
-import { collection, getDocs, writeBatch, DocumentData } from 'firebase/firestore';
+// ✅ 이렇게 수정해주세요 (상단 부분을 교체)
+import 'dotenv/config';
+import admin from 'firebase-admin';
+import { getFirestore, DocumentData } from 'firebase-admin/firestore';
 import type { Product, SalesRound } from '../src/types';
 
-/**
- * @description [일회성 마이그레이션 함수]
- * 모든 상품의 모든 판매 회차에 'allowedTiers' 필드가 없으면 빈 배열로 추가합니다.
- * 이를 통해 기존 상품들이 새로운 '참여 조건' 시스템과 호환되도록 합니다.
- */
+// 1. 서비스 계정 키 파일을 불러옵니다.
+// require를 사용해야 json 파일을 바로 가져올 수 있습니다.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const serviceAccount = require('../serviceAccountKey.json');
+
+// 2. Firebase Admin 앱을 초기화합니다.
+if (admin.apps.length === 0) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
+
+// 3. Admin SDK를 통해 Firestore 인스턴스를 가져옵니다.
+const db = getFirestore();
+
 const migrateProductParticipationTiers = async (): Promise<{
   totalProducts: number;
   updatedProducts: number;
 }> => {
   console.log('Firestore에서 모든 상품 정보를 가져오는 중...');
-  const productsRef = collection(db, 'products');
-  const snapshot = await getDocs(productsRef);
+const productsRef = db.collection('products');
+const snapshot = await productsRef.get();
   const totalProducts = snapshot.size;
   let updatedProducts = 0;
   let batchCount = 0;
-  let batch = writeBatch(db);
+let batch = db.batch();
 
   console.log(`총 ${totalProducts}개의 상품을 확인합니다.`);
 
@@ -54,7 +64,7 @@ const migrateProductParticipationTiers = async (): Promise<{
       // Firestore의 batch 쓰기 제한은 500개이므로, 400개마다 커밋합니다.
       if (batchCount === 400) {
         batch.commit();
-        batch = writeBatch(db);
+batch = db.batch();
         batchCount = 0;
         console.log('중간 커밋: 400개 상품 업데이트 완료.');
       }

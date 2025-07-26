@@ -276,3 +276,53 @@
     color: #888;
     padding: 20px;
 }
+
+/* ✅ [모바일] 반응형 디자인 추가 */
+@media (max-width: 768px) {
+    .category-management-container {
+        padding: 10px;
+    }
+
+    .section-card {
+        padding: 15px;
+    }
+    
+    .section-card h3 {
+        font-size: 1.1rem;
+    }
+
+    .category-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .category-form button {
+        justify-content: center;
+    }
+    
+    .category-main-row {
+        flex-wrap: wrap;
+    }
+    
+    .category-name-display {
+        flex-basis: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .drag-handle {
+        order: -1;
+    }
+    
+    .category-actions {
+        flex-grow: 1;
+        justify-content: flex-end;
+    }
+
+    .inline-edit-form {
+        flex-wrap: wrap;
+    }
+    .inline-edit-form input {
+        flex-basis: 100%;
+        margin-bottom: 5px;
+    }
+}

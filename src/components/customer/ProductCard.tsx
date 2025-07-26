@@ -8,11 +8,13 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-import type { Product as OriginalProduct, CartItem, VariantGroup } from '@/types'; 
+import type { Product as OriginalProduct, CartItem } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
-import { safeToDate } from '@/utils/productUtils';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
+// ✅ [수정] 유틸리티 함수와 통합된 타입을 가져옵니다.
+import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
+import type { ProductActionState } from '@/utils/productUtils';
 
 type Product = OriginalProduct & {
   phase?: 'primary' | 'secondary' | 'past';
@@ -21,8 +23,6 @@ type Product = OriginalProduct & {
     secondaryEnd: Date | null;
   }
 }
-
-type ProductActionState = 'PURCHASABLE' | 'REQUIRE_OPTION' | 'ENDED' | 'SCHEDULED' | 'WAITLIST_AVAILABLE' | 'ENCORE_REQUEST_AVAILABLE' | 'AWAITING_STOCK';
 
 const QuantityInput: React.FC<{
   quantity: number;
@@ -79,13 +79,10 @@ const QuantityInput: React.FC<{
   );
 };
 
-
-// ✅ [수정] reservedQuantitiesMap prop을 제거
 interface ProductCardProps {
   product: Product;
 }
 
-// ✅ [수정] prop 구조분해 할당에서 reservedQuantitiesMap을 제거
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -100,11 +97,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   }, []);
 
   const cardData = useMemo(() => {
-    const displayRound = product.salesHistory?.[0];
+    const displayRound = getDisplayRound(product as OriginalProduct);
     if (!displayRound) return null;
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
-    const singleOptionVg: VariantGroup | undefined = !isMultiOption ? displayRound.variantGroups?.[0] : undefined;
+    const singleOptionVg = !isMultiOption ? displayRound.variantGroups?.[0] : undefined;
     const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
     return {
@@ -116,59 +113,25 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       pickupDateFormatted: dayjs(safeToDate(displayRound.pickupDate)).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
-
-  }, [product, userDocument]);
+  }, [product]);
   
-  // ✅ [수정] reservedQuantitiesMap의 의존성을 제거하고, product 자체의 의존성으로 변경
   const actionState = useMemo<ProductActionState>(() => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg, singleOptionItem } = cardData;
-
-    if (!displayRound) return 'ENDED';
     
-    if (!product.phase) {
-      if (displayRound.status === 'ended' || displayRound.status === 'sold_out') return 'ENCORE_REQUEST_AVAILABLE';
-      if (displayRound.status === 'scheduled') return 'SCHEDULED';
-      return isMultiOption ? 'REQUIRE_OPTION' : 'PURCHASABLE';
-    }
-
-    if (product.phase === 'past') {
-      return 'ENCORE_REQUEST_AVAILABLE';
-    }
+    const state = determineActionState(displayRound, product, userDocument, singleOptionItem, singleOptionVg);
     
-    if (product.phase === 'secondary') {
-      let isAwaitingStock = false;
-      if (isMultiOption) {
-        isAwaitingStock = displayRound.variantGroups.some(
-          vg => vg.totalPhysicalStock === null || vg.totalPhysicalStock === -1 || vg.totalPhysicalStock === 0
-        );
-      } else {
-        const totalStock = singleOptionVg?.totalPhysicalStock;
-        isAwaitingStock = totalStock === null || totalStock === -1 || totalStock === 0;
-      }
-      if (isAwaitingStock) {
-        return 'AWAITING_STOCK';
-      }
-    }
-    
-    if (isMultiOption) {
+    if (state === 'PURCHASABLE' && isMultiOption) {
       return 'REQUIRE_OPTION';
     }
-        
-    const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
-    // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
-    const reserved = product.reservedQuantities?.[reservedKey] || 0;
-    const totalStock = singleOptionVg?.totalPhysicalStock;
-    if (totalStock !== null && totalStock !== -1) {
-      const remainingStock = (totalStock || 0) - reserved;
-      if (remainingStock < (singleOptionItem?.stockDeductionAmount || 1)) {
-        return product.phase === 'primary' ? 'WAITLIST_AVAILABLE' : 'ENCORE_REQUEST_AVAILABLE';
-      }
+    
+    if (state === 'INELIGIBLE') {
+      return 'ENCORE_REQUESTABLE';
     }
-
-    return 'PURCHASABLE';
-  }, [cardData, product]); // 의존성 배열 수정
-
+    
+    return state;
+  }, [cardData, product, userDocument]);
+    
   const handleCardClick = useCallback(() => { 
     if (isSuspendedUser) {
       toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
@@ -189,7 +152,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
     
     const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
-    // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
     const reserved = product.reservedQuantities?.[reservedKey] || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -216,7 +178,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
     addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
-  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser]); // 의존성 배열 수정
+  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser]);
 
   const handleAddToWaitlist = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -268,7 +230,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     switch (actionState) {
       case 'PURCHASABLE':
         const reservedKey = `${product.id}-${cardData.displayRound.roundId}-${cardData.singleOptionVg?.id}`;
-        // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
         const reserved = product.reservedQuantities?.[reservedKey] || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -279,7 +240,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             {isJustAdded ? <button className="add-to-cart-btn just-added" disabled><Check size={18} /> 담았어요</button>
                          : <button className="add-to-cart-btn" onClick={handleAddToCart}><ShoppingCart size={16} /> 담기</button>}
           </div>);
-      case 'WAITLIST_AVAILABLE':
+      case 'WAITLISTABLE':
         const maxWaitlistQuantity = cardData.singleOptionItem?.limitQuantity || 99;
         return (
           <div className="action-controls" onClick={(e) => e.stopPropagation()}>
@@ -293,7 +254,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         return <div className="options-btn disabled">예약 종료</div>;
       case 'SCHEDULED':
         return <div className="options-btn disabled">판매 예정</div>;
-      case 'ENCORE_REQUEST_AVAILABLE':
+      case 'ENCORE_REQUESTABLE':
         return <button className="options-btn encore" onClick={handleCardClick}><Flame size={16} /> 앵콜 요청</button>;
       case 'AWAITING_STOCK':
         return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
@@ -315,7 +276,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
         const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg.id}`;
-        // ✅ [수정] product.reservedQuantities 에서 직접 값을 읽도록 변경
         const reserved = product.reservedQuantities?.[reservedKey] || 0;
         const remaining = (totalStock || 0) - reserved;
         stockText = `${remaining}개 한정`;
@@ -335,11 +295,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <div className="product-card-wrapper">
       <div className="product-card-final" onClick={handleCardClick}>
-
-          <TopBadge />
+        <TopBadge />
         <div className="card-image-container">
           <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
-          {(product.phase === 'past' || actionState === 'ENCORE_REQUEST_AVAILABLE') && <div className="card-overlay-badge">예약 마감</div>}
+          {(product.phase === 'past' || actionState === 'ENCORE_REQUESTABLE') && <div className="card-overlay-badge">예약 마감</div>}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

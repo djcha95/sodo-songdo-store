@@ -148,3 +148,31 @@
   background-color: #e9ecef;
   color: #495057;
 }
+
+/* FaqTab.css 파일 하단에 추가해주세요 */
+
+/* .faq-answer-text 내부의 요소들에 대한 스타일 */
+.faq-answer-text .paragraph-item {
+  margin-bottom: 0.5em; /* 문단 간 간격 */
+  line-height: 1.6;
+}
+.faq-answer-text .paragraph-item:last-child {
+  margin-bottom: 0;
+}
+
+.faq-answer-text .list-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.faq-answer-text .list-bullet {
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.faq-answer-text strong {
+  color: var(--primary-color); /* 강조 색상 */
+  font-weight: 600;
+}

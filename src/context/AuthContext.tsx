@@ -1,29 +1,34 @@
 // src/context/AuthContext.tsx
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+// ✅ [수정] signOut 함수를 firebase/auth에서 가져옵니다.
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { recordDailyVisit } from '@/firebase/pointService';
 import type { UserDocument } from '../types';
 
+// ✅ [수정] logout 함수의 타입 정의를 추가합니다.
 interface AuthContextType {
   user: User | null;
   userDocument: UserDocument | null;
   isAdmin: boolean;
-  isMaster: boolean; // ✨ [추가] 마스터 권한 확인용
+  isMaster: boolean;
   isSuspendedUser: boolean;
   loading: boolean;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userDocument: null,
   isAdmin: false,
-  isMaster: false, // ✨ [추가]
+  isMaster: false,
   isSuspendedUser: false,
   loading: true,
+  // ✅ [추가] 기본값에도 logout 함수를 추가합니다.
+  logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -63,10 +68,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     return () => unsubscribe();
   }, []);
+  
+  // ✅ [추가] 로그아웃 함수를 구현합니다.
+  const logout = useCallback(async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("로그아웃 실패:", error);
+    }
+  }, []);
 
-  // ✨ [수정] 'master' 또는 'admin'일 경우 isAdmin을 true로 설정
   const isAdmin = userDocument?.role === 'admin' || userDocument?.role === 'master';
-  // ✨ [추가] 'master' 역할인지 명확히 확인하는 변수
   const isMaster = userDocument?.role === 'master';
   const isSuspendedUser = userDocument?.loyaltyTier === '참여 제한';
 
@@ -74,9 +86,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     user,
     userDocument,
     isAdmin,
-    isMaster, // ✨ [추가]
+    isMaster,
     isSuspendedUser,
     loading,
+    // ✅ [추가] value 객체에 logout 함수를 포함시켜 다른 컴포넌트에서 사용할 수 있도록 합니다.
+    logout,
   };
 
   return (

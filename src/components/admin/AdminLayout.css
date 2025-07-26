@@ -1,42 +1,25 @@
 /* src/layouts/AdminLayout.css */
 
 .admin-layout {
-  /* ✅ [수정] flexbox를 사용하여 사이드바와 메인 콘텐츠 레이아웃을 구성합니다. */
   display: flex;
   min-height: 100vh;
   background-color: var(--bg-color-gray-soft, #f8f9fa);
 }
 
-/* ✅ [추가] 사이드바의 기본 스타일을 이곳에서 관리합니다. */
-.admin-sidebar {
-  flex-shrink: 0; /* 사이드바 너비가 줄어들지 않도록 설정 */
-  width: var(--admin-sidebar-width, 250px);
-  transition: width 0.3s ease-in-out;
-}
-
-.admin-layout.sidebar-collapsed .admin-sidebar {
-  width: var(--admin-sidebar-collapsed-width, 70px);
-}
-
-
-/* 메인 콘텐츠 영역 (Outlet이 렌더링되는 곳) */
 .admin-main-content {
-  /* ✅ flex-grow를 사용하여 남은 공간을 모두 차지하도록 합니다. */
   flex-grow: 1;
-  /* ✅ 콘텐츠가 많아지면 내부에서만 스크롤되도록 설정합니다. */
   overflow-y: auto;
   padding: 2rem;
-  /* ❗ 레이아웃 방식 변경으로 인해 기존의 복잡한 padding-left 로직을 모두 제거합니다. */
   box-sizing: border-box;
 }
 
-/* ❗ [제거] 더 이상 사용하지 않는 로딩 스피너 스타일을 제거합니다. */
-
 /* --- 반응형 디자인 (모바일/태블릿 최적화) --- */
 @media (max-width: 768px) {
-  /* 모바일에서는 사이드바가 화면 위에 덮어씌워지는 형태로 동작하므로,
-     AdminLayout.tsx의 state로 제어하는 것이 더 적합합니다.
-     아래는 데스크탑 레이아웃을 위한 기본 설정입니다. */
+  /* ✅ [모바일] 레이아웃 방향을 세로로 변경하여 상단바와 콘텐츠를 수직으로 쌓습니다. */
+  .admin-layout {
+    flex-direction: column;
+  }
+
   .admin-main-content {
     padding: 1rem;
   }

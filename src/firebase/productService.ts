@@ -11,7 +11,7 @@ import {
 import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem, WaitlistInfo, UserDocument, PointLog, PaginatedProductsResponse, LoyaltyTier } from '@/types';
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem, WaitlistInfo, UserDocument, PointLog, PaginatedProductsResponse } from '@/types';
 import { getUserDocById } from './userService';
 import { submitOrderFromWaitlist } from './orderService';
 import { calculateTier } from '@/utils/loyaltyUtils';
@@ -869,4 +869,37 @@ export const addStockAndProcessWaitlist = async (
   });
 
   return { convertedCount, failedCount };
+};
+
+/**
+ * @description 여러 상품 ID를 받아 해당하는 상품 문서 목록을 반환합니다.
+ * @param productIds - 조회할 상품 ID 배열
+ * @returns 상품 문서 배열
+ */
+export const getProductsByIds = async (productIds: string[]): Promise<Product[]> => {
+  if (productIds.length === 0) {
+    return [];
+  }
+  
+  // Firestore 'in' 쿼리는 최대 30개의 인자를 받을 수 있으므로, 30개씩 나누어 요청합니다.
+  const productChunks: string[][] = [];
+  for (let i = 0; i < productIds.length; i += 30) {
+    productChunks.push(productIds.slice(i, i + 30));
+  }
+
+  const productPromises = productChunks.map(chunk => {
+    const productsQuery = query(collection(db, 'products'), where('__name__', 'in', chunk));
+    return getDocs(productsQuery);
+  });
+  
+  const querySnapshots = await Promise.all(productPromises);
+  
+  const products: Product[] = [];
+  querySnapshots.forEach(snapshot => {
+    snapshot.forEach(doc => {
+      products.push({ id: doc.id, ...doc.data() } as Product);
+    });
+  });
+
+  return products;
 };

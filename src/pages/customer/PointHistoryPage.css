@@ -24,7 +24,8 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  background: var(--primary-color-light);
+  /* ✅ [수정] 배경색을 더 진하고 세련되게 변경 */
+  background: linear-gradient(135deg, #1d4ed8, #1d4ed8);
   padding: var(--spacing-md);
   border-radius: var(--border-radius-md);
 }
@@ -32,13 +33,15 @@
 .current-points-display span {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
-  color: var(--primary-color-dark);
+  /* ✅ [수정] 텍스트 색상을 밝게 변경 */
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .current-points-display strong {
   font-size: var(--font-size-xxl);
   font-weight: var(--font-weight-extrabold);
-  color: var(--primary-color);
+  /* ✅ [수정] 텍스트 색상을 흰색으로 변경 */
+  color: #ffffff;
 }
 
 .point-history-content {

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-// getReservedQuantitiesMap 임포트 제거
 import { getProducts, getActiveBanners } from '@/firebase';
 import type { Product, Banner } from '@/types';
 import type { DocumentData } from 'firebase/firestore';
@@ -18,24 +17,13 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-
+// ✅ [수정] 유틸리티 함수 import
+import { getDisplayRound, safeToDate } from '@/utils/productUtils';
 import './ProductListPage.css';
 import '@/styles/common.css';
 
 dayjs.extend(isBetween);
 dayjs.locale('ko');
-
-const convertTimestampToDate = (timestamp: any): Date | null => {
-  if (!timestamp) return null;
-  if (typeof timestamp.toDate === 'function') {
-    return timestamp.toDate();
-  }
-  if (typeof timestamp.seconds === 'number') {
-    return new Date(timestamp.seconds * 1000);
-  }
-  return null;
-};
-
 
 interface ProductWithUIState extends Product {
   phase: 'primary' | 'secondary' | 'past';
@@ -49,17 +37,7 @@ const ProductListPage: React.FC = () => {
   const { userDocument } = useAuth();
   
   const [banners, setBanners] = useState<Banner[]>([]);
-  
-  const [currentTime, setCurrentTime] = useState(dayjs());
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(dayjs());
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
   const [products, setProducts] = useState<Product[]>([]);
-  // reservedQuantitiesMap 상태 제거
   const [countdown, setCountdown] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -76,7 +54,6 @@ const ProductListPage: React.FC = () => {
 
     try {
       if (isInitial) {
-        // getReservedQuantitiesMap 호출 제거
         const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
       }
@@ -124,9 +101,9 @@ const ProductListPage: React.FC = () => {
     return () => { if (currentLoader) observer.unobserve(currentLoader); };
   }, [hasMore, loadingMore, loading, fetchProductsCallback]);
   
-  // reservedQuantitiesMap 의존성 제거
+  // ✅ [수정] useMemo 훅을 useEffect 밖으로 이동하고 로직을 개선
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
-    const now = currentTime;
+    const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
 
     const tempPrimary: ProductWithUIState[] = [];
@@ -134,54 +111,32 @@ const ProductListPage: React.FC = () => {
     const tempPast: ProductWithUIState[] = [];
 
     products.forEach(product => {
-      if (!product.salesHistory || product.salesHistory.length === 0) return;
+      const round = getDisplayRound(product);
+      if (!round || round.status === 'draft') return;
       
-      const sortedHistory = [...product.salesHistory].sort((a, b) => {
-        const dateA = convertTimestampToDate(a.publishAt)?.getTime() || 0;
-        const dateB = convertTimestampToDate(b.publishAt)?.getTime() || 0;
-        return dateB - dateA;
-      });
-      
-     const round = sortedHistory[0];
-if (!round || round.status === 'draft') return;
-
-// ▼ 이렇게 변경됩니다.
-// 1. 상품의 참여 가능 등급(allowedTiers) 정보를 가져옵니다.
-const allowedTiers = round.allowedTiers || [];
-
-// 2. 만약 참여 등급 제한이 있는데 (allowedTiers 배열에 값이 있는데),
-if (allowedTiers.length > 0) {
-  // 3. 사용자가 로그인을 안했거나, 사용자의 등급이 참여 가능 등급에 포함되지 않으면,
-  if (!userTier || !allowedTiers.includes(userTier)) {
-    return; // 이 상품을 목록에 표시하지 않고 건너뜁니다.
-  }
-}
-      const publishAtDate = convertTimestampToDate(round.publishAt);
-      const primaryEndDate = convertTimestampToDate(round.deadlineDate);
-      
-      const pickupStartDate = convertTimestampToDate(round.pickupDate);
-      let secondaryEndDate: Date | null = null;
-      if (pickupStartDate) {
-        const tempDate = new Date(pickupStartDate);
-        tempDate.setHours(13, 0, 0, 0);
-        secondaryEndDate = tempDate;
+      const allowedTiers = round.allowedTiers || [];
+      if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) {
+        return;
       }
 
-      if (!publishAtDate || !primaryEndDate || !secondaryEndDate) return;
-      
-      const publishAt = dayjs(publishAtDate);
-      const primaryEnd = dayjs(primaryEndDate);
-      const secondaryEnd = dayjs(secondaryEndDate);
-      
-      if (now.isBefore(publishAt)) return;
+      const primaryEndDate = safeToDate(round.deadlineDate);
+      const pickupStartDate = safeToDate(round.pickupDate);
+      const secondaryEndDate = pickupStartDate ? dayjs(pickupStartDate).hour(13).minute(0).second(0).toDate() : null;
+
+      if (!primaryEndDate || !secondaryEndDate) return;
 
       let currentPhase: 'primary' | 'secondary' | 'past';
-      if (now.isBefore(primaryEnd)) {
+      if (now.isBefore(dayjs(primaryEndDate))) {
         currentPhase = 'primary';
-      } else if (now.isBefore(secondaryEnd)) {
+      } else if (now.isBefore(dayjs(secondaryEndDate))) {
         currentPhase = 'secondary';
       } else {
         currentPhase = 'past';
+      }
+
+      const publishAtDate = safeToDate(round.publishAt);
+      if (round.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) {
+        return;
       }
 
       const productWithState: ProductWithUIState = {
@@ -196,52 +151,37 @@ if (allowedTiers.length > 0) {
       } else if (currentPhase === 'secondary') {
         const isSoldOut = round.variantGroups.every(vg => {
             const totalStock = vg.totalPhysicalStock;
-            if (totalStock === null || totalStock === -1 || totalStock === 0) {
-                return false;
-            }
-            const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
-            // product.reservedQuantities 에서 직접 값을 읽도록 수정
-            const reserved = product.reservedQuantities?.[reservedKey] || 0;
-            const remainingStock = totalStock - reserved;
-            const minDeductionAmount = Math.min(...vg.items.map(item => item.stockDeductionAmount || 1));
-            return remainingStock < minDeductionAmount;
+            if (totalStock === null || totalStock === -1) return false;
+            if (totalStock === 0) return true;
+            
+            const reserved = product.reservedQuantities?.[`${product.id}-${round.roundId}-${vg.id}`] || 0;
+            return totalStock - reserved <= 0;
         });
 
         if (!isSoldOut) {
             tempSecondary.push(productWithState);
         }
-      } else { // 'past'
-        if (now.diff(secondaryEnd, 'day') <= 7) {
+      } else {
+        if (now.diff(dayjs(secondaryEndDate), 'day') <= 7) {
             tempPast.push(productWithState);
         }
       }
     });
-
-    tempPrimary.sort((a, b) => {
-      return (a.deadlines.primaryEnd?.getTime() || 0) - (b.deadlines.primaryEnd?.getTime() || 0);
-    });
     
-    tempSecondary.sort((a, b) => {
-      return (a.deadlines.secondaryEnd?.getTime() || 0) - (b.deadlines.secondaryEnd?.getTime() || 0);
-    });
+    tempPrimary.sort((a, b) => (a.deadlines.primaryEnd?.getTime() || 0) - (b.deadlines.primaryEnd?.getTime() || 0));
+    tempSecondary.sort((a, b) => (a.deadlines.secondaryEnd?.getTime() || 0) - (b.deadlines.secondaryEnd?.getTime() || 0));
 
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
       const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
-      if (!pastGroups[dateKey]) {
-        pastGroups[dateKey] = [];
-      }
+      if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
       pastGroups[dateKey].push(p);
     });
     
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
-      sortedPastGroups[key] = pastGroups[key].sort((productA, productB) => {
-        const roundNameA = productA.salesHistory[0]?.roundName || '';
-        const roundNameB = productB.salesHistory[0]?.roundName || '';
-        return roundNameB.localeCompare(roundNameA);
-      });
+      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.salesHistory[0]?.roundName || '').localeCompare(b.salesHistory[0]?.roundName || ''));
     });
 
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? dayjs(tempPrimary[0].deadlines.primaryEnd) : null;
@@ -252,8 +192,8 @@ if (allowedTiers.length > 0) {
       pastProductsByDate: sortedPastGroups,
       primarySaleEndDate: firstPrimarySaleEndDate,
     };
-  }, [products, userDocument, currentTime]);
-  
+  }, [products, userDocument]);
+      
   useEffect(() => {
     if (primarySaleProducts.length === 0 || !primarySaleEndDate) {
       setCountdown(null);
@@ -307,7 +247,6 @@ if (allowedTiers.length > 0) {
           countdownText={primarySaleProducts.length > 0 ? countdown : null}
         >
           {primarySaleProducts.length > 0
-            // ProductCard에 reservedQuantitiesMap prop 제거
             ? primarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />)
             : !loading && (
               <div className="product-list-placeholder">
@@ -321,7 +260,6 @@ if (allowedTiers.length > 0) {
         
         {secondarySaleProducts.length > 0 && (
           <ProductSection title={<>⏰ 마감임박! 추가공구</>}>
-             {/* ProductCard에 reservedQuantitiesMap prop 제거 */}
             {secondarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />)}
           </ProductSection>
         )}
@@ -337,7 +275,6 @@ if (allowedTiers.length > 0) {
                 title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}
               >
                 {productsForDate.map(p => (
-                   // ProductCard에 reservedQuantitiesMap prop 제거
                   <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />
                 ))}
               </ProductSection>

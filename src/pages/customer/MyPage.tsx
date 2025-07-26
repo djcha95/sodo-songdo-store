@@ -2,9 +2,9 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
+// ✅ [수정] signOut 관련 import는 AuthContext에서 처리하므로 제거합니다.
 import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '@/firebase/firebaseConfig';
+import { db } from '@/firebase/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { 
   Crown, Gem, Sparkles, ShieldAlert, ShieldX, LogOut,
@@ -24,7 +24,7 @@ const getLoyaltyInfo = (points: number): {
   icon: React.ReactNode; 
   nextTierPoints: number | null;
   minPoints: number; 
-  color: string 
+  color: string // 이 color는 이제 사용되지 않지만, 다른 곳에서 쓸 수 있으니 유지합니다.
 } => {
     if (points >= 500) return { tier: '공구의 신', icon: <Crown size={24} />, nextTierPoints: null, minPoints: 500, color: 'var(--loyalty-god)' };
     if (points >= 200) return { tier: '공구왕', icon: <Gem size={24} />, nextTierPoints: 500, minPoints: 200, color: 'var(--loyalty-king)' };
@@ -34,6 +34,20 @@ const getLoyaltyInfo = (points: number): {
     return { tier: '참여 제한', icon: <ShieldX size={24} />, nextTierPoints: 0, minPoints: -300, color: 'var(--loyalty-restricted)' };
 };
 
+// ✅ [추가] 등급에 따른 CSS 클래스 이름을 반환하는 헬퍼 함수
+const getTierClassName = (tier: LoyaltyTier): string => {
+  switch (tier) {
+    case '공구의 신': return 'tier-god';
+    case '공구왕': return 'tier-king';
+    case '공구요정': return 'tier-fairy';
+    case '공구새싹': return 'tier-sprout';
+    case '주의 요망': return 'tier-warning';
+    case '참여 제한': return 'tier-restricted';
+    default: return 'tier-default';
+  }
+};
+
+
 // =================================================================
 // 하위 컴포넌트
 // =================================================================
@@ -41,6 +55,8 @@ const getLoyaltyInfo = (points: number): {
 const UnifiedProfileCard: React.FC<{ userDocument: UserDocument }> = ({ userDocument }) => {
   const navigate = useNavigate();
   const loyaltyInfo = useMemo(() => getLoyaltyInfo(userDocument?.points || 0), [userDocument?.points]);
+  // ✅ [추가] 등급별 CSS 클래스 이름 생성
+  const tierClassName = getTierClassName(loyaltyInfo.tier);
 
   const progressPercent = useMemo(() => {
     if (!loyaltyInfo || loyaltyInfo.nextTierPoints === null) return 100;
@@ -58,7 +74,8 @@ const UnifiedProfileCard: React.FC<{ userDocument: UserDocument }> = ({ userDocu
   const pointsToNextTier = loyaltyInfo?.nextTierPoints !== null ? loyaltyInfo.nextTierPoints - (userDocument?.points || 0) : null;
   
   return (
-    <div className="unified-profile-card" style={{ '--tier-color': loyaltyInfo.color } as React.CSSProperties}>
+    // ✅ [수정] 인라인 스타일 대신 동적 CSS 클래스를 적용합니다.
+    <div className={`unified-profile-card ${tierClassName}`}>
       <div className="profile-card-header">
         <div className="profile-info">
           <span className="display-name">
@@ -126,7 +143,6 @@ const NicknameSetupSection: React.FC<{ userDocument: UserDocument }> = ({ userDo
         }
     };
 
-    // 닉네임을 이미 변경했거나, (혹시 모를 레거시 데이터) 닉네임이 이미 있는 경우, 설정 UI를 보여주지 않음
     if (userDocument.nicknameChanged || userDocument.nickname) {
         return null;
     }
@@ -223,19 +239,28 @@ const MenuList: React.FC = () => {
 // =================================================================
 
 const MyPage = () => {
-  const { user, userDocument } = useAuth();
+  // ✅ [수정] AuthContext에서 user, userDocument와 함께 logout 함수를 가져옵니다.
+  const { user, userDocument, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = useCallback(async () => {
-    try {
-      await signOut(auth);
-      navigate('/login');
-      toast.success("성공적으로 로그아웃 되었습니다.");
-    } catch (error) {
-      console.error("로그아웃 오류:", error);
-      toast.error("로그아웃 중 오류가 발생했습니다.");
-    }
-  }, [navigate]);
+  // ✅ [수정] 로그아웃 로직을 AuthContext의 공통 함수를 사용하도록 변경합니다.
+  const handleLogout = useCallback(() => {
+    toast((t) => (
+      <div className="confirmation-toast">
+          <h4>로그아웃</h4>
+          <p>정말 로그아웃 하시겠습니까?</p>
+          <div className="toast-buttons">
+              <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
+              <button className="common-button button-danger button-medium" onClick={async () => {
+                  toast.dismiss(t.id);
+                  await logout();
+                  navigate('/login');
+                  toast.success("성공적으로 로그아웃 되었습니다.");
+              }}>로그아웃</button>
+          </div>
+      </div>
+    ));
+  }, [logout, navigate]);
 
   if (!user || !userDocument) {
     return (
