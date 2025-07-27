@@ -5,7 +5,7 @@ import React from 'react';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ClipboardList,
-  Image as ImageIcon, ExternalLink, Menu, SlidersHorizontal, Zap
+  Image as ImageIcon, ExternalLink, Menu, SlidersHorizontal, Zap, PlusSquare
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -13,9 +13,10 @@ interface AdminSidebarProps {
   toggleSidebar: () => void;
 }
 
-const MenuItem = ({ to, icon, text, isSidebarOpen }: { to: string; icon: React.ReactNode; text: string; isSidebarOpen: boolean; }) => (
+// ✅ [수정] NavLink가 현재 경로와 정확히 일치할 때만 active 클래스를 적용하도록 'end' prop 추가
+const MenuItem = ({ to, icon, text, isSidebarOpen, end = false }: { to: string; icon: React.ReactNode; text: string; isSidebarOpen: boolean; end?: boolean; }) => (
   <li className="menu-item">
-    <NavLink to={to} title={!isSidebarOpen ? text : undefined}>
+    <NavLink to={to} title={!isSidebarOpen ? text : undefined} end={end}>
       {icon}
       {isSidebarOpen && <span>{text}</span>}
     </NavLink>
@@ -39,14 +40,15 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
       </div>
 
       <nav className="sidebar-nav">
-        {/* ✅ [수정] 모바일 가로 스크롤을 위해 모든 메뉴를 하나의 ul로 통합합니다. */}
         <ul>
+          {/* ✅ [수정] 대시보드를 가장 위로 이동하여 메인 페이지임을 명시 */}
+          <MenuItem to="/admin/dashboard" icon={<Home size={18} />} text="대시보드" isSidebarOpen={isSidebarOpen} end={true} />
           <MenuItem to="/admin/quick-check" icon={<Zap size={18} />} text="빠른 예약확인" isSidebarOpen={isSidebarOpen} />
-          <MenuItem to="/admin/dashboard" icon={<Home size={18} />} text="대시보드" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/orders" icon={<ShoppingCart size={18} />} text="주문 통합 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/users" icon={<Users size={18} />} text="고객 관리" isSidebarOpen={isSidebarOpen} />
-          <MenuItem to="/admin/products" icon={<Package size={18} />} text="상품 목록" isSidebarOpen={isSidebarOpen} />
-          <MenuItem to="/admin/products/add" icon={<Package size={18} />} text="새 상품 등록" isSidebarOpen={isSidebarOpen} />
+          {/* ✅ [수정] '상품 목록' 메뉴에 end prop을 전달하여 정확한 경로에서만 활성화되도록 수정 */}
+          <MenuItem to="/admin/products" icon={<Package size={18} />} text="상품 목록" isSidebarOpen={isSidebarOpen} end={true} />
+          <MenuItem to="/admin/products/add" icon={<PlusSquare size={18} />} text="새 상품 등록" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products/batch-category" icon={<SlidersHorizontal size={18} />} text="카테고리 일괄 변경" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/categories" icon={<ClipboardList size={18} />} text="카테고리 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/banners" icon={<ImageIcon size={18} />} text="배너 관리" isSidebarOpen={isSidebarOpen} />

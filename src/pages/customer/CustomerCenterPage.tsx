@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import InfoTab from '@/components/customer/InfoTab';
 import GuideTab from '@/components/customer/GuideTab';
 import FaqTab from '@/components/customer/FaqTab';
-import { isEqual } from 'lodash';
+import isEqual from 'lodash/isEqual';
 import './CustomerCenterPage.css';
 
 const defaultUsageGuide: GuideItem[] = [

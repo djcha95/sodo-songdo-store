@@ -4,10 +4,9 @@ import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/produc
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
-// ✅ [수정] SodomallLoader를 사용합니다.
 import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
-import { TrendingUp, SaveAll } from 'lucide-react';
+import { TrendingUp, SaveAll, Hourglass, CheckCircle } from 'lucide-react';
 import './DashboardPage.css';
 
 interface EnrichedGroupItem {
@@ -19,7 +18,8 @@ interface EnrichedGroupItem {
   variantGroupId: string;
   variantGroupName: string;
   uploadDate: string;
-  reservedQuantity: number;
+  confirmedReservedQuantity: number; // ✅ [수정] 확정된 예약 수량
+  pendingPrepaymentQuantity: number; // ✅ [추가] 선입금 대기 수량
   waitlistedQuantity: number;
   configuredStock: number;
 }
@@ -40,23 +40,36 @@ const DashboardPage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [products, allReservedOrders] = await Promise.all([
+      // ✅ [수정] 선입금 완료된 주문도 함께 가져오도록 쿼리 변경
+      const [products, allPendingOrders] = await Promise.all([
         getProducts(false),
-        getDocs(query(collection(db, 'orders'), where('status', '==', 'RESERVED'))),
+        getDocs(query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))),
       ]);
 
-      const reservedQuantitiesMap = new Map<string, number>();
-      allReservedOrders.forEach(doc => {
+      // ✅ [수정] '확정된 예약'과 '선입금 대기'를 구분하여 집계
+      const confirmedReservationMap = new Map<string, number>();
+      const pendingPrepaymentMap = new Map<string, number>();
+
+      allPendingOrders.forEach(doc => {
         const order = doc.data() as Order;
         (order.items || []).forEach((item: OrderItem) => {
           const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-          const currentQty = reservedQuantitiesMap.get(groupKey) || 0;
-          reservedQuantitiesMap.set(groupKey, currentQty + item.quantity);
+          
+          if(order.status === 'RESERVED' && order.wasPrepaymentRequired) {
+            // 선입금이 필요한 '가예약' 상태
+            const currentQty = pendingPrepaymentMap.get(groupKey) || 0;
+            pendingPrepaymentMap.set(groupKey, currentQty + item.quantity);
+          } else {
+            // 재고가 차감된 '진예약' 상태 (일반 예약 또는 선입금 완료)
+            const currentQty = confirmedReservationMap.get(groupKey) || 0;
+            confirmedReservationMap.set(groupKey, currentQty + item.quantity);
+          }
         });
       });
 
       const allDisplayItems: EnrichedGroupItem[] = [];
-      products.forEach((product: Product) => {
+      // ✅ [수정] products.products 배열에 접근하도록 수정
+      products.products.forEach((product: Product) => {
         const uploadDate = product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
 
         product.salesHistory?.forEach((round: SalesRound) => {
@@ -78,7 +91,8 @@ const DashboardPage: React.FC = () => {
               variantGroupId: groupId,
               variantGroupName: vg.groupName,
               uploadDate: uploadDate,
-              reservedQuantity: reservedQuantitiesMap.get(groupKey) || 0,
+              confirmedReservedQuantity: confirmedReservationMap.get(groupKey) || 0,
+              pendingPrepaymentQuantity: pendingPrepaymentMap.get(groupKey) || 0,
               waitlistedQuantity: round.waitlistCount || 0,
               configuredStock: finalConfiguredStock,
             });
@@ -161,8 +175,7 @@ const DashboardPage: React.FC = () => {
     setStockInputs({});
     fetchData();
   };
-
-  // ✅ [수정] 페이지 로딩 시 SodomallLoader를 사용합니다.
+  
   if (loading) return <SodomallLoader />;
 
   return (
@@ -193,7 +206,10 @@ const DashboardPage: React.FC = () => {
                     <th>No.</th>
                     <th>상품명</th>
                     <th>판매 회차</th>
-                    <th>예약 수량</th>
+                    {/* ✅ [추가] 선입금 대기 컬럼 */}
+                    <th className="wait-col"><Hourglass size={14} /> 선입금 대기</th>
+                    {/* ✅ [수정] 예약 -> 확정으로 명칭 변경 */}
+                    <th className="reserve-col"><CheckCircle size={14} /> 확정 수량</th>
                     <th>대기 수량</th>
                     <th>남은 수량</th>
                     <th>설정된 재고</th>
@@ -202,7 +218,8 @@ const DashboardPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {groupedItems[date].map((item, index) => {
-                    const remainingStock = item.configuredStock === -1 ? -1 : item.configuredStock - item.reservedQuantity;
+                    // ✅ [수정] 남은 수량 계산 시 '확정 수량'만 사용
+                    const remainingStock = item.configuredStock === -1 ? -1 : item.configuredStock - item.confirmedReservedQuantity;
                     const displayName = item.productName === item.variantGroupName
                       ? item.productName
                       : `${item.productName} - ${item.variantGroupName}`;
@@ -212,8 +229,11 @@ const DashboardPage: React.FC = () => {
                         <td>{index + 1}</td>
                         <td className="product-name-cell">{displayName}</td>
                         <td>{item.roundName}</td>
-                        <td className="quantity-cell">{item.reservedQuantity}</td>
-                        <td className="quantity-cell">{item.waitlistedQuantity}</td>
+                        {/* ✅ [추가] 선입금 대기 수량 표시 */}
+                        <td className="quantity-cell wait-col">{item.pendingPrepaymentQuantity > 0 ? item.pendingPrepaymentQuantity : '-'}</td>
+                        {/* ✅ [수정] 확정 수량 표시 */}
+                        <td className="quantity-cell reserve-col">{item.confirmedReservedQuantity}</td>
+                        <td className="quantity-cell">{item.waitlistedQuantity > 0 ? item.waitlistedQuantity : '-'}</td>
                         <td className="quantity-cell important-cell">
                           {remainingStock === -1
                             ? <span className="unlimited-stock">무제한</span>

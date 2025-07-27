@@ -7,24 +7,22 @@ import {
   Timestamp,
   arrayUnion,
   deleteDoc,
-  getDoc, // ✅ [수정] getDoc 함수를 추가하고, 사용하지 않는 함수들을 제거했습니다.
+  getDoc,
 } from 'firebase/firestore';
 import type { UserDocument, Order, OrderStatus, PointLog, Product } from '@/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
 
 /**
  * @description 포인트 정책 정의
- * ✅ [수정] 구매 금액 비례 정책 도입으로 고정 픽업 포인트 제거, 연속 출석 보너스 추가
+ * ✅ [수정] 취소 패널티 정책의 이름과 사유를 명확하게 변경했습니다.
  */
 export const POINT_POLICIES = {
-  // PICKED_UP: { points: 10, reason: '정상 픽업 완료' }, // 제거
-  // PREPAID_PICKED_UP: { points: 15, reason: '선입금 상품 픽업 완료' }, // 제거
   LATE_PICKED_UP: { points: -40, reason: '지각 픽업 완료' },
   NO_SHOW: { points: -100, reason: '노쇼 (미픽업)' },
-  CANCEL_AFTER_DEADLINE: { points: -20, reason: '1차 마감 후 취소' },
+  CANCEL_IN_PENALTY_WINDOW: { points: -30, reason: '1차 마감 후 ~ 픽업일 13시 사이 취소' }, // ✅ [수정]
   CANCEL_ON_PICKUP_DAY: { points: -40, reason: '픽업 당일 취소' },
   DAILY_LOGIN: { points: 1, reason: '일일 첫 로그인' },
-  MONTHLY_ATTENDANCE_BONUS: { points: 100, reason: '한달 연속 출석 보너스' }, // ✅ [추가]
+  MONTHLY_ATTENDANCE_BONUS: { points: 100, reason: '한달 연속 출석 보너스' },
   REVIEW_CREATED: { points: 5, reason: '리뷰 작성' },
   FRIEND_INVITED: { points: 30, reason: '친구 초대 성공' },
   COMMUNITY_PROMOTION: { points: 200, reason: '커뮤니티 홍보 인증' },
@@ -55,9 +53,8 @@ export const applyPointChangeByStatus = async (
 
   switch (newStatus) {
     case 'PICKED_UP':
-      // ✅ [수정] 고정 포인트 대신 주문 금액의 0.5%를 계산하여 지급
       const purchasePoints = Math.floor(order.totalPrice * 0.005);
-      const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0; // 선결제 시 5포인트 추가 보너스
+      const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0; 
       const totalPoints = purchasePoints + prepaidBonus;
       
       let reason = `구매 확정 (결제액: ₩${order.totalPrice.toLocaleString()})`;
@@ -77,7 +74,7 @@ export const applyPointChangeByStatus = async (
       break;
   }
 
-  if (policy && policy.points !== 0) { // ✅ [수정] 0 포인트는 기록하지 않음
+  if (policy && policy.points !== 0) { 
     const newPoints = (userDoc.points || 0) + policy.points;
     const newTier = calculateTier(newPoints);
     const now = new Date();
@@ -222,7 +219,6 @@ export const getPointHistory = async (
   count: number = 20
 ): Promise<PointLog[]> => {
   const userRef = doc(db, 'users', userId);
-  // ✅ [오류 수정] getDoc 함수를 사용하도록 수정
   const userSnapshot = await getDoc(userRef);
 
   if (!userSnapshot.exists()) return [];
@@ -246,7 +242,6 @@ export const getPointHistory = async (
 
 /**
  * @description 사용자의 일일 방문을 기록하고 포인트와 등급을 업데이트합니다.
- * ✅ [수정] 연속 출석일 계산 및 보너스 지급 로직 추가
  */
 export const recordDailyVisit = async (userId: string): Promise<void> => {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -259,17 +254,14 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
 
       const userData = userDoc.data() as UserDocument;
       
-      // 이미 오늘 방문 기록이 있으면 종료
       if (userData.lastLoginDate === todayStr) {
         return;
       }
 
-      // --- 포인트 및 연속 출석 계산 ---
       let pointsToAdd = 0;
       const pointLogsToAdd: Omit<PointLog, 'id'>[] = [];
       let newConsecutiveDays = userData.consecutiveLoginDays || 0;
 
-      // 1. 기본 출석 포인트
       pointsToAdd += POINT_POLICIES.DAILY_LOGIN.points;
       const dailyLoginExpiration = new Date();
       dailyLoginExpiration.setFullYear(dailyLoginExpiration.getFullYear() + 1);
@@ -280,7 +272,6 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
         expiresAt: Timestamp.fromDate(dailyLoginExpiration),
       });
 
-      // 2. 연속 출석일 업데이트
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
@@ -288,10 +279,9 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
       if (userData.lastLoginDate === yesterdayStr) {
         newConsecutiveDays += 1;
       } else {
-        newConsecutiveDays = 1; // 연속 출석 깨짐
+        newConsecutiveDays = 1; 
       }
 
-      // 3. 연속 출석 보너스 확인
       if (newConsecutiveDays === 30) {
         pointsToAdd += POINT_POLICIES.MONTHLY_ATTENDANCE_BONUS.points;
         const bonusExpiration = new Date();
@@ -302,10 +292,9 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
           createdAt: Timestamp.now(),
           expiresAt: Timestamp.fromDate(bonusExpiration),
         });
-        newConsecutiveDays = 0; // 보너스 지급 후 초기화
+        newConsecutiveDays = 0; 
       }
       
-      // --- 최종 데이터 업데이트 ---
       const newPoints = (userData.points || 0) + pointsToAdd;
       const newTier = calculateTier(newPoints);
       
@@ -314,7 +303,6 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
         loyaltyTier: newTier,
         lastLoginDate: todayStr,
         consecutiveLoginDays: newConsecutiveDays,
-        // 여러 포인트 로그를 한 번에 추가
         pointHistory: arrayUnion(...pointLogsToAdd),
       };
 

@@ -87,10 +87,9 @@ const router = createBrowserRouter([
             path: "admin",
             element: <Suspense fallback={<SodomallLoader />}><AdminLayout /></Suspense>,
             children: [
-              // ✅ [수정] Redirect 대신 QuickCheckPage를 직접 index 컴포넌트로 렌더링합니다.
-              { index: true, element: <QuickCheckPage /> },
+              // ✅ [수정] 관리자 페이지의 기본 경로를 다시 대시보드로 변경합니다.
+              { index: true, element: <DashboardPage /> },
               { path: 'dashboard', element: <DashboardPage /> },
-              // '빠른 예약 확인' 페이지는 /admin 경로에서도 접근 가능하도록 유지합니다.
               { path: 'quick-check', element: <QuickCheckPage /> },
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
