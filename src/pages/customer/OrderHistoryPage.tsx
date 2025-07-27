@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap,
+  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap, Info,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -86,7 +86,6 @@ const formatPickupDateShort = (date: Date): string => {
   return `${date.getMonth() + 1}/${date.getDate()}(${dayOfWeek})`;
 };
 
-// ✅ [수정] 무한 루프를 방지하기 위해 빈 페이로드 상수를 정의합니다.
 const EMPTY_PAYLOAD = {};
 
 // =================================================================
@@ -163,7 +162,6 @@ const usePaginatedData = <T,>(
     fetchData(false);
   }, [fetchData]);
 
-  // ✅ [수정] loadingMore 상태를 loading 상태와 병합하여 반환
   return { data, setData, loading: loading || loadingMore, hasMore, loadMore };
 };
 
@@ -340,7 +338,6 @@ const OrderHistoryPage: React.FC = () => {
   const { data: orders, setData: setOrders, loading: ordersLoading, hasMore: hasMoreOrders, loadMore: loadMoreOrders } =
     usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'orders' || viewMode === 'pickup');
 
-  // ✅ [수정] 인라인 {} 대신 상수를 사용하여 무한 재렌더링을 방지합니다.
   const { data: waitlist, setData: setWaitlist, loading: waitlistLoading, loadMore: loadMoreWaitlist, hasMore: hasMoreWaitlist } =
     usePaginatedData<WaitlistInfo>(user?.uid, getUserWaitlistCallable, EMPTY_PAYLOAD, viewMode === 'waitlist');
   
@@ -354,7 +351,8 @@ const OrderHistoryPage: React.FC = () => {
       const dateStr = dayjs(date).format('YYYY-MM-DD');
 
       (order.items || []).forEach((item: OrderItem) => {
-        const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
+        // ✅ [수정] 집계 키에 order.status를 추가하여 취소된 주문이 별도로 집계되도록 함
+        const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}`;
         const stableAnimationId = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
 
         if (!aggregated[aggregationKey]) {
@@ -378,7 +376,7 @@ const OrderHistoryPage: React.FC = () => {
 
     Object.values(aggregated).forEach(item => {
       const sortedOrders = [...item.originalOrders].sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0));
-      item.status = sortedOrders[0]?.status ?? 'RESERVED';
+      // 상태는 이미 집계 시점에 결정되었으므로 여기서는 정렬만 수행
       item.originalOrders = sortedOrders;
     });
 
@@ -421,8 +419,11 @@ const OrderHistoryPage: React.FC = () => {
   const handleCancelOrder = useCallback((orderToCancel: Order) => {
     toast((t) => (
       <div className="confirmation-toast">
-          <h4>예약 취소</h4>
+          <h4><AlertCircle style={{ color: 'var(--warning-color)'}}/> 예약 취소</h4>
           <p>예약을 취소하시겠습니까?</p>
+          <div className="toast-warning-box">
+              <Info size={16} /> 1차 마감 이후 취소 시 신뢰도 포인트가 차감될 수 있습니다.
+          </div>
           <div className="toast-buttons">
               <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
               <button
@@ -433,7 +434,10 @@ const OrderHistoryPage: React.FC = () => {
                       toast.promise(promise, {
                         loading: '예약 취소 처리 중...',
                         success: () => {
-                          setOrders(prev => prev.filter(o => o.id !== orderToCancel.id));
+                          // ✅ [수정] 주문을 삭제하는 대신, 상태를 'CANCELED'로 업데이트
+                          setOrders(prev => prev.map(o => 
+                            o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o
+                          ));
                           return '예약이 성공적으로 취소되었습니다.';
                         },
                         error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
@@ -573,7 +577,6 @@ const OrderHistoryPage: React.FC = () => {
   return (
     <div className="customer-page-container">
       <div className="order-history-page">
-        {/* ✅ [수정] 탭 버튼에서 개별 로더 제거 */}
         <div className="view-toggle-container">
           <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => setViewMode('orders')}>
             <ListOrdered size={18} /> 주문일순
@@ -598,7 +601,6 @@ const OrderHistoryPage: React.FC = () => {
             </motion.div>
         </AnimatePresence>
         
-        {/* ✅ [수정] 하단 로더 및 메시지 로직을 각 탭에 맞게 분리 */}
         {(viewMode === 'orders' || viewMode === 'pickup') && ordersLoading && orders.length > 0 && (
           <div className="loading-more-spinner"><InlineSodomallLoader /></div>
         )}
