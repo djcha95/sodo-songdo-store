@@ -101,7 +101,6 @@ const ProductListPage: React.FC = () => {
     return () => { if (currentLoader) observer.unobserve(currentLoader); };
   }, [hasMore, loadingMore, loading, fetchProductsCallback]);
   
-  // ✅ [수정] useMemo 훅을 useEffect 밖으로 이동하고 로직을 개선
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
@@ -168,7 +167,46 @@ const ProductListPage: React.FC = () => {
       }
     });
     
-    tempPrimary.sort((a, b) => (a.deadlines.primaryEnd?.getTime() || 0) - (b.deadlines.primaryEnd?.getTime() || 0));
+    // ✅ [수정] 오늘의 공동구매(primarySaleProducts) 정렬 로직 변경
+    const getProductRemainingStock = (product: ProductWithUIState): number => {
+      const round = getDisplayRound(product);
+      if (!round) return Infinity;
+
+      let totalRemaining = 0;
+      let isLimited = false;
+
+      round.variantGroups.forEach(vg => {
+        const totalStock = vg.totalPhysicalStock;
+        if (totalStock !== null && totalStock !== -1) {
+          isLimited = true;
+          const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
+          const reserved = product.reservedQuantities?.[reservedKey] || 0;
+          totalRemaining += (totalStock - reserved);
+        }
+      });
+      
+      return isLimited ? totalRemaining : Infinity;
+    };
+
+    tempPrimary.sort((a, b) => {
+      const stockA = getProductRemainingStock(a);
+      const stockB = getProductRemainingStock(b);
+
+      const isALimited = stockA !== Infinity;
+      const isBLimited = stockB !== Infinity;
+
+      if (isALimited && !isBLimited) return -1;
+      if (!isALimited && isBLimited) return 1;
+
+      if (isALimited && isBLimited && stockA !== stockB) {
+        return stockA - stockB;
+      }
+      
+      const deadlineA = a.deadlines.primaryEnd?.getTime() || 0;
+      const deadlineB = b.deadlines.primaryEnd?.getTime() || 0;
+      return deadlineA - deadlineB;
+    });
+
     tempSecondary.sort((a, b) => (a.deadlines.secondaryEnd?.getTime() || 0) - (b.deadlines.secondaryEnd?.getTime() || 0));
 
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};

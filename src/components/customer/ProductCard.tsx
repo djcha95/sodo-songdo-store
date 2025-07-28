@@ -278,7 +278,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg.id}`;
         const reserved = product.reservedQuantities?.[reservedKey] || 0;
         const remaining = (totalStock || 0) - reserved;
-        stockText = `${remaining}개 한정`;
+        stockText = `${remaining}개 남음!`;
       }
     }
     
