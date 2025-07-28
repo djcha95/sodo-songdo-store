@@ -117,7 +117,8 @@ const NicknameSetupSection: React.FC<{ userDocument: UserDocument }> = ({ userDo
 
     const handleSaveNickname = async () => {
         if (!nicknameInput.trim()) {
-            toast.error("닉네임을 입력해주세요.");
+            // ✅ [수정] 토스트가 3초 후 자동으로 사라지도록 duration 옵션을 추가합니다.
+            toast.error("닉네임을 입력해주세요.", { duration: 3000 });
             return;
         }
         setIsLoading(true);
@@ -127,11 +128,15 @@ const NicknameSetupSection: React.FC<{ userDocument: UserDocument }> = ({ userDo
             nickname: nicknameInput.trim(),
             nicknameChanged: true,
         });
-
+        
+        // ✅ [수정] 성공 및 에러 토스트가 3초 후 자동으로 사라지도록 duration 옵션을 추가합니다.
         toast.promise(promise, {
             loading: '닉네임을 저장하는 중...',
             success: '닉네임이 성공적으로 설정되었습니다!',
             error: '닉네임 저장에 실패했습니다. 다시 시도해주세요.'
+        }, {
+            success: { duration: 3000 },
+            error: { duration: 3000 }
         });
 
         try {
@@ -178,9 +183,11 @@ const ReferralCodeSection: React.FC<{ referralCode?: string }> = ({ referralCode
   const handleCopy = () => {
     if (!referralCode) return;
     navigator.clipboard.writeText(referralCode)
-      .then(() => toast.success('초대코드가 복사되었습니다!'))
+      // ✅ [수정] 성공 토스트가 3초 후 자동으로 사라지도록 duration 옵션을 추가합니다.
+      .then(() => toast.success('초대코드가 복사되었습니다!', { duration: 3000 }))
       .catch(err => {
-        toast.error('복사에 실패했습니다.');
+        // ✅ [수정] 에러 토스트가 3초 후 자동으로 사라지도록 duration 옵션을 추가합니다.
+        toast.error('복사에 실패했습니다.', { duration: 3000 });
         console.error('클립보드 복사 실패:', err);
       });
   };
@@ -255,11 +262,15 @@ const MyPage = () => {
                   toast.dismiss(t.id);
                   await logout();
                   navigate('/login');
-                  toast.success("성공적으로 로그아웃 되었습니다.");
+                  // ✅ [수정] 로그아웃 성공 토스트가 3초 후 자동으로 사라지도록 duration 옵션을 추가합니다.
+                  toast.success("성공적으로 로그아웃 되었습니다.", { duration: 3000 });
               }}>로그아웃</button>
           </div>
       </div>
-    ));
+    ), {
+        // 대화형 토스트는 사용자가 직접 닫아야 하므로 무한 지속 시간을 유지합니다.
+        duration: Infinity
+    });
   }, [logout, navigate]);
 
   if (!user || !userDocument) {
