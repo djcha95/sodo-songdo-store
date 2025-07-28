@@ -472,7 +472,6 @@ const latestRound = getDisplayRound(productData);
                 <div className={`info-value storage-type-${product.storageType}`}>{storageLabels?.[product.storageType]}</div>
               </div>
               
-              {/* ✅ [수정] 선입금 필요 여부 표시 */}
               {displayRound.isPrepaymentRequired && (
                 <div className="info-row">
                   <div className="info-label"><AlertTriangle size={16} />결제 조건</div>
@@ -482,13 +481,18 @@ const latestRound = getDisplayRound(productData);
                 </div>
               )}
               
-              {/* ✅ [추가] 참여 등급 표시 UI */}
+              {/* ✅ [수정] 참여 등급 표시 UI: 등급이 있을 때만 표시하고, 등급들을 '/'로 구분 */}
               {(displayRound.allowedTiers && displayRound.allowedTiers.length > 0) && (
                 <div className="info-row">
                   <div className="info-label"><ShieldCheck size={16} />참여 등급</div>
                   <div className="info-value">
                     <span className="tier-badge-group">
-                      {(displayRound.allowedTiers as LoyaltyTier[]).map(tier => <span key={tier} className="tier-badge">{tier}</span>)}
+                      {(displayRound.allowedTiers as LoyaltyTier[]).map((tier, index) => (
+                        <React.Fragment key={tier}>
+                          <span className="tier-badge">{tier}</span>
+                          {index < (displayRound.allowedTiers as LoyaltyTier[]).length - 1 && <span className="tier-separator"> / </span>}
+                        </React.Fragment>
+                      ))}
                     </span>
                   </div>
                 </div>
@@ -537,7 +541,6 @@ const latestRound = getDisplayRound(productData);
       );
     }
     
-    // ✅ [추가] 참여 자격 없음(INELIGIBLE) 상태 처리
     if (productActionState === 'INELIGIBLE') {
       return (
         <div className="product-purchase-footer">

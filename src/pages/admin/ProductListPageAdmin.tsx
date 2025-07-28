@@ -8,6 +8,7 @@ import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
 import toast from 'react-hot-toast';
+// ✅ [수정] Plus 아이콘 추가
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -191,15 +192,30 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
     onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs, onOpenWaitlistModal
 }) => {
     const navigate = useNavigate();
+    
+    // ✅ [추가] 새 회차 추가 핸들러
+    const handleAddNewRound = () => {
+        navigate('/admin/products/add', {
+            state: {
+                productId: item.productId,
+                productGroupName: item.productName,
+                lastRound: item.round
+            }
+        });
+    };
 
-    // ✅ [수정] 옵션 그룹이 없는 경우에 대한 방어 코드 추가
     if (!item.enrichedVariantGroups || item.enrichedVariantGroups.length === 0) {
         return (
             <tr className="master-row error-row">
                 <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
                 <td>{index + 1}</td>
                 <td colSpan={10}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td>
-                <td><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></td>
+                <td>
+                    {/* ✅ [수정] 액션 버튼들을 감싸는 div 추가 */}
+                    <div className="action-buttons-wrapper">
+                        <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button>
+                    </div>
+                </td>
             </tr>
         );
     }
@@ -251,7 +267,13 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
                   <button className="stock-display-button" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정. -1 입력 시 무제한">{vg.configuredStock === -1 ? '∞' : vg.configuredStock}</button>
               )}
             </td>
-            <td><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차 정보를 수정합니다."><Edit size={16}/></button></td>
+            <td>
+                {/* ✅ [수정] 새 회차 추가 버튼 포함 */}
+                <div className="action-buttons-wrapper">
+                    <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차 정보를 수정합니다."><Edit size={16}/></button>
+                    <button onClick={handleAddNewRound} className="admin-action-button" title="이 상품의 새 판매 회차를 추가합니다."><Plus size={16} /></button>
+                </div>
+            </td>
           </tr>
         );
     }
@@ -288,9 +310,11 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>
-              <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차 정보를 수정합니다.">
-                  <Edit size={16}/>
-              </button>
+            {/* ✅ [수정] 새 회차 추가 버튼 포함 */}
+            <div className="action-buttons-wrapper">
+                <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="이 판매 회차 정보를 수정합니다."><Edit size={16}/></button>
+                <button onClick={handleAddNewRound} className="admin-action-button" title="이 상품의 새 판매 회차를 추가합니다."><Plus size={16} /></button>
+            </div>
           </td>
         </tr>
         {isExpanded && item.enrichedVariantGroups.map((subVg, vgIndex) => {
@@ -513,7 +537,6 @@ const ProductListPageAdmin: React.FC = () => {
     let flatRounds: EnrichedRoundItem[] = [];
     (allProducts || []).forEach(p => {
         (p.salesHistory || []).forEach(r => {
-            // ✅ [수정] 옵션 그룹이 없는 회차는 건너뛰도록 방어 코드 추가
             if (!r.variantGroups || r.variantGroups.length === 0) {
                 console.warn(`Skipping round without variant groups: Product ID ${p.id}, Round ID ${r.roundId}`);
                 return;
