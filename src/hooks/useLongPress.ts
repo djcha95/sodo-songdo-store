@@ -23,7 +23,9 @@ const useLongPress = (
 
   // 마우스를 누르기 시작할 때
   const start = useCallback((event: React.MouseEvent | React.TouchEvent) => {
-    if (event.cancelable) {
+    // ✅ [수정] passive listener 경고를 해결하기 위해 'mousedown' 이벤트에만 preventDefault를 적용합니다.
+    // 이렇게 하면 터치 이벤트에서 발생하는 경고를 피하면서, 데스크톱에서 꾹 누를 때 텍스트가 선택되는 현상을 방지할 수 있습니다.
+    if (event.type === 'mousedown' && event.cancelable) {
       event.preventDefault();
     }
     

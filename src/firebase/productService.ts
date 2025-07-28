@@ -107,20 +107,22 @@ export const searchProductsByName = async (name: string): Promise<Product[]> => 
 export const addProductWithFirstRound = async (
   productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'>,
   firstRoundData: Omit<SalesRound, 'roundId' | 'createdAt' | 'waitlist' | 'waitlistCount'>,
-  imageFiles: File[]
+  imageFiles: File[],
+  creationDate: Date // ✅ 1. 함수가 네 번째 인자로 creationDate를 받도록 수정
 ): Promise<string> => {
   const imageUrls = await uploadImages(imageFiles, 'products');
-  const now = Timestamp.now();
+  // ✅ 2. 전달받은 creationDate를 Firestore Timestamp 객체로 변환
+  const creationTimestamp = Timestamp.fromDate(creationDate);
 
   const newProduct: Omit<Product, 'id'> = {
     ...productData,
     imageUrls,
     isArchived: false,
-    createdAt: now,
+    createdAt: creationTimestamp, // ✅ 3. 'createdAt'을 전달받은 날짜로 설정
     salesHistory: [{
       ...firstRoundData,
       roundId: `round-${Date.now()}`,
-      createdAt: now,
+      createdAt: creationTimestamp, // ✅ 4. 첫 판매 회차의 생성일도 동일하게 설정
       waitlist: [],
       waitlistCount: 0,
     }],
@@ -129,7 +131,6 @@ export const addProductWithFirstRound = async (
   const docRef = await addDoc(collection(db, 'products'), newProduct);
   return docRef.id;
 };
-
 /**
  * @description 기존 상품에 새로운 판매 회차를 추가하는 함수
  */

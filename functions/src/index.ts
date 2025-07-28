@@ -867,3 +867,25 @@ export const expirePointsScheduled = onSchedule(
     }
   }
 );
+
+export const setUserRole = onRequest(
+  { region: "asia-northeast3" },
+  (request, response: Response) => {
+    corsHandler(request, response, async () => {
+      const { uid, role } = request.query;
+
+      if (typeof uid !== 'string' || typeof role !== 'string') {
+        response.status(400).send("uid와 role 파라미터를 정확히 입력해주세요.");
+        return;
+      }
+
+      try {
+        await getAuth().setCustomUserClaims(uid, { role: role });
+        response.send(`성공! 사용자(${uid})에게 '${role}' 역할이 부여되었습니다.`);
+      } catch (error) {
+        logger.error("커스텀 클레임 설정 오류:", error);
+        response.status(500).send(`커스텀 클레임 설정 중 오류 발생: ${error}`);
+      }
+    });
+  }
+);
