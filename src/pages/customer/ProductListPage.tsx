@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { getProducts, getActiveBanners } from '@/firebase';
+// ✅ [수정] getReservedQuantitiesMap import 추가
+import { getProducts, getActiveBanners, getReservedQuantitiesMap } from '@/firebase';
 import type { Product, Banner } from '@/types';
 import type { DocumentData } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -17,7 +18,6 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-// ✅ [수정] 유틸리티 함수 import
 import { getDisplayRound, safeToDate } from '@/utils/productUtils';
 import './ProductListPage.css';
 import '@/styles/common.css';
@@ -25,20 +25,28 @@ import '@/styles/common.css';
 dayjs.extend(isBetween);
 dayjs.locale('ko');
 
-interface ProductWithUIState extends Product {
+// ✅ [수정] reservedQuantities 속성 추가
+// ✅ 1. State에 저장될 상품 데이터의 타입을 명확히 정의합니다.
+interface ProductForList extends Product {
+  reservedQuantities?: Record<string, number>;
+}
+
+// ✅ 2. useMemo 내부에서 가공 후 사용될 데이터 타입을 정의합니다.
+interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
   deadlines: {
     primaryEnd: Date | null;
     secondaryEnd: Date | null;
-  }
+  };
 }
 
 const ProductListPage: React.FC = () => {
   const { userDocument } = useAuth();
   
   const [banners, setBanners] = useState<Banner[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [countdown, setCountdown] = useState<string | null>(null);
+  // ✅ [수정] ProductWithUIState 타입 사용
+// ✅ 3. products 상태의 타입을 위에서 정의한 ProductForList[]로 변경합니다.
+const [products, setProducts] = useState<ProductForList[]>([]);  const [countdown, setCountdown] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -49,29 +57,63 @@ const ProductListPage: React.FC = () => {
 
   const PAGE_SIZE = 10;
 
+  // ✅ [수정] 예약 수량을 함께 가져와 상품 데이터에 병합하는 로직 추가
   const fetchProductsCallback = useCallback(async (isInitial: boolean) => {
-    if (!isInitial) setLoadingMore(true);
-
+    if (!isInitial) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+  
     try {
+      const currentLastVisible = isInitial ? null : lastVisible;
+  
+      // 상품 정보와 전체 예약 수량 정보를 병렬로 가져옴
+      const [productResponse, reservedQuantitiesMap] = await Promise.all([
+        getProducts(false, PAGE_SIZE, currentLastVisible),
+        getReservedQuantitiesMap()
+      ]);
+  
+      // 첫 로드 시에만 배너 정보 가져오기
       if (isInitial) {
         const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
       }
-
-      const response = await getProducts(false, PAGE_SIZE, isInitial ? null : lastVisible);
-      const newProducts = response.products;
-
-      setProducts(prevProducts => isInitial ? newProducts : [...prevProducts, ...newProducts]);
-      setLastVisible(response.lastVisible);
-      if (!response.lastVisible || newProducts.length < PAGE_SIZE) {
+  
+      const { products: newProducts, lastVisible: newLastVisible } = productResponse;
+  
+      // 가져온 상품 목록에 예약 수량 정보(reservedQuantities)를 주입
+      const productsWithReservedData = newProducts.map(product => {
+        const reservedQuantities: Record<string, number> = {};
+        (product.salesHistory || []).forEach(round => {
+          (round.variantGroups || []).forEach(vg => {
+            const key = `${product.id}-${round.roundId}-${vg.id}`;
+            if (reservedQuantitiesMap.has(key)) {
+              reservedQuantities[key] = reservedQuantitiesMap.get(key)!;
+            }
+          });
+        });
+        return { ...product, reservedQuantities };
+      });
+  
+      // 상태 업데이트: 첫 로드이면 새로 설정, 더보기이면 기존 목록에 추가
+      setProducts(prevProducts =>
+        isInitial ? productsWithReservedData : [...prevProducts, ...productsWithReservedData]
+      );
+  
+      setLastVisible(newLastVisible);
+      if (!newLastVisible || newProducts.length < PAGE_SIZE) {
         setHasMore(false);
       }
     } catch (error) {
       console.error(error);
       toast.error("데이터를 불러오는 중 문제가 발생했습니다.");
     } finally {
-      if (isInitial) setLoading(false);
-      else setLoadingMore(false);
+      if (isInitial) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
   }, [lastVisible]);
 
@@ -82,7 +124,6 @@ const ProductListPage: React.FC = () => {
   });
 
   useEffect(() => {
-    setLoading(true);
     fetchProductsCallback(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -167,7 +208,6 @@ const ProductListPage: React.FC = () => {
       }
     });
     
-    // ✅ [수정] 오늘의 공동구매(primarySaleProducts) 정렬 로직 변경
     const getProductRemainingStock = (product: ProductWithUIState): number => {
       const round = getDisplayRound(product);
       if (!round) return Infinity;
