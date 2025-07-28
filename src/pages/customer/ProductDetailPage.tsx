@@ -138,12 +138,11 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   
   const userAlreadyRequestedEncore = !!(user && product && hasRequestedEncore(product.id));
   
-const productActionState = useMemo<ProductActionState>(() => {
+  const productActionState = useMemo<ProductActionState>(() => {
     if (loading || !displayRound || !product || !selectedVariantGroup || !selectedItem) {
       return 'LOADING';
     }
     
-    // ✅ productUtils의 통합 함수를 사용하여 상태를 결정합니다.
     return determineActionState(
       displayRound,
       product,
@@ -167,7 +166,7 @@ const productActionState = useMemo<ProductActionState>(() => {
           return;
         }
 
-const latestRound = getDisplayRound(productData);
+        const latestRound = getDisplayRound(productData);
         if (!latestRound) {
           setError('판매 정보를 찾을 수 없습니다.');
           return;
@@ -447,6 +446,14 @@ const latestRound = getDisplayRound(productData);
                 </SwiperSlide>
               ))}
             </Swiper>
+            
+            {/* ✅ [수정] '재고 준비중' 상태일 때 이미지 위에 오버레이 표시 */}
+            {productActionState === 'AWAITING_STOCK' && (
+              <div className="product-detail-overlay-badge">
+                <Hourglass size={32} />
+                <p>재고 준비중</p>
+              </div>
+            )}
           </div>
           <div className="product-info-area">
             <div className="product-info-header">
@@ -481,22 +488,27 @@ const latestRound = getDisplayRound(productData);
                 </div>
               )}
               
-              {/* ✅ [수정] 참여 등급 표시 UI: 등급이 있을 때만 표시하고, 등급들을 '/'로 구분 */}
-              {(displayRound.allowedTiers && displayRound.allowedTiers.length > 0) && (
-                <div className="info-row">
-                  <div className="info-label"><ShieldCheck size={16} />참여 등급</div>
-                  <div className="info-value">
-                    <span className="tier-badge-group">
-                      {(displayRound.allowedTiers as LoyaltyTier[]).map((tier, index) => (
-                        <React.Fragment key={tier}>
-                          <span className="tier-badge">{tier}</span>
-                          {index < (displayRound.allowedTiers as LoyaltyTier[]).length - 1 && <span className="tier-separator"> / </span>}
-                        </React.Fragment>
-                      ))}
-                    </span>
-                  </div>
-                </div>
-              )}
+              {(() => {
+                const tierCount = displayRound.allowedTiers?.length ?? 0;
+                if (tierCount > 0 && tierCount < 4) {
+                  return (
+                    <div className="info-row">
+                      <div className="info-label"><ShieldCheck size={16} />참여 등급</div>
+                      <div className="info-value">
+                        <span className="tier-badge-group">
+                          {(displayRound.allowedTiers as LoyaltyTier[]).map((tier, index) => (
+                            <React.Fragment key={tier}>
+                              <span className="tier-badge">{tier}</span>
+                              {index < (displayRound.allowedTiers as LoyaltyTier[]).length - 1 && <span className="tier-separator"> / </span>}
+                            </React.Fragment>
+                          ))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}>
                 <div className="info-label">
@@ -546,6 +558,17 @@ const latestRound = getDisplayRound(productData);
         <div className="product-purchase-footer">
           <button className="sold-out-btn-fixed" disabled>
             <ShieldX size={16} /> 참여 등급이 아닙니다
+          </button>
+        </div>
+      );
+    }
+    
+    {/* ✅ [수정] '재고 준비중' 상태일 때 하단 버튼 처리 */}
+    if (productActionState === 'AWAITING_STOCK') {
+      return (
+        <div className="product-purchase-footer">
+          <button className="sold-out-btn-fixed" disabled>
+            <Hourglass size={16} /> 재고 준비중
           </button>
         </div>
       );
