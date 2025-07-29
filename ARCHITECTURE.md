@@ -6,7 +6,7 @@
 
 SODOMALL-APP/
 ├── public/              # 이미지, 폰트 등 정적 파일 보관
-├── scripts/             # 프로젝트 관련 보조 스크립트 파일 보관
+├── scripts/             # 프로젝트 관련 보조 스크립트 파일 보관 (DB 마이그레이션 등)
 ├── src/                 # ✅ 핵심 소스 코드가 있는 폴더
 │   ├── assets/          # 로고, 아이콘 등 작은 이미지 파일 보관
 │   ├── components/      # 여러 곳에서 재사용되는 UI 컴포넌트를 보관하며, 역할에 따라 admin/, customer/, common/ 등으로 하위 폴더를 구성
@@ -19,7 +19,7 @@ SODOMALL-APP/
 │   │   └── customer/    # 고객 관련 페이지
 │   ├── styles/          # 전역적으로 사용되는 CSS 스타일 파일 보관
 │   ├── types/           # 전역 TypeScript 타입 정의 파일 (react-html.d.ts 등)
-│   └── utils/           # 공통 유틸리티 함수 보관 (예: 이미지 URL 변환)
+│   └── utils/           # 공통 유틸리티 함수 보관 (예: 이미지 URL 변환, 등급 계산)
 ├── .env                 # API 키 등 민감한 정보 보관 (Git에 올리면 안 됨)
 ├── firebase.json        # Firebase 호스팅, Firestore 규칙 등 설정
 ├── index.html           # 앱의 진입점이 되는 메인 HTML 파일
@@ -44,7 +44,7 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 `productService.ts`: 상품 정보(생성, 수정, 조회, 대기자 등록) 관련 함수를 관리합니다. `getWaitlistForRound`, `addStockAndProcessWaitlist` 등 대기자 관리 핵심 로직과 **유사 상품명 검색을 위한 `searchProductsByName` 함수가 추가되었습니다.**
 `orderService.ts`: 결제 완료된 '주문' 내역을 관리합니다. **또한, cancelOrder 함수에는 서버사이드 유효성 검사 로직이 추가되어 프론트엔드와 동일한 취소 정책을 서버에서도 이중으로 검증하여, 데이터 정합성과 보안을 강화합니다.**
 `generalService.ts`: 배너, 카테고리 등 여러 곳에서 사용되는 공통 기능을 관리합니다.
-**`pointService.ts`**: **포인트 관련 모든 비즈니스 로직의 중심입니다. `POINT_POLICIES` 객체를 통해 포인트 정책을 중앙에서 관리하며, 주문 상태 변경(`applyPointChangeByStatus`), 관리자 수동 조정(`adjustUserPoints`), '대기 순번 상승권' 사용(`applyWaitlistPriorityTicket`) 등 포인트가 변동되는 모든 경우의 수를 처리합니다.**
+**`pointService.ts`**: **포인트의 '화폐'적 측면을 관리하는 비즈니스 로직의 중심입니다. `POINT_POLICIES` 객체를 통해 포인트 정책을 중앙에서 관리하며, 주문 상태 변경(`applyPointChangeByStatus`), 관리자 수동 조정(`adjustUserPoints`), '대기 순번 상승권' 사용(`applyWaitlistPriorityTicket`) 등 포인트가 변동되는 모든 경우의 수를 처리합니다.**
 **`userService.ts`**: **사용자 정보 처리의 핵심입니다. 신규 가입 시 사용자 문서를 생성하고(`processUserSignIn`), 이때 고유 추천인 코드를 자동으로 발급합니다. 또한, 신규 가입자가 제출한 추천인 코드를 검증하고 보너스 포인트를 지급하는 `submitReferralCode` 함수를 포함합니다.**
 다른 컴포넌트에서는 이 폴더의 각 서비스 파일에 정의된 함수를 import하여 사용함으로써 코드의 일관성과 재사용성을 높입니다.
 
@@ -174,6 +174,10 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 -   **상품 관련 비즈니스 로직의 중앙 허브**: 상품의 상태를 판별하는 모든 복잡한 로직을 담고 있는 핵심 유틸리티 파일입니다.
 -   `getDisplayRound`: 상품의 여러 판매 이력(`salesHistory`) 중 현재 사용자에게 보여줘야 할 가장 적절한 판매 회차를 결정합니다.
 -   `determineActionState`: 상품, 사용자 등급, 재고 등 모든 조건을 고려하여 현재 상품이 '예약 가능', '대기 가능', '참여 등급 아님' 등 어떤 상태인지를 판별하는 통합 함수를 제공합니다. 이를 통해 여러 페이지와 컴포넌트의 동작을 100% 통일시킵니다.
+
+### ✅ [신규] `src/utils/loyaltyUtils.ts`
+-   **신뢰 등급(Tier) 계산의 중심**: 사용자의 누적 픽업(`pickupCount`) 및 노쇼(`noShowCount`) 횟수를 기반으로, '공구의 신'부터 '참여 제한'까지의 **신뢰 등급을 계산하는 순수 함수(`calculateTier`)**를 관리합니다. 포인트와 등급이 분리된 새로운 시스템의 핵심 로직입니다.
+
 
 ### `src/context/CartContext.tsx`
 
