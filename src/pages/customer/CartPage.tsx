@@ -17,6 +17,7 @@ import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
 import { addWaitlistEntry, getProductsByIds } from '@/firebase';
 
+// ✅ [복원] 원래의 showToast 함수
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
@@ -41,6 +42,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string | React.R
     default: toast(toastContent, { duration }); break;
   }
 };
+
 
 const CartItemCard: React.FC<{ 
   item: CartItem; 
@@ -134,7 +136,7 @@ const CartItemCard: React.FC<{
 
 const CartPage: React.FC = () => {
   const { user, userDocument, isSuspendedUser } = useAuth();
-  const { allItems, reservationItems, waitlistItems, removeItems, updateCartItemQuantity } = useCart();
+  const { reservationItems, waitlistItems, removeItems, updateCartItemQuantity } = useCart();
   const navigate = useNavigate();
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
@@ -220,6 +222,8 @@ const CartPage: React.FC = () => {
   const handleBulkRemove = useCallback((type: 'reservation' | 'waitlist') => {
     const keysToRemove = type === 'reservation' ? selectedReservationKeys : selectedWaitlistKeys;
     if (keysToRemove.size === 0) { showToast('info', '삭제할 상품을 선택해주세요.'); return; }
+    
+    // ✅ [복원] 원래의 커스텀 토스트 로직으로 되돌립니다.
     toast((t) => (
       <div className="confirmation-toast-content">
         <AlertTriangle size={44} className="toast-icon" style={{ color: 'var(--danger-color)' }} />
@@ -239,7 +243,6 @@ const CartPage: React.FC = () => {
   const handleImageClick = useCallback((e: React.MouseEvent, productId: string) => { e.stopPropagation(); navigate(`/product/${productId}`); }, [navigate]);
   
   const doesCartRequirePrepayment = useMemo(() => {
-    // ✅ [수정] 한정수량(stock이 null이나 -1이 아님) 상품이 하나라도 있으면 선입금 필요
     return eligibleReservationItems.some(item => item.isPrepaymentRequired || (item.stock !== null && item.stock !== -1));
   }, [eligibleReservationItems]);
   
@@ -299,6 +302,11 @@ const CartPage: React.FC = () => {
             throw new Error(orderResult.data.message || '서버에서 주문 처리에 실패했습니다.');
         }
 
+        const processedItemIds = [
+            ...eligibleReservationItems.map(i => i.id),
+            ...waitlistItems.map(i => i.id)
+        ];
+
         const prepaymentRequired = orderPayload?.wasPrepaymentRequired ?? false;
         
         if (prepaymentRequired) {
@@ -310,12 +318,11 @@ const CartPage: React.FC = () => {
             hasNavigated = true;
             toast.dismiss(toastId);
             startTransition(() => {
-              removeItems(allItems.map(i => i.id));
+              removeItems(processedItemIds);
               navigate('/mypage/history');
             });
           };
           
-          // ✅ [수정] 선입금 안내 모달 내용 강화
           toast.custom((t) => (
             <div className="prepayment-modal-overlay">
               <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
@@ -335,13 +342,13 @@ const CartPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ), { id: toastId, duration: 8000 }); // 시간을 넉넉하게 늘림
+          ), { id: toastId, duration: 3000 });
 
-          setTimeout(performNavigation, 8000);
+          setTimeout(performNavigation, 3000); 
           return '';
         } else {
           startTransition(() => {
-            removeItems(allItems.map(i => i.id));
+            removeItems(processedItemIds);
             navigate('/mypage/history');
           });
           const message = eligibleReservationItems.length > 0 && waitlistItems.length > 0
@@ -381,7 +388,6 @@ const CartPage: React.FC = () => {
     else if(eligibleReservationItems.length > 0) message = '예약 상품에 대한 주문을 확정하시겠습니까?';
     else message = '대기 상품에 대한 신청을 확정하시겠습니까?';
     
-    // ✅ [수정] 최종 확인 토스트에 경고 문구 추가
     let finalWarning = "예약 확정 후 1차 마감일 이후 취소 시 패널티가 부과될 수 있습니다.";
     if (isLimitedItemInCart) {
         finalWarning = "한정 수량 상품은 선입금 및 1:1 채팅 확인 후에만 최종 확정됩니다. 단순 예약은 재고를 확보하지 않습니다.";
@@ -389,6 +395,7 @@ const CartPage: React.FC = () => {
         finalWarning = "선택하신 상품은 예약 후 선입금이 필요합니다.";
     }
 
+    // ✅ [복원] 원래의 커스텀 토스트 로직으로 되돌립니다.
     toast((t) => (
       <div className="confirmation-toast-content">
         <Info size={44} className="toast-icon" />
@@ -414,6 +421,8 @@ const CartPage: React.FC = () => {
   };
 
   const buttonInfo = getButtonInfo();
+  
+  const allItems = useMemo(() => [...reservationItems, ...waitlistItems], [reservationItems, waitlistItems]);
 
   return (
     <div className="cart-page-wrapper">

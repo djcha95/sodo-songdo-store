@@ -61,10 +61,22 @@ export interface Order {
 export interface CartItem {
   id: string;
   productId: string;
+  productName: string;
+  imageUrl: string;
   roundId: string;
+  roundName: string;
   variantGroupId: string;
+  variantGroupName: string;
   itemId: string;
+  itemName: string;
   quantity: number;
+  unitPrice: number;
+  stock: number | null;
+  pickupDate: Timestamp;
+  status: 'RESERVATION' | 'WAITLIST';
+  deadlineDate: Timestamp;
+  stockDeductionAmount: number; // 오류를 발생시킨 핵심 속성
+  isPrepaymentRequired?: boolean;
 }
 
 // ✨ [추가] 서버에서 사용할 WaitlistInfo 타입을 정의합니다.
