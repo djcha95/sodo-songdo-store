@@ -15,11 +15,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap, Info,
+  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap,
 } from 'lucide-react';
-import toast from 'react-hot-toast';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
+import { showPromiseToast, showCancelOrderToast, showCancelWaitlistToast, showUseTicketToast, showToast } from '@/utils/toastUtils';
 import './OrderHistoryPage.css';
 
 // =================================================================
@@ -42,16 +42,6 @@ interface AggregatedItem {
 // =================================================================
 // 📌 헬퍼 함수
 // =================================================================
-
-const showToast = (type: 'success' | 'error' | 'blank', message: string | React.ReactNode, duration: number = 4000) => {
-  const toastContent = <>{message ?? ''}</>;
-  switch (type) {
-    case 'success': toast.success(toastContent, { duration }); break;
-    case 'error': toast.error(toastContent, { duration }); break;
-    case 'blank': toast(toastContent, { duration }); break;
-    default: toast(toastContent, { duration });
-  }
-};
 
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
@@ -226,7 +216,7 @@ const AggregatedItemCard: React.FC<{
     () => {
       if (cancellable && orderToCancel && onCancel) onCancel(orderToCancel);
     },
-    () => { if (cancellable) toast('카드를 꾹 눌러서 취소할 수 있어요.', { duration: 2000 }); },
+    () => { if (cancellable) showToast('info', '카드를 꾹 눌러서 취소할 수 있어요.', 2000); },
     { delay: 500 }
   );
 
@@ -417,98 +407,49 @@ const OrderHistoryPage: React.FC = () => {
   }, [handleScroll]);
   
   const handleCancelOrder = useCallback((orderToCancel: Order) => {
-    toast((t) => (
-      <div className="confirmation-toast">
-          <h4><AlertCircle style={{ color: 'var(--warning-color)'}}/> 예약 취소</h4>
-          <p>예약을 취소하시겠습니까?</p>
-          <div className="toast-warning-box">
-              <Info size={16} /> 1차 마감 이후 취소 시 신뢰도 포인트가 차감될 수 있습니다.
-          </div>
-          <div className="toast-buttons">
-              <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
-              <button
-                  className="common-button button-danger button-medium"
-                  onClick={() => {
-                      toast.dismiss(t.id);
-                      const promise = cancelOrder(orderToCancel);
-                      toast.promise(promise, {
-                        loading: '예약 취소 처리 중...',
-                        success: () => {
-                          // ✅ [수정] 주문을 삭제하는 대신, 상태를 'CANCELED'로 업데이트
-                          setOrders(prev => prev.map(o => 
-                            o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o
-                          ));
-                          return '예약이 성공적으로 취소되었습니다.';
-                        },
-                        error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
-                      });
-                  }}
-              >
-                  취소 확정
-              </button>
-          </div>
-      </div>
-    ));
+    showCancelOrderToast(() => {
+      const promise = cancelOrder(orderToCancel);
+      showPromiseToast(promise, {
+        loading: '예약 취소 처리 중...',
+        success: () => {
+          setOrders(prev => prev.map(o => 
+            o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o
+          ));
+          return '예약이 성공적으로 취소되었습니다.';
+        },
+        error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
+      });
+    });
   }, [setOrders]);
 
   const handleCancelWaitlist = useCallback((item: WaitlistInfo) => {
     if (!user) return;
-    toast((t) => (
-        <div className="confirmation-toast">
-            <h4>대기 취소</h4>
-            <p><strong>{item.itemName}</strong> ({item.quantity}개) 대기 신청을 취소하시겠습니까?</p>
-            <div className="toast-buttons">
-                <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
-                <button
-                    className="common-button button-danger button-medium"
-                    onClick={() => {
-                        toast.dismiss(t.id);
-                        const promise = cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId);
-                        toast.promise(promise, {
-                            loading: '대기 취소 처리 중...',
-                            success: () => {
-                                setWaitlist(prev => prev.filter(w => w.itemId !== item.itemId || w.roundId !== item.roundId));
-                                return '대기 신청이 취소되었습니다.';
-                            },
-                            error: (err: any) => err.message || '대기 취소 중 오류가 발생했습니다.'
-                        });
-                    }}
-                >
-                    취소 확정
-                </button>
-            </div>
-        </div>
-    ));
+    showCancelWaitlistToast(item.itemName, item.quantity, () => {
+      const promise = cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId);
+      showPromiseToast(promise, {
+          loading: '대기 취소 처리 중...',
+          success: () => {
+              setWaitlist(prev => prev.filter(w => w.itemId !== item.itemId || w.roundId !== item.roundId));
+              return '대기 신청이 취소되었습니다.';
+          },
+          error: (err: any) => err.message || '대기 취소 중 오류가 발생했습니다.'
+      });
+    });
   }, [user, setWaitlist]);
 
   const handleUsePriorityTicket = useCallback((item: WaitlistInfo) => {
     if (!user) return;
-    toast((t) => (
-      <div className="confirmation-toast">
-        <h4><Zap size={20} /> 순번 상승권 사용</h4>
-        <p>50 포인트를 사용하여 이 상품의 대기 순번을 가장 앞으로 옮기시겠습니까?</p>
-        <div className="toast-buttons">
-          <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
-          <button
-            className="common-button button-accent button-medium"
-            onClick={() => {
-              toast.dismiss(t.id);
-              const promise = applyWaitlistPriorityTicket(user.uid, item.productId, item.roundId, item.itemId);
-              toast.promise(promise, {
-                loading: '순번 상승권 사용 중...',
-                success: () => {
-                  setWaitlist(prev => prev.map(w => w.itemId === item.itemId && w.roundId === item.roundId ? { ...w, isPrioritized: true } : w));
-                  return '순번 상승권이 적용되었습니다!';
-                },
-                error: (err: any) => err.message || '오류가 발생했습니다.',
-              });
-            }}
-          >
-            포인트 사용
-          </button>
-        </div>
-      </div>
-    ));
+    showUseTicketToast(() => {
+      const promise = applyWaitlistPriorityTicket(user.uid, item.productId, item.roundId, item.itemId);
+      showPromiseToast(promise, {
+        loading: '순번 상승권 사용 중...',
+        success: () => {
+          setWaitlist(prev => prev.map(w => w.itemId === item.itemId && w.roundId === item.roundId ? { ...w, isPrioritized: true } : w));
+          return '순번 상승권이 적용되었습니다!';
+        },
+        error: (err: any) => err.message || '오류가 발생했습니다.',
+      });
+    });
   }, [user, setWaitlist]);
 
 

@@ -8,15 +8,15 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-import type { Product as OriginalProduct, CartItem } from '@/types'; 
+import type { Product as OriginalProduct, CartItem, SalesRound } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
-// ✅ [수정] 유틸리티 함수와 통합된 타입을 가져옵니다.
-import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
+import { getDisplayRound, determineActionState, safeToDate, type VariantGroup } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 
 type Product = OriginalProduct & {
+  reservedQuantities?: Record<string, number>;
   phase?: 'primary' | 'secondary' | 'past';
   deadlines?: {
     primaryEnd: Date | null;
@@ -101,36 +101,45 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (!displayRound) return null;
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
-    const singleOptionVg = !isMultiOption ? displayRound.variantGroups?.[0] : undefined;
+    
+    // 옵션 그룹에 실시간 예약 수량을 주입합니다.
+    const roundWithReserved: SalesRound = {
+      ...displayRound,
+      variantGroups: displayRound.variantGroups.map(vg => {
+        const key = `${product.id}-${displayRound.roundId}-${vg.id}`;
+        return {
+          ...vg,
+          reservedCount: product.reservedQuantities?.[key] || 0
+        };
+      })
+    };
+
+    const singleOptionVg = !isMultiOption ? (roundWithReserved.variantGroups?.[0] as VariantGroup) : undefined;
     const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
     return {
-      displayRound,
+      displayRound: roundWithReserved,
       isMultiOption,
       singleOptionItem,
       singleOptionVg,
-      price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
-      pickupDateFormatted: dayjs(safeToDate(displayRound.pickupDate)).locale('ko').format('M/D(ddd)'),
+      price: singleOptionItem?.price ?? roundWithReserved.variantGroups?.[0]?.items?.[0]?.price ?? 0,
+      pickupDateFormatted: dayjs(safeToDate(roundWithReserved.pickupDate)).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
   }, [product]);
   
   const actionState = useMemo<ProductActionState>(() => {
     if (!cardData) return 'ENDED';
-    const { displayRound, isMultiOption, singleOptionVg, singleOptionItem } = cardData;
+    const { displayRound, isMultiOption, singleOptionVg } = cardData;
     
-    const state = determineActionState(displayRound, product, userDocument, singleOptionItem, singleOptionVg);
+    const state = determineActionState(displayRound, userDocument, singleOptionVg);
     
     if (state === 'PURCHASABLE' && isMultiOption) {
       return 'REQUIRE_OPTION';
     }
     
-    if (state === 'INELIGIBLE') {
-      return 'ENCORE_REQUESTABLE';
-    }
-    
     return state;
-  }, [cardData, product, userDocument]);
+  }, [cardData, userDocument]);
     
   const handleCardClick = useCallback(() => { 
     if (isSuspendedUser) {
@@ -151,8 +160,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
     
-    const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
-    const reserved = product.reservedQuantities?.[reservedKey] || 0;
+    const reserved = singleOptionVg?.reservedCount || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
 
@@ -163,6 +171,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     const cartItem: CartItem = {
       id: `reservation-${product.id}-${singleOptionItem.id}-${Date.now()}`,
+      // ✅ [수정] 오타 수정: stockDuductionAmount -> stockDeductionAmount
       stockDeductionAmount: singleOptionItem.stockDeductionAmount || 1,
       productId: product.id, productName: product.groupName, imageUrl: product.imageUrls?.[0] || '',
       roundId: displayRound.roundId, roundName: displayRound.roundName,
@@ -173,7 +182,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       deadlineDate: displayRound.deadlineDate, isPrepaymentRequired: displayRound.isPrepaymentRequired ?? false,
     };
     addToCart(cartItem);
-    toast.success(`${product.groupName} ${quantity}개를 담았어요!`);
+    toast.success(`${product.groupName} ${quantity}개를 담았어요!`, { duration: 3000 });
     setQuantity(1);
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
@@ -200,7 +209,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       deadlineDate: displayRound.deadlineDate, isPrepaymentRequired: false,
     };
     addToCart(cartItem);
-    toast.success(`${product.groupName} ${quantity}개를 대기 목록에 추가했습니다.`);
+    toast.success(`${product.groupName} ${quantity}개를 대기 목록에 추가했습니다.`, { duration: 3000 });
     setQuantity(1);
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
@@ -229,8 +238,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     switch (actionState) {
       case 'PURCHASABLE':
-        const reservedKey = `${product.id}-${cardData.displayRound.roundId}-${cardData.singleOptionVg?.id}`;
-        const reserved = product.reservedQuantities?.[reservedKey] || 0;
+        const reserved = cardData.singleOptionVg?.reservedCount || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
         const maxStockForUI = Math.floor(remainingStock / (cardData.singleOptionItem?.stockDeductionAmount || 1));
@@ -254,10 +262,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         return <div className="options-btn disabled">예약 종료</div>;
       case 'SCHEDULED':
         return <div className="options-btn disabled">판매 예정</div>;
-      case 'ENCORE_REQUESTABLE':
-        return <button className="options-btn encore" onClick={handleCardClick}><Flame size={16} /> 앵콜 요청</button>;
-      case 'AWAITING_STOCK':
-        return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
       default: return null;
     }
   };
@@ -275,8 +279,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       const totalStock = singleOptionVg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
-        const reservedKey = `${product.id}-${displayRound.roundId}-${singleOptionVg.id}`;
-        const reserved = product.reservedQuantities?.[reservedKey] || 0;
+        const reserved = singleOptionVg.reservedCount || 0;
         const remaining = (totalStock || 0) - reserved;
         stockText = `${remaining}개 남음!`;
       }
@@ -298,7 +301,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <TopBadge />
         <div className="card-image-container">
           <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
-          {(product.phase === 'past' || actionState === 'ENCORE_REQUESTABLE') && <div className="card-overlay-badge">예약 마감</div>}
+          {product.phase === 'past' && <div className="card-overlay-badge">예약 마감</div>}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

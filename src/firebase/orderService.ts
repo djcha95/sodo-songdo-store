@@ -37,7 +37,6 @@ const safeToDate = (date: any): Date | null => {
 
 /**
  * @description 주문을 생성하고, 재고를 차감하는 트랜잭션.
- * ✅ [수정] 한정 수량 상품은 재고를 차감하지 않고, 선입금 필요 플래그만 설정하도록 변경
  */
 export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
@@ -62,7 +61,7 @@ export const submitOrder = async (
     }
 
     const itemsToReserve: OrderItem[] = [];
-    let isAnyItemLimited = false; // ✅ 한정 수량 상품 포함 여부 플래그
+    let isAnyItemLimited = false; 
     const productUpdates = new Map<string, SalesRound[]>();
     const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => doc(db, 'products', id));
     const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
@@ -97,26 +96,23 @@ export const submitOrder = async (
       const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
       if (itemIndex === -1) throw new Error(`세부 옵션 정보를 찾을 수 없습니다: ${item.itemName}`);
       const productItem = variantGroup.items[itemIndex];
+      
+      const isLimited = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
 
-      // ✅ 한정 수량 상품인지 판별 (재고가 -1이 아니면 한정 수량으로 간주)
-      const isLimited = productItem.stock !== -1;
-      if (isLimited) isAnyItemLimited = true;
-
-      const availableStock = productItem.stock === -1 ? Infinity : productItem.stock;
-
-      if (availableStock >= item.quantity) {
-        itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
-
-        // ✅ 한정 수량 상품이 '아닌' 경우에만 재고를 즉시 차감
-        if (!isLimited) {
-          const deductionAmount = item.quantity * (productItem.stockDeductionAmount || 1);
-          if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) variantGroup.totalPhysicalStock -= deductionAmount;
-          if (productItem.stock !== -1) productItem.stock -= item.quantity;
-          productUpdates.set(item.productId, salesHistoryForUpdate);
-        }
+      if (isLimited) {
+        isAnyItemLimited = true;
       } else {
-        throw new Error(`죄송합니다. ${item.productName}(${item.itemName})의 재고가 부족합니다.`);
+        const availableStock = productItem.stock === -1 ? Infinity : productItem.stock;
+        if (availableStock < item.quantity) {
+          throw new Error(`죄송합니다. ${item.productName}(${item.itemName})의 재고가 부족합니다.`);
+        }
+        
+        if (productItem.stock !== -1) productItem.stock -= item.quantity;
+        
+        productUpdates.set(item.productId, salesHistoryForUpdate);
       }
+      
+      itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
     }
 
     if (itemsToReserve.length > 0) {
@@ -141,14 +137,12 @@ export const submitOrder = async (
         pickupDeadlineDate: roundForOrder!.pickupDeadlineDate ?? null,
         notes: orderData.notes ?? '',
         isBookmarked: orderData.isBookmarked ?? false,
-        // ✅ 한정 수량 상품이 하나라도 포함되면 선입금 필요 플래그 설정
         wasPrepaymentRequired: isAnyItemLimited || orderData.wasPrepaymentRequired,
       };
 
       transaction.set(newOrderRef, newOrderData);
       reservedItemCount = itemsToReserve.reduce((sum, i) => sum + i.quantity, 0);
 
-      // 무제한 재고 상품에 대한 업데이트만 반영
       for (const [productId, updatedSalesHistory] of productUpdates.entries()) {
         const productRef = doc(db, 'products', productId);
         transaction.update(productRef, { salesHistory: updatedSalesHistory });
@@ -161,7 +155,6 @@ export const submitOrder = async (
 
 /**
  * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 신뢰도 점수를 조정하는 함수
- * ✅ [수정] 새로운 취소 패널티 정책 로직 적용
  */
 export const cancelOrder = async (order: Order): Promise<void> => {
   const orderRef = doc(db, 'orders', order.id);
@@ -186,19 +179,15 @@ export const cancelOrder = async (order: Order): Promise<void> => {
     const now = new Date();
     const deadlineDate = safeToDate(currentOrder.items[0]?.deadlineDate);
     const pickupDate = safeToDate(currentOrder.pickupDate);
-
-    // ✅ [신규] 패널티 적용 기간 계산
+    
     const pickupDateTime = pickupDate ? new Date(pickupDate.getTime()) : null;
-    if (pickupDateTime) pickupDateTime.setHours(13, 0, 0, 0); // 픽업일 오후 1시
+    if (pickupDateTime) pickupDateTime.setHours(13, 0, 0, 0);
 
     let penaltyPolicy: { points: number; reason: string } | null = null;
-
-    // ✅ [수정] 패널티 정책을 새로운 기준에 따라 적용
+    
     if (pickupDateTime && now > pickupDateTime) {
-      // 픽업일 오후 1시가 지난 경우 (기존 당일 취소)
       penaltyPolicy = POINT_POLICIES.CANCEL_ON_PICKUP_DAY;
     } else if (deadlineDate && pickupDateTime && now > deadlineDate && now < pickupDateTime) {
-      // 1차 마감일 이후 ~ 픽업일 오후 1시 사이
       penaltyPolicy = POINT_POLICIES.CANCEL_IN_PENALTY_WINDOW;
     }
 
@@ -217,52 +206,60 @@ export const cancelOrder = async (order: Order): Promise<void> => {
       };
     }
 
-    const productUpdates = new Map<string, { salesHistory: SalesRound[] }>();
+    const productUpdates = new Map<string, SalesRound[]>();
     const productDataMap = new Map<string, Product>();
     for (const productSnap of productSnaps) {
       if (productSnap.exists()) {
         productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
       }
     }
+    
+    // ✅ [수정] 재고 복구 로직 수정
+    // 더 이상 wasPrepaymentRequired 플래그에 의존하지 않고,
+    // 각 상품의 재고 관리 방식과 주문 상태에 따라 재고를 복구합니다.
+    for (const item of currentOrder.items) {
+      const productData = productDataMap.get(item.productId);
+      if (!productData) continue;
 
-    // ✅ 재고 복구 로직: 선입금 필요했던(한정수량) 상품은 취소해도 재고 변동이 없었으므로 복구할 필요 없음
-    if (!currentOrder.wasPrepaymentRequired) {
-      for (const item of currentOrder.items) {
-        const productData = productDataMap.get(item.productId);
-        if (!productData) continue;
+      const newSalesHistory = productUpdates.get(item.productId) || JSON.parse(JSON.stringify(productData.salesHistory));
+      const roundIndex = newSalesHistory.findIndex((r: SalesRound) => r.roundId === item.roundId);
+      if (roundIndex === -1) continue;
 
-        const newSalesHistory = JSON.parse(JSON.stringify(productData.salesHistory));
-        const roundIndex = newSalesHistory.findIndex((r: SalesRound) => r.roundId === item.roundId);
-        if (roundIndex === -1) continue;
+      const groupIndex = newSalesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
+      if (groupIndex === -1) continue;
 
-        const groupIndex = newSalesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-        if (groupIndex === -1) continue;
+      const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
+      const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
 
-        const itemIndex = newSalesHistory[roundIndex].variantGroups[groupIndex].items.findIndex((i: any) => i.id === item.itemId);
+      if (isGroupStockManaged) {
+        // 한정 수량 상품(그룹 재고)은 'PREPAID' 상태에서 재고가 차감되었으므로,
+        // 'PREPAID' 상태의 주문을 취소할 때만 재고를 복구합니다.
+        if (currentOrder.status === 'PREPAID') {
+          variantGroup.totalPhysicalStock += item.quantity * (item.stockDeductionAmount || 1);
+        }
+      } else {
+        // 일반 상품(개별 재고)은 'RESERVED' 상태가 될 때 재고가 즉시 차감되므로,
+        // 'RESERVED' 또는 'PREPAID' 상태에서 취소될 때 재고를 복구합니다.
+        const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
         if (itemIndex === -1) continue;
 
-        const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
         const productItem = variantGroup.items[itemIndex];
-        const stockDeductionAmount = item.stockDeductionAmount || 1;
-
-        if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-          variantGroup.totalPhysicalStock += item.quantity * stockDeductionAmount;
-        }
         if (productItem.stock !== -1) {
           productItem.stock += item.quantity;
         }
-
-        productUpdates.set(item.productId, { salesHistory: newSalesHistory });
       }
+      
+      productUpdates.set(item.productId, newSalesHistory);
     }
+
 
     if (userUpdatePayload) {
       transaction.update(userRef, userUpdatePayload);
     }
 
-    for (const [productId, updateData] of productUpdates.entries()) {
+    for (const [productId, updatedSalesHistory] of productUpdates.entries()) {
       const productRef = doc(db, 'products', productId);
-      transaction.update(productRef, updateData);
+      transaction.update(productRef, { salesHistory: updatedSalesHistory });
     }
 
     transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
@@ -422,14 +419,12 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus): P
 
 /**
  * @description 여러 주문의 상태를 일괄 변경하고, 신뢰도 포인트를 적용하며, 필요시 알림을 보냅니다.
- * ✅ [수정] 선입금 완료 처리 시, 한정 수량 상품의 재고를 차감하는 로직 추가
  */
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
 
   const notificationsToSend: { userId: string; message: string; link: string }[] = [];
 
   await runTransaction(db, async (transaction) => {
-    // 상품 정보를 미리 읽기 위해 Set을 사용해 중복 productId 제거
     const productIdsToRead = new Set<string>();
     const ordersToProcess: Order[] = [];
 
@@ -464,8 +459,7 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
       const updateData: any = { status };
       if (status === 'PICKED_UP') updateData.pickedUpAt = serverTimestamp();
       if (status === 'PREPAID') updateData.prepaidAt = serverTimestamp();
-
-      // ✅ 선입금 확정 시 재고 차감 로직
+      
       if (status === 'PREPAID' && order.wasPrepaymentRequired) {
         for (const item of order.items) {
           const productData = productDocs.get(item.productId);
@@ -477,24 +471,18 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
 
           const groupIndex = newSalesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
           if (groupIndex === -1) continue;
-
-          const itemIndex = newSalesHistory[roundIndex].variantGroups[groupIndex].items.findIndex((i: any) => i.id === item.itemId);
-          if (itemIndex === -1) continue;
-
+          
           const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
-          const productItem = variantGroup.items[itemIndex];
-          const deductionAmount = item.quantity * (item.stockDeductionAmount || 1);
 
-          if (productItem.stock === -1) continue; // 무제한 상품은 스킵
-
-          if (productItem.stock < item.quantity) {
-            throw new Error(`재고 부족: ${productItem.name} (${productItem.stock}개 남음)`);
-          }
-
-          productItem.stock -= item.quantity;
-          if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
+          const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
+          if (isGroupStockManaged) {
+            const deductionAmount = item.quantity * (item.stockDeductionAmount || 1);
+            if (variantGroup.totalPhysicalStock < deductionAmount) {
+              throw new Error(`재고 부족: ${variantGroup.groupName} (${variantGroup.totalPhysicalStock}개 남음)`);
+            }
             variantGroup.totalPhysicalStock -= deductionAmount;
           }
+          
           transaction.update(doc(db, 'products', item.productId), { salesHistory: newSalesHistory });
         }
       }
@@ -522,9 +510,6 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
 
 /**
  * @description [신규] 특정 주문의 단일 품목 수량을 변경하고 총액을 재계산합니다.
- * @param orderId 주문 ID
- * @param itemId 변경할 품목의 ID (OrderItem의 itemId)
- * @param newQuantity 새로운 수량
  */
 export const updateOrderItemQuantity = async (orderId: string, itemId: string, newQuantity: number): Promise<void> => {
   if (newQuantity <= 0) {
@@ -565,8 +550,6 @@ export const updateOrderItemQuantity = async (orderId: string, itemId: string, n
 
 /**
  * @description [수정] 주문 상태를 이전(예약 확정)으로 되돌리는 통합 함수
- * @param orderIds 되돌릴 주문 ID 배열
- * @param currentStatus 현재 상태 (이 상태에 따라 어떤 필드를 삭제할지 결정)
  */
 export const revertOrderStatus = async (orderIds: string[], currentStatus: OrderStatus): Promise<void> => {
   const batch = writeBatch(db);
@@ -589,8 +572,6 @@ export const revertOrderStatus = async (orderIds: string[], currentStatus: Order
 
 /**
  * @description (신규) 주문에 대한 관리자 비고를 업데이트합니다.
- * @param orderId - 주문 ID
- * @param notes - 저장할 비고 내용
  */
 export const updateOrderNotes = async (orderId: string, notes: string): Promise<void> => {
   await updateDoc(doc(db, 'orders', orderId), { notes });
@@ -598,8 +579,6 @@ export const updateOrderNotes = async (orderId: string, notes: string): Promise<
 
 /**
  * @description (신규) 주문의 북마크 상태를 토글합니다.
- * @param orderId - 주문 ID
- * @param isBookmarked - 새로운 북마크 상태 (true/false)
  */
 export const toggleOrderBookmark = async (orderId: string, isBookmarked: boolean): Promise<void> => {
   await updateDoc(doc(db, 'orders', orderId), { isBookmarked });

@@ -37,6 +37,7 @@ interface ProductFormProps {
     }
 }
 
+// ✨ [삭제] initialReservationLimit 속성 제거
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
 interface VariantGroupUI { id: string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
 
@@ -48,13 +49,12 @@ const parseDateString = (dateString: string): Date | null => { if (!dateString) 
 const formatNumberWithCommas = (value: number | ''): string => { if (value === '' || value === null) return ''; return Number(value).toLocaleString('ko-KR'); };
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 
-// ✅ [추가] 다양한 형태의 날짜 데이터를 안전하게 Date 객체로 변환하는 헬퍼 함수
 const convertToDate = (dateSource: any): Date | null => {
     if (!dateSource) return null;
     if (dateSource instanceof Date) return dateSource;
-    if (typeof dateSource.toDate === 'function') return dateSource.toDate(); // Firestore Timestamp
+    if (typeof dateSource.toDate === 'function') return dateSource.toDate(); 
     if (typeof dateSource === 'object' && dateSource.seconds !== undefined && dateSource.nanoseconds !== undefined) {
-        return new Timestamp(dateSource.seconds, dateSource.nanoseconds).toDate(); // Serialized Timestamp
+        return new Timestamp(dateSource.seconds, dateSource.nanoseconds).toDate(); 
     }
     const d = new Date(dateSource);
     if (!isNaN(d.getTime())) return d;
@@ -69,7 +69,6 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALL_LOYALTY_TIERS: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹'];
 
 
-// --- 모달 컴포넌트 (통합 및 개선) ---
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -104,7 +103,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, isPreOrd
                     <button onClick={onClose} className="admin-modal-close-button"><X size={24}/></button>
                 </div>
                 <div className="admin-modal-body">
-                    {/* 선주문 설정 */}
                     <div className="form-group" style={{ marginBottom: '24px' }}>
                         <label className="preorder-toggle-label">
                             <span><Clock size={16} /> 선주문 기능 사용</span>
@@ -127,7 +125,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, isPreOrd
                         )}
                     </div>
 
-                    {/* 시크릿 상품(참여 등급 제한) 설정 */}
                     <div className="form-group">
                         <label className="preorder-toggle-label">
                             <span><Lock size={16} /> 시크릿 상품 (등급 제한)</span>
@@ -159,18 +156,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, isPreOrd
 };
 
 
-// --- 메인 폼 컴포넌트 ---
 const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, initialState }) => {
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // --- 상태 관리 ---
     const [isLoading, setIsLoading] = useState(mode === 'editRound' || mode === 'newRound');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [pageTitle, setPageTitle] = useState('새 상품 등록');
     const [submitButtonText, setSubmitButtonText] = useState('신규 상품 등록하기');
     
-    // 대표 상품 정보
     const [productType, setProductType] = useState<'single' | 'group'>('single');
     const [categories, setCategories] = useState<Category[]>([]);
     const [groupName, setGroupName] = useState('');
@@ -179,23 +173,19 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
     const [creationDate, setCreationDate] = useState<Date>(new Date());
     
-    // 이미지
     const [initialImageUrls, setInitialImageUrls] = useState<string[]>([]);
     const [currentImageUrls, setCurrentImageUrls] = useState<string[]>([]);
     const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
-    // 판매 회차 정보
     const [roundName, setRoundName] = useState('1차 판매');
     const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]);
     
-    // 기간 설정
     const [publishDate, setPublishDate] = useState<Date>(() => new Date(new Date().setHours(14, 0, 0, 0)));
     const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
     const [pickupDate, setPickupDate] = useState<Date | null>(null);
     const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
 
-    // 옵션 설정
     const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
@@ -203,13 +193,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false);
     const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]);
     
-    // 중복 검사
     const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
     const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
     
-    // --- useEffect 훅 ---
-
-    // 모드에 따라 페이지 제목, 버튼 텍스트 설정
     useEffect(() => {
         switch (mode) {
             case 'newProduct':
@@ -237,7 +223,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
     }, [mode, initialState?.productGroupName]);
 
-    // 데이터 로딩 (수정, 새 회차 모드)
     useEffect(() => {
         const fetchData = async () => {
             if (!productId) return;
@@ -272,7 +257,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                     }
                     setPageTitle(`'${product.groupName}' 회차 수정`); 
                 } else if (mode === 'newRound') {
-                    roundToLoad = initialState?.lastRound || product.salesHistory[0]; // ✅ 전달받은 lastRound 우선 사용
+                    roundToLoad = initialState?.lastRound || product.salesHistory[0];
                     if (roundToLoad) {
                         const roundNumMatch = roundToLoad.roundName.match(/\d+/);
                         const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : 2;
@@ -286,7 +271,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                     setRoundName(mode === 'editRound' ? roundData.roundName : roundName);
                     setProductType((roundData.variantGroups?.length || 0) > 1 || (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
                     
-                    // ✅ [수정] 날짜 변환 로직에 convertToDate 헬퍼 함수 사용
                     const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
                         const expirationDate = convertToDate(vg.items[0]?.expirationDate);
                         return {
@@ -335,7 +319,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
     }, [mode, productId, roundId, navigate, roundName, initialState]);
 
-    // 카테고리 로딩 & 초기 VariantGroup 설정
     useEffect(() => {
         getCategories().then(setCategories).catch(() => toast.error("카테고리 정보를 불러오는 데 실패했습니다."));
         if (mode === 'newProduct' && variantGroups.length === 0) {
@@ -343,7 +326,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
     }, [mode, variantGroups.length]);
 
-    // 날짜 자동 계산 (마감일)
     useEffect(() => {
         if (mode === 'editRound') return; 
         const newDeadline = new Date(publishDate);
@@ -355,7 +337,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         setDeadlineDate(newDeadline);
     }, [publishDate, mode]);
 
-    // 보관 타입에 따라 픽업 마감일 자동 계산
     useEffect(() => {
         if (!pickupDate) {
             setPickupDeadlineDate(null);
@@ -369,7 +350,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         setPickupDeadlineDate(newPickupDeadline);
     }, [pickupDate, selectedStorageType]);
     
-    // 단일 상품일 경우, 대표 상품명과 하위 상품 그룹명을 연동
     useEffect(() => {
         if (productType === 'single' && variantGroups.length > 0) {
             setVariantGroups(prev => {
@@ -384,7 +364,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
     }, [groupName, productType]);
 
-    // 중복 상품명 검사
     useEffect(() => {
         if (mode !== 'newProduct' || !groupName.trim()) {
             setSimilarProducts([]);
@@ -404,7 +383,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     }, [groupName, mode]);
 
 
-    // --- 핸들러 함수들 (useCallback으로 최적화) ---
     const handleProductTypeChange = useCallback((newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); } }, [productType]);
     const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { setVariantGroups(prev => prev.map(vg => (vg.id === id ? { ...vg, [field]: value } : vg))); }, []);
     const handleGroupDateBlur = useCallback((id: string, dateStr: string) => { const parsedDate = parseDateString(dateStr); if (dateStr && !parsedDate) { toast.error('유효하지 않은 날짜 형식입니다. (예: 250715 또는 20250715)'); return; } handleVariantGroupChange(id, 'expirationDate', parsedDate); handleVariantGroupChange(id, 'expirationDateInput', parsedDate ? formatDateToYYYYMMDD(parsedDate) : dateStr);}, [handleVariantGroupChange]);
@@ -472,7 +450,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]);
 
 
-    // --- 제출 로직 ---
     const handleSubmit = async (isDraft: boolean = false) => {
         if (!isDraft) {
             if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; }
@@ -486,6 +463,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             const finalPublishDate = new Date(publishDate);
             finalPublishDate.setHours(14, 0, 0, 0);
 
+            // ✨ [수정] 저장 데이터에서 initialReservationLimit 제거
             const salesRoundData = {
                 roundName: roundName.trim(), status,
                 variantGroups: variantGroups.map(vg => ({
@@ -669,7 +647,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                             <div className="variant-group-card" key={vg.id}>
                                 <div className="variant-group-header">
                                     <div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div>
-                                    <div className="form-group"><label>그룹 총 재고</label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="비우면 무제한"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div>
+                                    {/* ✨ [수정] '총 재고' 필드로 단일화 */}
+                                    <div className="form-group">
+                                        <label>
+                                            <Tippy content="판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다.">
+                                                <span>총 재고</span>
+                                            </Tippy>
+                                        </label>
+                                        <div className="stock-input-wrapper">
+                                          <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="실물 재고"/>
+                                          <span className="stock-unit-addon">{vg.stockUnitType || '개'}</span>
+                                        </div>
+                                    </div>
                                     <div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>
                                     {productType === 'group' && (<button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? "마지막 그룹은 삭제할 수 없습니다." : "그룹 삭제"}><Trash2 size={16}/></button>)}
                                 </div>

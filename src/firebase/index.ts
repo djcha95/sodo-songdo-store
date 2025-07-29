@@ -8,7 +8,6 @@ export * from './userService';
 // ✅ [추가] bannerService를 export 목록에 추가합니다.
 export * from './bannerService';
 export * from './pointService'; // ✅ [추가] pointService의 함수들을 내보냅니다.
-export * from './cartService';       // ✅ [추가] cartService export
 export * from './notificationService'; // ✅ [추가] notificationService export
 
 // 설정 파일에서 db, auth, storage 인스턴스도 함께 내보내서

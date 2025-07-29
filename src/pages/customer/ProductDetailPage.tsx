@@ -2,18 +2,15 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import type { 
-  Product, 
-  ProductItem, 
-  CartItem, 
-  StorageType, 
-  VariantGroup as OriginalVariantGroup, 
-  SalesRound as OriginalSalesRound,
+import type {
+  Product,
+  ProductItem,
+  CartItem,
+  StorageType,
   LoyaltyTier
 } from '@/types';
 import { Timestamp } from 'firebase/firestore';
-import { getProductById } from '@/firebase/productService';
+import { getProductById, getReservedQuantitiesMap } from '@/firebase';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
@@ -39,16 +36,9 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
-import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
+import { getDisplayRound, determineActionState, safeToDate, type VariantGroup, type SalesRound } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
-
-interface VariantGroup extends OriginalVariantGroup {
-  reservedCount?: number;
-}
-
-interface SalesRound extends OriginalSalesRound {
-    variantGroups: VariantGroup[];
-}
+import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
 // --- 유틸리티 및 헬퍼 함수 ---
 dayjs.extend(isBetween);
@@ -139,19 +129,23 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const userAlreadyRequestedEncore = !!(user && product && hasRequestedEncore(product.id));
   
   const productActionState = useMemo<ProductActionState>(() => {
-    if (loading || !displayRound || !product || !selectedVariantGroup || !selectedItem) {
+    if (loading || !displayRound || !product) {
       return 'LOADING';
     }
     
-    return determineActionState(
+    const state = determineActionState(
       displayRound,
-      product,
       userDocument,
-      selectedItem,
       selectedVariantGroup
     );
-  }, [loading, displayRound, product, selectedVariantGroup, selectedItem, userDocument]);
 
+    if (state === 'PURCHASABLE' && allAvailableOptions.length > 1 && (!selectedVariantGroup || !selectedItem)) {
+      return 'REQUIRE_OPTION';
+    }
+
+    return state;
+  }, [loading, displayRound, product, selectedVariantGroup, selectedItem, userDocument, allAvailableOptions.length]);
+  
   // --- 데이터 로딩 및 상태 업데이트 로직 (useEffect) ---
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -159,30 +153,47 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       setError(null);
 
       try {
-        const productData = await getProductById(productId);
+        const [productData, reservedQuantitiesMap] = await Promise.all([
+            getProductById(productId),
+            getReservedQuantitiesMap()
+        ]);
 
         if (!productData) {
           setError('상품 정보를 찾을 수 없습니다.');
+          setLoading(false);
           return;
         }
 
         const latestRound = getDisplayRound(productData);
         if (!latestRound) {
           setError('판매 정보를 찾을 수 없습니다.');
+          setLoading(false);
           return;
         }
+        
+        const roundWithReserved: SalesRound = {
+            ...latestRound,
+            variantGroups: latestRound.variantGroups.map(vg => {
+                const key = `${productData.id}-${latestRound!.roundId}-${vg.id}`;
+                return {
+                    ...vg,
+                    reservedCount: reservedQuantitiesMap.get(key) || 0
+                };
+            })
+        };
 
         setProduct(productData);
-        setDisplayRound(latestRound as SalesRound);
+        setDisplayRound(roundWithReserved);
         setCurrentImageIndex(0);
-
-        const firstVg = latestRound.variantGroups?.[0];
+        
+        const firstVg = roundWithReserved.variantGroups?.[0];
         const firstItem = firstVg?.items?.[0];
+
         if (firstVg) {
-            setSelectedVariantGroup(firstVg);
+          setSelectedVariantGroup(firstVg);
         }
         if (firstItem) {
-            setSelectedItem(firstItem);
+          setSelectedItem(firstItem);
         }
 
       } catch (e) {
@@ -261,21 +272,21 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   }, [quantity]);
 
   const handleAddToCart = useCallback(async () => {
-    if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
+    if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
     if (isSuspendedUser) {
-      toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
+      showToast('error', '반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
       return;
     }
-    if (!product || !displayRound || !selectedVariantGroup || !selectedItem) { toast.error('상품 또는 옵션이 올바르지 않습니다.'); return; }
-    if (productActionState !== 'PURCHASABLE') { toast.error('지금은 예약할 수 없는 상품입니다.'); return; }
-    if (quantity < 1) { toast.error('1개 이상 선택해주세요.'); return; }
+    if (!product || !displayRound || !selectedVariantGroup || !selectedItem) { showToast('error', '상품 또는 옵션이 올바르지 않습니다.'); return; }
+    if (productActionState !== 'PURCHASABLE') { showToast('error', '지금은 예약할 수 없는 상품입니다.'); return; }
+    if (quantity < 1) { showToast('error', '1개 이상 선택해주세요.'); return; }
 
     const reserved = selectedVariantGroup.reservedCount || 0;
     const totalGroupStock = selectedVariantGroup.totalPhysicalStock;
     const remainingStock = (totalGroupStock === null || totalGroupStock === -1) ? Infinity : totalGroupStock - reserved;
 
     if (quantity * (selectedItem.stockDeductionAmount || 1) > remainingStock) {
-      toast.error(`죄송합니다. 재고가 부족합니다. (현재 ${Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1) )}개 예약 가능)`);
+      showToast('error', `죄송합니다. 재고가 부족합니다. (현재 ${Math.floor(remainingStock / (selectedItem.stockDeductionAmount || 1) )}개 예약 가능)`);
       return;
     }
 
@@ -304,22 +315,22 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     };
 
     addToCart(itemToAdd);
-    toast.success(`${product.groupName} ${quantity}개를 장바구니에 담았습니다.`);
+    showToast('success', `${product.groupName} ${quantity}개를 장바구니에 담았습니다.`);
     onClose();
   }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate, user, onClose, productActionState, isSuspendedUser, userDocument]);
 
   const handleEncoreRequest = useCallback(async () => {
-    if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
+    if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
     if (isSuspendedUser) {
-      toast.error('현재 등급에서는 앵콜 요청을 할 수 없습니다.');
+      showToast('error', '현재 등급에서는 앵콜 요청을 할 수 없습니다.');
       return;
     }
     if (!product) return;
-    if (userAlreadyRequestedEncore) { toast('이미 앵콜을 요청한 상품입니다.', { icon: '👏' }); return; }
+    if (userAlreadyRequestedEncore) { showToast('info', '이미 앵콜을 요청한 상품입니다.'); return; }
 
     const promise = requestEncore(product.id);
 
-    toast.promise(promise, {
+    showPromiseToast(promise, {
       loading: '앵콜 요청 중...',
       success: '앵콜 요청이 접수되었습니다!',
       error: '앵콜 요청에 실패했습니다.',
@@ -327,13 +338,13 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   }, [product, user, userAlreadyRequestedEncore, requestEncore, navigate, onClose, isSuspendedUser]);
 
   const handleAddToWaitlist = useCallback(async () => {
-    if (!user) { toast.error('로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
+    if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); onClose(); return; }
     if (isSuspendedUser) {
-      toast.error('반복적인 약속 불이행으로 대기 신청이 제한되었습니다.');
+      showToast('error', '반복적인 약속 불이행으로 대기 신청이 제한되었습니다.');
       return;
     }
     if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
-    if (productActionState !== 'WAITLISTABLE') { toast.error('지금은 대기 신청을 할 수 없습니다.'); return; }
+    if (productActionState !== 'WAITLISTABLE') { showToast('error', '지금은 대기 신청을 할 수 없습니다.'); return; }
     
     setWaitlistLoading(true);
 
@@ -362,11 +373,11 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
       addToCart(itemToWaitlist);
       
-      toast.success('대기 신청이 완료되었습니다!');
+      showToast('success', '대기 신청이 완료되었습니다!');
       onClose();
     } catch (error) {
       const err = error as Error;
-      toast.error(err.message || '대기 신청에 실패했습니다.');
+      showToast('error', err.message || '대기 신청에 실패했습니다.');
     } finally {
       setWaitlistLoading(false);
     }
@@ -447,7 +458,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
               ))}
             </Swiper>
             
-            {/* ✅ [수정] '재고 준비중' 상태일 때 이미지 위에 오버레이 표시 */}
             {productActionState === 'AWAITING_STOCK' && (
               <div className="product-detail-overlay-badge">
                 <Hourglass size={32} />
@@ -518,7 +528,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                   <div className="stock-list">
                     {displayRound.variantGroups.map(vg => {
                         const totalStock = vg.totalPhysicalStock;
-                        const reserved = vg.reservedCount || 0;
+                        const reserved = (vg as VariantGroup).reservedCount || 0;
                         const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
                         const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
                         
@@ -563,7 +573,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       );
     }
     
-    {/* ✅ [수정] '재고 준비중' 상태일 때 하단 버튼 처리 */}
     if (productActionState === 'AWAITING_STOCK') {
       return (
         <div className="product-purchase-footer">
