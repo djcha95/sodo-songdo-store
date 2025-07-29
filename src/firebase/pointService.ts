@@ -14,13 +14,18 @@ import { calculateTier } from '@/utils/loyaltyUtils';
 
 /**
  * @description 포인트 정책 정의
- * ✅ [수정] 취소 패널티 정책의 이름과 사유를 명확하게 변경했습니다.
+ * ✅ [수정] 취소 페널티를 '기본 페널티 + 금액 비례' 하이브리드 방식으로 변경
  */
 export const POINT_POLICIES = {
   LATE_PICKED_UP: { points: -40, reason: '지각 픽업 완료' },
   NO_SHOW: { points: -100, reason: '노쇼 (미픽업)' },
-  CANCEL_IN_PENALTY_WINDOW: { points: -30, reason: '1차 마감 후 ~ 픽업일 13시 사이 취소' }, // ✅ [수정]
-  CANCEL_ON_PICKUP_DAY: { points: -40, reason: '픽업 당일 취소' },
+  // ✅ [변경] 취소 페널티 정책: 기본 차감 + 금액 비례 차감
+  CANCEL_PENALTY: {
+    basePoints: -20, // 기본 차감 점수
+    rate: 0.003, // 취소 금액의 0.3%
+    maxRatePenalty: -100, // 금액 비례 페널티의 최대 한도
+    reason: '예약 취소 (마감 후)'
+  },
   DAILY_LOGIN: { points: 1, reason: '일일 첫 로그인' },
   MONTHLY_ATTENDANCE_BONUS: { points: 100, reason: '한달 연속 출석 보너스' },
   REVIEW_CREATED: { points: 5, reason: '리뷰 작성' },
@@ -33,7 +38,8 @@ export const POINT_POLICIES = {
 
 
 /**
- * @description 주문 상태 변경에 따라 신뢰도 포인트를 적용하고 등급을 업데이트하는 핵심 함수
+ * @description 주문 상태 변경에 따라 신뢰도 포인트를 적용하는 핵심 함수
+ * ✅ [수정] 등급 계산 로직은 이제 외부 loyaltyUtils의 새로운 기준을 따름
  */
 export const applyPointChangeByStatus = async (
   transaction: any,
@@ -72,11 +78,25 @@ export const applyPointChangeByStatus = async (
       policy = POINT_POLICIES.NO_SHOW;
       noShowCountIncrement = 1;
       break;
+    // 필요한 경우 CANCEL 등의 상태에 대한 포인트 정책을 추가합니다.
+    // case 'CANCELLED':
+    //   const cancelPenaltyPolicy = POINT_POLICIES.CANCEL_PENALTY;
+    //   const ratePenalty = Math.max(cancelPenaltyPolicy.maxRatePenalty, Math.floor(order.totalPrice * cancelPenaltyPolicy.rate) * -1);
+    //   policy = {
+    //     points: cancelPenaltyPolicy.basePoints + ratePenalty,
+    //     reason: cancelPenaltyPolicy.reason
+    //   };
+    //   break;
   }
 
   if (policy && policy.points !== 0) { 
     const newPoints = (userDoc.points || 0) + policy.points;
-    const newTier = calculateTier(newPoints);
+    const newPickupCount = (userDoc.pickupCount || 0) + pickupCountIncrement;
+    const newNoShowCount = (userDoc.noShowCount || 0) + noShowCountIncrement;
+    
+    // ✅ [변경] 새로운 등급 계산 함수 호출
+    const newTier = calculateTier(newPickupCount, newNoShowCount);
+
     const now = new Date();
     const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
 
@@ -90,23 +110,19 @@ export const applyPointChangeByStatus = async (
 
     const updateData: any = {
       points: newPoints,
-      loyaltyTier: newTier,
+      loyaltyTier: newTier, // 새로운 등급으로 업데이트
       pointHistory: arrayUnion(newPointHistoryEntry), 
+      pickupCount: newPickupCount,
+      noShowCount: newNoShowCount,
     };
-
-    if (pickupCountIncrement > 0) {
-      updateData.pickupCount = (userDoc.pickupCount || 0) + pickupCountIncrement;
-    }
-    if (noShowCountIncrement > 0) {
-      updateData.noShowCount = (userDoc.noShowCount || 0) + noShowCountIncrement;
-    }
 
     transaction.update(userRef, updateData);
   }
 };
 
 /**
- * @description 관리자가 수동으로 사용자의 포인트를 조정하고 등급을 업데이트합니다.
+ * @description 관리자가 수동으로 사용자의 포인트를 조정합니다.
+ * ✅ [수정] 등급은 이제 포인트와 무관하므로, 이 함수는 등급을 변경하지 않습니다.
  */
 export const adjustUserPoints = async (
   userId: string,
@@ -130,7 +146,6 @@ export const adjustUserPoints = async (
 
     const currentPoints = userDoc.data().points || 0;
     const newPoints = currentPoints + amount;
-    const newTier = calculateTier(newPoints);
     
     const now = new Date();
     const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
@@ -142,9 +157,9 @@ export const adjustUserPoints = async (
       expiresAt: amount > 0 ? Timestamp.fromDate(expirationDate) : null,
     };
 
+    // ✅ [변경] 등급(loyaltyTier) 업데이트 로직 제거
     transaction.update(userRef, {
       points: newPoints,
-      loyaltyTier: newTier,
       pointHistory: arrayUnion(newPointHistoryEntry),
     });
   });
@@ -185,7 +200,8 @@ export const applyWaitlistPriorityTicket = async (
     if (round.waitlist[entryIndex].isPrioritized) throw new Error('이미 순번 상승권을 사용한 대기입니다.');
 
     const newPoints = userData.points - ticketCost;
-    const newTier = calculateTier(newPoints);
+    // ✅ [변경] 등급 계산을 픽업/노쇼 카운트 기준으로 변경 (수동 포인트 조정이 아니므로 기존 카운트 사용)
+    const newTier = calculateTier(userData.pickupCount || 0, userData.noShowCount || 0);
     const pointHistoryEntry: Omit<PointLog, 'id'> = {
       amount: -ticketCost,
       reason: POINT_POLICIES.USE_WAITLIST_TICKET.reason,
@@ -296,7 +312,8 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
       }
       
       const newPoints = (userData.points || 0) + pointsToAdd;
-      const newTier = calculateTier(newPoints);
+      // ✅ [변경] 등급 계산을 픽업/노쇼 카운트 기준으로 변경 (로그인 시점의 기존 카운트 사용)
+      const newTier = calculateTier(userData.pickupCount || 0, userData.noShowCount || 0);
       
       const updateData = {
         points: newPoints,

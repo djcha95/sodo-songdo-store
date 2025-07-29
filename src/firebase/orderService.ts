@@ -153,6 +153,8 @@ export const submitOrder = async (
   return { reservedCount: reservedItemCount, orderId: newOrderId };
 };
 
+// src/firebase/orderService.ts
+
 /**
  * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 신뢰도 점수를 조정하는 함수
  */
@@ -178,17 +180,24 @@ export const cancelOrder = async (order: Order): Promise<void> => {
     let userUpdatePayload: any = null;
     const now = new Date();
     const deadlineDate = safeToDate(currentOrder.items[0]?.deadlineDate);
-    const pickupDate = safeToDate(currentOrder.pickupDate);
     
-    const pickupDateTime = pickupDate ? new Date(pickupDate.getTime()) : null;
-    if (pickupDateTime) pickupDateTime.setHours(13, 0, 0, 0);
-
     let penaltyPolicy: { points: number; reason: string } | null = null;
     
-    if (pickupDateTime && now > pickupDateTime) {
-      penaltyPolicy = POINT_POLICIES.CANCEL_ON_PICKUP_DAY;
-    } else if (deadlineDate && pickupDateTime && now > deadlineDate && now < pickupDateTime) {
-      penaltyPolicy = POINT_POLICIES.CANCEL_IN_PENALTY_WINDOW;
+    // ✅ [수정] 새로운 페널티 정책 적용 로직
+    // 마감일이 지났을 경우에만 페널티 부과
+    if (deadlineDate && now > deadlineDate) {
+      const cancelPenaltyPolicy = POINT_POLICIES.CANCEL_PENALTY;
+      // 금액 비례 페널티 계산 (최대 한도 적용)
+      const ratePenalty = Math.max(
+        cancelPenaltyPolicy.maxRatePenalty, 
+        Math.floor(order.totalPrice * cancelPenaltyPolicy.rate) * -1
+      );
+      const totalPenalty = cancelPenaltyPolicy.basePoints + ratePenalty;
+      
+      penaltyPolicy = {
+        points: totalPenalty,
+        reason: cancelPenaltyPolicy.reason
+      };
     }
 
     if (penaltyPolicy && userSnap.exists()) {
@@ -214,9 +223,6 @@ export const cancelOrder = async (order: Order): Promise<void> => {
       }
     }
     
-    // ✅ [수정] 재고 복구 로직 수정
-    // 더 이상 wasPrepaymentRequired 플래그에 의존하지 않고,
-    // 각 상품의 재고 관리 방식과 주문 상태에 따라 재고를 복구합니다.
     for (const item of currentOrder.items) {
       const productData = productDataMap.get(item.productId);
       if (!productData) continue;
@@ -232,14 +238,10 @@ export const cancelOrder = async (order: Order): Promise<void> => {
       const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
 
       if (isGroupStockManaged) {
-        // 한정 수량 상품(그룹 재고)은 'PREPAID' 상태에서 재고가 차감되었으므로,
-        // 'PREPAID' 상태의 주문을 취소할 때만 재고를 복구합니다.
         if (currentOrder.status === 'PREPAID') {
           variantGroup.totalPhysicalStock += item.quantity * (item.stockDeductionAmount || 1);
         }
       } else {
-        // 일반 상품(개별 재고)은 'RESERVED' 상태가 될 때 재고가 즉시 차감되므로,
-        // 'RESERVED' 또는 'PREPAID' 상태에서 취소될 때 재고를 복구합니다.
         const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
         if (itemIndex === -1) continue;
 
@@ -265,7 +267,6 @@ export const cancelOrder = async (order: Order): Promise<void> => {
     transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
   });
 };
-
 
 /**
  * @description 특정 사용자의 모든 주문 내역을 가져옵니다.

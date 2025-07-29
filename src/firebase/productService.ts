@@ -776,6 +776,8 @@ export const getWaitlistForRound = async (productId: string, roundId: string): P
   return detailedWaitlist;
 };
 
+// src/firebase/productService.ts
+
 /**
  * @description 재고를 추가하고, 대기자 명단을 선착순으로 예약 전환 처리합니다.
  */
@@ -854,7 +856,10 @@ export const addStockAndProcessWaitlist = async (
         const userData = userDoc.data() as UserDocument;
         const refundAmount = 50;
         const newPoints = userData.points + refundAmount;
-        const newTier = calculateTier(newPoints);
+        
+        // ✅ [수정] calculateTier 함수에 올바른 인자(pickupCount, noShowCount) 전달
+        const newTier = calculateTier(userData.pickupCount || 0, userData.noShowCount || 0);
+
         const pointHistoryEntry: Omit<PointLog, 'id'> = {
           amount: refundAmount,
           reason: '대기 순번 상승권 환불 (재고 미확보)',

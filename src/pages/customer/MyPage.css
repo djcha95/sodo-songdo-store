@@ -3,163 +3,243 @@
 /* --- 전체 레이아웃 --- */
 .mypage-container {
   padding: var(--spacing-md);
-  /* ✅ [수정] 하단 여백을 늘려 로그아웃 버튼이 잘리지 않도록 합니다. */
   padding-bottom: 120px;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
   position: relative;
-  min-height: calc(100vh - 60px - 70px); /* 헤더, 바텀네비 제외 최소 높이 확보 */
+  min-height: calc(100vh - 60px - 70px);
 }
 
-/* --- 1. 통합 프로필 카드 --- */
-.unified-profile-card {
-  /* ✅ [수정] 기본 배경은 등급별 클래스에서 지정하도록 제거합니다. */
-  color: white;
+/* --- ✅ [신규] 새로운 프로필 카드 V2 --- */
+.unified-profile-card-v2 {
   border-radius: var(--border-radius-xl);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: white;
+}
+
+.card-v2-background {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-size: 300% 300%; /* 그라데이션 애니메이션을 위해 크기 확장 */
+  background-position: center;
+  transition: background-image 0.5s ease-in-out;
+  z-index: -1;
+  animation: gradient-animation 10s ease infinite;
+}
+
+/* 그라데이션 애니메이션 */
+@keyframes gradient-animation {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+
+/* 등급별 배경 */
+.unified-profile-card-v2.tier-god .card-v2-background { background-image: linear-gradient(-45deg, #ffd700, #ffc107, #ff9800, #e65100); }
+.unified-profile-card-v2.tier-king .card-v2-background { background-image: linear-gradient(-45deg, #e0e0e0, #bdbdbd, #9e9e9e, #757575); }
+.unified-profile-card-v2.tier-fairy .card-v2-background { background-image: linear-gradient(-45deg, #da70d6, #ba55d3, #9932cc, #8a2be2); }
+.unified-profile-card-v2.tier-sprout .card-v2-background { background-image: linear-gradient(-45deg, #90ee90, #3cb371, #2e8b57, #006400); }
+.unified-profile-card-v2.tier-warning .card-v2-background { background-image: linear-gradient(-45deg, #ffa500, #ff7043, #ff5722, #f4511e); }
+.unified-profile-card-v2.tier-restricted .card-v2-background,
+.unified-profile-card-v2.tier-default .card-v2-background { background-image: linear-gradient(-45deg, #778899, #546e7a, #455a64, #2f4f4f); }
+
+/* ✅ [변경] 관리자/마스터 전용 "쌈뽕뽁짝 핑크" 배경 */
+.unified-profile-card-v2.role-admin .card-v2-background,
+.unified-profile-card-v2.role-master .card-v2-background {
+  background-image: linear-gradient(-45deg, #ff79c6, #ff55b8, #ff8ace, #f72585);
+  animation-duration: 6s; /* 더 빠른 애니메이션 */
+}
+
+/* ✅ [신규] 반짝이는 효과 */
+.unified-profile-card-v2.role-admin::after,
+.unified-profile-card-v2.role-master::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 4%);
+    background-size: 50px 50px;
+    opacity: 0;
+    animation: sparkle-animation 4s infinite;
+    z-index: 0;
+}
+
+@keyframes sparkle-animation {
+  0% { transform: scale(1); opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+
+.card-v2-content {
   padding: var(--spacing-lg);
-  box-shadow: var(--box-shadow-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  position: relative;
-  overflow: hidden;
-}
-
-/* ✅ [추가] 등급별 프로필 카드 배경 스타일 */
-.unified-profile-card.tier-god {
-  background: linear-gradient(135deg, #e6c869, #3a301c);
-}
-.unified-profile-card.tier-king {
-  background: linear-gradient(135deg, #a7b4c4, #3e4a5a);
-}
-.unified-profile-card.tier-fairy {
-  background: linear-gradient(135deg, #e08ee9, #6a4f9b);
-}
-.unified-profile-card.tier-sprout {
-  background: linear-gradient(135deg, #48bb78, #2f855a);
-}
-.unified-profile-card.tier-warning {
-  background: linear-gradient(135deg, #ed8936, #7b341e);
-}
-.unified-profile-card.tier-restricted,
-.unified-profile-card.tier-default {
-  background: linear-gradient(135deg, #4a5568, #1a202c);
-}
-
-
-.unified-profile-card.loading {
-  height: 200px;
-  background: var(--bg-color-medium);
-}
-/* 카드 배경 패턴 */
-.unified-profile-card::before {
-  content: '';
-  position: absolute;
-  top: -50%; left: -50%;
-  width: 200%; height: 200%;
-  background-image: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
-  background-size: 1.5rem 1.5rem;
-  animation: bg-pan 20s linear infinite;
-  opacity: 0.5;
-}
-@keyframes bg-pan {
-  0% { transform: translate(0, 0); }
-  100% { transform: translate(1.5rem, 1.5rem); }
-}
-
-.profile-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  position: relative;
+  position: relative; /* 패턴 위에 콘텐츠가 오도록 */
   z-index: 1;
 }
 
-.profile-info .display-name {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  display: block;
-  margin-bottom: var(--spacing-xs);
+.profile-tier-section-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-.tier-info {
+
+.tier-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.tier-icon-name {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  background: rgba(0,0,0,0.2);
-  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6px 12px;
   border-radius: var(--border-radius-full);
-  width: fit-content;
+  margin-bottom: var(--spacing-sm);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
-.tier-info .tier-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-}
-.tier-info i {
-  font-size: 1.2em;
+/* ✅ [변경] 관리자/마스터 뱃지 색상 */
+.role-admin .tier-icon-name,
+.role-master .tier-icon-name {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff; /* 텍스트 색상을 더 밝게 */
 }
 
-.edit-button {
-  background: rgba(255,255,255,0.15);
-  border: none;
-  color: white;
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  cursor: pointer;
+
+.tier-icon-name .tier-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+.tier-icon-name i.seedling-icon-mypage {
+  font-size: 1.2em;
+  font-style: normal;
+}
+
+.display-name {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--spacing-xs);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.progress-message {
+  font-size: var(--font-size-xs);
+  opacity: 0.9;
+  margin: 0;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.profile-points-section-v2 {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
   transition: background-color 0.2s;
 }
-.edit-button:hover {
-  background: rgba(255,255,255,0.3);
+.profile-points-section-v2:hover {
+  background: rgba(0, 0, 0, 0.3);
 }
 
-.profile-card-body {
-  text-align: right;
-  cursor: pointer;
-  position: relative;
-  z-index: 1;
-}
-.current-points-label {
-  display: block;
-  font-size: var(--font-size-sm);
-  opacity: 0.8;
-}
-.current-points-value {
-  font-size: var(--font-size-xxxl);
-  font-weight: var(--font-weight-extrabold);
-  line-height: 1.1;
+.points-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: var(--font-weight-medium);
 }
 
-.profile-card-footer {
+.points-value {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+.points-value .arrow-icon {
+  opacity: 0.7;
+}
+
+/* --- 원형 프로그레스 바 --- */
+.progress-ring-wrapper {
   position: relative;
-  z-index: 1;
+  width: 120px;
+  height: 120px;
 }
-.progress-bar-container {
-  width: 100%;
-  margin-bottom: var(--spacing-xs);
+
+.progress-ring {
+  transform: rotate(-90deg);
 }
-.progress-bar-track {
-  background: rgba(0,0,0,0.2);
-  height: 8px;
-  border-radius: var(--border-radius-full);
+
+.progress-ring__circle-bg {
+  stroke: rgba(255, 255, 255, 0.2);
 }
-.progress-bar-fill {
-  height: 100%;
-  background-color: white;
-  border-radius: var(--border-radius-full);
-  transition: width 0.5s ease-in-out;
+
+.progress-ring__circle {
+  transition: stroke-dashoffset 0.8s ease-out;
+  transform-origin: center;
+  stroke-linecap: round;
 }
-.progress-bar-label {
+
+/* 등급별 프로그레스 바 색상 */
+.progress-ring__circle.tier-god { stroke: #FFD700; }
+.progress-ring__circle.tier-king { stroke: #e0e0e0; }
+.progress-ring__circle.tier-fairy { stroke: #DA70D6; }
+.progress-ring__circle.tier-sprout { stroke: #90EE90; }
+.progress-ring__circle.tier-warning { stroke: #FFA500; }
+.progress-ring__circle.tier-restricted,
+.progress-ring__circle.tier-default { stroke: #778899; }
+
+
+.progress-ring__text {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.progress-ring__text .percentage {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.progress-ring__text .label {
   font-size: var(--font-size-xs);
   opacity: 0.8;
-  text-align: right;
-  display: block;
+  margin-top: 4px;
 }
 
-/* --- 2. 닉네임 설정 카드 --- */
-.nickname-setup-card {
+
+/* --- 닉네임, 초대, 메뉴, 로그아웃 (기존과 동일) --- */
+.mypage-menu-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.nickname-setup-card, .referral-card {
   background-color: var(--bg-color-white);
   border-radius: var(--border-radius-lg);
   padding: var(--spacing-md);
@@ -175,14 +255,12 @@
   gap: var(--spacing-sm);
   color: var(--primary-color);
 }
-
 .nickname-setup-header h4 {
   margin: 0;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--text-color-dark);
 }
-
 .nickname-setup-guide {
   font-size: var(--font-size-sm);
   color: var(--text-color-medium);
@@ -192,18 +270,15 @@
   gap: 5px;
   line-height: 1.4;
 }
-
 .nickname-setup-guide svg {
   color: var(--accent-color);
-  margin-top: 2px; /* 아이콘과 텍스트 상단 정렬 */
+  margin-top: 2px;
   flex-shrink: 0;
 }
-
 .nickname-setup-form {
   display: flex;
   gap: var(--spacing-sm);
 }
-
 .nickname-setup-form input {
   flex-grow: 1;
   padding: var(--spacing-sm);
@@ -213,69 +288,59 @@
   outline: none;
   transition: border-color 0.2s;
 }
-
 .nickname-setup-form input:focus {
   border-color: var(--primary-color);
 }
-
 .nickname-setup-form button {
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--border-radius-md);
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
-  white-space: nowrap; /* 버튼 텍스트 줄바꿈 방지 */
+  white-space: nowrap;
 }
 
-
-/* --- 3. 친구 초대 코드 카드 --- */
-.referral-card {
-    background-color: var(--bg-color-white);
-    border-radius: var(--border-radius-lg);
-    padding: var(--spacing-md);
-    border: 1px solid var(--border-color-light);
-}
 .referral-info {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    margin-bottom: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
 }
 .referral-icon {
-    flex-shrink: 0;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--loyalty-king-bg);
-    color: var(--loyalty-king);
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--loyalty-king-bg);
+  color: var(--loyalty-king);
 }
 .referral-info h4 {
-    margin: 0 0 4px;
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-color-dark);
+  margin: 0 0 4px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color-dark);
 }
 .referral-info p {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--text-color-medium);
-    line-height: 1.5;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-color-medium);
+  line-height: 1.5;
 }
 .referral-action {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background-color: var(--bg-color-light);
-    border-radius: var(--border-radius-md);
-    padding: var(--spacing-sm) var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-color-light);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
 }
 .referral-code {
-    font-size: var(--font-size-md);
-    font-weight: var(--font-weight-bold);
-    color: var(--primary-color);
-    letter-spacing: 1px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--primary-color);
+  letter-spacing: 1px;
 }
 .copy-button {
   display: flex;
@@ -295,7 +360,6 @@
   background-color: var(--border-color-dark);
 }
 
-/* --- 4. 메뉴 리스트 --- */
 .mypage-menu-list {
   display: flex;
   flex-direction: column;
@@ -333,17 +397,13 @@
   color: var(--text-color-light);
 }
 
-
-/* --- 로그아웃 --- */
-/* ✅ [수정] 로그아웃 버튼을 하단에 고정된 형태로 변경 */
 .logout-section {
   position: absolute;
-  bottom: 75px; /* 하단 네비게이션 바 위 */
-  left: 16px; /* container padding */
-  right: 16px; /* container padding */
+  bottom: 75px;
+  left: 16px;
+  right: 16px;
   z-index: 10;
 }
-
 .logout-button {
   width: 100%;
   padding: 12px;
@@ -360,7 +420,6 @@
   justify-content: center;
   gap: 6px;
 }
-
 .logout-button:hover {
   background-color: #e9ecef;
   color: #495057;
