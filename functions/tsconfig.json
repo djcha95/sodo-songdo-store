@@ -1,19 +1,18 @@
 {
   "compilerOptions": {
     "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "outDir": "lib",
+    "strict": true,
+    "sourceMap": true,
     "esModuleInterop": true,
-    "moduleResolution": "nodenext",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "outDir": "lib",
-    "sourceMap": true,
-    "strict": true,
-    "target": "es2017"
+    "resolveJsonModule": true
   },
   "compileOnSave": true,
   "include": [
     "src"
-    // ✨ [수정] "src"가 포함되어 있으므로 이 줄은 불필요하여 제거합니다.
-    // "src/types.ts"
   ]
 }

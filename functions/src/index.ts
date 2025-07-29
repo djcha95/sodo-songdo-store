@@ -37,7 +37,7 @@ interface ProductWithHistory {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. 초기 설정
+// 1. Initialization
 // ─────────────────────────────────────────────────────────────────────────────
 if (process.env.FUNCTIONS_EMULATOR) {
   process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
@@ -57,13 +57,24 @@ const corsHandler = cors({
   origin: allowedOrigins,
 });
 
-const calculateTier = (points: number): string => {
-  if (points >= 500) return "공구의 신";
-  if (points >= 200) return "공구왕";
-  if (points >= 50) return "공구요정";
-  if (points >= 0) return "공구새싹";
-  if (points >= -299) return "주의 요망";
-  return "참여 제한";
+const calculateTier = (pickupCount: number, noShowCount: number): string => {
+  const totalTransactions = pickupCount + noShowCount;
+
+  if (totalTransactions === 0) {
+    return "공구새싹";
+  }
+
+  if (noShowCount >= 3) {
+    return "참여 제한";
+  }
+
+  const pickupRate = (pickupCount / totalTransactions) * 100;
+
+  if (pickupRate >= 98 && pickupCount >= 50) return "공구의 신";
+  if (pickupRate >= 95 && pickupCount >= 20) return "공구왕";
+  if (pickupRate >= 90 && pickupCount >= 5) return "공구요정";
+  if (pickupRate >= 80) return "공구새싹";
+  return "주의 요망";
 };
 
 const POINT_POLICIES = {
@@ -72,8 +83,84 @@ const POINT_POLICIES = {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. 클라이언트 호출 가능 함수 (onCall)
+// 2. Callable Functions (onCall)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @description [NEW] Fetches a paginated list of products and calculates real-time stock levels securely on the server.
+ */
+export const getProductsWithStock = onCall({
+  region: "asia-northeast3",
+  enforceAppCheck: false,
+  cors: allowedOrigins // ✅ [추가] 이 줄을 추가하여 CORS 오류를 해결합니다.
+}, async (request) => {
+  // ... (함수 내부 로직은 이전과 동일) ...
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+
+  const { pageSize = 10, lastVisible } = request.data;
+  
+  try {
+    // ... (이하 생략) ...
+    const reservedQuantitiesMap = new Map<string, number>();
+    const ordersSnapshot = await db.collection("orders")
+        .where("status", "in", ["RESERVED", "PREPAID"])
+        .get();
+
+    ordersSnapshot.forEach((doc) => {
+      const order = doc.data();
+      (order.items || []).forEach((item: any) => {
+        const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+        const currentQty = reservedQuantitiesMap.get(key) || 0;
+        reservedQuantitiesMap.set(key, currentQty + item.quantity);
+      });
+    });
+
+    let productsQuery = db.collection("products")
+        .where("isArchived", "==", false)
+        .orderBy("createdAt", "desc")
+        .limit(pageSize);
+
+    if (lastVisible) {
+      productsQuery = productsQuery.startAfter(Timestamp.fromMillis(lastVisible));
+    }
+
+    const productsSnapshot = await productsQuery.get();
+
+    const products = productsSnapshot.docs.map((doc) => {
+      const productData = doc.data();
+      const productId = doc.id;
+
+      const reservedQuantities: Record<string, number> = {};
+      (productData.salesHistory || []).forEach((round: any) => {
+        (round.variantGroups || []).forEach((vg: any) => {
+          const key = `${productId}-${round.roundId}-${vg.id}`;
+          if (reservedQuantitiesMap.has(key)) {
+            reservedQuantities[key] = reservedQuantitiesMap.get(key)!;
+          }
+        });
+      });
+
+      return {
+        id: productId,
+        ...productData,
+        reservedQuantities,
+      };
+    });
+    
+    const newLastVisibleDoc = productsSnapshot.docs[productsSnapshot.docs.length - 1];
+    const newLastVisible = newLastVisibleDoc ? (newLastVisibleDoc.data().createdAt as Timestamp)?.toMillis() : null;
+
+    return {
+      products,
+      lastVisible: newLastVisible,
+    };
+  } catch (error) {
+    logger.error("Error in getProductsWithStock:", error);
+    throw new HttpsError("internal", "상품 정보를 불러오는 중 오류가 발생했습니다.");
+  }
+});
 
 export const checkCartStock = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
@@ -95,7 +182,6 @@ export const checkCartStock = onCall(
     }
 
     try {
-      // ✅ [수정] 1. 'orders' 컬렉션을 직접 조회하여 실시간 예약 수량 맵을 만듭니다. (클라이언트 로직과 동일)
       const reservedQuantitiesMap = new Map<string, number>();
       const ordersQuery = db.collection('orders').where('status', 'in', ['RESERVED', 'PREPAID']);
       const ordersSnapshot = await ordersQuery.get();
@@ -135,7 +221,6 @@ export const checkCartStock = onCall(
         
         const totalStock = group.totalPhysicalStock;
         
-        // ✅ [수정] 2. 위에서 직접 계산한 예약 수량 맵을 사용하고, products 문서의 reservedCount는 더 이상 참조하지 않습니다.
         const mapKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
         const reservedQuantity = reservedQuantitiesMap.get(mapKey) || 0;
         
@@ -146,7 +231,6 @@ export const checkCartStock = onCall(
 
         if (item.quantity > availableStock) {
           isSufficient = false;
-          // ✅ [수정] 차감 재고 단위(stockDeductionAmount)를 고려하여 조정될 수량을 계산합니다.
           const stockDeductionAmount = item.stockDeductionAmount || 1;
           const adjustedQuantity = Math.max(0, Math.floor(availableStock / stockDeductionAmount));
           if (adjustedQuantity > 0) {
@@ -170,7 +254,7 @@ export const submitOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+      throw new HttpsError("unauthenticated", "A login is required.");
     }
 
     const orderData = request.data as Order;
@@ -181,17 +265,15 @@ export const submitOrder = onCall(
         const userRef = db.collection('users').doc(userId);
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists) {
-          throw new HttpsError('not-found', '사용자 정보를 찾을 수 없습니다.');
+          throw new HttpsError('not-found', 'User information not found.');
         }
         const userDoc = userSnap.data() as UserDocument;
         if (userDoc.loyaltyTier === '참여 제한') {
-          throw new HttpsError('permission-denied', '반복적인 약속 불이행으로 인해 현재 공동구매 참여가 제한되었습니다.');
+          throw new HttpsError('permission-denied', 'Your participation in group buys is currently restricted due to repeated promise violations.');
         }
 
-        // ✅ [수정] submitOrder 함수 내부에서도 실시간 재고 계산을 위해 orders 컬렉션을 직접 조회합니다.
         const reservedQuantitiesMap = new Map<string, number>();
         const ordersQuery = db.collection('orders').where('status', 'in', ['RESERVED', 'PREPAID']);
-        // 트랜잭션 내에서는 트랜잭션 객체를 통해 get을 해야 합니다.
         const ordersSnapshot = await transaction.get(ordersQuery);
         ordersSnapshot.forEach((doc) => {
             const order = doc.data() as Order;
@@ -205,31 +287,30 @@ export const submitOrder = onCall(
         const productSnaps = await transaction.getAll(...productRefs);
         const productDataMap = new Map<string, any>();
         for (const productSnap of productSnaps) {
-            if (!productSnap.exists) throw new HttpsError('not-found', `상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
+            if (!productSnap.exists) throw new HttpsError('not-found', `Product not found (ID: ${productSnap.id}).`);
             productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() });
         }
         
         const itemsToReserve: OrderItem[] = [];
         for (const item of orderData.items) {
           const productData = productDataMap.get(item.productId);
-          if (!productData) throw new HttpsError('internal', `상품 데이터를 처리할 수 없습니다: ${item.productId}`);
+          if (!productData) throw new HttpsError('internal', `Could not process product data: ${item.productId}`);
           
           const round = productData.salesHistory.find((r: any) => r.roundId === item.roundId);
-          if (!round) throw new HttpsError('not-found', `판매 회차 정보를 찾을 수 없습니다.`);
+          if (!round) throw new HttpsError('not-found', `Sales round information not found.`);
 
           const variantGroup = round.variantGroups.find((vg: any) => vg.id === item.variantGroupId);
-          if (!variantGroup) throw new HttpsError('not-found', `옵션 그룹 정보를 찾을 수 없습니다.`);
+          if (!variantGroup) throw new HttpsError('not-found', `Option group information not found.`);
           
           let availableStock = Infinity;
           if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-              // ✅ [수정] product 문서의 reservedCount 대신 직접 계산한 맵을 사용합니다.
               const mapKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
               const reservedCount = reservedQuantitiesMap.get(mapKey) || 0;
               availableStock = variantGroup.totalPhysicalStock - reservedCount;
           }
 
           if (availableStock < item.quantity) {
-              throw new HttpsError('resource-exhausted', `죄송합니다. ${productData.groupName} 상품의 재고가 부족합니다. (남은 수량: ${Math.max(0, availableStock)}개)`);
+              throw new HttpsError('resource-exhausted', `Sorry, the product ${productData.groupName} is out of stock. (Remaining quantity: ${Math.max(0, availableStock)})`);
           }
             
           itemsToReserve.push({ ...item });
@@ -237,7 +318,7 @@ export const submitOrder = onCall(
         
         if (itemsToReserve.length > 0) {
             const newOrderRef = db.collection('orders').doc();
-            const originalTotalPrice = itemsToReserve.reduce((total, i: OrderItem) => total + (i.unitPrice * i.quantity), 0);
+            const originalTotalPrice = itemsToReserve.reduce((total: number, i: OrderItem) => total + (i.unitPrice * i.quantity), 0);
             
             const phoneLast4 = orderData.customerInfo.phone.slice(-4);
             const firstItem = orderData.items[0];
@@ -245,7 +326,7 @@ export const submitOrder = onCall(
             const roundForOrder = productForRound?.salesHistory.find((r: any) => r.roundId === firstItem.roundId);
             
             if (!roundForOrder?.pickupDate) {
-              throw new HttpsError('invalid-argument', '주문하려는 상품의 픽업 날짜 정보가 설정되지 않았습니다.');
+              throw new HttpsError('invalid-argument', 'Pickup date information for the ordered product is not set.');
             }
 
             const newOrderData: Order = {
@@ -266,7 +347,7 @@ export const submitOrder = onCall(
             transaction.set(newOrderRef, newOrderData);
             return { success: true, orderId: newOrderRef.id };
         }
-        return { success: false, message: "주문할 상품이 없습니다." };
+        return { success: false, message: "There are no items to order." };
       });
       return result;
     } catch (error) {
@@ -274,15 +355,16 @@ export const submitOrder = onCall(
       if (error instanceof HttpsError) {
           throw error;
       }
-      throw new HttpsError("internal", "주문 처리 중 알 수 없는 오류가 발생했습니다.");
+      throw new HttpsError("internal", "An unknown error occurred while processing the order.");
     }
   }
 );
+
 export const getUserOrders = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+      throw new HttpsError("unauthenticated", "A login is required.");
     }
     const userId = request.auth.uid;
     const { pageSize, lastVisible: lastVisibleData, orderByField } = request.data as { pageSize: number, lastVisible?: number, orderByField: 'createdAt' | 'pickupDate' };
@@ -292,13 +374,10 @@ export const getUserOrders = onCall(
         .orderBy(orderByField, 'desc')
         .limit(pageSize);
 
-    // 페이지네이션 커서 처리
     if (lastVisibleData) {
       if (orderByField === 'createdAt' || orderByField === 'pickupDate') {
-        // Timestamp 필드 기준
         queryBuilder = queryBuilder.startAfter(Timestamp.fromMillis(lastVisibleData));
       } else {
-        // 다른 필드 기준 (필요시 확장)
         queryBuilder = queryBuilder.startAfter(lastVisibleData);
       }
     }
@@ -312,7 +391,6 @@ export const getUserOrders = onCall(
       if (lastDoc) {
         const lastDocData = lastDoc.data();
         if (orderByField === 'createdAt' || orderByField === 'pickupDate') {
-          // Timestamp 필드는 toMillis()로 변환하여 클라이언트에 전달
           newLastVisible = (lastDocData[orderByField] as Timestamp)?.toMillis() || null;
         } else {
           newLastVisible = lastDocData[orderByField] || null;
@@ -322,7 +400,7 @@ export const getUserOrders = onCall(
       return { data: orders, lastDoc: newLastVisible };
     } catch (error) {
       logger.error('Error fetching user orders:', error);
-      throw new HttpsError('internal', '주문 내역을 가져오는 중 오류가 발생했습니다.');
+      throw new HttpsError('internal', 'An error occurred while fetching order history.');
     }
   }
 );
@@ -332,7 +410,7 @@ export const getUserWaitlist = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+      throw new HttpsError("unauthenticated", "A login is required.");
     }
     const userId = request.auth.uid;
     
@@ -355,7 +433,7 @@ export const getUserWaitlist = onCall(
                 roundName: round.roundName,
                 variantGroupId: entry.variantGroupId,
                 itemId: entry.itemId,
-                itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
+                itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || 'Option information not available',
                 imageUrl: product.imageUrls?.[0] || '',
                 quantity: entry.quantity,
                 timestamp: entry.timestamp,
@@ -375,7 +453,7 @@ export const getUserWaitlist = onCall(
       return { data: sortedWaitlist, lastDoc: null };
     } catch (error) {
       logger.error('Error fetching user waitlist:', error);
-      throw new HttpsError('internal', '대기 목록을 가져오는 중 오류가 발생했습니다.');
+      throw new HttpsError('internal', 'An error occurred while fetching the waitlist.');
     }
   }
 );
@@ -402,10 +480,7 @@ export const getProductsForList = onCall({ region: "asia-northeast3", cors: allo
         return { products: [], nextLastVisibleCreatedAt: null };
     }
     
-    // ✅ [수정] 클라이언트에서 직접 재고를 계산하므로, 서버에서는 더 이상 reservedQuantities를 내려주지 않아도 됩니다.
-    // 트리거에 의해 집계된 reservedCount를 그대로 사용합니다.
     const productsWithMap = rawProducts.map(product => {
-        // reservedQuantities 맵 생성 로직 제거
         return { ...product };
     });
 
@@ -427,11 +502,12 @@ export const getProductsForList = onCall({ region: "asia-northeast3", cors: allo
     };
   } catch (error) {
       logger.error("Error in getProductsForList:", error);
-      throw new HttpsError("internal", "상품 정보를 가져오는 중 오류가 발생했습니다.");
+      throw new HttpsError("internal", "An error occurred while fetching product information.");
   }
 });
+
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. HTTP 함수 (단순 요청/응답)
+// 3. HTTP Functions (Simple Request/Response)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const kakaoLogin = onRequest(
@@ -445,7 +521,7 @@ export const kakaoLogin = onRequest(
       if (!token) {
         return response
           .status(400)
-          .json({message: "카카오 토큰이 제공되지 않았습니다."});
+          .json({message: "Kakao token not provided."});
       }
       try {
         const kakaoUserResponse = await axios.get(
@@ -454,7 +530,7 @@ export const kakaoLogin = onRequest(
         );
         const kakaoId = kakaoUserResponse.data.id;
         if (!kakaoId) {
-          throw new Error("카카오 사용자 ID를 가져올 수 없습니다.");
+          throw new Error("Could not retrieve Kakao user ID.");
         }
         const uid = `kakao:${kakaoId}`;
         try {
@@ -477,11 +553,11 @@ export const kakaoLogin = onRequest(
         const firebaseToken = await auth.createCustomToken(uid);
         return response.status(200).json({firebaseToken});
       } catch (error: unknown) {
-        let errorMessage = "인증 처리 중 서버에서 오류가 발생했습니다.";
+        let errorMessage = "An error occurred on the server during authentication processing.";
         if (error instanceof Error) {
           errorMessage = error.message;
         }
-        logger.error("Firebase 커스텀 토큰 생성 중 오류:", error);
+        logger.error("Error creating Firebase custom token:", error);
         if (axios.isAxiosError(error)) {
           logger.error("Axios error details:", error.response?.data);
         }
@@ -491,8 +567,30 @@ export const kakaoLogin = onRequest(
   }
 );
 
+export const setUserRole = onRequest(
+  { region: "asia-northeast3" },
+  (request, response: Response) => {
+    corsHandler(request, response, async () => {
+      const { uid, role } = request.query;
+
+      if (typeof uid !== 'string' || typeof role !== 'string') {
+        response.status(400).send("Please provide uid and role parameters accurately.");
+        return;
+      }
+
+      try {
+        await getAuth().setCustomUserClaims(uid, { role: role });
+        response.send(`Success! The '${role}' role has been assigned to user (${uid}).`);
+      } catch (error) {
+        logger.error("Error setting custom claim:", error);
+        response.status(500).send(`An error occurred while setting the custom claim: ${error}`);
+      }
+    });
+  }
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Firestore 트리거 함수 (DB 변경 감지)
+// 4. Firestore Trigger Functions (DB Change Detection)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const createNotificationOnPointChange = onDocumentCreated(
@@ -503,7 +601,7 @@ export const createNotificationOnPointChange = onDocumentCreated(
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) {
-      logger.error("이벤트에 데이터가 없습니다.", {params: event.params});
+      logger.error("No data in the event.", {params: event.params});
       return;
     }
 
@@ -516,7 +614,7 @@ export const createNotificationOnPointChange = onDocumentCreated(
     }
 
     if (amount === undefined || !reason) {
-      logger.error("포인트 로그에 amount 또는 reason 필드가 없습니다.", {
+      logger.error("The point log is missing the amount or reason field.", {
         data: pointLog,
       });
       return;
@@ -524,11 +622,11 @@ export const createNotificationOnPointChange = onDocumentCreated(
 
     let message = "";
     if (amount > 0) {
-      message = `🎉 '${reason}'으로 ${amount.toLocaleString()}P가 적립되었어요!`;
+      message = `🎉 You've earned ${amount.toLocaleString()}P for '${reason}'!`;
     } else {
-      message = `🛍️ '${reason}'으로 ${Math.abs(
+      message = `🛍️ You've used ${Math.abs(
         amount
-      ).toLocaleString()}P를 사용했어요.`;
+      ).toLocaleString()}P for '${reason}'.`;
     }
 
     const newNotification = {
@@ -545,10 +643,10 @@ export const createNotificationOnPointChange = onDocumentCreated(
         .doc(userId)
         .collection("notifications")
         .add(newNotification);
-      logger.info(`사용자 [${userId}]에게 알림을 성공적으로 보냈습니다.`);
+      logger.info(`Successfully sent a notification to user [${userId}].`);
     } catch (error) {
       logger.error(
-        `사용자 [${userId}]에게 알림을 보내는 중 오류 발생:`,
+        `An error occurred while sending a notification to user [${userId}]:`,
         error
       );
     }
@@ -556,7 +654,6 @@ export const createNotificationOnPointChange = onDocumentCreated(
 );
 
 
-// [재작성] onOrderCreated: 새로운 reservedCount 방식으로 재고 관리
 export const onOrderCreated = onDocumentCreated(
   {
     document: "orders/{orderId}",
@@ -618,7 +715,6 @@ export const onOrderCreated = onDocumentCreated(
   }
 );
 
-// [재작성] onOrderDeleted: 새로운 reservedCount 방식으로 재고 관리
 export const onOrderDeleted = onDocumentDeleted(
   {
     document: "orders/{orderId}",
@@ -680,7 +776,6 @@ export const onOrderDeleted = onDocumentDeleted(
   }
 );
 
-// [재작성] onOrderUpdated: 새로운 reservedCount 방식으로 재고 관리
 export const onOrderUpdated = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -766,9 +861,6 @@ export const onOrderUpdated = onDocumentUpdated(
   }
 );
 
-/**
- * @description 신규 유저가 첫 픽업을 완료했을 때, 추천인에게 보상 포인트를 지급합니다.
- */
 export const rewardReferrerOnFirstPickup = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -776,21 +868,20 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
   },
   async (event) => {
     if (!event.data) {
-      logger.error("이벤트 데이터가 없습니다.");
+      logger.error("No event data.");
       return;
     }
 
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
 
-    // 1. 주문 상태가 'PICKED_UP'으로 변경되었는지 확인
     if (before.status === "PICKED_UP" || after.status !== "PICKED_UP") {
       return;
     }
 
     const newUserId = after.userId;
     if (!newUserId) {
-      logger.warn("주문 데이터에 userId가 없습니다.");
+      logger.warn("No userId in order data.");
       return;
     }
     const newUserRef = db.collection("users").doc(newUserId);
@@ -798,28 +889,25 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
     try {
       const newUserDoc = await newUserRef.get();
       if (!newUserDoc.exists) {
-        logger.warn(`주문자(ID: ${newUserId})의 사용자 문서를 찾을 수 없습니다.`);
+        logger.warn(`User document for orderer (ID: ${newUserId}) not found.`);
         return;
       }
 
       const newUser = newUserDoc.data() as UserDocument;
 
-      // 2. 이 픽업이 '첫 번째' 픽업이고, 추천인을 통해 가입했는지 확인
-      // pickupCount는 픽업 완료 시점에 1이 되므로, 이전 상태(0)를 기준으로 판단
       const isFirstPickup = (newUser.pickupCount || 0) === 1;
       const wasReferred = newUser.referredBy && newUser.referredBy !== "__SKIPPED__";
 
       if (isFirstPickup && wasReferred) {
-        logger.info(`첫 픽업 사용자(ID: ${newUserId}) 확인. 추천인 검색을 시작합니다.`);
+        logger.info(`First pickup user (ID: ${newUserId}) confirmed. Starting referrer search.`);
 
-        // 3. 추천인 찾기
         const referrerQuery = db.collection("users")
           .where("referralCode", "==", newUser.referredBy)
           .limit(1);
 
         const referrerSnapshot = await referrerQuery.get();
         if (referrerSnapshot.empty) {
-          logger.warn(`추천인 코드(${newUser.referredBy})에 해당하는 사용자를 찾을 수 없습니다.`);
+          logger.warn(`User with referral code (${newUser.referredBy}) not found.`);
           return;
         }
 
@@ -827,7 +915,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
         const referrerRef = referrerDoc.ref;
         const rewardPoints = POINT_POLICIES.FRIEND_INVITED.points;
         
-        // 4. 추천인에게 포인트 지급 (트랜잭션)
         await db.runTransaction(async (transaction) => {
           const freshReferrerDoc = await transaction.get(referrerRef);
           if (!freshReferrerDoc.exists) return;
@@ -835,14 +922,15 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
           const referrerData = freshReferrerDoc.data() as UserDocument;
           const currentPoints = referrerData.points || 0;
           const newPoints = currentPoints + rewardPoints;
-          const newTier = calculateTier(newPoints);
+          
+          const newTier = calculateTier(referrerData.pickupCount || 0, referrerData.noShowCount || 0);
           
           const now = new Date();
           const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
 
           const pointLog: Omit<PointLog, "id"> = {
             amount: rewardPoints,
-            reason: `${POINT_POLICIES.FRIEND_INVITED.reason} (${newUser.displayName || "신규회원"}님)`,
+            reason: `${POINT_POLICIES.FRIEND_INVITED.reason} (${newUser.displayName || "New Member"}님)`,
             createdAt: Timestamp.now(),
             expiresAt: Timestamp.fromDate(expirationDate),
           };
@@ -854,22 +942,18 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
           });
         });
         
-        logger.info(`추천인(ID: ${referrerRef.id})에게 ${rewardPoints}P 지급 완료.`);
+        logger.info(`Successfully awarded ${rewardPoints}P to referrer (ID: ${referrerRef.id}).`);
       }
     } catch (error) {
-      logger.error("추천인 보상 처리 중 오류 발생:", error);
+      logger.error("An error occurred while processing the referrer reward:", error);
     }
   }
 );
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. 스케줄링 함수 (주기적 실행)
+// 5. Scheduled Functions (Periodic Execution)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @description 매일 자정에 실행되어 만료된 포인트를 자동으로 소멸시키는 스케줄링 함수
- */
 export const expirePointsScheduled = onSchedule(
   {
     schedule: "0 0 * * *",
@@ -877,13 +961,13 @@ export const expirePointsScheduled = onSchedule(
     region: "asia-northeast3",
   },
   async (event) => {
-    logger.log("포인트 유효기간 만료 처리를 시작합니다.");
+    logger.log("Starting point expiration process.");
     const now = new Date();
     const usersRef = db.collection("users");
     const snapshot = await usersRef.get();
 
     if (snapshot.empty) {
-      logger.log("처리할 사용자가 없습니다.");
+      logger.log("No users to process.");
       return;
     }
 
@@ -912,11 +996,12 @@ export const expirePointsScheduled = onSchedule(
         updatedUserCount++;
         const currentPoints = user.points || 0;
         const newPoints = currentPoints - totalExpiredAmount;
-        const newTier = calculateTier(newPoints);
+
+        const newTier = calculateTier(user.pickupCount || 0, user.noShowCount || 0);
 
         const expirationLog: Omit<PointLog, "orderId" | "isExpired"> = {
           amount: -totalExpiredAmount,
-          reason: "포인트 기간 만료 소멸",
+          reason: "Points expired",
           createdAt: Timestamp.now(),
           expiresAt: null,
         };
@@ -929,39 +1014,17 @@ export const expirePointsScheduled = onSchedule(
           pointHistory: newPointHistory,
         });
 
-        logger.log(`사용자 ${doc.id}: ${totalExpiredAmount}포인트 소멸 처리.`);
+        logger.log(`User ${doc.id}: Expired ${totalExpiredAmount} points.`);
       }
     });
 
     if (updatedUserCount > 0) {
       await batch.commit();
       logger.log(
-        `총 ${updatedUserCount}명의 사용자에 대한 포인트 소멸 처리가 완료되었습니다.`
+        `Point expiration process completed for a total of ${updatedUserCount} users.`
       );
     } else {
-      logger.log("금일 소멸될 포인트가 없습니다.");
+      logger.log("No points to expire today.");
     }
-  }
-);
-
-export const setUserRole = onRequest(
-  { region: "asia-northeast3" },
-  (request, response: Response) => {
-    corsHandler(request, response, async () => {
-      const { uid, role } = request.query;
-
-      if (typeof uid !== 'string' || typeof role !== 'string') {
-        response.status(400).send("uid와 role 파라미터를 정확히 입력해주세요.");
-        return;
-      }
-
-      try {
-        await getAuth().setCustomUserClaims(uid, { role: role });
-        response.send(`성공! 사용자(${uid})에게 '${role}' 역할이 부여되었습니다.`);
-      } catch (error) {
-        logger.error("커스텀 클레임 설정 오류:", error);
-        response.status(500).send(`커스텀 클레임 설정 중 오류 발생: ${error}`);
-      }
-    });
   }
 );

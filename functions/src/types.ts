@@ -16,6 +16,7 @@ export interface UserDocument {
   displayName: string | null;
   points: number;
   pickupCount?: number;
+  noShowCount?: number; // ✅ [추가] 이 줄을 추가하여 오류를 해결합니다.
   referredBy?: string | null;
   referralCode?: string;
   pointHistory?: PointLog[];

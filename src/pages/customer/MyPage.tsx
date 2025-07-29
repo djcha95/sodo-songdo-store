@@ -7,15 +7,17 @@ import { db } from '@/firebase/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import {
   Crown, Gem, Sparkles, ShieldAlert, ShieldX, LogOut,
-  ChevronRight, Calendar, BarChart2, Shield, Copy, Gift, UserPlus, Info, TrendingUp
+  ChevronRight, Calendar, BarChart2, Shield, Copy, Gift, UserPlus, Info, TrendingUp, X
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown'; // ✅ [추가] react-markdown import
 import './MyPage.css';
 import toast from 'react-hot-toast';
 import type { LoyaltyTier, UserDocument } from '@/types';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 
 // =================================================================
-// 헬퍼 함수 및 데이터 (기존과 동일)
+// 헬퍼 함수 및 데이터
 // =================================================================
 
 const getLoyaltyInfo = (tier: LoyaltyTier): {
@@ -74,7 +76,7 @@ const getTierClassName = (tier: LoyaltyTier): string => {
 // 하위 컴포넌트
 // =================================================================
 
-// ✅ [신설] 원형 프로그레스 바 컴포넌트
+// 원형 프로그레스 바 컴포넌트
 const CircularProgressBar: React.FC<{ percentage: number; tier: LoyaltyTier }> = ({ percentage, tier }) => {
   const [offset, setOffset] = useState(0);
   const radius = 52;
@@ -115,39 +117,93 @@ const CircularProgressBar: React.FC<{ percentage: number; tier: LoyaltyTier }> =
   );
 };
 
+// ✅ [신설] 신뢰 등급 안내 모달
+const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const tiers: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹'];
+  
+  // ✅ [수정] 안내 문구를 변수로 분리
+  const guideIntroText = "소도몰의 등급은 복잡한 포인트 점수가 아닌, 오직 **'픽업률'** 로만 결정됩니다. 고객님의 꾸준한 약속이 곧 신뢰 등급이 되는, 아주 간단하고 공정한 방식이에요.";
+  const guideOutroText = "높은 신뢰 등급을 가진 고객님들께는 **'선주문'** 이나 **'시크릿 상품'** 참여 기회처럼 특별한 혜택이 가장 먼저 주어집니다!";
 
-// ✅ [수정] 새로운 디자인을 적용한 프로필 카드
-const UnifiedProfileCard: React.FC<{ userDocument: UserDocument }> = ({ userDocument }) => {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            className="modal-content tier-guide-modal"
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h4>👑 신뢰 등급 안내</h4>
+              <button onClick={onClose} className="modal-close-button"><X size={24} /></button>
+            </div>
+            <div className="modal-body">
+              {/* ✅ [수정] <p> 대신 <ReactMarkdown> 사용 */}
+              <div className="guide-intro">
+                <ReactMarkdown>{guideIntroText}</ReactMarkdown>
+              </div>
+              <div className="tier-list">
+                {tiers.map(tier => {
+                  const info = getLoyaltyInfo(tier);
+                  return (
+                    <div key={tier} className={`tier-item ${getTierClassName(tier)}`}>
+                      <div className="tier-item-icon">{info.icon}</div>
+                      <div className="tier-item-name">{info.tierName}</div>
+                    </div>
+                  );
+                })}
+              </div>
+               {/* ✅ [수정] <p> 대신 <ReactMarkdown> 사용 */}
+              <div className="guide-outro">
+                <ReactMarkdown>{guideOutroText}</ReactMarkdown>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+
+
+// 프로필 카드 컴포넌트
+const UnifiedProfileCard: React.FC<{ userDocument: UserDocument; onTierClick: () => void; }> = ({ userDocument, onTierClick }) => {
   const navigate = useNavigate();
   const loyaltyInfo = useMemo(() => getLoyaltyInfo(userDocument?.loyaltyTier || '공구새싹'), [userDocument?.loyaltyTier]);
   const progressInfo = useMemo(() => getTierProgressInfo(userDocument?.pickupCount || 0, userDocument?.noShowCount || 0), [userDocument?.pickupCount, userDocument?.noShowCount]);
   
-  // ✅ [수정] role에 따라 클래스를 동적으로 결정하는 로직 추가
   const tierClassName = getTierClassName(loyaltyInfo.tierName);
   const isAdminOrMaster = userDocument.role === 'admin' || userDocument.role === 'master';
   const cardClassName = isAdminOrMaster ? `role-${userDocument.role}` : tierClassName;
 
   return (
-    // ✅ [수정] 동적으로 결정된 클래스 이름 적용
     <div className={`unified-profile-card-v2 ${cardClassName}`}>
       <div className="card-v2-background"></div>
       <div className="card-v2-content">
         {/* --- 신뢰 등급 섹션 --- */}
-        <div className="profile-tier-section-v2">
+        <div className="profile-tier-section-v2" onClick={onTierClick}>
           <div className="tier-display">
             <div className="tier-icon-name">
-              {/* ✅ [추가] 관리자/마스터일 경우 아이콘과 텍스트 변경 */}
               {isAdminOrMaster ? <Shield size={24} /> : loyaltyInfo.icon}
               <span className="tier-name">{isAdminOrMaster ? userDocument.role?.toUpperCase() : loyaltyInfo.tierName}</span>
             </div>
-<span className="display-name">
-  {userDocument.displayName || '고객'}님
-  {userDocument.nickname && <span className="nickname-display"> ({userDocument.nickname})</span>}
-</span>
-            {/* ✅ [추가] 관리자/마스터는 진행률 메시지 대신 권한 텍스트 표시 */}
+            <span className="display-name">
+              {userDocument.displayName || '고객'}님
+              {userDocument.nickname && <span className="nickname-display"> ({userDocument.nickname})</span>}
+            </span>
             <p className="progress-message">{isAdminOrMaster ? '모든 권한을 가지고 있습니다.' : progressInfo.progressMessage}</p>
           </div>
-           {/* ✅ [추가] 관리자/마스터는 프로그레스 바 숨김 */}
           {!isAdminOrMaster && (
             <CircularProgressBar percentage={progressInfo.currentRate} tier={loyaltyInfo.tierName} />
           )}
@@ -169,69 +225,6 @@ const UnifiedProfileCard: React.FC<{ userDocument: UserDocument }> = ({ userDocu
   );
 };
 
-
-// (NicknameSetupSection, ReferralCodeSection, MenuList는 이전과 동일)
-// ... (생략) ...
-
-// =================================================================
-// 메인 컴포넌트
-// =================================================================
-
-const MyPage = () => {
-  const { user, userDocument, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = useCallback(() => {
-    toast((t) => (
-      <div className="confirmation-toast">
-          <h4>로그아웃</h4>
-          <p>정말 로그아웃 하시겠습니까?</p>
-          <div className="toast-buttons">
-              <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
-              <button className="common-button button-danger button-medium" onClick={async () => {
-                  toast.dismiss(t.id);
-                  await logout();
-                  navigate('/login');
-                  toast.success("성공적으로 로그아웃 되었습니다.", { duration: 3000 });
-              }}>로그아웃</button>
-          </div>
-      </div>
-    ), {
-        duration: Infinity
-    });
-  }, [logout, navigate]);
-
-  if (!user || !userDocument) {
-    return (
-      <div className="mypage-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-        <InlineSodomallLoader />
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <div className="mypage-container">
-        
-        <UnifiedProfileCard userDocument={userDocument} />
-
-        <div className="mypage-menu-list-wrapper">
-          <NicknameSetupSection userDocument={userDocument} />
-          <ReferralCodeSection referralCode={userDocument?.referralCode} />
-          <MenuList />
-        </div>
-
-        <div className="logout-section">
-          <button onClick={handleLogout} className="logout-button">
-            <LogOut size={16} />
-            로그아웃
-          </button>
-        </div>
-
-      </div>
-    </>
-  );
-};
 
 // 이전 코드에서 생략되었던 컴포넌트들
 const NicknameSetupSection: React.FC<{ userDocument: UserDocument }> = ({ userDocument }) => {
@@ -356,6 +349,69 @@ const MenuList: React.FC = () => {
         </div>
       ))}
     </nav>
+  );
+};
+
+
+// =================================================================
+// 메인 컴포넌트
+// =================================================================
+
+const MyPage = () => {
+  const { user, userDocument, logout } = useAuth();
+  const navigate = useNavigate();
+  const [isTierGuideOpen, setIsTierGuideOpen] = useState(false); // 모달 상태 추가
+
+  const handleLogout = useCallback(() => {
+    toast((t) => (
+      <div className="confirmation-toast">
+          <h4>로그아웃</h4>
+          <p>정말 로그아웃 하시겠습니까?</p>
+          <div className="toast-buttons">
+              <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
+              <button className="common-button button-danger button-medium" onClick={async () => {
+                  toast.dismiss(t.id);
+                  await logout();
+                  navigate('/login');
+                  toast.success("성공적으로 로그아웃 되었습니다.", { duration: 3000 });
+              }}>로그아웃</button>
+          </div>
+      </div>
+    ), {
+        duration: Infinity
+    });
+  }, [logout, navigate]);
+
+  if (!user || !userDocument) {
+    return (
+      <div className="mypage-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <InlineSodomallLoader />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mypage-container">
+        
+        <UnifiedProfileCard userDocument={userDocument} onTierClick={() => setIsTierGuideOpen(true)} />
+
+        <div className="mypage-menu-list-wrapper">
+          <NicknameSetupSection userDocument={userDocument} />
+          <ReferralCodeSection referralCode={userDocument?.referralCode} />
+          <MenuList />
+        </div>
+
+        <div className="logout-section">
+          <button onClick={handleLogout} className="logout-button">
+            <LogOut size={16} />
+            로그아웃
+          </button>
+        </div>
+      </div>
+
+      <TierGuideModal isOpen={isTierGuideOpen} onClose={() => setIsTierGuideOpen(false)} />
+    </>
   );
 };
 
