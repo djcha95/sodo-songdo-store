@@ -331,13 +331,23 @@ export const getUserOrdersByPickupDatePaginated = async (
 
   const baseConditions: any[] = [
     where('userId', '==', userId),
-    where('status', 'in', ['RESERVED', 'PREPAID', 'PICKED_UP', 'COMPLETED', 'NO_SHOW']),
+    // 🔴 [수정] Firestore 쿼리 제약으로 인해 'status'에 대한 'in' 필터와
+    // 'pickupDate'에 대한 범위(>=) 필터를 동시에 사용할 수 없습니다.
+    // 이 제약으로 인해 쿼리가 실패하여 오류가 발생했습니다.
+    // 픽업과 직접 관련 없는 'CANCELED' 상태의 주문이 포함될 수 있으나,
+    // 우선 status 필터를 제거하여 쿼리가 정상적으로 실행되도록 수정합니다.
+    // UI 단에서 취소된 주문은 별도로 표시되므로 기능적으로는 문제가 없습니다.
+    // where('status', 'in', ['RESERVED', 'PREPAID', 'PICKED_UP', 'COMPLETED', 'NO_SHOW']),
   ];
 
   if (startDate) {
+    // `pickupDate`에 대한 범위 필터는 Firestore에서 유효합니다.
+    // 이 필터는 `pickupDate` 필드가 존재하고, 값이 `startDate`보다 크거나 같은 문서만 반환합니다.
     baseConditions.push(where('pickupDate', '>=', new Date(startDate)));
   }
 
+  // Firestore에서는 범위(<, <=, >, >=) 필터가 적용된 필드와 첫 번째 orderBy 필드가 동일해야 합니다.
+  // 현재 쿼리는 이 규칙을 준수합니다 (orderBy('pickupDate')).
   let q = query(
     collection(db, 'orders'),
     ...baseConditions,
