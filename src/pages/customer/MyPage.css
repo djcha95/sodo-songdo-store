@@ -11,7 +11,7 @@
   min-height: calc(100vh - 60px - 70px);
 }
 
-/* --- ✅ [신규] 새로운 프로필 카드 V2 --- */
+/* --- 새로운 프로필 카드 V2 --- */
 .unified-profile-card-v2 {
   border-radius: var(--border-radius-xl);
   position: relative;
@@ -26,14 +26,13 @@
 .card-v2-background {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-size: 300% 300%; /* 그라데이션 애니메이션을 위해 크기 확장 */
+  background-size: 300% 300%;
   background-position: center;
   transition: background-image 0.5s ease-in-out;
   z-index: -1;
   animation: gradient-animation 10s ease infinite;
 }
 
-/* 그라데이션 애니메이션 */
 @keyframes gradient-animation {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -50,14 +49,14 @@
 .unified-profile-card-v2.tier-restricted .card-v2-background,
 .unified-profile-card-v2.tier-default .card-v2-background { background-image: linear-gradient(-45deg, #778899, #546e7a, #455a64, #2f4f4f); }
 
-/* ✅ [변경] 관리자/마스터 전용 "쌈뽕뽁짝 핑크" 배경 */
+/* 관리자/마스터 전용 "쌈뽕뽁짝 핑크" 배경 */
 .unified-profile-card-v2.role-admin .card-v2-background,
 .unified-profile-card-v2.role-master .card-v2-background {
   background-image: linear-gradient(-45deg, #ff79c6, #ff55b8, #ff8ace, #f72585);
-  animation-duration: 6s; /* 더 빠른 애니메이션 */
+  animation-duration: 6s;
 }
 
-/* ✅ [신규] 반짝이는 효과 */
+/* 반짝이는 효과 */
 .unified-profile-card-v2.role-admin::after,
 .unified-profile-card-v2.role-master::after {
     content: '';
@@ -85,7 +84,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  position: relative; /* 패턴 위에 콘텐츠가 오도록 */
+  position: relative;
   z-index: 1;
 }
 
@@ -93,6 +92,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer; /* 클릭 가능함을 표시 */
 }
 
 .tier-display {
@@ -112,12 +112,11 @@
   border: 1px solid rgba(255, 255, 255, 0.2);
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
-/* ✅ [변경] 관리자/마스터 뱃지 색상 */
 .role-admin .tier-icon-name,
 .role-master .tier-icon-name {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.5);
-  color: #fff; /* 텍스트 색상을 더 밝게 */
+  color: #fff;
 }
 
 
@@ -135,6 +134,11 @@
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--spacing-xs);
   text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.nickname-display {
+  font-weight: var(--font-weight-medium);
+  opacity: 0.9;
 }
 
 .progress-message {
@@ -159,23 +163,17 @@
   background: rgba(0, 0, 0, 0.3);
 }
 
-.points-label {
+.points-label, .points-value {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   font-weight: var(--font-weight-medium);
 }
-
 .points-value {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
 }
-.points-value .arrow-icon {
-  opacity: 0.7;
-}
+.points-value .arrow-icon { opacity: 0.7; }
 
 /* --- 원형 프로그레스 바 --- */
 .progress-ring-wrapper {
@@ -232,7 +230,7 @@
 }
 
 
-/* --- 닉네임, 초대, 메뉴, 로그아웃 (기존과 동일) --- */
+/* --- 닉네임, 초대, 메뉴, 로그아웃 --- */
 .mypage-menu-list-wrapper {
   display: flex;
   flex-direction: column;
@@ -424,3 +422,104 @@
   background-color: #e9ecef;
   color: #495057;
 }
+
+
+/* ✅ [신규] 등급 안내 모달 스타일 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content.tier-guide-modal {
+  background: white;
+  padding: var(--spacing-lg);
+  border-radius: var(--border-radius-xl);
+  box-shadow: var(--box-shadow-lg);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color-light);
+  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.modal-header h4 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-color-dark);
+}
+
+.modal-close-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-color-light);
+  transition: color 0.2s;
+}
+.modal-close-button:hover {
+  color: var(--text-color-dark);
+}
+
+.modal-body {
+  overflow-y: auto; /* 내용이 길어질 경우 스크롤 가능하게 */
+}
+
+.modal-body .guide-intro, .modal-body .guide-outro {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--text-color-medium);
+  text-align: center;
+}
+
+.tier-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-md);
+  margin: var(--spacing-lg) 0;
+}
+
+.tier-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--border-color-light);
+  text-align: center;
+}
+
+.tier-item-icon {
+  margin-bottom: var(--spacing-sm);
+}
+
+.tier-item-name {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-base);
+}
+
+/* 등급별 색상 적용 */
+.tier-item.tier-god { color: #e65100; background-color: #fff3e0; border-color: #ffe0b2; }
+.tier-item.tier-king { color: #616161; background-color: #f5f5f5; border-color: #e0e0e0; }
+.tier-item.tier-fairy { color: #8a2be2; background-color: #f3e5f5; border-color: #e1bee7; }
+.tier-item.tier-sprout { color: #2e8b57; background-color: #e8f5e9; border-color: #c8e6c9; }
+.tier-item.tier-warning { color: #ffa500; background-color: #fff8e1; border-color: #ffe082; }
+.tier-item.tier-restricted { color: #424242; background-color: #eceff1; border-color: #cfd8dc; }

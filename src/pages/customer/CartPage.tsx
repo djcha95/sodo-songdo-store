@@ -16,8 +16,9 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
 import { addWaitlistEntry, getProductsByIds } from '@/firebase';
+import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
-// ✅ [복원] 원래의 showToast 함수
+
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
@@ -30,17 +31,6 @@ const safeToDate = (date: any): Date | null => {
     if (!isNaN(parsedDate.getTime())) return parsedDate;
   }
   return null;
-};
-
-const showToast = (type: 'success' | 'error' | 'info', message: string | React.ReactNode, duration: number = 3000) => {
-  const content = message ?? '';
-  const toastContent = <>{content}</>;
-  switch (type) {
-    case 'success': toast.success(toastContent, { duration }); break;
-    case 'error': toast.error(toastContent, { duration }); break;
-    case 'info': toast(toastContent, { duration, icon: 'ℹ️' }); break;
-    default: toast(toastContent, { duration }); break;
-  }
 };
 
 
@@ -223,7 +213,6 @@ const CartPage: React.FC = () => {
     const keysToRemove = type === 'reservation' ? selectedReservationKeys : selectedWaitlistKeys;
     if (keysToRemove.size === 0) { showToast('info', '삭제할 상품을 선택해주세요.'); return; }
     
-    // ✅ [복원] 원래의 커스텀 토스트 로직으로 되돌립니다.
     toast((t) => (
       <div className="confirmation-toast-content">
         <AlertTriangle size={44} className="toast-icon" style={{ color: 'var(--danger-color)' }} />
@@ -237,7 +226,7 @@ const CartPage: React.FC = () => {
           }}>삭제</button>
         </div>
       </div>
-    ), { id: 'bulk-delete-confirmation', style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
+    ), { id: 'bulk-delete-confirmation', duration: Infinity, style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
   }, [selectedReservationKeys, selectedWaitlistKeys, removeItems]);
 
   const handleImageClick = useCallback((e: React.MouseEvent, productId: string) => { e.stopPropagation(); navigate(`/product/${productId}`); }, [navigate]);
@@ -294,7 +283,7 @@ const CartPage: React.FC = () => {
       allPromises.push(addWaitlistEntry(item.productId, item.roundId, user.uid, item.quantity, item.variantGroupId, item.itemId));
     });
 
-    toast.promise(Promise.all(allPromises), {
+    showPromiseToast(Promise.all(allPromises), {
       loading: '요청을 처리하는 중입니다...',
       success: (results) => {
         const orderResult = results[0];
@@ -342,15 +331,19 @@ const CartPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ), { id: toastId, duration: 3000 });
+          ), { id: toastId, duration: Infinity });
 
           setTimeout(performNavigation, 3000); 
           return '';
         } else {
-          startTransition(() => {
-            removeItems(processedItemIds);
-            navigate('/mypage/history');
-          });
+          // ✅ [수정] 페이지 이동을 setTimeout으로 감싸 타이밍 문제 해결
+          setTimeout(() => {
+            startTransition(() => {
+              removeItems(processedItemIds);
+              navigate('/mypage/history');
+            });
+          }, 50);
+
           const message = eligibleReservationItems.length > 0 && waitlistItems.length > 0
             ? '예약 및 대기 신청이 모두 완료되었습니다!'
             : eligibleReservationItems.length > 0
@@ -360,9 +353,6 @@ const CartPage: React.FC = () => {
         }
       },
       error: (err) => err.message || '요청 처리 중 오류가 발생했습니다.',
-    }, {
-      success: { duration: 3000 },
-      error: { duration: 3000 }
     }).finally(() => {
       setIsProcessingOrder(false);
     });
@@ -395,7 +385,6 @@ const CartPage: React.FC = () => {
         finalWarning = "선택하신 상품은 예약 후 선입금이 필요합니다.";
     }
 
-    // ✅ [복원] 원래의 커스텀 토스트 로직으로 되돌립니다.
     toast((t) => (
       <div className="confirmation-toast-content">
         <Info size={44} className="toast-icon" />
@@ -409,7 +398,7 @@ const CartPage: React.FC = () => {
           <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleConfirmReservation(); }}>확인</button>
         </div>
       </div>
-    ), { id: 'order-confirmation', style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
+    ), { id: 'order-confirmation', duration: Infinity, style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
   };
   
   const getButtonInfo = () => {

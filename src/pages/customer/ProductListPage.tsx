@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-// ✅ [수정] getProducts, getReservedQuantitiesMap을 직접 import 합니다.
-import { getProducts, getActiveBanners, getReservedQuantitiesMap } from '@/firebase';
+// ✅ [수정] getProducts, getReservedQuantitiesMap import 제거
+import { getActiveBanners } from '@/firebase'; 
+// ✅ [추가] Cloud Functions를 사용하기 위한 import 추가
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Product, Banner } from '@/types';
-import type { DocumentData } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
@@ -47,14 +49,19 @@ const ProductListPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [lastVisible, setLastVisible] = useState<DocumentData | null>(null);
+  // ✅ [수정] lastVisible의 타입을 DocumentData | null 에서 number | null 로 변경
+  const [lastVisible, setLastVisible] = useState<number | null>(null); 
   const [hasMore, setHasMore] = useState(true);
   const loader = useRef(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
 
   const PAGE_SIZE = 10;
 
-  // ✅ [수정] Cloud Function 호출 대신 getProducts와 getReservedQuantitiesMap을 직접 호출
+  // ✅ [추가] Cloud Functions 호출을 위한 설정
+  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
+  const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
+
+  // ✅ [전면 수정] 이제 로컬 함수 대신 Cloud Function을 호출합니다.
   const fetchProductsCallback = useCallback(async (isInitial: boolean) => {
     if (loadingMore && !isInitial) return;
 
@@ -67,46 +74,33 @@ const ProductListPage: React.FC = () => {
     }
   
     try {
-      const currentLastVisible = isInitial ? null : lastVisible;
-  
-      // 1. 상품 목록과 예약 수량 정보를 병렬로 가져옵니다. (관리자 페이지와 동일한 로직)
-      const [productResponse, reservedQuantitiesMap] = await Promise.all([
-        getProducts(false, PAGE_SIZE, currentLastVisible),
-        getReservedQuantitiesMap(),
-      ]);
-  
       if (isInitial) {
         const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
       }
-  
-      const { products: newProducts, lastVisible: newLastVisible } = productResponse;
-
-      // 2. 가져온 상품 목록에 예약 수량 정보를 주입합니다.
-      const productsWithReservedData = newProducts.map(product => {
-        const reservedQuantities: Record<string, number> = {};
-        (product.salesHistory || []).forEach(round => {
-            (round.variantGroups || []).forEach(vg => {
-                const key = `${product.id}-${round.roundId}-${vg.id}`;
-                if (reservedQuantitiesMap.has(key)) {
-                    reservedQuantities[key] = reservedQuantitiesMap.get(key)!;
-                }
-            });
-        });
-        return { ...product, reservedQuantities };
+      
+      const currentLastVisible = isInitial ? null : lastVisible;
+      
+      // Cloud Function 호출
+      const result = await getProductsWithStockCallable({
+        pageSize: PAGE_SIZE,
+        lastVisible: currentLastVisible // lastVisible이 number 타입으로 전달됩니다.
       });
+
+      // result.data는 { products: ProductForList[], lastVisible: number | null } 형태를 가집니다.
+      const { products: newProducts, lastVisible: newLastVisible } = result.data as { products: ProductForList[], lastVisible: number | null };
   
       setProducts(prevProducts =>
-        isInitial ? productsWithReservedData : [...prevProducts, ...productsWithReservedData]
+        isInitial ? newProducts : [...prevProducts, ...newProducts]
       );
   
       setLastVisible(newLastVisible);
       if (!newLastVisible || newProducts.length < PAGE_SIZE) {
         setHasMore(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      showToast('error', "데이터를 불러오는 중 문제가 발생했습니다.");
+      showToast('error', error.message || "데이터를 불러오는 중 문제가 발생했습니다.");
     } finally {
       if (isInitial) {
         setLoading(false);
@@ -114,7 +108,7 @@ const ProductListPage: React.FC = () => {
         setLoadingMore(false);
       }
     }
-  }, [lastVisible, loadingMore]);
+  }, [lastVisible, loadingMore, getProductsWithStockCallable]);
 
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({
     onRefresh: async () => {
@@ -193,6 +187,7 @@ const ProductListPage: React.FC = () => {
             if (totalStock === null || totalStock === -1) return false;
             if (totalStock === 0) return true;
             
+            // reservedQuantities는 이제 Cloud Function에서 내려주는 데이터에 포함됩니다.
             const reserved = product.reservedQuantities?.[`${product.id}-${round.roundId}-${vg.id}`] || 0;
             return totalStock - reserved <= 0;
         });
@@ -219,6 +214,7 @@ const ProductListPage: React.FC = () => {
         if (totalStock !== null && totalStock !== -1) {
           isLimited = true;
           const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
+          // reservedQuantities는 이제 Cloud Function에서 내려주는 데이터에 포함됩니다.
           const reserved = product.reservedQuantities?.[reservedKey] || 0;
           totalRemaining += (totalStock - reserved);
         }
