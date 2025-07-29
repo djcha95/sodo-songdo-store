@@ -364,46 +364,76 @@ export const getUserOrders = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError("unauthenticated", "A login is required.");
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
     const userId = request.auth.uid;
-    const { pageSize, lastVisible: lastVisibleData, orderByField } = request.data as { pageSize: number, lastVisible?: number, orderByField: 'createdAt' | 'pickupDate' };
-    
-    let queryBuilder = db.collection('orders')
-        .where('userId', '==', userId)
-        .orderBy(orderByField, 'desc')
-        .limit(pageSize);
+    const {
+      pageSize = 10,
+      lastVisible: lastVisibleDocData, // 클라이언트에서 받은 마지막 문서 데이터
+      orderByField,
+      orderDirection = 'desc', // 기본값은 내림차순
+      startDate,
+    } = request.data as {
+      pageSize?: number;
+      lastVisible?: any;
+      orderByField: 'createdAt' | 'pickupDate';
+      orderDirection?: 'asc' | 'desc';
+      startDate?: string;
+    };
 
-    if (lastVisibleData) {
-      if (orderByField === 'createdAt' || orderByField === 'pickupDate') {
-        queryBuilder = queryBuilder.startAfter(Timestamp.fromMillis(lastVisibleData));
-      } else {
-        queryBuilder = queryBuilder.startAfter(lastVisibleData);
-      }
-    }
-    
     try {
+      let queryBuilder: FirebaseFirestore.Query = db.collection('orders').where('userId', '==', userId);
+
+      // 1. 클라이언트 요청에 따라 쿼리 구성
+      if (orderByField === 'pickupDate') {
+        // '픽업일순' 보기의 경우
+        if (startDate) {
+          queryBuilder = queryBuilder.where('pickupDate', '>=', new Date(startDate));
+        }
+        // ✅ orderDirection을 올바르게 적용합니다. '픽업일순'은 오름차순('asc')이 필요합니다.
+        queryBuilder = queryBuilder.orderBy('pickupDate', orderDirection);
+      } else {
+        // '주문일순' 보기의 경우 (기본)
+        queryBuilder = queryBuilder.orderBy('createdAt', orderDirection);
+      }
+      
+      queryBuilder = queryBuilder.limit(pageSize);
+
+      // 2. 페이지네이션(더보기) 커서 처리
+      if (lastVisibleDocData) {
+        // Admin SDK의 startAfter()는 마지막 문서의 정렬 필드 '값'이 필요합니다.
+        const cursorFieldData = lastVisibleDocData[orderByField];
+        
+        if (cursorFieldData) {
+            let cursorValue;
+            // 클라이언트에서 받은 plain object를 Firestore Timestamp 객체로 재구성합니다.
+            // 이것이 오류의 핵심 원인이었습니다.
+            if (typeof cursorFieldData === 'object' && cursorFieldData !== null && cursorFieldData.hasOwnProperty('_seconds')) {
+                 cursorValue = new Timestamp(cursorFieldData._seconds, cursorFieldData._nanoseconds);
+            } else {
+                 cursorValue = cursorFieldData;
+            }
+            queryBuilder = queryBuilder.startAfter(cursorValue);
+        }
+      }
+
       const snapshot = await queryBuilder.get();
       const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
       
-      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-      let newLastVisible = null;
-      if (lastDoc) {
-        const lastDocData = lastDoc.data();
-        if (orderByField === 'createdAt' || orderByField === 'pickupDate') {
-          newLastVisible = (lastDocData[orderByField] as Timestamp)?.toMillis() || null;
-        } else {
-          newLastVisible = lastDocData[orderByField] || null;
-        }
-      }
-      
-      return { data: orders, lastDoc: newLastVisible };
-    } catch (error) {
+      // 3. 다음 페이지를 위한 마지막 문서 정보(lastDoc) 반환
+      const lastDocSnapshot = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+      // DocumentSnapshot의 전체 데이터를 plain object로 변환하여 클라이언트에 전달합니다.
+      const lastDocPayload = lastDocSnapshot ? { id: lastDocSnapshot.id, ...lastDocSnapshot.data() } : null;
+
+      return { data: orders, lastDoc: lastDocPayload };
+
+    } catch (error: any) {
       logger.error('Error fetching user orders:', error);
-      throw new HttpsError('internal', 'An error occurred while fetching order history.');
+      throw new HttpsError('internal', error.message || '주문 내역을 불러오는 중 오류가 발생했습니다.');
     }
   }
 );
+
 
 
 export const getUserWaitlist = onCall(

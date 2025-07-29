@@ -555,6 +555,25 @@
   font-size: 0.95rem;
 }
 
+/* ✅ [수정] 아이콘과 함께 있는 입력 필드 스타일 추가 */
+.input-with-icon {
+  position: relative;
+}
+
+.input-with-icon .input-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-tertiary);
+  pointer-events: none; /* 아이콘이 클릭 이벤트를 방해하지 않도록 설정 */
+}
+
+/* 기존 form-group input 스타일을 덮어쓰기 위해 명시도를 높여서 padding-left 추가 */
+.form-group .input-with-icon input[type="date"] {
+  padding-left: 44px; 
+}
+
 .price-input-wrapper {
   position: relative;
 }
@@ -727,8 +746,9 @@ input[placeholder="비우면 무제한"]::placeholder {
 .input-description {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
-  margin-top: 8px;
+  margin-top: -4px; /* 라벨과 인풋 간격이 12px이므로 조절 */
 }
+
 
 .admin-modal-overlay {
   position: fixed;

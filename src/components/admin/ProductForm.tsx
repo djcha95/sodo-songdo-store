@@ -37,7 +37,6 @@ interface ProductFormProps {
     }
 }
 
-// ✨ [삭제] initialReservationLimit 속성 제거
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
 interface VariantGroupUI { id: string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
 
@@ -260,15 +259,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                     roundToLoad = initialState?.lastRound || product.salesHistory[0];
                     if (roundToLoad) {
                         const roundNumMatch = roundToLoad.roundName.match(/\d+/);
-                        const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : 2;
+                        const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : product.salesHistory.length + 1;
                         setRoundName(`${newRoundNumber}차 판매`);
+                    } else {
+                        setRoundName('1차 판매');
                     }
                 }
 
                 if (roundToLoad) {
                     const roundData = roundToLoad as SalesRound & { preOrderTiers?: LoyaltyTier[]; secretForTiers?: LoyaltyTier[] };
                     
-                    setRoundName(mode === 'editRound' ? roundData.roundName : roundName);
+                    if (mode === 'editRound') {
+                        setRoundName(roundData.roundName);
+                    }
+                    
                     setProductType((roundData.variantGroups?.length || 0) > 1 || (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
                     
                     const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
@@ -317,7 +321,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         if (mode === 'editRound' || mode === 'newRound') {
             fetchData();
         }
-    }, [mode, productId, roundId, navigate, roundName, initialState]);
+    }, [mode, productId, roundId, navigate, initialState]);
 
     useEffect(() => {
         getCategories().then(setCategories).catch(() => toast.error("카테고리 정보를 불러오는 데 실패했습니다."));
@@ -463,7 +467,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             const finalPublishDate = new Date(publishDate);
             finalPublishDate.setHours(14, 0, 0, 0);
 
-            // ✨ [수정] 저장 데이터에서 initialReservationLimit 제거
             const salesRoundData = {
                 roundName: roundName.trim(), status,
                 variantGroups: variantGroups.map(vg => ({
@@ -496,9 +499,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                 };
                 await addProductWithFirstRound(productData, salesRoundData as any, newImageFiles, creationDate);
                 toast.success(isDraft ? "상품이 임시저장되었습니다." : "신규 상품이 성공적으로 등록되었습니다.");
+            
             } else if (mode === 'newRound' && productId) {
+                // ✅ [수정] 새 회차 추가 시에도 상품 설명을 업데이트하도록 로직 추가
+                const productDataToUpdate: Partial<Product> = {
+                    description: description.trim(),
+                };
+                await updateProductCoreInfo(productId, productDataToUpdate, [], currentImageUrls, initialImageUrls);
                 await addNewSalesRound(productId, salesRoundData as any);
                 toast.success(isDraft ? "새 회차가 임시저장되었습니다." : "새로운 판매 회차가 추가되었습니다.");
+            
             } else if (mode === 'editRound' && productId && roundId) {
                 const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { 
                     groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, 
@@ -563,8 +573,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                 </div>
                                 {mode === 'newProduct' && similarProducts.length > 0 && (
                                     <div className="similar-products-warning">
-                                        <AlertTriangle size={16} />
-                                        <span>유사한 이름의 상품이 이미 존재합니다. 새 회차로 추가하시겠어요?</span>
+                                        <span><AlertTriangle size={16} />
+                                        유사한 이름의 상품이 이미 존재합니다. 새 회차로 추가하시겠어요?</span>
                                         <ul>
                                             {similarProducts.map(p => (
                                                 <li key={p.id} className="similar-product-item">
@@ -595,8 +605,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                 </div>
                             )}
 
-                            <div className="form-group"><label>상세 설명</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} disabled={mode === 'newRound'}/></div>
-                            <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)} disabled={mode === 'newRound'}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                            {/* ✅ [수정] 상세 설명 필드의 disabled 속성을 완전히 제거하여 항상 수정 가능하도록 변경 */}
+                            <div className="form-group">
+                                <label>상세 설명</label>
+                                <textarea 
+                                    value={description} 
+                                    onChange={e => setDescription(e.target.value)} 
+                                    rows={4} 
+                                />
+                            </div>
+                            <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)} disabled={mode !== 'editRound' && mode !== 'newProduct'}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                                 <div className="settings-option-group">
                                     {storageTypeOptions.map(opt => 
                                         <button 
@@ -604,7 +622,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                             type="button" 
                                             className={`settings-option-btn ${opt.className} ${selectedStorageType===opt.key?'active':''}`} 
                                             onClick={()=>setSelectedStorageType(opt.key)} 
-                                            disabled={mode === 'newRound'}>
+                                            disabled={mode !== 'editRound' && mode !== 'newProduct'}>
                                             {opt.name}
                                         </button>
                                     )}
@@ -617,9 +635,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                     <Droppable droppableId="image-previews" direction="horizontal">
                                         {(provided) => (
                                             <div className="compact-image-uploader" {...provided.droppableProps} ref={provided.innerRef}>
-                                                <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/png, image/jpeg" style={{display:'none'}} disabled={mode === 'newRound'}/>
+                                                <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/png, image/jpeg" style={{display:'none'}} disabled={mode !== 'editRound' && mode !== 'newProduct'}/>
                                                 {imagePreviews.map((p, i) => (
-                                                    <Draggable key={p+i} draggableId={p+i.toString()} index={i} isDragDisabled={mode==='newRound'}>
+                                                    <Draggable key={p+i} draggableId={p+i.toString()} index={i} isDragDisabled={mode!=='editRound' && mode !== 'newProduct'}>
                                                         {(provided, snapshot) => (
                                                             <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`} style={{...provided.draggableProps.style}}>
                                                                 <img src={p} alt={`미리보기 ${i+1}`}/>
@@ -629,12 +647,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                                     </Draggable>
                                                 ))}
                                                 {provided.placeholder}
-                                                {imagePreviews.length < 10 && mode !== 'newRound' && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}
+                                                {imagePreviews.length < 10 && (mode === 'editRound' || mode === 'newProduct') && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}
                                             </div>
                                         )}
                                     </Droppable>
                                 </DragDropContext>
-                                {mode === 'newRound' && <p className="input-description">대표 상품 정보(이미지 포함)는 '회차 수정' 페이지에서만 변경할 수 있습니다.</p>}
+                                {mode === 'newRound' && <p className="input-description">대표 상품 정보는 회차 추가 시에도 수정할 수 있습니다.</p>}
                             </div>
                         </div>
 
@@ -642,12 +660,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                         <div className="form-section">
                             <div className="form-section-title"><div className="title-text-group"><Box size={20} className="icon-color-option"/><h3>판매 옵션 *</h3></div></div>
                             <p className="section-subtitle">현재 회차에만 적용되는 옵션, 가격, 재고 등을 설정합니다.</p>
-                            <div className="form-group"><label>회차명 *</label><input type="text" value={roundName} onChange={e=>setRoundName(e.target.value)} required/></div>
+                            
+                            <div className="form-group">
+                                <label>회차명</label>
+                                <input type="text" value={roundName} readOnly disabled />
+                            </div>
+
                             {variantGroups.map(vg => (
                             <div className="variant-group-card" key={vg.id}>
                                 <div className="variant-group-header">
                                     <div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div>
-                                    {/* ✨ [수정] '총 재고' 필드로 단일화 */}
                                     <div className="form-group">
                                         <label>
                                             <Tippy content="판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다.">
