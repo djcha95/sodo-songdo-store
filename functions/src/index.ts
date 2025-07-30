@@ -6,7 +6,9 @@ import {
   onDocumentUpdated,
   onDocumentDeleted,
 } from "firebase-functions/v2/firestore";
-import {onSchedule} from "firebase-functions/v2/scheduler";
+// onSchedule 옆에 functions를 추가하고, ScheduledEvent 타입을 가져옵니다.
+import {onSchedule, ScheduledEvent} from "firebase-functions/v2/scheduler";
+import * as functions from "firebase-functions/v2"; // ✨ [추가] functions 모듈을 가져옵니다.
 import {Response} from "express";
 import * as logger from "firebase-functions/logger";
 
@@ -1058,3 +1060,184 @@ export const expirePointsScheduled = onSchedule(
     }
   }
 );
+
+// =================================================================
+// ✨ [신규] 지능형 픽업 안내 알림톡 발송 스케줄링 함수 (오전 9시 실행)
+// =================================================================
+export const sendPickupReminders = onSchedule(
+  {
+    schedule: "every day 09:00",
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+  },
+  async (context: ScheduledEvent) => {
+    logger.info("오전 9시: 픽업 안내 알림톡 발송 작업을 시작합니다.");
+
+    try {
+      const db = getFirestore();
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+      const ordersSnapshot = await db.collection("orders")
+        .where("pickupDate", ">=", todayStart)
+        .where("pickupDate", "<=", todayEnd)
+        .where("status", "in", ["RESERVED", "PREPAID"])
+        .get();
+
+      if (ordersSnapshot.empty) {
+        logger.info("오늘 픽업 시작인 주문이 없습니다. 작업을 종료합니다.");
+        return;
+      }
+
+      // 사용자별로 픽업할 상품 목록 그룹화
+      const pickupsByUser = new Map<string, OrderItem[]>();
+      ordersSnapshot.forEach(doc => {
+        const order = doc.data() as Order;
+        const existingItems = pickupsByUser.get(order.userId) || [];
+        pickupsByUser.set(order.userId, [...existingItems, ...order.items]);
+      });
+
+      // 각 사용자에게 상황에 맞는 알림톡 발송
+      for (const [userId, items] of pickupsByUser.entries()) {
+        const userDoc = await db.collection("users").doc(userId).get();
+        if (!userDoc.exists) continue;
+        const userData = userDoc.data() as UserDocument;
+        if (!userData?.phone || !userData.displayName) continue;
+        
+        // 1. 상품들을 '긴급(당일마감)'과 '일반'으로 분류
+        const urgentItems = items.filter(item => {
+            const pickupDate = (item.pickupDate as Timestamp)?.toDate();
+            const deadlineDate = (item.deadlineDate as Timestamp)?.toDate();
+            return pickupDate && deadlineDate && pickupDate.toDateString() === deadlineDate.toDateString();
+        });
+        const standardItems = items.filter(item => !urgentItems.includes(item));
+
+        let templateCode = "";
+        const templateVariables: { [key: string]: string } = { 고객명: userData.displayName };
+
+        // 2. 템플릿 선택 로직
+        if (urgentItems.length > 0) {
+          // '긴급' 상품이 하나라도 있으면 긴급 템플릿 사용
+          templateCode = "URGENT_PICKUP_TODAY";
+          templateVariables.오늘날짜 = `${today.getMonth() + 1}월 ${today.getDate()}일`;
+          templateVariables.긴급상품목록 = urgentItems.map(item => `${item.itemName} ${item.quantity}개`).join('\n');
+          templateVariables.추가안내 = standardItems.length > 0 ? `이 외에 ${standardItems.length}건의 다른 픽업 상품도 오늘부터 수령 가능합니다.` : '';
+
+        } else if (standardItems.length > 0) {
+          // '긴급'은 없고 '일반' 상품만 있을 경우
+          templateCode = "STANDARD_PICKUP_STAR"; // 수정된 템플릿 코드 사용
+          
+          // 가장 빠른 마감일 찾기
+          const earliestDeadline = new Date(Math.min(...standardItems.map(item => ((item.deadlineDate as Timestamp)?.toDate() ?? new Date()).getTime())));
+          const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+          
+          templateVariables.대표상품명 = standardItems[0].productName || '주문 상품';
+          templateVariables.추가상품갯수 = (standardItems.length - 1).toString();
+          templateVariables.마감일 = `${earliestDeadline.getMonth() + 1}월 ${earliestDeadline.getDate()}일(${weekdays[earliestDeadline.getDay()]})`;
+        }
+
+        if (templateCode) {
+          await sendAlimtalk(userData.phone, templateCode, templateVariables);
+        }
+      }
+      logger.info(`${pickupsByUser.size}명의 사용자에게 픽업 안내 알림톡 발송을 완료했습니다.`);
+    } catch (error) {
+      logger.error("오전 9시 픽업 안내 알림톡 발송 중 오류 발생:", error);
+    }
+  });
+
+// =================================================================
+// ✨ [신규] 선입금 최종 안내 알림톡 발송 스케줄링 함수 (오후 7시 실행)
+// =================================================================
+export const sendPrepaymentReminders = onSchedule(
+  {
+    schedule: "every day 19:00",
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+  },
+  async (context: ScheduledEvent) => {
+    logger.info("오후 7시: 선입금 최종 안내 알림톡 발송 작업을 시작합니다.");
+    
+    try {
+        const db = getFirestore();
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+        // 오늘이 '픽업 마감일'인 주문들 조회
+        const ordersSnapshot = await db.collection("orders")
+            .where("pickupDeadlineDate", ">=", todayStart)
+            .where("pickupDeadlineDate", "<=", todayEnd)
+            .where("status", "==", "RESERVED")
+            .get();
+
+        if (ordersSnapshot.empty) {
+            logger.info("오늘 픽업 마감 예정인 미수령 주문이 없습니다. 작업을 종료합니다.");
+            return;
+        }
+
+        const remindersByUser = new Map<string, OrderItem[]>();
+        ordersSnapshot.forEach(doc => {
+            const order = doc.data() as Order;
+            const existingItems = remindersByUser.get(order.userId) || [];
+            remindersByUser.set(order.userId, [...existingItems, ...order.items]);
+        });
+
+        for (const [userId, items] of remindersByUser.entries()) {
+            const userDoc = await db.collection("users").doc(userId).get();
+            if (!userDoc.exists) continue;
+            const userData = userDoc.data() as UserDocument;
+            if (!userData?.phone || !userData.displayName) continue;
+            
+            const templateCode = "PREPAYMENT_GUIDE_URG"; // 수정된 템플릿 코드 사용
+            const templateVariables: { [key: string]: string } = {
+                고객명: userData.displayName,
+                대표상품명: items[0].productName || '주문 상품',
+                추가상품갯수: (items.length - 1).toString(),
+            };
+
+            await sendAlimtalk(userData.phone, templateCode, templateVariables);
+        }
+        logger.info(`${remindersByUser.size}명의 사용자에게 선입금 최종 안내 알림톡 발송을 완료했습니다.`);
+
+    } catch (error) {
+        logger.error("오후 7시 선입금 안내 알림톡 발송 중 오류 발생:", error);
+    }
+  });
+
+
+/**
+ * @description NHN Cloud 알림톡 발송 API를 호출하는 헬퍼 함수
+ */
+async function sendAlimtalk(recipientPhone: string, templateCode: string, templateVariables: object) {
+  const APP_KEY = functions.config().nhn.appkey;
+  const SECRET_KEY = functions.config().nhn.secretkey;
+  
+  if (!APP_KEY || !SECRET_KEY) {
+    logger.error("NHN Cloud API 키가 환경 변수에 설정되지 않았습니다.");
+    return;
+  }
+  
+  const API_URL = `https://api-alimtalk.cloud.toast.com/alimtalk/v2.2/appkeys/${APP_KEY}/messages`;
+
+  const payload = {
+    templateCode: templateCode,
+    recipientList: [{
+      recipientNo: recipientPhone,
+      templateParameter: templateVariables,
+    }],
+  };
+
+  try {
+    await axios.post(API_URL, payload, {
+      headers: {
+        "X-Secret-Key": SECRET_KEY,
+        "Content-Type": "application/json;charset=UTF-8",
+      },
+    });
+    logger.info(`알림톡 발송 성공: ${recipientPhone}, 템플릿: ${templateCode}`);
+  } catch (error: any) {
+    logger.error(`알림톡 발송 실패: ${recipientPhone}, 사유:`, error.response?.data || error.message);
+  }
+}
