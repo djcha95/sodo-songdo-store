@@ -53,7 +53,13 @@ initializeApp(appOptions);
 const auth = getAuth();
 const db = getFirestore();
 
-const allowedOrigins = [ "http://localhost:5173", "http://sodo-songdo.store", "https://sodomall.vercel.app" ];
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://sodomall.vercel.app",
+  "http://sodo-songdo.store",
+  "https://sodo-songdo.store",
+  "https://www.sodo-songdo.store"
+];
 
 const corsHandler = cors({
   origin: allowedOrigins,
