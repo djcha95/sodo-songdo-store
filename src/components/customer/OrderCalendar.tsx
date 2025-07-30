@@ -7,12 +7,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import 'react-calendar/dist/Calendar.css';
 import './OrderCalendar.css';
-// ✅ [추가] 예약 내역 페이지의 카드 스타일을 가져옵니다.
 import '../../pages/customer/OrderHistoryPage.css';
 
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useAuth } from '../../context/AuthContext';
-import { getUserOrders } from '../../firebase';
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
@@ -23,14 +23,14 @@ import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderStatus } from '../../types';
 import toast from 'react-hot-toast';
 import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck } from 'lucide-react';
+
 // =================================================================
-// 헬퍼 함수 및 타입
+// 헬퍼 함수 및 타입 (기존과 동일)
 // =================================================================
 
 type ValuePiece = Date | null;
 type PickupStatus = 'pending' | 'completed' | 'noshow';
 
-// ✅ [추가] 예약 내역 페이지와 동일한 집계 아이템 타입
 interface AggregatedItem {
   id: string; 
   productName: string;
@@ -49,9 +49,12 @@ const customWeekday = ['일', '월', '화', '수', '목', '금', '토'];
 const safeToDate = (date: any): Date | null => {
     if (!date) return null;
     if (date instanceof Date) return date;
+    
     if (typeof date.toDate === 'function') return date.toDate();
-    if (typeof date === 'object' && date.seconds !== undefined) {
-        return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+    if (typeof date === 'object' && (date.seconds !== undefined || date._seconds !== undefined)) {
+        const seconds = date.seconds ?? date._seconds;
+        const nanoseconds = date.nanoseconds ?? date._nanoseconds ?? 0;
+        return new Timestamp(seconds, nanoseconds).toDate();
     }
     return null;
 };
@@ -71,7 +74,6 @@ const getOrderStatusDisplay = (order: Order) => {
     return { text: order.status, Icon: Hourglass, className: '', type: 'pending' };
 };
 
-// ✅ [추가] 예약 내역 페이지의 집계 로직을 가져와 캘린더에 맞게 수정
 const aggregateOrdersForDate = (ordersToAggregate: Order[]): AggregatedItem[] => {
     const aggregated: { [key: string]: AggregatedItem } = {};
 
@@ -107,7 +109,7 @@ const aggregateOrdersForDate = (ordersToAggregate: Order[]): AggregatedItem[] =>
 
 
 // =================================================================
-// 하위 컴포넌트
+// 하위 컴포넌트 (기존과 동일)
 // =================================================================
 
 const EmptyCalendarState: React.FC = () => {
@@ -122,7 +124,6 @@ const EmptyCalendarState: React.FC = () => {
     );
 };
 
-// ✅ [추가] 예약 내역 페이지와 동일한 디자인의 카드 컴포넌트 (읽기 전용)
 const CalendarItemCard: React.FC<{ item: AggregatedItem }> = React.memo(({ item }) => {
   const { statusText, StatusIcon, statusClass } = useMemo(() => {
     if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
@@ -191,7 +192,6 @@ const DetailsBottomSheet: React.FC<{ selectedDate: Date; orders: Order[]; onClos
                     <button onClick={onClose} className="sheet-close-btn" aria-label="닫기"><X size={20} /></button>
                 </div>
                 <div className="sheet-body">
-                    {/* ✅ [수정] 집계된 아이템을 새로운 카드로 렌더링합니다. */}
                     {aggregatedItems.length > 0 ? (
                         <div className="order-cards-grid">
                             {aggregatedItems.map(item => <CalendarItemCard key={item.id} item={item} />)}
@@ -273,11 +273,32 @@ const OrderCalendar: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
+  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
+
   useEffect(() => {
     if (user?.uid) {
         setIsLoading(true);
-        getUserOrders(user.uid)
-            .then(orders => setUserOrders(orders))
+
+        // ✅ [최종 수정] 캘린더 목적에 맞게 payload를 'pickupDate' 기준으로 변경합니다.
+        // 이것이 함수 내부 로직과 일치하여 오류를 해결할 것입니다.
+        const payload = { 
+          orderByField: 'pickupDate', 
+          orderDirection: 'asc',
+          pageSize: 1000,
+        };
+
+        getUserOrdersCallable(payload)
+            .then(result => {
+                const ordersData = (result.data as any)?.data || result.data;
+
+                if (Array.isArray(ordersData)) {
+                    setUserOrders(ordersData as Order[]);
+                } else {
+                    console.warn("Expected an array of orders, but received:", result.data);
+                    setUserOrders([]);
+                }
+            })
             .catch(err => {
                 console.error("주문 내역 로딩 오류:", err);
                 setError("주문 내역을 불러오는 데 실패했습니다.");
@@ -285,11 +306,11 @@ const OrderCalendar: React.FC = () => {
             })
             .finally(() => setIsLoading(false));
     }
-  }, [user]);
+  }, [user, getUserOrdersCallable]);
 
   const calendarDayMarkers = useMemo(() => {
     const markers: { [key: string]: { status: PickupStatus } } = {};
-    const ordersByDate: { [key: string]: Order[] } = {};
+    const ordersByDate: { [key:string]: Order[] } = {};
 
     userOrders.forEach(order => {
         const pickupDate = safeToDate(order.pickupDate);
@@ -326,7 +347,7 @@ const OrderCalendar: React.FC = () => {
 
   if (isLoading) return <div className="order-calendar-page-container--loading"><InlineSodomallLoader /></div>;
   if (error) return <div className="error-message">{error}</div>;
-  if (userOrders.length === 0) return <EmptyCalendarState />;
+  if (userOrders.length === 0 && !isLoading) return <EmptyCalendarState />;
 
   return (
     <>
@@ -342,10 +363,10 @@ const OrderCalendar: React.FC = () => {
                 if (view !== 'month') return null;
                 const isToday = isSameDay(date, new Date());
                 
-                const todayUTCString = new Date().toISOString().split('T')[0];
-                const hasLoggedInToday = userDocument?.lastLoginDate === todayUTCString;
+                const lastLoginTimestamp = userDocument?.lastLoginDate;
+                const lastLoginDate = lastLoginTimestamp ? safeToDate(lastLoginTimestamp) : null;
 
-                if (isToday && hasLoggedInToday) {
+                if (isToday && lastLoginDate && isSameDay(lastLoginDate, new Date())) {
                     return <div className="attendance-badge">출석✓</div>;
                 }
                 return null;

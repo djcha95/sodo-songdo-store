@@ -19,13 +19,19 @@ import { addWaitlistEntry, getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
 
+// ✅ [수정] 다른 페이지에서 사용하는 안정적인 날짜 변환 로직을 적용합니다.
+// Firestore Timestamp가 다양한 객체 형태로 전달되는 경우(_seconds)를 모두 처리합니다.
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
   if (typeof date.toDate === 'function') return date.toDate();
-  if (typeof date === 'object' && date.seconds !== undefined) {
-    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+  
+  if (typeof date === 'object' && (date.seconds !== undefined || date._seconds !== undefined)) {
+    const seconds = date.seconds ?? date._seconds;
+    const nanoseconds = date.nanoseconds ?? date._nanoseconds ?? 0;
+    return new Timestamp(seconds, nanoseconds).toDate();
   }
+  
   if (typeof date === 'string') {
     const parsedDate = new Date(date);
     if (!isNaN(parsedDate.getTime())) return parsedDate;
@@ -79,7 +85,7 @@ const CartItemCard: React.FC<{
 
   const formatPickupDate = (dateValue: any) => {
     const date = safeToDate(dateValue);
-    if (!date) return '날짜 정보 없음';
+    if (!date) return '픽업일 정보 없음';
     return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
   }
 
@@ -311,6 +317,8 @@ const CartPage: React.FC = () => {
               navigate('/mypage/history');
             });
           };
+
+          const autoCloseDuration = 6000;
           
           toast.custom((t) => (
             <div className="prepayment-modal-overlay">
@@ -331,12 +339,11 @@ const CartPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ), { id: toastId, duration: Infinity });
+          ), { id: toastId, duration: autoCloseDuration });
 
-          setTimeout(performNavigation, 3000); 
+          setTimeout(performNavigation, autoCloseDuration); 
           return '';
         } else {
-          // ✅ [수정] 페이지 이동을 setTimeout으로 감싸 타이밍 문제 해결
           setTimeout(() => {
             startTransition(() => {
               removeItems(processedItemIds);
@@ -401,13 +408,25 @@ const CartPage: React.FC = () => {
     ), { id: 'order-confirmation', duration: Infinity, style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
   };
   
-  const getButtonInfo = () => {
+const getButtonInfo = () => {
     if (isSuspendedUser) return { text: <><ShieldX size={20} /> 참여 제한</>, disabled: true };
     if (isProcessingOrder || isSyncing) return { text: '처리 중...', disabled: true };
-    if (eligibleReservationItems.length > 0) return { text: <>예약 확정하기 ({eligibleReservationTotal.toLocaleString()}원)</>, disabled: false };
-    if (waitlistItems.length > 0) return { text: <>대기 신청 확정하기</>, disabled: false };
-    return { text: '예약할 상품 없음', disabled: true };
-  };
+    
+    const hasReservation = eligibleReservationItems.length > 0;
+    const hasWaitlist = waitlistItems.length > 0;
+
+    if (hasReservation && hasWaitlist) {
+      return { text: '예약 및 대기 확정하기', disabled: false };
+    }
+    if (hasReservation) {
+      return { text: '예약 확정하기', disabled: false };
+    }
+    if (hasWaitlist) {
+      return { text: '대기 신청 확정하기', disabled: false };
+    }
+    
+    return { text: '예약/대기 상품 없음', disabled: true };
+};
 
   const buttonInfo = getButtonInfo();
   
@@ -443,36 +462,30 @@ const CartPage: React.FC = () => {
             )}
           </div>
 
-          {(eligibleReservationItems.length > 0 || waitlistItems.length > 0) && (
-            <div className="cart-summary-column">
-                <div className="cart-summary-card">
-                  <div className="summary-row">
-                    <span>예약 상품 금액</span>
-                    <span>{eligibleReservationTotal.toLocaleString()} 원</span>
-                  </div>
-                  {waitlistItems.length > 0 && (
+    {(eligibleReservationItems.length > 0 || waitlistItems.length > 0) && (
+        <div className="cart-summary-column">
+            {/* ✅ [수정] 사용자의 요청에 따라 '예약 상품' 건수 표시를 완전히 제거합니다. */}
+            <div className="cart-summary-card">
+                {waitlistItems.length > 0 && (
                     <div className="summary-row waitlist-info">
-                      <span>대기 상품</span>
-                      <span>{waitlistItems.length} 건</span>
+                        <span>대기 상품</span>
+                        <span>{waitlistItems.length} 건</span>
                     </div>
-                  )}
-                  <div className="summary-divider"></div>
-                  <div className="summary-row total">
-                    <span>최종 요청</span>
-                    <span>{eligibleReservationTotal.toLocaleString()} 원</span>
-                  </div>
+                )}
+                
+                <div className="summary-divider"></div>
 
-                  <button 
+                <button 
                     className="checkout-btn" 
                     onClick={showOrderConfirmation} 
                     disabled={buttonInfo.disabled}
-                  >
-                   {buttonInfo.text}
-                  </button>
-                </div>
+                >
+                    {buttonInfo.text}
+                </button>
             </div>
-          )}
         </div>
+    )}
+            </div>
       </div>
     </div>
   );
