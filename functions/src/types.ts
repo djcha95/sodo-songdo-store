@@ -14,9 +14,10 @@ export interface PointLog {
 export interface UserDocument {
   uid: string;
   displayName: string | null;
+  phone?: string | null; // ✨ [추가] 이 줄을 추가하여 오류를 해결합니다.
   points: number;
   pickupCount?: number;
-  noShowCount?: number; // ✅ [추가] 이 줄을 추가하여 오류를 해결합니다.
+  noShowCount?: number; 
   referredBy?: string | null;
   referralCode?: string;
   pointHistory?: PointLog[];
@@ -76,11 +77,10 @@ export interface CartItem {
   pickupDate: Timestamp;
   status: 'RESERVATION' | 'WAITLIST';
   deadlineDate: Timestamp;
-  stockDeductionAmount: number; // 오류를 발생시킨 핵심 속성
+  stockDeductionAmount: number; 
   isPrepaymentRequired?: boolean;
 }
 
-// ✨ [추가] 서버에서 사용할 WaitlistInfo 타입을 정의합니다.
 export interface WaitlistInfo {
   productId: string;
   productName: string;
