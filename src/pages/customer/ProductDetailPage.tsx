@@ -10,7 +10,7 @@ import type {
   LoyaltyTier
 } from '@/types';
 import { Timestamp } from 'firebase/firestore';
-import { getProductById, getReservedQuantitiesMap } from '@/firebase';
+import { getProductById } from '@/firebase'; // ✅ [수정] getReservedQuantitiesMap import 제거
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
@@ -153,10 +153,10 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       setError(null);
 
       try {
-        const [productData, reservedQuantitiesMap] = await Promise.all([
-            getProductById(productId),
-            getReservedQuantitiesMap()
-        ]);
+        // ✅ [수정] getReservedQuantitiesMap() 호출을 제거합니다.
+        // 이 함수는 모든 예약 정보를 클라이언트에서 집계하므로 고객 계정에서 권한 오류를 유발합니다.
+        // 올바른 방법은 백엔드에서 미리 계산된 예약 수량(reservedCount)을 상품 데이터에 포함시켜 제공하는 것입니다.
+        const productData = await getProductById(productId);
 
         if (!productData) {
           setError('상품 정보를 찾을 수 없습니다.');
@@ -171,22 +171,25 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           return;
         }
         
-        const roundWithReserved: SalesRound = {
+        // ✅ [수정] productData에 포함된 재고 정보를 사용하도록 로직을 변경합니다.
+        // 이제 VariantGroup 타입에 `reservedCount` 필드가 포함되어 있다고 가정하고 처리합니다.
+        // 이 `reservedCount` 필드는 Cloud Function 등을 통해 백엔드에서 업데이트되어야 합니다.
+        const roundWithStockData: SalesRound = {
             ...latestRound,
             variantGroups: latestRound.variantGroups.map(vg => {
-                const key = `${productData.id}-${latestRound!.roundId}-${vg.id}`;
+                // `vg` 객체 자체에 `reservedCount`가 포함되어 있다고 가정하고, 없으면 0으로 초기화합니다.
                 return {
                     ...vg,
-                    reservedCount: reservedQuantitiesMap.get(key) || 0
+                    reservedCount: (vg as VariantGroup).reservedCount || 0
                 };
             })
         };
 
         setProduct(productData);
-        setDisplayRound(roundWithReserved);
+        setDisplayRound(roundWithStockData); // 수정된 데이터를 state에 저장합니다.
         setCurrentImageIndex(0);
         
-        const firstVg = roundWithReserved.variantGroups?.[0];
+        const firstVg = roundWithStockData.variantGroups?.[0];
         const firstItem = firstVg?.items?.[0];
 
         if (firstVg) {
@@ -198,7 +201,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
       } catch (e) {
         console.error("Error fetching product data:", e);
-        if ((e as any).code === 'permission-denied') {
+        // ✅ [수정] Firebase 권한 오류에 대한 더 명확한 메시지를 제공합니다.
+        if ((e as any).code === 'permission-denied' || (e as any).code === 'PERMISSION_DENIED') {
             setError('상품 정보를 불러올 권한이 없습니다. 관리자에게 문의하세요.');
         } else {
             setError('데이터를 불러오는 중 오류가 발생했습니다.');
