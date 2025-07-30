@@ -13,6 +13,7 @@
 -   **백엔드 & 데이터베이스:** Firebase (Firestore, Authentication, Storage)
     -   **Firebase Extensions (Resize Images):** 이미지 업로드 시 WebP 형식 변환 및 리사이징 자동화
     -   **Cloud Functions (v2):** 서버리스 백엔드 로직 (포인트 자동 소멸, 추천인 보상 등)
+     - **NHN Cloud:** 카카오톡 알림톡 발송 중계 서비스
 -   **스타일링:** 일반 CSS (.css)
 -   **UI & 상태관리:**
     -   `react-hot-toast`: 사용자 피백 알림(Toast) 메시지
