@@ -1,5 +1,4 @@
 // src/firebase/orderService.ts
-import { getUserDocById } from './userService';
 import { db } from './firebaseConfig';
 import {
   collection,
@@ -18,6 +17,7 @@ import {
   startAfter,
   arrayUnion,
   Timestamp,
+  type Transaction,
 } from 'firebase/firestore';
 import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument, PointLog } from '@/types';
@@ -61,7 +61,7 @@ export const submitOrder = async (
     }
 
     const itemsToReserve: OrderItem[] = [];
-    let isAnyItemLimited = false; 
+    let isAnyItemLimited = false;
     const productUpdates = new Map<string, SalesRound[]>();
     const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => doc(db, 'products', id));
     const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
@@ -96,7 +96,7 @@ export const submitOrder = async (
       const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
       if (itemIndex === -1) throw new Error(`세부 옵션 정보를 찾을 수 없습니다: ${item.itemName}`);
       const productItem = variantGroup.items[itemIndex];
-      
+
       const isLimited = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
 
       if (isLimited) {
@@ -106,12 +106,12 @@ export const submitOrder = async (
         if (availableStock < item.quantity) {
           throw new Error(`죄송합니다. ${item.productName}(${item.itemName})의 재고가 부족합니다.`);
         }
-        
+
         if (productItem.stock !== -1) productItem.stock -= item.quantity;
-        
+
         productUpdates.set(item.productId, salesHistoryForUpdate);
       }
-      
+
       itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
     }
 
@@ -153,7 +153,77 @@ export const submitOrder = async (
   return { reservedCount: reservedItemCount, orderId: newOrderId };
 };
 
-// src/firebase/orderService.ts
+/**
+ * @description 대기열을 처리하는 내부 헬퍼 함수
+ */
+const processWaitlistForCancelledItem = async (
+  transaction: Transaction,
+  item: OrderItem,
+  productDataMap: Map<string, Product>
+) => {
+  const productRef = doc(db, 'products', item.productId);
+  const productData = productDataMap.get(item.productId);
+  if (!productData) return;
+
+  const salesHistory = [...productData.salesHistory];
+  const roundIndex = salesHistory.findIndex(r => r.roundId === item.roundId);
+  if (roundIndex === -1) return;
+
+  // ✅ [수정] 대기자 명단은 '판매 회차(round)'에 속해 있으므로 round에서 직접 접근합니다.
+  const round = salesHistory[roundIndex];
+  if (!round.waitlist || round.waitlist.length === 0) return;
+
+  let availableStock = item.quantity;
+
+  const sortedWaitlist = round.waitlist.sort((a, b) => {
+    if (a.isPrioritized && !b.isPrioritized) return -1;
+    if (!a.isPrioritized && b.isPrioritized) return 1;
+    return a.timestamp.toMillis() - b.timestamp.toMillis();
+  });
+
+  const remainingWaitlist: WaitlistEntry[] = [];
+  const usersNotified = new Set<string>();
+
+  for (const entry of sortedWaitlist) {
+    if (availableStock <= 0) {
+      remainingWaitlist.push(entry);
+      continue;
+    }
+
+    if (entry.variantGroupId === item.variantGroupId && entry.itemId === item.itemId) {
+      const quantityToConvert = Math.min(entry.quantity, availableStock);
+
+      if (quantityToConvert > 0) {
+        const partialEntry = { ...entry, quantity: quantityToConvert };
+        try {
+          await submitOrderFromWaitlist(transaction, partialEntry, productData, round);
+          availableStock -= quantityToConvert;
+          if (!usersNotified.has(entry.userId)) {
+            // ✅ [수정] 올바른 알림 타입('WAITLIST_CONFIRMED')으로 변경합니다.
+            await createNotification(entry.userId, `대기하시던 '${productData.groupName}' 상품이 예약으로 전환되었습니다!`, { type: "WAITLIST_CONFIRMED", link: "/mypage/history" });
+            usersNotified.add(entry.userId);
+          }
+        } catch (e) {
+          console.error("대기열 자동 전환 중 주문 생성 실패:", e);
+        }
+      }
+
+      const remainingQuantity = entry.quantity - quantityToConvert;
+      if (remainingQuantity > 0) {
+        remainingWaitlist.push({ ...entry, quantity: remainingQuantity });
+      }
+    } else {
+      remainingWaitlist.push(entry);
+    }
+  }
+
+  // ✅ [수정] round 객체의 waitlist와 waitlistCount를 직접 업데이트합니다.
+  round.waitlist = remainingWaitlist;
+  round.waitlistCount = remainingWaitlist.reduce((acc, curr) => acc + curr.quantity, 0);
+  salesHistory[roundIndex] = round;
+
+  transaction.update(productRef, { salesHistory });
+}
 
 /**
  * @description 사용자의 예약을 취소하고, 상품 재고를 복구하며, 신뢰도 점수를 조정하는 함수
@@ -166,105 +236,47 @@ export const cancelOrder = async (order: Order): Promise<void> => {
     if (!orderDoc.exists()) throw new Error("주문 정보를 찾을 수 없습니다.");
     const currentOrder = orderDoc.data() as Order;
 
-    const userRef = doc(db, 'users', currentOrder.userId);
-    const userSnap = await transaction.get(userRef);
-
-    const productRefs = [...new Set(currentOrder.items.map(item => item.productId))].map(id => doc(db, 'products', id));
-    const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-
-    if (currentOrder.userId !== order.userId) throw new Error("본인의 주문만 취소할 수 있습니다.");
     if (currentOrder.status !== 'RESERVED' && currentOrder.status !== 'PREPAID') {
       throw new Error("예약 또는 결제 완료 상태의 주문만 취소할 수 있습니다.");
     }
 
-    let userUpdatePayload: any = null;
-    const now = new Date();
-    const deadlineDate = safeToDate(currentOrder.items[0]?.deadlineDate);
-    
-    let penaltyPolicy: { points: number; reason: string } | null = null;
-    
-    // ✅ [수정] 새로운 페널티 정책 적용 로직
-    // 마감일이 지났을 경우에만 페널티 부과
-    if (deadlineDate && now > deadlineDate) {
-      const cancelPenaltyPolicy = POINT_POLICIES.CANCEL_PENALTY;
-      // 금액 비례 페널티 계산 (최대 한도 적용)
-      const ratePenalty = Math.max(
-        cancelPenaltyPolicy.maxRatePenalty, 
-        Math.floor(order.totalPrice * cancelPenaltyPolicy.rate) * -1
-      );
-      const totalPenalty = cancelPenaltyPolicy.basePoints + ratePenalty;
-      
-      penaltyPolicy = {
-        points: totalPenalty,
-        reason: cancelPenaltyPolicy.reason
-      };
+    const userRef = doc(db, 'users', currentOrder.userId);
+    const userSnap = await transaction.get(userRef);
+    const productIds = [...new Set(currentOrder.items.map(item => item.productId))];
+    const productRefs = productIds.map(id => doc(db, 'products', id));
+    const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+    const productDataMap = new Map<string, Product>();
+    productSnaps.forEach(snap => {
+      if (snap.exists()) productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+    });
+
+    transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
+
+    for (const item of currentOrder.items) {
+      await processWaitlistForCancelledItem(transaction, item, productDataMap);
     }
 
-    if (penaltyPolicy && userSnap.exists()) {
+    const now = new Date();
+    const deadlineDate = safeToDate(currentOrder.items[0]?.deadlineDate);
+    if (deadlineDate && now > deadlineDate && userSnap.exists()) {
+      const cancelPenaltyPolicy = POINT_POLICIES.CANCEL_PENALTY;
+      const ratePenalty = Math.max(cancelPenaltyPolicy.maxRatePenalty, Math.floor(order.totalPrice * cancelPenaltyPolicy.rate) * -1);
+      const totalPenalty = cancelPenaltyPolicy.basePoints + ratePenalty;
+
       const userDoc = userSnap.data() as UserDocument;
-      const newPoints = (userDoc.points || 0) + penaltyPolicy.points;
+      const newPoints = (userDoc.points || 0) + totalPenalty;
       const pointHistoryUpdate: Omit<PointLog, 'id'> = {
-        amount: penaltyPolicy.points,
-        reason: penaltyPolicy.reason,
+        amount: totalPenalty,
+        reason: cancelPenaltyPolicy.reason,
         createdAt: Timestamp.now(),
         orderId: order.id,
       };
-      userUpdatePayload = {
+
+      transaction.update(userRef, {
         points: newPoints,
         pointHistory: arrayUnion(pointHistoryUpdate),
-      };
+      });
     }
-
-    const productUpdates = new Map<string, SalesRound[]>();
-    const productDataMap = new Map<string, Product>();
-    for (const productSnap of productSnaps) {
-      if (productSnap.exists()) {
-        productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
-      }
-    }
-    
-    for (const item of currentOrder.items) {
-      const productData = productDataMap.get(item.productId);
-      if (!productData) continue;
-
-      const newSalesHistory = productUpdates.get(item.productId) || JSON.parse(JSON.stringify(productData.salesHistory));
-      const roundIndex = newSalesHistory.findIndex((r: SalesRound) => r.roundId === item.roundId);
-      if (roundIndex === -1) continue;
-
-      const groupIndex = newSalesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-      if (groupIndex === -1) continue;
-
-      const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
-      const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
-
-      if (isGroupStockManaged) {
-        if (currentOrder.status === 'PREPAID') {
-          variantGroup.totalPhysicalStock += item.quantity * (item.stockDeductionAmount || 1);
-        }
-      } else {
-        const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
-        if (itemIndex === -1) continue;
-
-        const productItem = variantGroup.items[itemIndex];
-        if (productItem.stock !== -1) {
-          productItem.stock += item.quantity;
-        }
-      }
-      
-      productUpdates.set(item.productId, newSalesHistory);
-    }
-
-
-    if (userUpdatePayload) {
-      transaction.update(userRef, userUpdatePayload);
-    }
-
-    for (const [productId, updatedSalesHistory] of productUpdates.entries()) {
-      const productRef = doc(db, 'products', productId);
-      transaction.update(productRef, { salesHistory: updatedSalesHistory });
-    }
-
-    transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
   });
 };
 
@@ -331,23 +343,12 @@ export const getUserOrdersByPickupDatePaginated = async (
 
   const baseConditions: any[] = [
     where('userId', '==', userId),
-    // 🔴 [수정] Firestore 쿼리 제약으로 인해 'status'에 대한 'in' 필터와
-    // 'pickupDate'에 대한 범위(>=) 필터를 동시에 사용할 수 없습니다.
-    // 이 제약으로 인해 쿼리가 실패하여 오류가 발생했습니다.
-    // 픽업과 직접 관련 없는 'CANCELED' 상태의 주문이 포함될 수 있으나,
-    // 우선 status 필터를 제거하여 쿼리가 정상적으로 실행되도록 수정합니다.
-    // UI 단에서 취소된 주문은 별도로 표시되므로 기능적으로는 문제가 없습니다.
-    // where('status', 'in', ['RESERVED', 'PREPAID', 'PICKED_UP', 'COMPLETED', 'NO_SHOW']),
   ];
 
   if (startDate) {
-    // `pickupDate`에 대한 범위 필터는 Firestore에서 유효합니다.
-    // 이 필터는 `pickupDate` 필드가 존재하고, 값이 `startDate`보다 크거나 같은 문서만 반환합니다.
     baseConditions.push(where('pickupDate', '>=', new Date(startDate)));
   }
 
-  // Firestore에서는 범위(<, <=, >, >=) 필터가 적용된 필드와 첫 번째 orderBy 필드가 동일해야 합니다.
-  // 현재 쿼리는 이 규칙을 준수합니다 (orderBy('pickupDate')).
   let q = query(
     collection(db, 'orders'),
     ...baseConditions,
@@ -401,7 +402,6 @@ export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Or
 
 /**
  * @description [신규] 전화번호 뒷자리로 주문을 검색합니다. (인덱싱된 필드 사용)
- * @param phoneLast4 - 전화번호 뒷 4자리
  */
 export const getOrdersByPhoneLast4 = async (phoneLast4: string): Promise<Order[]> => {
   if (!phoneLast4 || phoneLast4.length < 2) return [];
@@ -470,7 +470,7 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
       const updateData: any = { status };
       if (status === 'PICKED_UP') updateData.pickedUpAt = serverTimestamp();
       if (status === 'PREPAID') updateData.prepaidAt = serverTimestamp();
-      
+
       if (status === 'PREPAID' && order.wasPrepaymentRequired) {
         for (const item of order.items) {
           const productData = productDocs.get(item.productId);
@@ -482,7 +482,7 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
 
           const groupIndex = newSalesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
           if (groupIndex === -1) continue;
-          
+
           const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
 
           const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
@@ -493,7 +493,7 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
             }
             variantGroup.totalPhysicalStock -= deductionAmount;
           }
-          
+
           transaction.update(doc(db, 'products', item.productId), { salesHistory: newSalesHistory });
         }
       }
@@ -636,7 +636,7 @@ export const getReservedQuantities = async (): Promise<Record<string, number>> =
  * @description 대기 목록 항목으로부터 새로운 주문을 생성합니다. (트랜잭션 내부에서만 호출)
  */
 export const submitOrderFromWaitlist = async (
-  transaction: any, // Firestore Transaction
+  transaction: Transaction, // Firestore Transaction
   waitlistEntry: WaitlistEntry,
   product: Product,
   round: SalesRound
@@ -647,7 +647,11 @@ export const submitOrderFromWaitlist = async (
   if (!vg || !itemDetail) {
     throw new Error(`주문 전환 실패: 상품(${product.groupName})의 옵션(ID: ${itemId})을 찾을 수 없습니다.`);
   }
-  const userDoc = await getUserDocById(userId);
+
+  const userRef = doc(db, 'users', userId);
+  const userDocSnap = await transaction.get(userRef);
+  const userDoc = userDocSnap.exists() ? userDocSnap.data() as UserDocument : null;
+
   const newOrderRef = doc(collection(db, 'orders'));
   const newOrderId = newOrderRef.id;
   const phoneLast4 = userDoc?.phone?.slice(-4) || '';
@@ -676,7 +680,7 @@ export const submitOrderFromWaitlist = async (
 
   const orderData: Omit<Order, 'id'> = {
     userId,
-    orderNumber: `SODOMALL-W-${newOrderId}`,
+    orderNumber: `SODOMALL-W-${Date.now()}`,
     items: [orderItemPayload],
     totalPrice: itemDetail.price * quantity,
     status: 'RESERVED',
@@ -689,6 +693,7 @@ export const submitOrderFromWaitlist = async (
   };
   transaction.set(newOrderRef, orderData);
 };
+
 
 /**
  * @description [수정] 전화번호 또는 고객 이름으로 주문을 통합 검색합니다.

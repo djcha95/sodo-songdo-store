@@ -49,7 +49,7 @@ const PointManagementModal: React.FC<PointManagementModalProps> = ({ isOpen, onC
             await adjustUserPoints(user.uid, finalAmount, reason);
             
             // ✅ [수정] 알림 메시지에 조정 '사유'를 포함
-            const notificationMessage = `[${reason}] 사유로 신뢰도 포인트 ${pointAmount.toLocaleString()}P가 ${action === 'grant' ? '지급' : '차감'}되었습니다.`;
+            const notificationMessage = `[${reason}] 사유로 소도 포인트 ${pointAmount.toLocaleString()}P가 ${action === 'grant' ? '지급' : '차감'}되었습니다.`;
             const notificationType = action === 'grant' ? 'POINTS_EARNED' : 'POINTS_USED';
             
             await createNotification(user.uid, notificationMessage, {
@@ -77,12 +77,12 @@ const PointManagementModal: React.FC<PointManagementModalProps> = ({ isOpen, onC
         <div className="admin-modal-overlay" onClick={onClose}>
             <div className="admin-modal-content" onClick={e => e.stopPropagation()}>
                 <div className="admin-modal-header">
-                    <h3>신뢰도 포인트 관리</h3>
+                    <h3>소도 포인트 관리</h3>
                     <button onClick={onClose} className="admin-modal-close-button"><X size={24}/></button>
                 </div>
                 <div className="admin-modal-body">
                     <p><strong>{user.displayName}{user.nickname ? ` (${user.nickname})` : ''}</strong> 님의 포인트를 조정합니다.</p>
-                    <p className="current-points">현재 신뢰도 포인트: <strong>{(user.points || 0).toLocaleString()} P</strong></p>
+                    <p className="current-points">현재 소도 포인트: <strong>{(user.points || 0).toLocaleString()} P</strong></p>
                     <div className="point-action-selector">
                         <button className={action === 'grant' ? 'active' : ''} onClick={() => setAction('grant')}>지급</button>
                         <button className={action === 'deduct' ? 'active' : ''} onClick={() => setAction('deduct')}>차감</button>
