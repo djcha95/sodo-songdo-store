@@ -1,171 +1,131 @@
 // src/components/admin/QuickCheckOrderCard.tsx
 
-import React, { useState } from 'react';
-import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/types';
-import toast from 'react-hot-toast';
-import { MinusCircle, PlusCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import type { AggregatedOrderGroup, OrderStatus } from '@/types';
+// ✅ [수정] 사용하지 않는 toast와 OrderItem import를 제거했습니다.
+import { Minus, Plus, Calendar, CheckCircle, Clock, DollarSign, PackageCheck, PackageX, UserX, AlertCircle } from 'lucide-react';
+import useLongPress from '@/hooks/useLongPress';
+import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './QuickCheckOrderCard.css';
+import { Timestamp } from 'firebase/firestore'; // Timestamp 타입을 import 합니다.
 
-interface OrderCardProps {
-  group: AggregatedOrderGroup;
-  onSelect: (groupKey: string) => void;
-  isSelected: boolean;
-  onQuantityChange: (orderId: string, itemId: string, newQuantity: number) => void;
+const STATUS_CONFIG: Record<OrderStatus, { label: string; icon: React.ReactNode; className: string }> = {
+    PICKED_UP: { label: '픽업 완료', icon: <PackageCheck size={14} />, className: 'status-picked-up' },
+    PREPAID: { label: '선입금', icon: <DollarSign size={14} />, className: 'status-prepaid' },
+    RESERVED: { label: '예약', icon: <Clock size={14} />, className: 'status-reserved' },
+    NO_SHOW: { label: '노쇼', icon: <UserX size={14} />, className: 'status-no-show' },
+    CANCELED: { label: '취소', icon: <PackageX size={14} />, className: 'status-canceled' },
+    COMPLETED: { label: '처리 완료', icon: <CheckCircle size={14} />, className: 'status-completed' },
+};
+
+interface QuickCheckOrderCardProps {
+    group: AggregatedOrderGroup;
+    isSelected: boolean;
+    onSelect: (groupKey: string) => void;
+    onQuantityChange: (orderId: string, itemId: string, newQuantity: number) => void;
 }
 
-const formatDate = (timestamp: any): string => {
-  if (!timestamp) return '미지정';
-  let date: Date;
-  if (typeof timestamp.toDate === 'function') date = timestamp.toDate();
-  else if (typeof timestamp.seconds === 'number') date = new Date(timestamp.seconds * 1000);
-  else return '형식 오류';
-  if (isNaN(date.getTime())) return '날짜 오류';
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
-  return `${month}/${day}(${dayOfWeek})`;
-};
+const QuantityInput: React.FC<{
+    orderId: string;
+    itemId: string;
+    quantity: number;
+    onUpdate: (orderId: string, itemId: string, newQuantity: number) => void;
+}> = ({ orderId, itemId, quantity, onUpdate }) => {
+    const [currentQuantity, setCurrentQuantity] = useState(quantity);
+    
+    const handleUpdate = (newQuantity: number) => {
+        const finalQuantity = Math.max(1, newQuantity);
+        setCurrentQuantity(finalQuantity);
+        onUpdate(orderId, itemId, finalQuantity);
+    };
 
-const isSameDay = (date1: any, date2: any): boolean => {
-    const toJsDate = (ts: any): Date | null => {
-        if (!ts) return null;
-        if (typeof ts.toDate === 'function') return ts.toDate();
-        if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
-        return null;
-    }
-    const d1 = toJsDate(date1);
-    const d2 = toJsDate(date2);
-    if (!d1 || !d2) return false;
-    return d1.getFullYear() === d2.getFullYear() &&
-           d1.getMonth() === d2.getMonth() &&
-           d1.getDate() === d2.getDate();
-};
+    const createQuantityHandlers = (delta: number) => {
+        const performUpdate = () => handleUpdate(currentQuantity + delta);
+        return useLongPress(performUpdate, performUpdate, { delay: 100 });
+    };
 
-const getStatusClassName = (status: OrderStatus): string => {
-    switch (status) {
-      case 'PICKED_UP': return 'bg-picked-up-strong';
-      case 'PREPAID': return 'bg-prepaid-strong';
-      case 'NO_SHOW': return 'bg-noshow-strong';
-      case 'CANCELED': return 'bg-canceled';
-      default: return 'bg-default';
-    }
-};
+    const decreaseHandlers = createQuantityHandlers(-1);
+    const increaseHandlers = createQuantityHandlers(1);
 
-const CardItemRow: React.FC<{
-  item: OrderItem;
-  totalQuantity: number;
-  onQuantityChange: (newQuantity: number) => void;
-}> = ({ item, totalQuantity, onQuantityChange }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [currentQuantity, setCurrentQuantity] = useState(totalQuantity);
-
-  const handleUpdate = () => {
-    setIsEditing(false);
-    if (currentQuantity !== totalQuantity) {
-        if(currentQuantity <= 0) {
-            toast.error("수량은 1 이상이어야 합니다.");
-            setCurrentQuantity(totalQuantity);
-            return;
-        }
-        onQuantityChange(currentQuantity);
-    }
-  };
-
-  const getFullItemName = (item: OrderItem) => {
-    let name = item.productName || '';
-    if (item.variantGroupName && item.variantGroupName !== item.productName) name += ` - ${item.variantGroupName}`;
-    if (item.itemName) name += ` (${item.itemName})`;
-    return name;
-  };
-  
-  const handleQuantityClick = (e: React.MouseEvent) => {
-      e.stopPropagation(); 
-      setIsEditing(true);
-  }
-
-  const adjustQuantity = (e: React.MouseEvent, amount: number) => {
-    e.stopPropagation();
-    const newQuantity = Math.max(1, currentQuantity + amount);
-    setCurrentQuantity(newQuantity);
-  };
-
-  const handleInputClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-  };
-
-  return (
-    <div className="qco-item">
-      <span className="qco-item-name">{getFullItemName(item)}</span>
-      {isEditing ? (
-        <div className="qco-qty-editor" onClick={handleInputClick}>
-            <button type="button" onClick={(e) => adjustQuantity(e, -1)}><MinusCircle size={18} /></button>
-            <input
-              type="number"
-              className="qco-qty-input"
-              value={currentQuantity}
-              onChange={(e) => setCurrentQuantity(parseInt(e.target.value, 10) || 1)}
-              onBlur={handleUpdate}
-              onKeyDown={(e) => e.key === 'Enter' && handleUpdate()}
-              autoFocus
-            />
-            <button type="button" onClick={(e) => adjustQuantity(e, 1)}><PlusCircle size={18} /></button>
+    return (
+        <div className="qcp-quantity-controls" onClick={(e) => e.stopPropagation()}>
+            <button {...decreaseHandlers} className="qcp-quantity-btn" disabled={currentQuantity <= 1}>
+                <Minus size={16} />
+            </button>
+            <span className="qcp-quantity-display">{currentQuantity}</span>
+            <button {...increaseHandlers} className="qcp-quantity-btn">
+                <Plus size={16} />
+            </button>
         </div>
-      ) : (
-        <span className="qco-item-qty" onClick={handleQuantityClick} title="수량 클릭하여 수정">
-          {totalQuantity}개
-        </span>
-      )}
-    </div>
-  );
+    );
 };
 
-const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSelected, onQuantityChange }) => {
-  const { groupKey, status, item, totalPrice, customerInfo, pickupDate, pickupDeadlineDate, totalQuantity, originalOrders } = group;
-  
-  const arrivalDate = pickupDate;
-  const deadlineDate = pickupDeadlineDate ?? pickupDate;
-  const isSingleDayPickup = isSameDay(arrivalDate, deadlineDate);
-  
-  const representativeOrderId = originalOrders.length > 0 ? originalOrders[0].orderId : '';
 
-  return (
-    <div
-      className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)}`}
-      onClick={() => onSelect(groupKey)}
-    >
-      <div className="qco-top-row">
-        {isSingleDayPickup ? (
-            <span className='today'>🔥 {formatDate(arrivalDate)} 당일픽업</span>
-        ) : (
-            <>
-                <span>{formatDate(arrivalDate)} 입고</span>
-                <span>{formatDate(deadlineDate)} 마감</span>
-            </>
-        )}
-      </div>
+const QuickCheckOrderCard: React.FC<QuickCheckOrderCardProps> = ({ group, isSelected, onSelect, onQuantityChange }) => {
+    const statusInfo = useMemo(() => {
+        const now = new Date();
+        // ✅ [수정] pickupDeadlineDate가 Timestamp 객체인지 확인하고 .toDate()를 호출합니다.
+        const pickupDeadline = group.pickupDeadlineDate instanceof Timestamp ? group.pickupDeadlineDate.toDate() : group.pickupDeadlineDate;
+        if ((group.status === 'RESERVED' || group.status === 'PREPAID') && pickupDeadline && pickupDeadline < now) {
+            return { label: '미수령(노쇼)', icon: <AlertCircle size={14} />, className: 'status-no-show' };
+        }
+        return STATUS_CONFIG[group.status] || { label: group.status, icon: null, className: '' };
+    }, [group.status, group.pickupDeadlineDate]);
 
-      <div className="qco-body">
-          <CardItemRow 
-            item={item}
-            totalQuantity={totalQuantity}
-            onQuantityChange={(newQuantity) => {
-              // 그룹화된 경우, 어떤 주문의 수량을 바꿀지 결정하는 로직이 필요.
-              // 여기서는 일단 첫 번째 주문의 수량을 변경하는 것으로 단순화합니다.
-              if (representativeOrderId) {
-                onQuantityChange(representativeOrderId, item.itemId, newQuantity);
-              } else {
-                toast.error("수량을 변경할 주문 정보를 찾을 수 없습니다.");
-              }
-            }}
-          />
-      </div>
+    const handleCardClick = () => {
+        onSelect(group.groupKey);
+    };
 
-      <div className="qco-bottom-row">
-        <span className="qco-customer-name" title={`전화번호: ${customerInfo.phone}`}>{customerInfo.name}</span>
-        <span className="qco-total-price">{totalPrice.toLocaleString()}원</span>
-      </div>
-    </div>
-  );
+    // ✅ [수정] pickupDate가 Timestamp 객체인지 확인하고 .toDate()를 호출합니다.
+    const pickupDate = group.pickupDate instanceof Timestamp ? group.pickupDate.toDate() : group.pickupDate;
+
+    return (
+        <div className={`qcp-order-card ${isSelected ? 'selected' : ''} ${statusInfo.className}`} onClick={handleCardClick}>
+            <div className="qcp-card-header">
+                <div className="qcp-customer-info">
+                    <span className="qcp-customer-name">{group.customerInfo.name}</span>
+                    <span className="qcp-customer-phone">{group.customerInfo.phone?.slice(-4)}</span>
+                </div>
+                <div className={`qcp-status-badge ${statusInfo.className}`}>
+                    {statusInfo.icon}
+                    {statusInfo.label}
+                </div>
+            </div>
+
+            <div className="qcp-card-body">
+                <div className="qcp-item-image">
+                    <img src={getOptimizedImageUrl(group.item.imageUrl, '200x200')} alt={group.item.itemName} />
+                </div>
+                <div className="qcp-item-details">
+                    <p className="qcp-item-name" title={group.item.itemName}>
+                        {group.item.itemName}
+                    </p>
+                    <p className="qcp-item-price">
+                        {group.totalPrice.toLocaleString()}원
+                    </p>
+                </div>
+            </div>
+
+            <div className="qcp-card-footer">
+                <div className="qcp-pickup-info">
+                    <Calendar size={14} />
+                    {pickupDate ? pickupDate.toLocaleDateString('ko-KR') : '날짜 미정'}
+                </div>
+                {group.originalOrders.length > 1 ? (
+                    <div className="qcp-quantity-display-static">
+                        {group.totalQuantity}개
+                    </div>
+                ) : (
+                    <QuantityInput
+                        orderId={group.originalOrders[0].orderId}
+                        itemId={group.item.itemId}
+                        quantity={group.totalQuantity}
+                        onUpdate={onQuantityChange}
+                    />
+                )}
+            </div>
+        </div>
+    );
 };
 
 export default QuickCheckOrderCard;
