@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getActiveBanners } from '@/firebase';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import type { Product, Banner } from '@/types';
+import type { Product, Banner, SalesRound } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
@@ -30,12 +30,14 @@ interface ProductForList extends Product {
   reservedQuantities?: Record<string, number>;
 }
 
+// ✅ [수정] ProductCard에 전달하기 위해 displayRound 속성을 추가했습니다.
 interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
   deadlines: {
     primaryEnd: Date | null;
     secondaryEnd: Date | null;
   };
+  displayRound: SalesRound;
 }
 
 const ProductListPage: React.FC = () => {
@@ -116,8 +118,6 @@ const ProductListPage: React.FC = () => {
     onRefresh: handleRefresh,
   });
 
-  // ✅ [핵심 수정] 의존성 배열을 비워서 최초 1회만 실행되도록 변경합니다.
-  // 이렇게 해야 스크롤 시 `loadingMore` 상태가 바뀌어도 이 useEffect가 재실행되지 않아 무한 루프가 발생하지 않습니다.
   useEffect(() => {
     fetchData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,7 +129,6 @@ const ProductListPage: React.FC = () => {
     }
   }, [isLoadMoreVisible, loading, isRefreshing, fetchData]);
   
-  // ... (이하 나머지 코드는 동일) ...
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
@@ -166,12 +165,13 @@ const ProductListPage: React.FC = () => {
       if (round.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) {
         return;
       }
-
+      
+      // ✅ [수정] productWithState 객체에 displayRound를 포함하여 ProductCard로 전달합니다.
       const productWithState: ProductWithUIState = {
         ...product,
-        salesHistory: product.salesHistory, 
         phase: currentPhase,
         deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate },
+        displayRound: round,
       };
 
       if (currentPhase === 'primary') {
@@ -197,7 +197,8 @@ const ProductListPage: React.FC = () => {
     });
     
     const getProductRemainingStock = (product: ProductWithUIState): number => {
-      const round = getDisplayRound(product);
+      // ✅ [수정] prop으로 받은 displayRound를 사용합니다.
+      const round = product.displayRound;
       if (!round) return Infinity;
 
       let totalRemaining = 0;
@@ -241,7 +242,8 @@ const ProductListPage: React.FC = () => {
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
-      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (getDisplayRound(a)?.roundName || '').localeCompare(getDisplayRound(b)?.roundName || ''));
+      // ✅ [수정] prop으로 받은 displayRound를 사용합니다.
+      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.displayRound.roundName || '').localeCompare(b.displayRound.roundName || ''));
     });
 
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? dayjs(tempPrimary[0].deadlines.primaryEnd) : null;

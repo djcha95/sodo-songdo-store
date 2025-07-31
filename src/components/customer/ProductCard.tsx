@@ -8,20 +8,23 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-import type { Product as OriginalProduct, CartItem, SalesRound, StorageType } from '@/types'; 
+// ✅ [수정] 타입 import 경로를 정리하고 명확하게 수정했습니다.
+import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
-import { getDisplayRound, determineActionState, safeToDate, type VariantGroup } from '@/utils/productUtils';
-import type { ProductActionState } from '@/utils/productUtils';
+import { determineActionState, safeToDate } from '@/utils/productUtils';
+import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
+// ✅ [수정] ProductListPage로부터 displayRound를 받도록 타입을 재정의했습니다.
 type Product = OriginalProduct & {
   reservedQuantities?: Record<string, number>;
   phase?: 'primary' | 'secondary' | 'past';
   deadlines?: {
     primaryEnd: Date | null;
     secondaryEnd: Date | null;
-  }
+  };
+  displayRound: OriginalSalesRound;
 }
 
 const QuantityInput: React.FC<{
@@ -97,11 +100,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   }, []);
 
   const cardData = useMemo(() => {
-    const displayRound = getDisplayRound(product as OriginalProduct);
+    // ✅ [개선] getDisplayRound를 다시 호출하는 대신, props로 받은 displayRound를 사용합니다.
+    const { displayRound } = product;
     if (!displayRound) return null;
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     
+    // ✅ [수정] displayRound에 예약 수량을 합쳐서 확장된 타입의 SalesRound 객체를 생성합니다.
     const roundWithReserved: SalesRound = {
       ...displayRound,
       variantGroups: displayRound.variantGroups.map(vg => {
@@ -256,7 +261,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>);
       case 'REQUIRE_OPTION':
         return <button className="options-btn" onClick={handleCardClick}>옵션 선택하기 <ChevronRight size={16} /></button>;
-      // ✅ [추가] '재고 준비중' 상태일 때 표시할 UI
       case 'AWAITING_STOCK':
         return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
       case 'ENDED':
@@ -302,7 +306,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <div className="card-image-container">
           <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
           {product.phase === 'past' && <div className="card-overlay-badge">예약 마감</div>}
-          {/* ✅ [추가] '재고 준비중' 상태일 때 이미지 위에 뱃지 표시 */}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

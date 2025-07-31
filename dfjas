@@ -1,0 +1,79 @@
+[33m3860c6d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 소도몰 퇴근
+[33mdf35344[m 빠른예약체크페이지 수정중
+[33ma544e32[m 고객용페이지 로그인 수정완료
+[33mdd7f67b[m 포인트, 대기 점검 및 수정완료
+[33m7f5eca1[m 마크다운 파일들 수정완료
+[33mfd677a3[m https://www.sodo-songdo.store/ 오류 수정완료
+[33m6aa4c16[m 알림톡기능 설정완료
+[33m2f9cbd2[m 소도몰 출근
+[33mbdefc02[m 소도몰 퇴근
+[33m75237dc[m 집에서 1차 수정완료
+[33md891738[m docs: 포인트 및 등급 시스템 개편 내용 반영
+[33m8d194e2[m refactor(stock): 재고 관리 로직 통합 및 안정화
+[33mb89f8d1[m 7/28 소도몰퇴근
+[33m34e5048[m 한정수량 오류 수정
+[33m808687d[m productlistpage파일 한정수량 순서바꿈
+[33mb98ae2d[m 다듬는중 1
+[33m070f1c6[m 교회에서 수정완
+[33md130a44[m fix: Regenerate package-lock.json to resolve build error
+[33m8aeb85a[m 전반적인 개선완료 (보안 키 파일 제거)
+[33m72f94c7[m asdasd
+[33m160938c[m asd
+[33m8ec5474[m Merge stash and resolve conflicts
+[33mb6ba55d[m 고객센터 페이지 수정중
+[33mdbaee32[m index.ts파일 바꾸기 전
+[33me0cc3bc[m 소도몰 로고 및 미리보기 등록
+[33m02115fb[m 소도몰 로고 등록
+[33m532bacf[m feat: 오류수정
+[33m821f39c[m feat(history): 예약 내역 페이지 탭별 페이지네이션 적용 및 로딩 오류 수정
+[33me5b9034[m productlistpageadmin수정완료. productlistpage 좀 수정해야할듯
+[33m2135510[m feat: 테스트 기능 추가
+[33m03203cf[m 포인트제도 확립함
+[33me4c985a[m ㅎㅎㅎ
+[33m5f81e13[m fix(app): 전반적인 타입 시스템 안정화 및 버그 수정
+[33m44fbbad[m docs: README 업데이트 및 토스트 알림 기능 안정화
+[33m03d2c33[m fix: Update vercel.json rewrite rules for API
+[33m943c337[m feat: 카카오 로그인 및 로컬/운영 환경 설정 완료2
+[33m5963afd[m feat: 카카오 로그인 및 로컬/운영 환경 설정 완료
+[33m7196f19[m feat: Add vercel.json for client-side routing
+[33m3bfac72[m 좀 되라
+[33mf039634[m feat: 장바구니 UI/UX 개선 및 전반적인 오류 수정
+[33m51e859d[m fix all3
+[33m4a0d818[m fix all2
+[33m879a24c[m fix(typescript): Resolve type errors across various components
+[33m835ee86[m feat: 서비스 약관 및 개인정보 처리방침 페이지 추가
+[33md94504a[m WIP: 카카오 로그인 동의항목 설정 진행 중
+[33mf94de65[m docs: 프로젝트 문서(README.md) 최신화
+[33m1e62085[m fix(Admin): ProductCategoryBatchPage 모듈 경로 오류 수정
+[33m42b5847[m fix(Admin): 상품 등록 이미지 업로더 레이아웃 깨짐 수정
+[33m4a51cf9[m Merge branch 'main-recover'
+[33m4a51a8b[m[33m ([m[1;32mmain-recover[m[33m)[m feat: 주문내역 UI 개선 및 집계 로직 수정
+[33m6f37db4[m 작업 내용 최종 복원 및 병합
+[33m994e90f[m Merge branch 'main' of https://github.com/djcha95/sodo-songdo-store
+[33mf63aed9[m[33m ([m[1;31morigin/backup-20250712[m[33m, [m[1;32mbackup-20250712[m[33m)[m 대기자 관리 기능 추가
+[33m4dede01[m Merge pull request #1 from djcha95/backup-20250712
+[33m52681bf[m "feat(ui): 배너 및 토스트 알림 기능 개선
+[33m85e0e3a[m feat: 장바구니 UI 및 대기 상품 자동화 기능 구현
+[33m3c435cb[m feat: 카테고리 일괄 관리 기능 추가 및 타입 정리
+[33maf06f68[m Feat: 고객센터 페이지 관리자용 즉시 수정 기능 추가
+[33mb59c992[m Feat: 어드민 상품 목록 UI/UX 개선
+[33m251d919[m Fix: 관리자 목록 유통기한 미표시 오류 최종 해결 및 리팩토링
+[33m20ad64b[m Feat: 관리자 상품 목록 UI/UX 대폭 개선
+[33m8b628e8[m feat: 관리자 대시보드 기능 고도화 및 README 업데이트
+[33m16f8f50[m feat: 고객용 예약 내역 페이지 구현 및 문서 업데이트
+[33md092e99[m feat: 고객용 예약 내역 페이지 구현 및 문서 업데이트
+[33m7101794[m feat: 예약 내역 페이지 개선 및 오류 수정
+[33mbbb9066[m feat(order): 예약 내역 페이지 기능 대대적 개선 및 안정화
+[33m75a11f1[m feat: 주문/픽업 내역 페이지 디자인 개선 및 카드 UI 통일
+[33mc3368fb[m feat(detail-page): 상품 상세 페이지 UI 및 기능 전면 개편
+[33mde4aad0[m feat(cart): 장바구니 UI/UX 개선 및 버그 수정
+[33mc8d6d2d[m feat: 상품 기능 개선 및 오류 수정3
+[33mb38a9ab[m feat: 상품 기능 개선 및 오류 수정2
+[33m76bfd5c[m feat: 상품 기능 개선 및 오류 수정
+[33m90a8d0d[m 상품리스트페이지 1차정리끝
+[33m8486c97[m fix: 상품 옵션 그룹 UI 및 버튼 위치 최종 수정
+[33mc70fd21[m refactor: 상품 등록/수정 페이지 최종 UI/UX 개선
+[33me6fdd4a[m refactor: 상품 등록/수정 페이지 최종 UI/UX 개선
+[33m87169af[m fix: 유통기한 시간대(Timezone) 오류 수정
+[33maf23152[m 상품 등록 페이지 최종 레이아웃 적용
+[33m3b42977[m feat: Initial commit for sodomall project
