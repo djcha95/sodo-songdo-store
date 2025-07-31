@@ -15,11 +15,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, XCircle, Inbox, Zap,
+  PackageX, Hourglass, CreditCard, Inbox, Zap, Info, // Info 아이콘 추가
 } from 'lucide-react';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
-import { showPromiseToast, showCancelOrderToast, showCancelWaitlistToast, showUseTicketToast, showToast } from '@/utils/toastUtils';
+import { showToast, showPromiseToast, showCancelOrderToast, showCancelWaitlistToast, showUseTicketToast } from '@/utils/toastUtils';
+
 import './OrderHistoryPage.css';
 
 // =================================================================
@@ -29,6 +30,7 @@ import './OrderHistoryPage.css';
 interface AggregatedItem {
   id: string; 
   stableId: string;
+  productId: string;
   productName: string;
   variantGroupName: string;
   itemName:string;
@@ -190,6 +192,8 @@ const AggregatedItemCard: React.FC<{
   displayDateInfo?: { type: 'pickup' | 'order'; date: Date };
   onCancel?: (order: Order) => void;
 }> = React.memo(({ item, displayDateInfo, onCancel }) => {
+  const navigate = useNavigate();
+  
   const { statusText, StatusIcon, statusClass } = useMemo(() => {
     if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
       return { statusText: '선입금 필요', StatusIcon: CreditCard, statusClass: 'status-prepayment_required' };
@@ -211,13 +215,20 @@ const AggregatedItemCard: React.FC<{
     return { cancellable: true, orderToCancel: latestOrder };
   }, [item.originalOrders]);
 
-  
-  const cancelHandlers = useLongPress(
+  // ✅ [수정] 클릭/롱프레스 로직을 수정했습니다.
+  const handlers = useLongPress(
+    // 1. 롱프레스 (2.5초): 예약 취소
     () => {
-      if (cancellable && orderToCancel && onCancel) onCancel(orderToCancel);
+      if (cancellable && orderToCancel && onCancel) {
+        onCancel(orderToCancel);
+      }
     },
-    () => { if (cancellable) showToast('info', '카드를 꾹 눌러서 취소할 수 있어요.', 2000); },
-    { delay: 500 }
+    // 2. 짧은 클릭: 상품 상세 페이지로 이동
+    () => {
+      navigate(`/product/${item.productId}`);
+    },
+    // 3. 롱프레스 시간 설정
+    { delay: 2500 }
   );
 
   let displayDateText = '';
@@ -231,7 +242,7 @@ const AggregatedItemCard: React.FC<{
       className={`order-card-v3 ${cancellable ? 'cancellable' : ''}`} 
       layoutId={item.stableId}
       key={item.id}
-      {...(onCancel ? cancelHandlers : {})}
+      {...handlers} // ✅ 수정된 핸들러 적용
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
@@ -261,10 +272,29 @@ const AggregatedItemCard: React.FC<{
 
 const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: WaitlistInfo) => void; onUseTicket: (item: WaitlistInfo) => void; userPoints: number;}> = React.memo(({ item, onCancel, onUseTicket, userPoints }) => {
     const navigate = useNavigate();
+
+    // ✅ [추가] 대기 목록 카드에도 동일한 클릭/롱프레스 로직 적용
+    const handlers = useLongPress(
+      () => onCancel(item), // 롱프레스 시 취소
+      () => navigate(`/product/${item.productId}`), // 짧은 클릭 시 상세페이지로 이동
+      { delay: 2500 }
+    );
+    
+    // ✅ [추가] 내부 버튼 클릭 시 카드 전체의 클릭 이벤트가 실행되는 것을 방지
+    const handleTicketClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onUseTicket(item);
+    };
+
     return (
-        <motion.div className="waitlist-card" layout key={`${item.roundId}-${item.itemId}`}>
+        <motion.div 
+          className="waitlist-card" 
+          layout 
+          key={`${item.roundId}-${item.itemId}`}
+          {...handlers} // ✅ 수정된 핸들러 적용
+        >
           <div className="card-v3-body">
-            <div className="item-image-wrapper" onClick={() => navigate(`/product/${item.productId}`)}>
+            <div className="item-image-wrapper">
               <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
             </div>
             <div className="item-aggregated-info">
@@ -277,13 +307,13 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
               </div>
               <div className="waitlist-actions">
                 {item.isPrioritized ? (
-                  <button className="priority-ticket-btn used" disabled>
+                  <button className="priority-ticket-btn used" disabled onClick={(e) => e.stopPropagation()}>
                     <CircleCheck size={16} /> 사용 완료
                   </button>
                 ) : (
                   <button
                     className="priority-ticket-btn"
-                    onClick={() => onUseTicket(item)}
+                    onClick={handleTicketClick} // ✅ 이벤트 전파 방지 핸들러 적용
                     disabled={userPoints < 50}
                     title={userPoints < 50 ? '포인트가 부족합니다 (50P 필요)' : '50포인트로 순서 올리기'}
                   >
@@ -293,9 +323,7 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
               </div>
             </div>
           </div>
-          <button className="waitlist-cancel-btn" onClick={() => onCancel(item)}>
-            <XCircle size={18} />
-          </button>
+          {/* ✅ [제거] 별도의 취소 버튼은 롱프레스 기능으로 대체되어 제거합니다. */}
         </motion.div>
     );
 });
@@ -309,7 +337,6 @@ const OrderHistoryPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('orders');
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  // ✅ [수정] 리팩토링으로 변경된 함수 이름에 'callable-' 접두사를 추가합니다.
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
   const getUserWaitlistCallable = useMemo(() => httpsCallable(functions, 'callable-getUserWaitlist'), [functions]);
   
@@ -349,6 +376,7 @@ const OrderHistoryPage: React.FC = () => {
           aggregated[aggregationKey] = {
             id: aggregationKey,
             stableId: stableAnimationId,
+            productId: item.productId, // ✅ [수정] productId를 집계 데이터에 추가
             productName: item.productName,
             variantGroupName: item.variantGroupName,
             itemName: item.itemName,
@@ -452,7 +480,7 @@ const OrderHistoryPage: React.FC = () => {
   }, [user, setWaitlist]);
 
 
-  const renderOrderContent = () => {
+const renderOrderContent = () => {
     const isFirstLoading = ordersLoading && orders.length === 0;
 
     if (isFirstLoading) {
@@ -471,9 +499,19 @@ const OrderHistoryPage: React.FC = () => {
     return (
       <div className="orders-list">
         <AnimatePresence>
-          {sortedDates.map(dateStr => (
+          {sortedDates.map((dateStr, index) => (
             <motion.div key={dateStr} layout>
-              <DateHeader date={new Date(dateStr)} />
+              {/* ✅ [수정] 날짜와 안내문구를 함께 묶는 컨테이너를 추가합니다. */}
+              <div className="date-header-container">
+                <DateHeader date={new Date(dateStr)} />
+                {/* ✅ [추가] 첫 번째 날짜 그룹에만 취소 안내 문구를 표시합니다. */}
+                {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
+                  <div className="cancel-instruction">
+                    <Info size={14} />
+                    <span>카드를 길게 눌러 예약을 취소하세요.</span>
+                  </div>
+                )}
+              </div>
               <div className="order-cards-grid">
                 {aggregatedItems[dateStr].map(item => (
                   <AggregatedItemCard
@@ -491,7 +529,7 @@ const OrderHistoryPage: React.FC = () => {
         </AnimatePresence>
       </div>
     );
-  };
+};
   
   const renderWaitlistContent = () => {
     const isFirstLoading = waitlistLoading && waitlist.length === 0;

@@ -6,6 +6,17 @@ import { AlertCircle, Info, Zap } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'loading';
 
+// ✅ [추가] 커스텀 토스트의 기본 스타일을 제거하기 위한 공용 옵션
+const customToastOptions = {
+  duration: Infinity, // 자동 닫힘 방지
+  style: {
+    background: 'transparent',
+    boxShadow: 'none',
+    padding: 0,
+    border: 'none',
+  },
+};
+
 /**
  * @description 일반 정보성 토스트를 표시합니다. (3초 후 자동 닫힘)
  * @param type 토스트 타입 (success, error, info, loading)
@@ -118,7 +129,7 @@ export const showCancelOrderToast = (onConfirm: () => void) => {
     confirmButtonText: '취소 확정',
     cancelButtonText: '유지',
     onConfirm,
-  }));
+  }), customToastOptions); // ✅ 옵션 적용
 };
 
 export const showCancelWaitlistToast = (itemName: string, quantity: number, onConfirm: () => void) => {
@@ -134,7 +145,7 @@ export const showCancelWaitlistToast = (itemName: string, quantity: number, onCo
     confirmButtonText: '취소 확정',
     cancelButtonText: '유지',
     onConfirm,
-  }));
+  }), customToastOptions); // ✅ 옵션 적용
 };
 
 export const showUseTicketToast = (onConfirm: () => void) => {
@@ -147,5 +158,5 @@ export const showUseTicketToast = (onConfirm: () => void) => {
     cancelButtonText: '취소',
     onConfirm,
     confirmButtonClass: 'button-accent',
-  }));
+  }), customToastOptions); // ✅ 옵션 적용
 }
