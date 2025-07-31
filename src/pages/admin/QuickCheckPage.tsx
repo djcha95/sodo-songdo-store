@@ -4,16 +4,23 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import {
     searchOrdersUnified,
-    updateMultipleOrderStatuses, // ✅ 이 함수가 이제 포인트 로직을 트리거합니다.
+    updateMultipleOrderStatuses,
     deleteMultipleOrders,
     revertOrderStatus,
     updateOrderItemQuantity,
+    splitAndUpdateOrderStatus, // ✨ [신규] 분할 처리 함수 import
 } from '../../firebase/orderService';
 import type { Order, OrderStatus, AggregatedOrderGroup } from '../../types';
-import { Search, Phone, CheckCircle, DollarSign, Loader, Trash2, UserX, RotateCcw, Filter, X as ClearIcon } from 'lucide-react';
+import { Search, Phone, CheckCircle, DollarSign, Loader, Trash2, UserX, RotateCcw, Filter, X as ClearIcon, GitCommit } from 'lucide-react';
 import toast from 'react-hot-toast';
 import QuickCheckOrderCard from '@/components/admin/QuickCheckOrderCard';
 import './QuickCheckPage.css';
+
+// ✨ [신규] 분할 처리 상태를 위한 타입
+interface SplitInfo {
+  group: AggregatedOrderGroup;
+  newQuantity: number;
+}
 
 const QuickCheckPage: React.FC = () => {
   useDocumentTitle('빠른 예약확인');
@@ -27,17 +34,21 @@ const QuickCheckPage: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsGridRef = useRef<HTMLDivElement>(null);
 
+  // ✨ [신규] 주문 분할을 위한 상태 추가
+  const [splitInfo, setSplitInfo] = useState<SplitInfo | null>(null);
+
   const clearSearch = () => {
     setSearchTerm('');
     setRawSearchResults([]);
     setSelectedGroupKeys([]);
     setDisambiguationNames([]);
     setActiveNameFilter(null);
+    setSplitInfo(null); // ✨ 상태 초기화
     searchInputRef.current?.focus();
   };
   
   const refreshAndDeselect = async () => {
-    // 검색어가 있을 때만 데이터를 다시 불러옵니다.
+    setSplitInfo(null); // ✨ 상태 초기화
     if (searchTerm.trim().length >= 2) {
       const results = await searchOrdersUnified(searchTerm.trim());
       setRawSearchResults(results);
@@ -57,7 +68,7 @@ const QuickCheckPage: React.FC = () => {
         setDisambiguationNames([]);
         setActiveNameFilter(null);
     }
-    setSelectedGroupKeys([]); // 선택 해제
+    setSelectedGroupKeys([]);
   }
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -70,6 +81,7 @@ const QuickCheckPage: React.FC = () => {
     setSelectedGroupKeys([]);
     setDisambiguationNames([]);
     setActiveNameFilter(null);
+    setSplitInfo(null); // ✨ 상태 초기화
     try {
       const results = await searchOrdersUnified(searchTerm.trim());
       setRawSearchResults(results);
@@ -94,6 +106,11 @@ const QuickCheckPage: React.FC = () => {
   };
 
   const handleSelectGroup = (groupKey: string) => {
+    // 분할 처리 모드에서는 카드 선택을 비활성화
+    if(splitInfo) {
+        toast.error('수량 변경 후에는 먼저 분할 처리를 완료해주세요.');
+        return;
+    }
     setSelectedGroupKeys(prev =>
       prev.includes(groupKey) ? prev.filter(key => key !== groupKey) : [...prev, groupKey]
     );
@@ -103,7 +120,6 @@ const QuickCheckPage: React.FC = () => {
     const allSelectedOrders = aggregatedResults
       .filter(group => selectedGroupKeys.includes(group.groupKey))
       .flatMap(group => group.originalOrders);
-    // 중복된 orderId 제거 (하나의 원본 주문이 여러 집계 그룹에 포함될 수 있기 때문)
     return [...new Set(allSelectedOrders.map(o => o.orderId))];
   };
   
@@ -111,7 +127,6 @@ const QuickCheckPage: React.FC = () => {
     const orderIdsToUpdate = getSelectedOriginalOrderIds();
     if (orderIdsToUpdate.length === 0) return;
     
-    // ✅ 이제 이 함수 호출만으로 주문 상태 변경과 포인트 적용이 모두 처리됩니다.
     const promise = updateMultipleOrderStatuses(orderIdsToUpdate, status).then(refreshAndDeselect);
     
     toast.promise(promise, { 
@@ -122,14 +137,14 @@ const QuickCheckPage: React.FC = () => {
   };
 
   const handleRevertStatus = async (statusToRevert: OrderStatus) => {
-    const orderIdsToRevert = getSelectedOriginalOrderIds(); // revert도 원본 주문 ID 기준으로
+    const orderIdsToRevert = getSelectedOriginalOrderIds();
     if (orderIdsToRevert.length === 0) return;
     const promise = revertOrderStatus(orderIdsToRevert, statusToRevert).then(refreshAndDeselect);
     toast.promise(promise, { loading: '처리 중...', success: '성공적으로 되돌렸습니다!', error: '처리 중 오류가 발생했습니다.' });
   };
 
   const handleDelete = () => {
-     const orderIdsToDelete = getSelectedOriginalOrderIds(); // delete도 원본 주문 ID 기준으로
+     const orderIdsToDelete = getSelectedOriginalOrderIds();
      if (orderIdsToDelete.length === 0) return;
      toast(t => (
         <div>
@@ -145,22 +160,78 @@ const QuickCheckPage: React.FC = () => {
         </div>
     ));
   };
-
-  const handleQuantityChange = (orderId: string, itemId: string, newQuantity: number) => {
-    const promise = updateOrderItemQuantity(orderId, itemId, newQuantity).then(() => refreshAndDeselect());
-    toast.promise(promise, { loading: '변경 중...', success: '수량이 변경되었습니다.', error: '수량 변경 중 오류가 발생했습니다.' });
+  
+  // ✨ [수정] 수량 변경 핸들러: 분할 처리 모드 진입/해제
+  const handleQuantityChange = (group: AggregatedOrderGroup, newQuantity: number) => {
+    if (newQuantity !== group.totalQuantity) {
+        // 단일 품목 주문에 대해서만 분할 처리 허용
+        if(group.originalOrders.length > 1) {
+            toast.error("여러 주문이 묶인 그룹의 수량은 변경할 수 없습니다.");
+            return;
+        }
+        setSplitInfo({ group, newQuantity });
+        setSelectedGroupKeys([group.groupKey]); // 분할 처리할 카드만 선택되도록
+    } else {
+        // 원래 수량으로 돌아오면 분할 모드 해제
+        setSplitInfo(null);
+        setSelectedGroupKeys([]);
+    }
   };
+
+  // ✨ [신규] 분할 처리를 최종 실행하는 함수
+  const handleConfirmSplit = (remainingStatus: OrderStatus) => {
+    if (!splitInfo) return;
+
+    const { group, newQuantity } = splitInfo;
+    const originalOrderId = group.originalOrders[0].orderId;
+
+    const promise = splitAndUpdateOrderStatus(originalOrderId, newQuantity, remainingStatus).then(refreshAndDeselect);
+    
+    toast.promise(promise, {
+        loading: '주문을 분할하여 처리 중...',
+        success: '성공적으로 분할 처리되었습니다!',
+        error: (err) => err.toString(),
+    });
+  };
+
+  // ✨ [신규] 분할 처리 확인 토스트를 띄우는 함수
+  const showSplitConfirmToast = () => {
+    if (!splitInfo) return;
+    const remainingQuantity = splitInfo.group.totalQuantity - splitInfo.newQuantity;
+
+    toast((t) => (
+        <div className="custom-toast-container">
+            <h4>주문 분할 처리</h4>
+            <p className="toast-message">
+                <b>{splitInfo.newQuantity}개</b>는 '픽업 완료' 처리하고, <br/>
+                남은 <b>{remainingQuantity}개</b>는 어떻게 할까요?
+            </p>
+            <div className="toast-button-group">
+                <button className="toast-button toast-button-cancel" onClick={() => toast.dismiss(t.id)}>취소</button>
+                <button
+                    className="toast-button toast-button-noshow"
+                    onClick={() => {
+                        toast.dismiss(t.id);
+                        handleConfirmSplit('NO_SHOW');
+                    }}
+                >노쇼 처리</button>
+            </div>
+        </div>
+    ), { duration: 10000, position: 'top-center' });
+  };
+
 
   const aggregatedResults = useMemo<AggregatedOrderGroup[]>(() => {
     let results = rawSearchResults;
     if (activeNameFilter) results = results.filter(order => order.customerInfo.name === activeNameFilter);
-    if (filterMode === 'pickup') results = results.filter(order => order.status === 'RESERVED' || order.status === 'PREPAID');
+    if (filterMode === 'pickup' && !splitInfo) { // 분할모드일때는 필터링 잠시 해제
+      results = results.filter(order => order.status === 'RESERVED' || order.status === 'PREPAID');
+    }
     
     const groups = new Map<string, AggregatedOrderGroup>();
 
     results.forEach(order => {
         order.items.forEach(item => {
-            // 고객명 + 상품ID + 아이템ID + 주문 상태를 고유 키로 사용
             const groupKey = `${order.customerInfo.name}-${item.productId}-${item.itemId}-${order.status}`;
             
             if (groups.has(groupKey)) {
@@ -185,13 +256,33 @@ const QuickCheckPage: React.FC = () => {
     });
 
     return Array.from(groups.values());
-  }, [rawSearchResults, filterMode, activeNameFilter]);
+  }, [rawSearchResults, filterMode, activeNameFilter, splitInfo]);
 
-  const selectedTotalPrice = aggregatedResults
-    .filter((group: AggregatedOrderGroup) => selectedGroupKeys.includes(group.groupKey))
-    .reduce((sum: number, group: AggregatedOrderGroup) => sum + group.totalPrice, 0);
+  const selectedTotalPrice = useMemo(() => {
+    // 분할 모드 시, 변경된 수량 기준으로 가격 재계산
+    if (splitInfo) {
+        const { group, newQuantity } = splitInfo;
+        const unitPrice = group.totalPrice / group.totalQuantity;
+        return newQuantity * unitPrice;
+    }
+
+    return aggregatedResults
+      .filter((group: AggregatedOrderGroup) => selectedGroupKeys.includes(group.groupKey))
+      .reduce((sum: number, group: AggregatedOrderGroup) => sum + group.totalPrice, 0);
+  }, [selectedGroupKeys, aggregatedResults, splitInfo]);
+
 
   const renderFooterActions = () => {
+    // ✨ [수정] 분할 처리 모드일 때의 버튼 렌더링
+    if (splitInfo) {
+        return (
+            <button onClick={showSplitConfirmToast} className="action-split-process">
+                <GitCommit size={16}/>
+                분할하여 처리하기
+            </button>
+        );
+    }
+
     const selectedGroupedOrders = aggregatedResults
       .filter(group => selectedGroupKeys.includes(group.groupKey));
     
@@ -224,13 +315,11 @@ const QuickCheckPage: React.FC = () => {
 
   useEffect(() => {
     if (resultsGridRef.current) {
-      // rawSearchResults가 변경되면 잠시 후 'loaded' 클래스를 추가하여 애니메이션 시작
       setTimeout(() => {
         resultsGridRef.current?.classList.add('loaded');
-      }, 50); // 약간의 딜레이를 줄 수 있습니다.
+      }, 50);
     }
     return () => {
-      // 언마운트 시 또는 rawSearchResults가 변경되기 전에 'loaded' 클래스 제거
       resultsGridRef.current?.classList.remove('loaded');
     };
   }, [rawSearchResults]);
@@ -284,9 +373,9 @@ const QuickCheckPage: React.FC = () => {
       {rawSearchResults.length > 0 && !isLoading && (
         <div className="qcp-results-summary">
             총 <strong>{aggregatedResults.length}</strong>건의 예약 내역
+            {splitInfo && <span className="split-mode-indicator"> (분할 처리 중)</span>}
         </div>
       )}
-      {/* ✅ [수정] 결과를 감싸는 컨테이너 추가 */}
       <div className="qcp-results-container">
         <div ref={resultsGridRef} className="qcp-results-grid">
           {aggregatedResults.map((group) => (

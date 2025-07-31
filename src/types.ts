@@ -185,6 +185,7 @@ export interface Order {
   isBookmarked?: boolean;
   canceledAt?: Timestamp;
   wasPrepaymentRequired?: boolean; // ✅ [추가] 주문 생성 시 선입금이 필요했는지 여부 기록
+  splitFrom?: string; // ✨ [신규] 주문 분할 시 원본 주문 ID를 추적하기 위한 필드
 }
 
 export interface AggregatedOrderGroup {
