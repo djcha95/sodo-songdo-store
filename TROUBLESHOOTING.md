@@ -380,3 +380,17 @@
     5.  **CORS 정책 오류 해결**: 로컬에서는 정상 작동했으나, 실제 배포 환경(`sodo-songdo.store`)에서 API 호출이 실패하는 CORS 오류 발생. 원인은 Cloud Function의 `allowedOrigins` 배열에 `https://www.sodo-songdo.store` 주소가 누락되었기 때문. `allowedOrigins`에 정확한 주소를 추가하고 재배포하여 문제를 해결함.
 
 * **개선 효과**: 운영자의 수동 안내 없이도 모든 고객에게 시의적절한 픽업 및 선입금 안내를 자동으로 제공할 수 있게 됨. 이를 통해 고객 만족도를 높이고, 노쇼 비율을 감소시켜 운영 효율성을 크게 향상시킬 것으로 기대됨.
+
+### ✅ [신규] 33. Cloud Functions 리팩토링 및 배포 오류 해결 과정
+
+* **문제점**: 프로젝트 규모가 커지면서 `functions/src/index.ts` 파일이 비대해지고, 다양한 종류의 함수(Callable, Trigger, Scheduled)가 혼재되어 유지보수가 어려워졌습니다. 또한, 리팩토링 후 배포 시 `CORS`, `Permission Denied`, `Resource Already Exists` 등 복합적인 오류가 발생했습니다.
+
+* **해결 과정**:
+    1.  **아키텍처 재설계**: 단일 `index.ts` 구조를 **역할 기반의 폴더 구조**(`callable/`, `triggers/`, `scheduled/`, `http/`)로 전면 리팩토링했습니다. `index.ts`는 각 파일에서 함수들을 가져와 최종적으로 내보내는 **진입점(Entry Point)** 역할만 하도록 변경하여 코드의 응집도와 가독성을 높였습니다.
+    2.  **CORS 및 함수 이름 오류 해결**: 리팩토링으로 인해 Firebase가 인식하는 함수 이름이 `submitOrder`에서 `callable-submitOrder` 등으로 변경되었습니다. 클라이언트(React 앱)에서 `httpsCallable`로 함수를 호출하는 모든 부분의 함수 이름을 새로운 규칙에 맞게 수정하여 CORS 및 함수를 찾을 수 없다는 오류를 해결했습니다.
+    3.  **배포 권한 및 환경 불일치 문제 해결**:
+        * `Permission Denied (403)` 오류는 배포 계정의 IAM 권한을 '소유자(Owner)'로 설정하여 해결했습니다.
+        * `Bad Request (400)` 오류는 `functions/package.json`의 `engines` 노드 버전을 실제 배포 환경인 **`20`**으로 통일하고, `node_modules`와 `lib` 폴더를 삭제 후 재설치 및 재빌드(`npm install && npm run build`)하여 환경 불일치 문제를 해결했습니다.
+    4.  **배포 충돌 문제 해결**: `Resource Already Exists (409)` 오류는 이전 함수가 삭제되는 동시에 새 함수가 생성될 때 발생하는 상태 불일치 문제로, **배포를 재시도**하여 자연스럽게 해결했습니다.
+
+* **개선 효과**: 유지보수성이 뛰어난 서버리스 아키텍처를 구축했으며, 복잡한 배포 오류에 대한 체계적인 디버깅 및 해결 능력을 확보했습니다.

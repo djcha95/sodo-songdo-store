@@ -1,23 +1,20 @@
 // src/components/customer/FaqTab.tsx
 
-import React, { useState, Fragment } from 'react'; // Fragment 추가
+import React, { useState, Fragment } from 'react';
 import type { FaqItem } from '@/types';
 import { ChevronDown, PlusCircle, Pencil, Check, X } from 'lucide-react';
 import { Disclosure } from '@headlessui/react';
 import './FaqTab.css';
 
-// ✅ [추가] 서식을 렌더링하기 위한 헬퍼 컴포넌트
 const FormattedContent: React.FC<{ text: string }> = ({ text = '' }) => {
   return (
     <>
       {text.split('\n').map((line, lineIndex) => {
-        // `- `로 시작하는 줄을 목록 아이템으로 처리
         if (line.trim().startsWith('- ')) {
           return (
             <div key={lineIndex} className="list-item">
               <span className="list-bullet">•</span>
               <span className="list-text">
-                {/* `**`를 기준으로 텍스트를 분리하여 strong 태그 적용 */}
                 {line.substring(2).split(/(\*\*.*?\*\*)/g).map((part, partIndex) => 
                   part.startsWith('**') ? 
                   <strong key={partIndex}>{part.slice(2, -2)}</strong> : 
@@ -27,7 +24,6 @@ const FormattedContent: React.FC<{ text: string }> = ({ text = '' }) => {
             </div>
           );
         }
-        // 일반 텍스트 문단 처리
         return (
           <div key={lineIndex} className="paragraph-item">
             {line.split(/(\*\*.*?\*\*)/g).map((part, partIndex) => 
@@ -51,7 +47,7 @@ interface FaqTabProps {
   removeItem: (id: string) => void;
 }
 
-const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateItem: FaqTabProps['updateItem'] }> = ({ id, question, answer, index, isAdmin, updateItem }) => {
+const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateItem: FaqTabProps['updateItem'] }> = ({  question, answer, index, isAdmin, updateItem }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedQuestion, setEditedQuestion] = useState(question);
   const [editedAnswer, setEditedAnswer] = useState(answer);
@@ -71,7 +67,6 @@ const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateI
   return (
     <div className="faq-item-wrapper">
       {isEditing ? (
-        // --- 수정 모드 UI (기존과 동일) ---
         <div className="faq-item-edit-view">
           <div className="faq-edit-field">
             <label>질문</label>
@@ -87,18 +82,19 @@ const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateI
           </div>
         </div>
       ) : (
-        // --- 일반 보기 UI ---
         <Disclosure as="div" className="faq-item">
           {({ open }) => (
             <>
-              <Disclosure.Button className="faq-question-button">
+              {/* ✅ [수정 1] 바깥쪽 버튼을 div로 변경하여 버튼 중첩 오류를 해결합니다. */}
+              <Disclosure.Button as="div" className="faq-question-button">
                 <div className="faq-question-header">
                   <span className="faq-icon-q">Q</span>
                   <h3 className="faq-question-text">{question}</h3>
                 </div>
                 <div className="faq-actions">
                   {isAdmin && (
-                    <button className="edit-icon-btn" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}>
+                    // ✅ [수정 2] 수정 버튼 클릭 시 이벤트 버블링을 막아, FAQ가 펼쳐지는 현상을 방지합니다.
+                    <button className="edit-icon-btn" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}>
                       <Pencil size={16} />
                     </button>
                   )}
@@ -109,7 +105,6 @@ const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateI
               <Disclosure.Panel as="div" className="faq-answer-wrapper">
                 <div className="faq-answer-header">
                   <span className="faq-icon-a">A</span>
-                   {/* ✅ [수정] p 태그 대신 FormattedContent 컴포넌트를 사용하여 렌더링 */}
                   <div className="faq-answer-text">
                     <FormattedContent text={answer} />
                   </div>
@@ -123,8 +118,7 @@ const FaqItemView: React.FC<FaqItem & { index: number; isAdmin: boolean; updateI
   );
 };
 
-const FaqTab: React.FC<FaqTabProps> = ({ items = [], isAdmin, updateItem, addItem, removeItem }) => {
-  return (
+const FaqTab: React.FC<FaqTabProps> = ({ items = [], isAdmin, updateItem, addItem }) => {  return (
     <section className="service-section faq-section">
       <div className="faq-list">
         {items.map((item, index) => (

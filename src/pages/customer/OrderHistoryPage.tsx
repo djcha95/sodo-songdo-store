@@ -146,7 +146,7 @@ const usePaginatedData = <T,>(
     if (isActive) {
       fetchData(true);
     }
-  }, [isActive, uid, fetchFn, fetchData]);
+  }, [isActive, fetchData]);
 
   const loadMore = useCallback(() => {
     fetchData(false);
@@ -309,8 +309,9 @@ const OrderHistoryPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('orders');
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
-  const getUserWaitlistCallable = useMemo(() => httpsCallable(functions, 'getUserWaitlist'), [functions]);
+  // ✅ [수정] 리팩토링으로 변경된 함수 이름에 'callable-' 접두사를 추가합니다.
+  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
+  const getUserWaitlistCallable = useMemo(() => httpsCallable(functions, 'callable-getUserWaitlist'), [functions]);
   
   const basePayload = useMemo(() => {
     if (viewMode === 'pickup') {
@@ -341,7 +342,6 @@ const OrderHistoryPage: React.FC = () => {
       const dateStr = dayjs(date).format('YYYY-MM-DD');
 
       (order.items || []).forEach((item: OrderItem) => {
-        // ✅ [수정] 집계 키에 order.status를 추가하여 취소된 주문이 별도로 집계되도록 함
         const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}`;
         const stableAnimationId = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
 
@@ -366,7 +366,6 @@ const OrderHistoryPage: React.FC = () => {
 
     Object.values(aggregated).forEach(item => {
       const sortedOrders = [...item.originalOrders].sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0));
-      // 상태는 이미 집계 시점에 결정되었으므로 여기서는 정렬만 수행
       item.originalOrders = sortedOrders;
     });
 
