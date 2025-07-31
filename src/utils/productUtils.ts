@@ -5,6 +5,7 @@ import type {
   SalesRound as OriginalSalesRound,
   UserDocument,
   VariantGroup as OriginalVariantGroup,
+  LoyaltyTier,
 } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import dayjs from 'dayjs';
@@ -21,6 +22,7 @@ export interface SalesRound extends OriginalSalesRound {
   variantGroups: VariantGroup[];
 }
 
+// ✅ [수정] 'AWAITING_STOCK' 상태를 다시 추가했습니다.
 export type ProductActionState =
   | 'LOADING'
   | 'PURCHASABLE'
@@ -130,20 +132,18 @@ export const determineActionState = (
   const userTier = userDocument?.loyaltyTier;
   const allowedTiers = round.allowedTiers || [];
 
-  // 1. 참여 등급 확인
-  if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) {
+  if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier as LoyaltyTier))) {
     return 'INELIGIBLE';
   }
 
   const now = dayjs();
   const publishAtDate = safeToDate(round.publishAt);
+  const primaryDeadline = safeToDate(round.deadlineDate); // 1차 마감일 (오늘의 공동구매 마감)
+  const pickupDate = safeToDate(round.pickupDate); // 픽업 시작일
+  
+  // ✅ [수정] 최종 마감일을 요청대로 '픽업일 오후 1시'로 명확히 정의합니다.
+  const finalSaleDeadline = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0).toDate() : null;
 
-  const deadlineDate = safeToDate(round.deadlineDate);
-  const finalSaleDeadline = deadlineDate
-    ? dayjs(deadlineDate).add(1, 'day').hour(13).minute(0).second(0).toDate()
-    : null;
-
-  // 2. 판매 기간 확인
   if (round.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) {
     return 'SCHEDULED';
   }
@@ -152,34 +152,40 @@ export const determineActionState = (
     return 'ENDED';
   }
 
-  // 이 시점부터는 판매 기간 내에 있다고 간주
+  const isLimitedStock = selectedVg ? (selectedVg.totalPhysicalStock !== null && selectedVg.totalPhysicalStock !== -1) : false;
 
-  // 3. 재고 상태 확인 (품절 여부)
-  let isSoldOut = false;
-  
-  // ✅ [수정] selectedVg가 null이나 undefined가 아닌지 먼저 확인
-  if (selectedVg) { 
-    const isLimitedStock = selectedVg.totalPhysicalStock !== null && selectedVg.totalPhysicalStock !== -1;
-
-    if (isLimitedStock) {
-      const reserved = selectedVg.reservedCount || 0;
-      const totalStock = selectedVg.totalPhysicalStock || 0;
-      const remainingStock = totalStock - reserved;
-
-      if (remainingStock <= 0) {
-        isSoldOut = true;
-      }
+  // ✅ [추가] '재고 준비중' 상태를 판별하는 로직을 추가합니다.
+  // 조건: 1차 마감 이후 && 최종 마감 이전 && 무제한 상품일 경우
+  if (primaryDeadline && now.isAfter(primaryDeadline) && finalSaleDeadline && now.isBefore(finalSaleDeadline)) {
+    if (!isLimitedStock) {
+      return 'AWAITING_STOCK';
     }
   }
 
-  // 4. 최종 상태 결정
+  let isSoldOut = false;
+  if (selectedVg && isLimitedStock) { 
+    const reserved = selectedVg.reservedCount || 0;
+    const totalStock = selectedVg.totalPhysicalStock || 0;
+    const remainingStock = totalStock - reserved;
+    if (remainingStock <= 0) {
+      isSoldOut = true;
+    }
+  }
+
   if (isSoldOut) {
-    // 한정 수량 상품이고, 품절이고, 판매 기간 내라면 '대기 가능'
-    // ✅ [수정] isLimitedStock을 다시 계산하지 않고, if(selectedVg) 블록 밖으로 isSoldOut만 사용
-    // isSoldOut은 selectedVg가 존재하고 한정 수량일 때만 true가 될 수 있음.
     return 'WAITLISTABLE';
-  } else {
-    // 재고가 남아있으면 '구매 가능' 상태
+  }
+  
+  // 1차 마감 이전이면서 재고가 있으면 구매 가능
+  if (primaryDeadline && now.isBefore(primaryDeadline)) {
     return 'PURCHASABLE';
   }
+
+  // 1차 마감 이후지만 한정수량 상품에 재고가 남아있으면 구매 가능 (추가공구)
+  if (primaryDeadline && now.isAfter(primaryDeadline) && isLimitedStock && !isSoldOut) {
+    return 'PURCHASABLE';
+  }
+
+  // 위의 모든 조건에 해당하지 않으면 최종 마감 전이라도 다른 상태(예: 무제한 상품의 재고준비중)가 될 수 있으므로, 마지막에 ENDED를 배치
+  return 'ENDED';
 };

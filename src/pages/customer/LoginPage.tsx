@@ -29,13 +29,11 @@ const initKakaoSDK = () =>
   });
 
 /* ───────── API URL 계산 ───────── */
+// ✅ [수정] 혼동을 막기 위해 환경 변수(.env)보다 프록시 경로를 항상 우선하도록 변경합니다.
 const getApiUrl = () => {
-  // 1순위 .env 값
-  const envUrl = import.meta.env.VITE_KAKAO_LOGIN_API;
-  if (envUrl) return envUrl;
-
-  // 2순위: firebase hosting rewrite → same‑origin + /api/kakaoLogin
-  return `${window.location.origin.replace(/\/$/, "")}/api/kakaoLogin`;
+  // 로컬 개발 시에는 Vite 프록시를 통하도록 상대 경로를 반환합니다.
+  // 실제 배포 환경(Vercel)에서는 vercel.json의 rewrite 규칙에 의해 처리됩니다.
+  return `/api/http-kakaoLogin`;
 };
 
 const LoginPage: React.FC = () => {
@@ -78,9 +76,8 @@ const LoginPage: React.FC = () => {
 
     const loginPromise = new Promise(async (resolve, reject) => {
       kakaoLogin({
-        // 동의 항목 (전화번호 + 성별·연령대)
         scope: "profile_nickname,account_email,name,gender,age_range,phone_number",
-        throughTalk: false, // PC·모바일 통일: 항상 웹 창
+        throughTalk: false,
         success: async ({ access_token }) => {
           try {
             const apiUrl = getApiUrl();

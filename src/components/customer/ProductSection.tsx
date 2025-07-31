@@ -5,13 +5,16 @@ import './ProductSection.css';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
+// ✅ [수정] ProductListPage에서 icon을 보내주고 있으므로, 타입 오류 방지를 위해 props 정의는 유지합니다.
 interface ProductSectionProps {
+ icon?: React.ReactNode;
  title: React.ReactNode;
  children: React.ReactNode;
  countdownText?: string | null;
 }
 
-const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countdownText }) => {
+// ✅ [수정] props에서 icon을 받도록 유지합니다.
+const ProductSection: React.FC<ProductSectionProps> = ({ icon, title, children, countdownText }) => {
  const { scrollRef, mouseHandlers, scrollByPage, showLeftArrow, showRightArrow } = useHorizontalScroll();
 
  const childElements = React.Children.toArray(children);
@@ -20,7 +23,10 @@ const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countd
  return (
    <section className="page-section product-section">
      <div className="section-header">
-       <h2 className="section-title">{title}</h2>
+       <h2 className="section-title">
+         {/* ✅ 요청하신 대로 아이콘 렌더링(표시) 로직은 제거된 상태를 유지합니다. */}
+         {title}
+       </h2>
        {countdownText && (
          <div className="section-countdown">
            <Clock size={14} className="countdown-icon" />
@@ -31,7 +37,6 @@ const ProductSection: React.FC<ProductSectionProps> = ({ title, children, countd
      </div>
      
      <div className="horizontal-scroll-container">
-       {/* ✅ [수정] 화살표를 CSS 클래스로 제어하여 항상 존재하도록 수정 */}
        <button 
          className={`scroll-arrow prev ${showLeftArrow ? 'visible' : ''}`} 
          onClick={() => scrollByPage('left')} 

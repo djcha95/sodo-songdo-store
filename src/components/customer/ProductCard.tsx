@@ -8,7 +8,7 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-import type { Product as OriginalProduct, CartItem, SalesRound } from '@/types'; 
+import type { Product as OriginalProduct, CartItem, SalesRound, StorageType } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
@@ -102,7 +102,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     
-    // 옵션 그룹에 실시간 예약 수량을 주입합니다.
     const roundWithReserved: SalesRound = {
       ...displayRound,
       variantGroups: displayRound.variantGroups.map(vg => {
@@ -171,7 +170,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     const cartItem: CartItem = {
       id: `reservation-${product.id}-${singleOptionItem.id}-${Date.now()}`,
-      // ✅ [수정] 오타 수정: stockDuductionAmount -> stockDeductionAmount
       stockDeductionAmount: singleOptionItem.stockDeductionAmount || 1,
       productId: product.id, productName: product.groupName, imageUrl: product.imageUrls?.[0] || '',
       roundId: displayRound.roundId, roundName: displayRound.roundName,
@@ -221,7 +219,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const { pickupDateFormatted, storageType } = cardData;
 
-  const getStorageTypeInfo = (type: typeof product.storageType) => {
+  const getStorageTypeInfo = (type: StorageType) => {
     switch (type) {
       case 'FROZEN': return { label: '냉동', style: { backgroundColor: '#5c7cfa', color: '#fff' } };
       case 'COLD': return { label: '냉장', style: { backgroundColor: '#e63946', color: '#fff' } };
@@ -258,6 +256,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>);
       case 'REQUIRE_OPTION':
         return <button className="options-btn" onClick={handleCardClick}>옵션 선택하기 <ChevronRight size={16} /></button>;
+      // ✅ [추가] '재고 준비중' 상태일 때 표시할 UI
+      case 'AWAITING_STOCK':
+        return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
       case 'ENDED':
         return <div className="options-btn disabled">예약 종료</div>;
       case 'SCHEDULED':
@@ -294,7 +295,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     );
   };
 
-
   return (
     <div className="product-card-wrapper">
       <div className="product-card-final" onClick={handleCardClick}>
@@ -302,6 +302,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <div className="card-image-container">
           <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
           {product.phase === 'past' && <div className="card-overlay-badge">예약 마감</div>}
+          {/* ✅ [추가] '재고 준비중' 상태일 때 이미지 위에 뱃지 표시 */}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-// ✅ [수정] getProducts, getReservedQuantitiesMap import 제거
-import { getActiveBanners } from '@/firebase'; 
-// ✅ [추가] Cloud Functions를 사용하기 위한 import 추가
+import { getActiveBanners } from '@/firebase';
 import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Product, Banner } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -16,7 +14,8 @@ import ProductCard from '@/components/customer/ProductCard';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
+import { PackageSearch, RefreshCw, ArrowDown, Flame, Clock } from 'lucide-react';
+import { useInView } from 'react-intersection-observer';
 
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { getDisplayRound, safeToDate } from '@/utils/productUtils';
@@ -27,7 +26,6 @@ import '@/styles/common.css';
 dayjs.extend(isBetween);
 dayjs.locale('ko');
 
-// reservedQuantities 속성을 포함하는 타입 정의
 interface ProductForList extends Product {
   reservedQuantities?: Record<string, number>;
 }
@@ -46,31 +44,32 @@ const ProductListPage: React.FC = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<ProductForList[]>([]);
   const [countdown, setCountdown] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  // ✅ [수정] lastVisible의 타입을 DocumentData | null 에서 number | null 로 변경
-  const [lastVisible, setLastVisible] = useState<number | null>(null); 
-  const [hasMore, setHasMore] = useState(true);
-  const loader = useRef(null);
-  const pageContainerRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const lastVisibleRef = useRef<number | null>(null); 
+  const hasMoreRef = useRef<boolean>(true);
 
   const PAGE_SIZE = 10;
 
-  // ✅ [추가] Cloud Functions 호출을 위한 설정
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
+  const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'callable-getProductsWithStock'), [functions]);
 
-  // ✅ [전면 수정] 이제 로컬 함수 대신 Cloud Function을 호출합니다.
-  const fetchProductsCallback = useCallback(async (isInitial: boolean) => {
-    if (loadingMore && !isInitial) return;
+  const { ref: loadMoreRef, inView: isLoadMoreVisible } = useInView({
+    threshold: 0,
+    triggerOnce: false,
+  });
 
-    if (!isInitial) {
-      setLoadingMore(true);
-    } else {
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
       setLoading(true);
-      setLastVisible(null);
-      setHasMore(true);
+      setError(null);
+      lastVisibleRef.current = null;
+      hasMoreRef.current = true;
+    } else {
+      if (loadingMore || !hasMoreRef.current) return;
+      setLoadingMore(true);
     }
   
     try {
@@ -79,62 +78,58 @@ const ProductListPage: React.FC = () => {
         setBanners(activeBanners);
       }
       
-      const currentLastVisible = isInitial ? null : lastVisible;
-      
-      // Cloud Function 호출
-      const result = await getProductsWithStockCallable({
+      const result: HttpsCallableResult<any> = await getProductsWithStockCallable({
         pageSize: PAGE_SIZE,
-        lastVisible: currentLastVisible // lastVisible이 number 타입으로 전달됩니다.
+        lastVisible: lastVisibleRef.current
       });
 
-      // result.data는 { products: ProductForList[], lastVisible: number | null } 형태를 가집니다.
       const { products: newProducts, lastVisible: newLastVisible } = result.data as { products: ProductForList[], lastVisible: number | null };
   
-      setProducts(prevProducts =>
-        isInitial ? newProducts : [...prevProducts, ...newProducts]
-      );
+      setProducts(prevProducts => {
+        const productsMap = new Map(prevProducts.map(p => [p.id, p]));
+        newProducts.forEach(p => {
+          productsMap.set(p.id, p);
+        });
+        const allUniqueProducts = Array.from(productsMap.values());
+        return isInitial ? newProducts : allUniqueProducts;
+      });
   
-      setLastVisible(newLastVisible);
+      lastVisibleRef.current = newLastVisible;
       if (!newLastVisible || newProducts.length < PAGE_SIZE) {
-        setHasMore(false);
+        hasMoreRef.current = false;
       }
-    } catch (error: any) {
-      console.error(error);
-      showToast('error', error.message || "데이터를 불러오는 중 문제가 발생했습니다.");
+    } catch (err: any) {
+      console.error("Error fetching products:", err);
+      setError("상품을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      showToast('error', err.message || "데이터를 불러오는 중 문제가 발생했습니다.");
     } finally {
-      if (isInitial) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-      }
+      setLoading(false);
+      setLoadingMore(false);
     }
-  }, [lastVisible, loadingMore, getProductsWithStockCallable]);
+  }, [loadingMore, getProductsWithStockCallable]);
+
+  const handleRefresh = useCallback(async () => {
+    await fetchData(true);
+  }, [fetchData]);
 
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({
-    onRefresh: async () => {
-      await fetchProductsCallback(true);
-    },
+    onRefresh: handleRefresh,
   });
 
+  // ✅ [핵심 수정] 의존성 배열을 비워서 최초 1회만 실행되도록 변경합니다.
+  // 이렇게 해야 스크롤 시 `loadingMore` 상태가 바뀌어도 이 useEffect가 재실행되지 않아 무한 루프가 발생하지 않습니다.
   useEffect(() => {
-    fetchProductsCallback(true);
+    fetchData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
-          fetchProductsCallback(false);
-        }
-      },
-      { threshold: 1.0 }
-    );
-    const currentLoader = loader.current;
-    if (currentLoader) observer.observe(currentLoader);
-    return () => { if (currentLoader) observer.unobserve(currentLoader); };
-  }, [hasMore, loadingMore, loading, fetchProductsCallback]);
+    if (isLoadMoreVisible && !loading && !isRefreshing && hasMoreRef.current) {
+      fetchData(false);
+    }
+  }, [isLoadMoreVisible, loading, isRefreshing, fetchData]);
   
+  // ... (이하 나머지 코드는 동일) ...
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
@@ -144,7 +139,7 @@ const ProductListPage: React.FC = () => {
     const tempPast: ProductWithUIState[] = [];
 
     products.forEach(product => {
-      const round = getDisplayRound(product);
+      const round = getDisplayRound(product); 
       if (!round || round.status === 'draft') return;
       
       const allowedTiers = round.allowedTiers || [];
@@ -174,7 +169,7 @@ const ProductListPage: React.FC = () => {
 
       const productWithState: ProductWithUIState = {
         ...product,
-        salesHistory: [round], 
+        salesHistory: product.salesHistory, 
         phase: currentPhase,
         deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate },
       };
@@ -187,7 +182,6 @@ const ProductListPage: React.FC = () => {
             if (totalStock === null || totalStock === -1) return false;
             if (totalStock === 0) return true;
             
-            // reservedQuantities는 이제 Cloud Function에서 내려주는 데이터에 포함됩니다.
             const reserved = product.reservedQuantities?.[`${product.id}-${round.roundId}-${vg.id}`] || 0;
             return totalStock - reserved <= 0;
         });
@@ -214,7 +208,6 @@ const ProductListPage: React.FC = () => {
         if (totalStock !== null && totalStock !== -1) {
           isLimited = true;
           const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
-          // reservedQuantities는 이제 Cloud Function에서 내려주는 데이터에 포함됩니다.
           const reserved = product.reservedQuantities?.[reservedKey] || 0;
           totalRemaining += (totalStock - reserved);
         }
@@ -226,17 +219,11 @@ const ProductListPage: React.FC = () => {
     tempPrimary.sort((a, b) => {
       const stockA = getProductRemainingStock(a);
       const stockB = getProductRemainingStock(b);
-
       const isALimited = stockA !== Infinity;
       const isBLimited = stockB !== Infinity;
-
       if (isALimited && !isBLimited) return -1;
       if (!isALimited && isBLimited) return 1;
-
-      if (isALimited && isBLimited && stockA !== stockB) {
-        return stockA - stockB;
-      }
-      
+      if (isALimited && isBLimited && stockA !== stockB) return stockA - stockB;
       const deadlineA = a.deadlines.primaryEnd?.getTime() || 0;
       const deadlineB = b.deadlines.primaryEnd?.getTime() || 0;
       return deadlineA - deadlineB;
@@ -254,7 +241,7 @@ const ProductListPage: React.FC = () => {
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
-      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.salesHistory[0]?.roundName || '').localeCompare(b.salesHistory[0]?.roundName || ''));
+      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (getDisplayRound(a)?.roundName || '').localeCompare(getDisplayRound(b)?.roundName || ''));
     });
 
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? dayjs(tempPrimary[0].deadlines.primaryEnd) : null;
@@ -291,7 +278,13 @@ const ProductListPage: React.FC = () => {
     return () => clearInterval(countdownInterval);
   }, [primarySaleProducts.length, primarySaleEndDate]);
 
-  if (loading && !isRefreshing) return <SodomallLoader />;
+  if (loading && products.length === 0) {
+    return <SodomallLoader />;
+  }
+
+  if (error) {
+    return <div className="error-message-container">{error}</div>;
+  }
 
   return (
     <div className="customer-page-container">
@@ -309,18 +302,19 @@ const ProductListPage: React.FC = () => {
         </div>
       </div>
       <div
-        ref={pageContainerRef}
         className="pull-to-refresh-content"
         style={{ transform: `translateY(${pullDistance}px)` }}
       >
         <div className="page-section banner-section"><BannerSlider banners={banners} /></div>
 
         <ProductSection
+          key="primary-section"
+          icon={<Flame />}
           title={<>🔥 오늘의 공동구매</>}
           countdownText={primarySaleProducts.length > 0 ? countdown : null}
         >
           {primarySaleProducts.length > 0
-            ? primarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />)
+            ? primarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)
             : !loading && (
               <div className="product-list-placeholder">
                 <PackageSearch size={48} className="placeholder-icon" />
@@ -332,8 +326,12 @@ const ProductListPage: React.FC = () => {
         </ProductSection>
         
         {secondarySaleProducts.length > 0 && (
-          <ProductSection title={<>⏰ 마감임박! 추가공구</>}>
-            {secondarySaleProducts.map(p => <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />)}
+          <ProductSection 
+            key="secondary-section"
+            icon={<Clock />}
+            title={<>⏰ 마감임박! 추가공구</>}
+          >
+            {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)}
           </ProductSection>
         )}
 
@@ -347,17 +345,15 @@ const ProductListPage: React.FC = () => {
                 key={date}
                 title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}
               >
-                {productsForDate.map(p => (
-                  <ProductCard key={`${p.id}-${p.salesHistory[0].roundId}`} product={p} />
-                ))}
+                {productsForDate.map(p => <ProductCard key={p.id} product={p} />)}
               </ProductSection>
             );
           })}
         </div>
 
-        <div ref={loader} className="infinite-scroll-loader">
+        <div ref={loadMoreRef} className="infinite-scroll-loader">
           {loadingMore && <InlineSodomallLoader />}
-          {!hasMore && products.length > PAGE_SIZE && (
+          {!hasMoreRef.current && products.length > PAGE_SIZE && (
             <div className="end-of-list-message"><p>모든 상품을 확인했어요!</p></div>
           )}
         </div>

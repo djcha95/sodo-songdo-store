@@ -19,8 +19,6 @@ import { addWaitlistEntry, getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
 
-// ✅ [수정] 다른 페이지에서 사용하는 안정적인 날짜 변환 로직을 적용합니다.
-// Firestore Timestamp가 다양한 객체 형태로 전달되는 경우(_seconds)를 모두 처리합니다.
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
@@ -112,7 +110,7 @@ const CartItemCard: React.FC<{
             {item.status === 'WAITLIST' ? (
               <div className="waitlist-status-badge"><Info size={14}/><span>재고 확보 시 자동 예약 전환</span></div>
             ) : (
-              <div className="item-total-price">{item.unitPrice.toLocaleString()}원</div>
+              <div className="item-total-price">{(item.unitPrice * item.quantity).toLocaleString()}원</div>
             )}
             <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}>
               <button {...decreaseHandlers} disabled={item.quantity <= 1 || !isEligible}><Minus size={18} /></button>
@@ -142,8 +140,9 @@ const CartPage: React.FC = () => {
   const [ineligibleItemIds, setIneligibleItemIds] = useState<Set<string>>(new Set());
   
   const functions = getFunctions(getApp(), 'asia-northeast3');
-  const checkCartStockCallable = httpsCallable<any, any>(functions, 'checkCartStock');
-  const submitOrderCallable = httpsCallable<any, any>(functions, 'submitOrder');
+  // ✅ [수정] 리팩토링으로 변경된 함수 이름에 'callable-' 접두사를 추가합니다.
+  const checkCartStockCallable = httpsCallable<any, any>(functions, 'callable-checkCartStock');
+  const submitOrderCallable = httpsCallable<any, any>(functions, 'callable-submitOrder');
 
   const syncCartWithServerStock = useCallback(async (itemsToCheck: CartItem[]): Promise<boolean> => {
     if (itemsToCheck.length === 0) {
@@ -175,7 +174,7 @@ const CartPage: React.FC = () => {
       
       if (data.updatedItems.length > 0 || data.removedItemIds.length > 0) {
         startTransition(() => {
-          data.updatedItems.forEach(item => updateCartItemQuantity(item.id, item.newQuantity));
+          data.updatedItems.forEach((item: { id: string, newQuantity: number }) => updateCartItemQuantity(item.id, item.newQuantity));
           if (data.removedItemIds.length > 0) removeItems(data.removedItemIds);
         });
         toast.error('일부 상품의 재고가 변경되어 자동 조정되었습니다.');
@@ -292,9 +291,11 @@ const CartPage: React.FC = () => {
     showPromiseToast(Promise.all(allPromises), {
       loading: '요청을 처리하는 중입니다...',
       success: (results) => {
-        const orderResult = results[0];
-        if (orderResult && orderResult.data && !orderResult.data.success && orderPayload) {
-            throw new Error(orderResult.data.message || '서버에서 주문 처리에 실패했습니다.');
+        if (orderPayload && results.length > 0) {
+          const orderResult = results[0];
+          if (orderResult && orderResult.data && orderResult.data.success === false) {
+              throw new Error(orderResult.data.message || '서버에서 주문 처리에 실패했습니다.');
+          }
         }
 
         const processedItemIds = [
@@ -431,6 +432,7 @@ const getButtonInfo = () => {
   const buttonInfo = getButtonInfo();
   
   const allItems = useMemo(() => [...reservationItems, ...waitlistItems], [reservationItems, waitlistItems]);
+  const totalPrice = useMemo(() => reservationItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0), [reservationItems]);
 
   return (
     <div className="cart-page-wrapper">
@@ -461,32 +463,19 @@ const getButtonInfo = () => {
               </div>
             )}
           </div>
-
-    {(eligibleReservationItems.length > 0 || waitlistItems.length > 0) && (
         <div className="cart-summary-column">
-            {/* ✅ [수정] 사용자의 요청에 따라 '예약 상품' 건수 표시를 완전히 제거합니다. */}
-            <div className="cart-summary-card">
-                {waitlistItems.length > 0 && (
-                    <div className="summary-row waitlist-info">
-                        <span>대기 상품</span>
-                        <span>{waitlistItems.length} 건</span>
-                    </div>
-                )}
-                
-                <div className="summary-divider"></div>
-
-                <button 
-                    className="checkout-btn" 
-                    onClick={showOrderConfirmation} 
-                    disabled={buttonInfo.disabled}
-                >
-                    {buttonInfo.text}
-                </button>
-            </div>
+          <div className="cart-summary-card">
+            <button 
+                className="checkout-btn" 
+                onClick={showOrderConfirmation} 
+                disabled={buttonInfo.disabled}
+            >
+                {buttonInfo.text}
+            </button>
+          </div>
         </div>
-    )}
-            </div>
       </div>
+    </div>
     </div>
   );
 };

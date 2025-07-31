@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "test": "vitest",
-"update-tiers": "tsx scripts/updateUserTiers.ts"
+    "update-tiers": "tsx scripts/updateUserTiers.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -33,6 +33,7 @@
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
+    "react-intersection-observer": "^9.16.0",
     "react-kakao-maps-sdk": "^1.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.30.1",

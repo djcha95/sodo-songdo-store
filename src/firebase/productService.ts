@@ -7,7 +7,7 @@ import {
   increment, arrayUnion, where, orderBy, Timestamp, runTransaction,
   startAfter, limit, getCountFromServer, serverTimestamp
 } from 'firebase/firestore';
-import type { DocumentData, Query, DocumentReference, WriteBatch, Transaction } from 'firebase/firestore';
+import type { DocumentData, Query, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
 import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, WaitlistEntry, CartItem, WaitlistInfo, UserDocument, PointLog, PaginatedProductsResponse } from '@/types';

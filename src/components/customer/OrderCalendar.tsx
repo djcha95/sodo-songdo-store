@@ -274,14 +274,13 @@ const OrderCalendar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
+  // ✅ [수정] 리팩토링으로 변경된 함수 이름에 'callable-' 접두사를 추가합니다.
+  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
 
   useEffect(() => {
     if (user?.uid) {
         setIsLoading(true);
 
-        // ✅ [최종 수정] 캘린더 목적에 맞게 payload를 'pickupDate' 기준으로 변경합니다.
-        // 이것이 함수 내부 로직과 일치하여 오류를 해결할 것입니다.
         const payload = { 
           orderByField: 'pickupDate', 
           orderDirection: 'asc',
