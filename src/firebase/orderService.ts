@@ -281,6 +281,73 @@ export const cancelOrder = async (order: Order): Promise<void> => {
 };
 
 /**
+ * @description ✨ [신규] 하나의 주문을 두 개로 분할하고 각각 다른 상태를 적용하는 함수
+ */
+export const splitAndUpdateOrderStatus = async (
+  originalOrderId: string,
+  pickedUpQuantity: number,
+  remainingStatus: OrderStatus
+): Promise<void> => {
+  if (pickedUpQuantity <= 0) {
+    throw new Error('픽업 수량은 1 이상이어야 합니다.');
+  }
+
+  await runTransaction(db, async (transaction) => {
+    const originalOrderRef = doc(db, 'orders', originalOrderId);
+    const originalOrderDoc = await transaction.get(originalOrderRef);
+
+    if (!originalOrderDoc.exists()) {
+      throw new Error('분할할 원본 주문을 찾을 수 없습니다.');
+    }
+
+    const originalOrder = { id: originalOrderId, ...originalOrderDoc.data() } as Order;
+    // 이 기능은 단일 품목 주문에 대해서만 작동한다고 가정
+    const originalItem = originalOrder.items[0];
+    const originalQuantity = originalItem.quantity;
+    const remainingQuantity = originalQuantity - pickedUpQuantity;
+
+    if (remainingQuantity <= 0) {
+      throw new Error('남는 수량이 없어 주문을 분할할 수 없습니다. 일반 상태 변경을 이용해주세요.');
+    }
+
+    // --- 1. 남은 수량에 대한 '노쇼' 주문 생성 ---
+    const remainingItem: OrderItem = { ...originalItem, quantity: remainingQuantity };
+    const remainingOrder: Omit<Order, 'id'> = {
+      ...originalOrder,
+      orderNumber: `${originalOrder.orderNumber}-REMAIN`,
+      items: [remainingItem],
+      totalPrice: remainingItem.unitPrice * remainingQuantity,
+      status: remainingStatus,
+      createdAt: serverTimestamp(),
+      splitFrom: originalOrderId, // 원본 주문 ID 추적
+      notes: `[${originalOrder.orderNumber}]에서 분할된 ${remainingStatus} 주문`,
+    };
+    
+    const newOrderRef = doc(collection(db, 'orders'));
+    transaction.set(newOrderRef, remainingOrder);
+    
+    // 남은 주문에 대한 포인트/등급 페널티 적용
+    await applyPointChangeByStatus(transaction, originalOrder.userId, { ...remainingOrder, id: newOrderRef.id }, remainingStatus);
+
+    // --- 2. 원본 주문을 '픽업 완료' 상태로 수정 ---
+    const pickedUpItem: OrderItem = { ...originalItem, quantity: pickedUpQuantity };
+    const pickedUpOrderUpdate = {
+      items: [pickedUpItem],
+      totalPrice: pickedUpItem.unitPrice * pickedUpQuantity,
+      status: 'PICKED_UP' as OrderStatus,
+      pickedUpAt: serverTimestamp(),
+      notes: `[${newOrderRef.id}]로 ${remainingQuantity}개 분할 처리됨`,
+    };
+    
+    transaction.update(originalOrderRef, pickedUpOrderUpdate);
+
+    // 픽업한 주문에 대한 포인트/등급 보상 적용
+    await applyPointChangeByStatus(transaction, originalOrder.userId, { ...originalOrder, ...pickedUpOrderUpdate }, 'PICKED_UP');
+  });
+};
+
+
+/**
  * @description 특정 사용자의 모든 주문 내역을 가져옵니다.
  */
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
