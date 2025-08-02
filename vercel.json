@@ -1,12 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/kakaoLogin",
-      "destination": "https://kakaologin-gjxboavawq-du.a.run.app"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/api/(.*)",
+      "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     }
   ]
 }
