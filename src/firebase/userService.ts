@@ -15,7 +15,8 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import type { UserDocument, PointLog } from '@/types';
+// ✅ [수정] LoyaltyTier 타입을 import 목록에 추가했습니다.
+import type { UserDocument, PointLog, LoyaltyTier } from '@/types';
 import { POINT_POLICIES } from './pointService';
 import { calculateTier } from '@/utils/loyaltyUtils';
 
@@ -67,7 +68,6 @@ export const processUserSignIn = async (
       const initialPointLog: Omit<PointLog, 'id'> = {
         amount: signupPoints,
         reason: signupReason,
-        // ✨ [수정] Firestore 배열 규칙 위반 오류를 해결하기 위해 serverTimestamp()를 Timestamp.now()로 변경합니다.
         createdAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expirationDate),
       };
@@ -81,7 +81,7 @@ export const processUserSignIn = async (
         role: 'customer',
         createdAt: serverTimestamp(),
         points: signupPoints,
-        loyaltyTier: '공구요정', 
+        loyaltyTier: '공구새싹', // 신규 유저는 '공구새싹'으로 시작
         pickupCount: 0,
         noShowCount: 0,
         lastLoginDate: new Date().toISOString().split('T')[0],
@@ -132,8 +132,11 @@ export const submitReferralCode = async (newUserId: string, referralCode: string
 
     const bonusPoints = POINT_POLICIES.REFERRAL_BONUS_NEW_USER.points;
     const bonusReason = POINT_POLICIES.REFERRAL_BONUS_NEW_USER.reason;
-    const newTotalPoints = newUserDoc.points + bonusPoints;
-    const newTier = calculateTier(newTotalPoints);
+    const newTotalPoints = (newUserDoc.points || 0) + bonusPoints;
+    
+    // ✅ [수정] calculateTier 함수에 포인트 대신 픽업/노쇼 횟수를 전달하도록 변경했습니다.
+    // 추천인 코드 입력 시점에는 횟수 변동이 없으므로 기존 값을 사용합니다.
+    const newTier = calculateTier(newUserDoc.pickupCount || 0, newUserDoc.noShowCount || 0);
     
     const now = new Date();
     const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
@@ -141,7 +144,6 @@ export const submitReferralCode = async (newUserId: string, referralCode: string
     const pointLog: Omit<PointLog, 'id'> = {
         amount: bonusPoints,
         reason: bonusReason,
-        // ✨ [수정] Firestore 배열 규칙 위반 오류를 해결하기 위해 serverTimestamp()를 Timestamp.now()로 변경합니다.
         createdAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expirationDate)
     };
@@ -169,11 +171,57 @@ export const getUserDocById = async (userId: string): Promise<UserDocument | nul
   return snap.exists() ? (snap.data() as UserDocument) : null;
 };
 
-// ✨ [신규] 사용자 역할을 변경하는 함수 (Master 권한 필요)
 export const updateUserRole = async (targetUserId: string, newRole: UserDocument['role']): Promise<void> => {
   if (!targetUserId || !newRole) {
     throw new Error("사용자 ID와 새로운 역할은 필수입니다.");
   }
   const userRef = doc(db, 'users', targetUserId);
   await updateDoc(userRef, { role: newRole });
+};
+
+/**
+ * @description [신규] 관리자가 사용자의 픽업/노쇼 횟수를 직접 조정하고 등급을 재계산합니다.
+ */
+export const adjustUserCounts = async (
+  userId: string,
+  newPickupCount: number,
+  newNoShowCount: number
+): Promise<void> => {
+  if (newPickupCount < 0 || newNoShowCount < 0) {
+    throw new Error("횟수는 0 이상이어야 합니다.");
+  }
+  const userRef = doc(db, 'users', userId);
+  const newTier = calculateTier(newPickupCount, newNoShowCount);
+  await updateDoc(userRef, {
+    pickupCount: newPickupCount,
+    noShowCount: newNoShowCount,
+    loyaltyTier: newTier,
+    manualTier: null,
+  });
+};
+
+/**
+ * @description [신규] 관리자가 사용자의 등급을 수동으로 지정하거나 자동 계산으로 되돌립니다.
+ */
+export const setManualTierForUser = async (
+  userId: string,
+  tier: LoyaltyTier | null
+): Promise<void> => {
+  const userRef = doc(db, 'users', userId);
+  if (tier) {
+    await updateDoc(userRef, {
+      manualTier: tier,
+      loyaltyTier: tier,
+    });
+  } else {
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const user = userSnap.data() as UserDocument;
+      const newTier = calculateTier(user.pickupCount || 0, user.noShowCount || 0);
+      await updateDoc(userRef, {
+        manualTier: null,
+        loyaltyTier: newTier,
+      });
+    }
+  }
 };

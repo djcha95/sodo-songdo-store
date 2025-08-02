@@ -234,6 +234,7 @@ export interface UserDocument {
   referredBy?: string | null;
   nickname?: string;
   nicknameChanged?: boolean;
+  manualTier?: LoyaltyTier | null; // ✨ [추가] 수동 지정 등급 필드
 }
 
 export interface Banner {
