@@ -9,10 +9,17 @@ import axios from "axios";
 export const kakaoLogin = onRequest(
   {
     region: "asia-northeast3",
-    cors: allowedOrigins, // Firebase가 CORS를 자동으로 처리하도록 설정
+    cors: allowedOrigins,
   },
-  // ✅ [수정] 수동 OPTIONS 처리 로직을 완전히 제거하여 Firebase 자동 처리에만 의존합니다.
   async (request: Request, response: Response) => {
+    // ✅ [수정] CORS 사전 요청(Preflight)을 수동으로 처리하는 로직 추가
+    // 브라우저가 보내는 OPTIONS 요청에 204 No Content로 응답하여
+    // 후속 POST 요청을 안전하게 보낼 수 있도록 허용합니다.
+    if (request.method === "OPTIONS") {
+      response.status(204).send("");
+      return;
+    }
+
     if (request.method !== "POST") {
       response.status(405).send("Method Not Allowed");
       return;
@@ -23,7 +30,7 @@ export const kakaoLogin = onRequest(
       response.status(400).json({ message: "Kakao token not provided." });
       return;
     }
-    
+
     try {
       const kakaoUserResponse = await axios.get(
         "https://kapi.kakao.com/v2/user/me",
@@ -68,12 +75,17 @@ export const kakaoLogin = onRequest(
 );
 
 export const setUserRole = onRequest(
-  { 
+  {
     region: "asia-northeast3",
     cors: allowedOrigins,
   },
-  // ✅ [수정] 여기도 동일하게 수동 OPTIONS 처리 로직을 제거합니다.
   async (request: Request, response: Response) => {
+    // ✅ [수정] 여기에도 동일하게 OPTIONS 사전 요청 처리 로직을 추가합니다.
+    if (request.method === "OPTIONS") {
+      response.status(204).send("");
+      return;
+    }
+
     const { uid, role } = request.query;
 
     if (typeof uid !== 'string' || typeof role !== 'string') {
