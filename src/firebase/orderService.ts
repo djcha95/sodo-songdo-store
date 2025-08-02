@@ -335,17 +335,24 @@ export const splitAndUpdateOrderStatus = async (
       items: [pickedUpItem],
       totalPrice: pickedUpItem.unitPrice * pickedUpQuantity,
       status: 'PICKED_UP' as OrderStatus,
-      pickedUpAt: serverTimestamp(),
+      pickedUpAt: serverTimestamp(), // DB 업데이트용: FieldValue 타입
       notes: `[${newOrderRef.id}]로 ${remainingQuantity}개 분할 처리됨`,
     };
     
     transaction.update(originalOrderRef, pickedUpOrderUpdate);
 
+    // ✅ [수정] 포인트 계산 함수에 전달할 객체를 별도로 생성합니다.
+    // 타입 오류를 해결하기 위해 'pickedUpAt'에 실제 Timestamp 객체를 할당합니다.
+    const orderForPointCalculation: Order = {
+      ...originalOrder,
+      ...pickedUpOrderUpdate,
+      pickedUpAt: Timestamp.now(), // 타입 검사용: Timestamp 타입
+    };
+
     // 픽업한 주문에 대한 포인트/등급 보상 적용
-    await applyPointChangeByStatus(transaction, originalOrder.userId, { ...originalOrder, ...pickedUpOrderUpdate }, 'PICKED_UP');
+    await applyPointChangeByStatus(transaction, originalOrder.userId, orderForPointCalculation, 'PICKED_UP');
   });
 };
-
 
 /**
  * @description 특정 사용자의 모든 주문 내역을 가져옵니다.
