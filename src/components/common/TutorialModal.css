@@ -1,0 +1,116 @@
+/* src/components/common/TutorialModal.css */
+
+.tutorial-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.tutorial-modal-content {
+  background-color: var(--background-color);
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.tutorial-modal-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-right: 30px; /* For close button */
+}
+
+.tutorial-modal-header h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-color-primary);
+  margin: 0 0 8px;
+}
+
+.tutorial-modal-header p {
+  font-size: 1rem;
+  color: var(--text-color-secondary);
+  margin: 0;
+}
+
+.tutorial-modal-close-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color-secondary);
+  padding: 4px;
+  border-radius: 50%;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.tutorial-modal-close-button:hover {
+  background-color: var(--hover-bg-color);
+  color: var(--text-color-primary);
+}
+
+.tutorial-modal-body {
+  margin-bottom: 24px;
+}
+
+.tutorial-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.tutorial-step-card {
+  background-color: var(--card-bg-color);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tutorial-step-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.07);
+}
+
+.step-icon {
+  margin-bottom: 12px;
+  color: var(--accent-color);
+}
+
+.step-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--text-color-primary);
+}
+
+.step-description {
+  font-size: 0.9rem;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.tutorial-modal-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+}

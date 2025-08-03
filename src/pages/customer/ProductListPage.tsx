@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useTutorial } from '@/context/TutorialContext';
+import { mainTourSteps } from '@/components/customer/AppTour';
 import { getActiveBanners } from '@/firebase';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
@@ -14,9 +16,8 @@ import ProductCard from '@/components/customer/ProductCard';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PackageSearch, RefreshCw, ArrowDown, Flame, Clock } from 'lucide-react';
+import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
-
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { getDisplayRound, safeToDate } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
@@ -29,20 +30,15 @@ dayjs.locale('ko');
 interface ProductForList extends Product {
   reservedQuantities?: Record<string, number>;
 }
-
-// ✅ [수정] ProductCard에 전달하기 위해 displayRound 속성을 추가했습니다.
 interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
-  deadlines: {
-    primaryEnd: Date | null;
-    secondaryEnd: Date | null;
-  };
+  deadlines: { primaryEnd: Date | null; secondaryEnd: Date | null; };
   displayRound: SalesRound;
 }
 
 const ProductListPage: React.FC = () => {
   const { userDocument } = useAuth();
-  
+  const { startTour, isTourRunning } = useTutorial(); // ✅ [수정] isTourRunning 상태 가져오기  
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<ProductForList[]>([]);
   const [countdown, setCountdown] = useState<string | null>(null);
@@ -52,16 +48,16 @@ const ProductListPage: React.FC = () => {
 
   const lastVisibleRef = useRef<number | null>(null); 
   const hasMoreRef = useRef<boolean>(true);
-
   const PAGE_SIZE = 10;
-
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'callable-getProductsWithStock'), [functions]);
+  const { ref: loadMoreRef, inView: isLoadMoreVisible } = useInView({ threshold: 0, triggerOnce: false });
 
-  const { ref: loadMoreRef, inView: isLoadMoreVisible } = useInView({
-    threshold: 0,
-    triggerOnce: false,
-  });
+  useEffect(() => {
+    if (userDocument && !userDocument.hasCompletedTutorial) {
+      setTimeout(() => startTour(mainTourSteps), 500);
+    }
+  }, [userDocument, startTour]);
 
   const fetchData = useCallback(async (isInitial = false) => {
     if (isInitial) {
@@ -73,164 +69,82 @@ const ProductListPage: React.FC = () => {
       if (loadingMore || !hasMoreRef.current) return;
       setLoadingMore(true);
     }
-  
     try {
       if (isInitial) {
         const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
       }
-      
-      const result: HttpsCallableResult<any> = await getProductsWithStockCallable({
-        pageSize: PAGE_SIZE,
-        lastVisible: lastVisibleRef.current
-      });
-
+      const result: HttpsCallableResult<any> = await getProductsWithStockCallable({ pageSize: PAGE_SIZE, lastVisible: lastVisibleRef.current });
       const { products: newProducts, lastVisible: newLastVisible } = result.data as { products: ProductForList[], lastVisible: number | null };
-  
+      
       setProducts(prevProducts => {
         const productsMap = new Map(prevProducts.map(p => [p.id, p]));
-        newProducts.forEach(p => {
-          productsMap.set(p.id, p);
-        });
-        const allUniqueProducts = Array.from(productsMap.values());
-        return isInitial ? newProducts : allUniqueProducts;
+        newProducts.forEach(p => productsMap.set(p.id, p));
+        return isInitial ? newProducts : Array.from(productsMap.values());
       });
-  
+
       lastVisibleRef.current = newLastVisible;
       if (!newLastVisible || newProducts.length < PAGE_SIZE) {
         hasMoreRef.current = false;
       }
     } catch (err: any) {
-      console.error("Error fetching products:", err);
-      setError("상품을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-      showToast('error', err.message || "데이터를 불러오는 중 문제가 발생했습니다.");
+      setError("상품을 불러오는 중 오류가 발생했습니다.");
+      showToast('error', err.message || "데이터 로딩 중 문제가 발생했습니다.");
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
   }, [loadingMore, getProductsWithStockCallable]);
 
-  const handleRefresh = useCallback(async () => {
-    await fetchData(true);
-  }, [fetchData]);
+  const handleRefresh = useCallback(async () => { await fetchData(true); }, [fetchData]);
+  const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({ onRefresh: handleRefresh });
 
-  const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({
-    onRefresh: handleRefresh,
-  });
-
+  useEffect(() => { fetchData(true); }, [fetchData]);
+  // ✅ [수정] 무한 스크롤을 실행하는 useEffect
   useEffect(() => {
-    fetchData(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (isLoadMoreVisible && !loading && !isRefreshing && hasMoreRef.current) {
+    // 튜토리얼이 실행 중이 아닐 때만 상품을 더 불러오도록 조건을 추가합니다.
+    if (isLoadMoreVisible && !loading && !isRefreshing && hasMoreRef.current && !isTourRunning) {
       fetchData(false);
     }
-  }, [isLoadMoreVisible, loading, isRefreshing, fetchData]);
+  }, [isLoadMoreVisible, loading, isRefreshing, fetchData, isTourRunning]); // ✅ 의존성 배열에 isTourRunning 추가
   
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
-
     const tempPrimary: ProductWithUIState[] = [];
     const tempSecondary: ProductWithUIState[] = [];
     const tempPast: ProductWithUIState[] = [];
-
+    
     products.forEach(product => {
-      const round = getDisplayRound(product); 
+      const round = getDisplayRound(product);
       if (!round || round.status === 'draft') return;
-      
       const allowedTiers = round.allowedTiers || [];
-      if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) {
-        return;
-      }
-
+      if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) return;
       const primaryEndDate = safeToDate(round.deadlineDate);
       const pickupStartDate = safeToDate(round.pickupDate);
       const secondaryEndDate = pickupStartDate ? dayjs(pickupStartDate).hour(13).minute(0).second(0).toDate() : null;
-
       if (!primaryEndDate || !secondaryEndDate) return;
-
       let currentPhase: 'primary' | 'secondary' | 'past';
-      if (now.isBefore(dayjs(primaryEndDate))) {
-        currentPhase = 'primary';
-      } else if (now.isBefore(dayjs(secondaryEndDate))) {
-        currentPhase = 'secondary';
-      } else {
-        currentPhase = 'past';
-      }
-
+      if (now.isBefore(dayjs(primaryEndDate))) currentPhase = 'primary';
+      else if (now.isBetween(dayjs(primaryEndDate), dayjs(secondaryEndDate), null, '[]')) currentPhase = 'secondary';
+      else currentPhase = 'past';
       const publishAtDate = safeToDate(round.publishAt);
-      if (round.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) {
-        return;
-      }
-      
-      // ✅ [수정] productWithState 객체에 displayRound를 포함하여 ProductCard로 전달합니다.
-      const productWithState: ProductWithUIState = {
-        ...product,
-        phase: currentPhase,
-        deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate },
-        displayRound: round,
-      };
-
-      if (currentPhase === 'primary') {
-        tempPrimary.push(productWithState);
-      } else if (currentPhase === 'secondary') {
+      if (round.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) return;
+      const productWithState: ProductWithUIState = { ...product, phase: currentPhase, deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, displayRound: round };
+      if (currentPhase === 'primary') tempPrimary.push(productWithState);
+      else if (currentPhase === 'secondary') {
         const isSoldOut = round.variantGroups.every(vg => {
-            const totalStock = vg.totalPhysicalStock;
-            if (totalStock === null || totalStock === -1) return false;
-            if (totalStock === 0) return true;
-            
-            const reserved = product.reservedQuantities?.[`${product.id}-${round.roundId}-${vg.id}`] || 0;
-            return totalStock - reserved <= 0;
+          const totalStock = vg.totalPhysicalStock;
+          if (totalStock === null || totalStock === -1) return false;
+          if (totalStock === 0) return true;
+          const reserved = product.reservedQuantities?.[`${product.id}-${round.roundId}-${vg.id}`] || 0;
+          return totalStock - reserved <= 0;
         });
-
-        if (!isSoldOut) {
-            tempSecondary.push(productWithState);
-        }
+        if (!isSoldOut) tempSecondary.push(productWithState);
       } else {
-        if (now.diff(dayjs(secondaryEndDate), 'day') <= 7) {
-            tempPast.push(productWithState);
-        }
+        if (now.diff(dayjs(secondaryEndDate), 'day') <= 7) tempPast.push(productWithState);
       }
     });
-    
-    const getProductRemainingStock = (product: ProductWithUIState): number => {
-      // ✅ [수정] prop으로 받은 displayRound를 사용합니다.
-      const round = product.displayRound;
-      if (!round) return Infinity;
-
-      let totalRemaining = 0;
-      let isLimited = false;
-
-      round.variantGroups.forEach(vg => {
-        const totalStock = vg.totalPhysicalStock;
-        if (totalStock !== null && totalStock !== -1) {
-          isLimited = true;
-          const reservedKey = `${product.id}-${round.roundId}-${vg.id}`;
-          const reserved = product.reservedQuantities?.[reservedKey] || 0;
-          totalRemaining += (totalStock - reserved);
-        }
-      });
-      
-      return isLimited ? totalRemaining : Infinity;
-    };
-
-    tempPrimary.sort((a, b) => {
-      const stockA = getProductRemainingStock(a);
-      const stockB = getProductRemainingStock(b);
-      const isALimited = stockA !== Infinity;
-      const isBLimited = stockB !== Infinity;
-      if (isALimited && !isBLimited) return -1;
-      if (!isALimited && isBLimited) return 1;
-      if (isALimited && isBLimited && stockA !== stockB) return stockA - stockB;
-      const deadlineA = a.deadlines.primaryEnd?.getTime() || 0;
-      const deadlineB = b.deadlines.primaryEnd?.getTime() || 0;
-      return deadlineA - deadlineB;
-    });
-
-    tempSecondary.sort((a, b) => (a.deadlines.secondaryEnd?.getTime() || 0) - (b.deadlines.secondaryEnd?.getTime() || 0));
 
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
@@ -238,115 +152,72 @@ const ProductListPage: React.FC = () => {
       if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
       pastGroups[dateKey].push(p);
     });
-    
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
-      // ✅ [수정] prop으로 받은 displayRound를 사용합니다.
       sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.displayRound.roundName || '').localeCompare(b.displayRound.roundName || ''));
     });
-
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? dayjs(tempPrimary[0].deadlines.primaryEnd) : null;
-
-    return {
-      primarySaleProducts: tempPrimary,
-      secondarySaleProducts: tempSecondary,
-      pastProductsByDate: sortedPastGroups,
-      primarySaleEndDate: firstPrimarySaleEndDate,
-    };
+    return { primarySaleProducts: tempPrimary, secondarySaleProducts: tempSecondary, pastProductsByDate: sortedPastGroups, primarySaleEndDate: firstPrimarySaleEndDate };
   }, [products, userDocument]);
       
   useEffect(() => {
-    if (primarySaleProducts.length === 0 || !primarySaleEndDate) {
-      setCountdown(null);
-      return;
-    }
-    const countdownInterval = setInterval(() => {
-      const now = dayjs();
-      const diff = primarySaleEndDate.diff(now, 'second');
-
-      if (diff <= 0) {
-        setCountdown("마감!");
-        clearInterval(countdownInterval);
-        return;
-      }
-
-      const hours = Math.floor(diff / 3600);
-      const minutes = Math.floor((diff % 3600) / 60);
-      const seconds = diff % 60;
-      setCountdown(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    if (!primarySaleEndDate) { setCountdown(null); return; }
+    const interval = setInterval(() => {
+      const diff = dayjs(primarySaleEndDate).diff(dayjs(), 'second');
+      if (diff <= 0) { setCountdown("마감!"); clearInterval(interval); return; }
+      const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+      const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+      const s = String(diff % 60).padStart(2, '0');
+      setCountdown(`${h}:${m}:${s}`);
     }, 1000);
+    return () => clearInterval(interval);
+  }, [primarySaleEndDate]);
 
-    return () => clearInterval(countdownInterval);
-  }, [primarySaleProducts.length, primarySaleEndDate]);
-
-  if (loading && products.length === 0) {
-    return <SodomallLoader />;
-  }
-
-  if (error) {
-    return <div className="error-message-container">{error}</div>;
-  }
+  if (loading && products.length === 0) return <SodomallLoader />;
+  if (error) return <div className="error-message-container">{error}</div>;
 
   return (
     <div className="customer-page-container">
-      <div 
-        className="pull-to-refresh-indicator"
-        style={{ height: `${pullDistance}px` }}
-      >
+      <div className="pull-to-refresh-indicator" style={{ height: `${pullDistance}px` }}>
         <div className="indicator-content">
-          {isRefreshing ? <RefreshCw size={24} className="refreshing-icon" />
-            : <>
-                <ArrowDown size={20} className="arrow-icon" style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }} />
-                <span className="indicator-text">{isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}</span>
-              </>
-          }
+          {isRefreshing ? <RefreshCw size={24} className="refreshing-icon" /> : <><ArrowDown size={20} className="arrow-icon" style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }} /><span>{isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}</span></>}
         </div>
       </div>
-      <div
-        className="pull-to-refresh-content"
-        style={{ transform: `translateY(${pullDistance}px)` }}
-      >
-        <div className="page-section banner-section"><BannerSlider banners={banners} /></div>
+      <div className="pull-to-refresh-content" style={{ transform: `translateY(${pullDistance}px)` }}>
+        <div className="page-section banner-section" data-tutorial-id="main-banner">
+          <BannerSlider banners={banners} />
+        </div>
 
         <ProductSection
           key="primary-section"
-          icon={<Flame />}
           title={<>🔥 오늘의 공동구매</>}
           countdownText={primarySaleProducts.length > 0 ? countdown : null}
+          tutorialId="primary-sale-section"
         >
-          {primarySaleProducts.length > 0
-            ? primarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)
-            : !loading && (
-              <div className="product-list-placeholder">
-                <PackageSearch size={48} className="placeholder-icon" />
-                <p className="placeholder-text">오늘의 상품을 준비중입니다</p>
-                <span className="placeholder-subtext">매일 오후 1시에 새로운 상품을 기대해주세요!</span>
-              </div>
-            )
-          }
+          {primarySaleProducts.length > 0 ? (
+            primarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)
+          ) : !loading && (
+            <div className="product-list-placeholder"><PackageSearch size={48} /><p>오늘의 상품을 준비중입니다</p><span>매일 오후 1시에 새로운 상품을 기대해주세요!</span></div>
+          )}
         </ProductSection>
         
         {secondarySaleProducts.length > 0 && (
           <ProductSection 
             key="secondary-section"
-            icon={<Clock />}
             title={<>⏰ 마감임박! 추가공구</>}
+            tutorialId="secondary-sale-section"
           >
             {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)}
           </ProductSection>
         )}
 
-        <div className="past-products-section">
+        <div className="past-products-section" data-tutorial-id="past-sale-section">
           {Object.keys(pastProductsByDate).map(date => {
             const productsForDate = pastProductsByDate[date];
             if (!productsForDate || productsForDate.length === 0) return null;
-
             return (
-              <ProductSection
-                key={date}
-                title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}
-              >
+              <ProductSection key={date} title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}>
                 {productsForDate.map(p => <ProductCard key={p.id} product={p} />)}
               </ProductSection>
             );

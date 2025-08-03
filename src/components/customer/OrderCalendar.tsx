@@ -13,6 +13,8 @@ import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useAuth } from '../../context/AuthContext';
+import { useTutorial } from '../../context/TutorialContext'; // ✅ [추가]
+import { calendarPageTourSteps } from '../customer/AppTour'; // ✅ [추가]
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
@@ -22,16 +24,12 @@ import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderStatus } from '../../types';
 import toast from 'react-hot-toast';
-import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck } from 'lucide-react';
+import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, HelpCircle } from 'lucide-react'; // ✅ [추가]
 
-// =================================================================
-// 헬퍼 함수 및 타입 (기존과 동일)
-// =================================================================
-
+// --- 헬퍼 함수 및 타입 ---
 type ValuePiece = Date | null;
 type PickupStatus = 'pending' | 'completed' | 'noshow';
-
-interface AggregatedItem {
+interface AggregatedItem { 
   id: string; 
   productName: string;
   variantGroupName: string;
@@ -42,7 +40,6 @@ interface AggregatedItem {
   status: OrderStatus;
   wasPrepaymentRequired: boolean;
 }
-
 const holidays = new Holidays('KR');
 const customWeekday = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -109,7 +106,7 @@ const aggregateOrdersForDate = (ordersToAggregate: Order[]): AggregatedItem[] =>
 
 
 // =================================================================
-// 하위 컴포넌트 (기존과 동일)
+// 하위 컴포넌트
 // =================================================================
 
 const EmptyCalendarState: React.FC = () => {
@@ -236,7 +233,7 @@ const MonthlyChallenge: React.FC<{ orders: Order[], activeMonth: Date }> = ({ or
     }, [orders, activeMonth]);
 
     return (
-        <div className="monthly-challenge-container">
+        <div className="monthly-challenge-container" data-tutorial-id="calendar-challenge">
             <h3 className="challenge-title"><Trophy size={18} /> 이달의 챌린지</h3>
             <div className="challenge-list">
                 {challenges.map(c => (
@@ -267,6 +264,7 @@ const MonthlyChallenge: React.FC<{ orders: Order[], activeMonth: Date }> = ({ or
 
 const OrderCalendar: React.FC = () => {
   const { user, userDocument } = useAuth();
+  const { startTour } = useTutorial(); // ✅ [추가]
   const [selectedDate, setSelectedDate] = useState<ValuePiece>(null);
   const [activeMonth, setActiveMonth] = useState<Date>(new Date());
   const [userOrders, setUserOrders] = useState<Order[]>([]);
@@ -274,7 +272,6 @@ const OrderCalendar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  // ✅ [수정] 리팩토링으로 변경된 함수 이름에 'callable-' 접두사를 추가합니다.
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
 
   useEffect(() => {
@@ -351,7 +348,15 @@ const OrderCalendar: React.FC = () => {
   return (
     <>
       <div className="order-calendar-page-container">
-        <div className="calendar-wrapper">
+        {/* ✅ [추가] 페이지 헤더 */}
+        <div className="page-header-container">
+          <h1 className="page-title">나의 픽업 캘린더</h1>
+          <button onClick={() => startTour(calendarPageTourSteps)} className="tutorial-help-button-inline">
+            <HelpCircle size={20} />
+          </button>
+        </div>
+        
+        <div className="calendar-wrapper" data-tutorial-id="calendar-main"> {/* ✅ [추가] */}
           <Calendar
             onClickDay={(date) => selectedDate && isSameDay(date, selectedDate) ? setSelectedDate(null) : setSelectedDate(date)}
             value={selectedDate}
@@ -385,7 +390,7 @@ const OrderCalendar: React.FC = () => {
             prev2Label={null}
             next2Label={null}
           />
-          <div className="calendar-legend">
+          <div className="calendar-legend" data-tutorial-id="calendar-legend"> {/* ✅ [추가] */}
               <div className="legend-item"><span className="legend-color-box pending"></span> 픽업 예정</div>
               <div className="legend-item"><span className="legend-color-box completed"></span> 픽업 완료</div>
               <div className="legend-item"><span className="legend-color-box noshow"></span> 노쇼 발생</div>

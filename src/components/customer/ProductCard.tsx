@@ -8,7 +8,6 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import toast from 'react-hot-toast';
-// ✅ [수정] 타입 import 경로를 정리하고 명확하게 수정했습니다.
 import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
@@ -16,14 +15,9 @@ import './ProductCard.css';
 import { determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
-// ✅ [수정] ProductListPage로부터 displayRound를 받도록 타입을 재정의했습니다.
+// ProductListPage로부터 주요 정보를 props로 받도록 타입 확장
 type Product = OriginalProduct & {
-  reservedQuantities?: Record<string, number>;
   phase?: 'primary' | 'secondary' | 'past';
-  deadlines?: {
-    primaryEnd: Date | null;
-    secondaryEnd: Date | null;
-  };
   displayRound: OriginalSalesRound;
 }
 
@@ -100,34 +94,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   }, []);
 
   const cardData = useMemo(() => {
-    // ✅ [개선] getDisplayRound를 다시 호출하는 대신, props로 받은 displayRound를 사용합니다.
     const { displayRound } = product;
     if (!displayRound) return null;
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     
-    // ✅ [수정] displayRound에 예약 수량을 합쳐서 확장된 타입의 SalesRound 객체를 생성합니다.
-    const roundWithReserved: SalesRound = {
-      ...displayRound,
-      variantGroups: displayRound.variantGroups.map(vg => {
-        const key = `${product.id}-${displayRound.roundId}-${vg.id}`;
-        return {
-          ...vg,
-          reservedCount: product.reservedQuantities?.[key] || 0
-        };
-      })
-    };
-
-    const singleOptionVg = !isMultiOption ? (roundWithReserved.variantGroups?.[0] as VariantGroup) : undefined;
+    const singleOptionVg = !isMultiOption ? (displayRound.variantGroups?.[0] as VariantGroup) : undefined;
     const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
     return {
-      displayRound: roundWithReserved,
+      displayRound,
       isMultiOption,
       singleOptionItem,
       singleOptionVg,
-      price: singleOptionItem?.price ?? roundWithReserved.variantGroups?.[0]?.items?.[0]?.price ?? 0,
-      pickupDateFormatted: dayjs(safeToDate(roundWithReserved.pickupDate)).locale('ko').format('M/D(ddd)'),
+      price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
+      pickupDateFormatted: dayjs(safeToDate(displayRound.pickupDate)).locale('ko').format('M/D(ddd)'),
       storageType: product.storageType,
     };
   }, [product]);
@@ -136,7 +117,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg } = cardData;
     
-    const state = determineActionState(displayRound, userDocument, singleOptionVg);
+    const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
     
     if (state === 'PURCHASABLE' && isMultiOption) {
       return 'REQUIRE_OPTION';
@@ -279,7 +260,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     let stockText = '한정수량';
 
     if (isMultiOption) {
-      isLimited = displayRound.variantGroups.some(vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1);
+      isLimited = (displayRound.variantGroups as VariantGroup[]).some(vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1);
     } else if (singleOptionVg) {
       const totalStock = singleOptionVg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;

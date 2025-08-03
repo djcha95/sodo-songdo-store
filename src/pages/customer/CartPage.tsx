@@ -6,11 +6,13 @@ import React, { useState, useMemo, useRef, useEffect, useCallback, startTransiti
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { useTutorial } from '@/context/TutorialContext'; // ✅ [추가] useTutorial 훅 import
+import { cartPageTourSteps } from '@/components/customer/AppTour'; // ✅ [추가] 튜토리얼 스텝 import
 import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Timestamp } from 'firebase/firestore';
-import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
+import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote, HelpCircle } from 'lucide-react'; // ✅ [추가] HelpCircle 아이콘 import
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -21,7 +23,7 @@ import { addWaitlistEntry, getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
 // =================================================================
-// 📌 헬퍼 함수 및 하위 컴포넌트 (기존과 동일)
+// 📌 헬퍼 함수 및 하위 컴포넌트
 // =================================================================
 
 const safeToDate = (date: any): Date | null => {
@@ -137,6 +139,7 @@ const CartPage: React.FC = () => {
   const { user, userDocument, isSuspendedUser } = useAuth();
   const { reservationItems, waitlistItems, removeItems, updateCartItemQuantity } = useCart();
   const navigate = useNavigate();
+  const { startTour } = useTutorial(); // ✅ [추가]
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isSyncing, setIsSyncing] = useState(true);
@@ -365,7 +368,6 @@ const CartPage: React.FC = () => {
     });
   };
 
-  // ... (showOrderConfirmation, getButtonInfo 등 나머지 함수는 기존과 동일)
   const showOrderConfirmation = () => {
     if (eligibleReservationItems.length === 0 && waitlistItems.length === 0) {
       showToast('error', '장바구니에 예약 또는 대기할 상품이 없습니다.');
@@ -439,20 +441,30 @@ const CartPage: React.FC = () => {
           <div className="cart-items-column">
             <div className="cart-section-header">
               <h2 className="cart-section-title">🛒 예약 상품 ({reservationItems.length}) {isSyncing && <RefreshCw size={18} className="spin-icon" />}</h2>
-              {selectedReservationKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}><XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})</button>)}
+              <div className="cart-header-actions"> {/* Added this div for better layout */}
+                {selectedReservationKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}><XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})</button>)}
+                {/* ✅ [추가] 페이지별 튜토리얼 시작 버튼 */}
+                <button onClick={() => startTour(cartPageTourSteps)} className="tutorial-help-button-inline">
+                  <HelpCircle size={20} />
+                </button>
+              </div>
             </div>
-            {reservationItems.length > 0 ? (
-              <div className="cart-items-list">{reservationItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedReservationKeys.has(item.id)} isEligible={!ineligibleItemIds.has(item.id)} onSelect={(key) => handleItemSelect(key, 'reservation')} onImageClick={handleImageClick} />)}</div>
-            ) : (<div className="info-box"><p>장바구니에 담긴 예약 상품이 없습니다.</p></div>)}
+            <div data-tutorial-id="cart-reservation-list"> {/* ✅ [추가] data-tutorial-id 추가 */}
+              {reservationItems.length > 0 ? (
+                <div className="cart-items-list">{reservationItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedReservationKeys.has(item.id)} isEligible={!ineligibleItemIds.has(item.id)} onSelect={(key) => handleItemSelect(key, 'reservation')} onImageClick={handleImageClick} />)}</div>
+              ) : (<div className="info-box"><p>장바구니에 담긴 예약 상품이 없습니다.</p></div>)}
+            </div>
 
             <div className="waitlist-section">
               <div className="cart-section-header waitlist-header">
                 <h2 className="cart-section-title"><Hourglass size={18}/> 대기 상품 ({waitlistItems.length})</h2>
                 {selectedWaitlistKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('waitlist')}><XCircle size={16} /> 선택 삭제 ({selectedWaitlistKeys.size})</button>)}
               </div>
-              {waitlistItems.length > 0 ? (
-                <div className="cart-items-list">{waitlistItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedWaitlistKeys.has(item.id)} isEligible={true} onSelect={(key) => handleItemSelect(key, 'waitlist')} onImageClick={handleImageClick} />)}</div>
-              ) : (<div className="info-box"><p>품절 상품에 '대기 신청'을 하면 여기에 표시됩니다.</p></div>)}
+              <div data-tutorial-id="cart-waitlist-list"> {/* ✅ [추가] data-tutorial-id 추가 */}
+                {waitlistItems.length > 0 ? (
+                  <div className="cart-items-list">{waitlistItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedWaitlistKeys.has(item.id)} isEligible={true} onSelect={(key) => handleItemSelect(key, 'waitlist')} onImageClick={handleImageClick} />)}</div>
+                ) : (<div className="info-box"><p>품절 상품에 '대기 신청'을 하면 여기에 표시됩니다.</p></div>)}
+              </div>
             </div>
 
             {allItems.length === 0 && !isSyncing && (
@@ -462,7 +474,7 @@ const CartPage: React.FC = () => {
             )}
           </div>
         <div className="cart-summary-column">
-          <div className="cart-summary-card">
+          <div className="cart-summary-card" data-tutorial-id="cart-checkout-button"> {/* ✅ [추가] data-tutorial-id 추가 */}
             <button 
                 className="checkout-btn" 
                 onClick={showOrderConfirmation} 

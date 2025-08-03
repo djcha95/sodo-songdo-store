@@ -20,7 +20,7 @@ import {
   type Transaction,
 } from 'firebase/firestore';
 import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
-import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument, PointLog } from '@/types';
+import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument, PointLog, NotificationType } from '@/types';
 import { applyPointChangeByStatus, POINT_POLICIES } from './pointService';
 import { createNotification } from './notificationService';
 
@@ -169,7 +169,6 @@ const processWaitlistForCancelledItem = async (
   const roundIndex = salesHistory.findIndex(r => r.roundId === item.roundId);
   if (roundIndex === -1) return;
 
-  // ✅ [수정] 대기자 명단은 '판매 회차(round)'에 속해 있으므로 round에서 직접 접근합니다.
   const round = salesHistory[roundIndex];
   if (!round.waitlist || round.waitlist.length === 0) return;
 
@@ -199,7 +198,6 @@ const processWaitlistForCancelledItem = async (
           await submitOrderFromWaitlist(transaction, partialEntry, productData, round);
           availableStock -= quantityToConvert;
           if (!usersNotified.has(entry.userId)) {
-            // ✅ [수정] 올바른 알림 타입('WAITLIST_CONFIRMED')으로 변경합니다.
             await createNotification(entry.userId, `대기하시던 '${productData.groupName}' 상품이 예약으로 전환되었습니다!`, { type: "WAITLIST_CONFIRMED", link: "/mypage/history" });
             usersNotified.add(entry.userId);
           }
@@ -217,7 +215,6 @@ const processWaitlistForCancelledItem = async (
     }
   }
 
-  // ✅ [수정] round 객체의 waitlist와 waitlistCount를 직접 업데이트합니다.
   round.waitlist = remainingWaitlist;
   round.waitlistCount = remainingWaitlist.reduce((acc, curr) => acc + curr.quantity, 0);
   salesHistory[roundIndex] = round;
@@ -281,7 +278,7 @@ export const cancelOrder = async (order: Order): Promise<void> => {
 };
 
 /**
- * @description ✨ [신규] 하나의 주문을 두 개로 분할하고 각각 다른 상태를 적용하는 함수
+ * @description ✨ [수정] 하나의 주문을 두 개로 분할하고, 상태 변경 후 알림을 생성합니다.
  */
 export const splitAndUpdateOrderStatus = async (
   originalOrderId: string,
@@ -292,7 +289,8 @@ export const splitAndUpdateOrderStatus = async (
     throw new Error('픽업 수량은 1 이상이어야 합니다.');
   }
 
-  await runTransaction(db, async (transaction) => {
+  // ✅ [수정] 트랜잭션이 성공적으로 완료되면 알림에 필요한 정보를 반환하도록 구조 변경
+  const notificationInfo = await runTransaction(db, async (transaction) => {
     const originalOrderRef = doc(db, 'orders', originalOrderId);
     const originalOrderDoc = await transaction.get(originalOrderRef);
 
@@ -301,7 +299,6 @@ export const splitAndUpdateOrderStatus = async (
     }
 
     const originalOrder = { id: originalOrderId, ...originalOrderDoc.data() } as Order;
-    // 이 기능은 단일 품목 주문에 대해서만 작동한다고 가정
     const originalItem = originalOrder.items[0];
     const originalQuantity = originalItem.quantity;
     const remainingQuantity = originalQuantity - pickedUpQuantity;
@@ -310,7 +307,7 @@ export const splitAndUpdateOrderStatus = async (
       throw new Error('남는 수량이 없어 주문을 분할할 수 없습니다. 일반 상태 변경을 이용해주세요.');
     }
 
-    // --- 1. 남은 수량에 대한 '노쇼' 주문 생성 ---
+    // --- 1. 남은 수량에 대한 주문 생성 ---
     const remainingItem: OrderItem = { ...originalItem, quantity: remainingQuantity };
     const remainingOrder: Omit<Order, 'id'> = {
       ...originalOrder,
@@ -319,14 +316,12 @@ export const splitAndUpdateOrderStatus = async (
       totalPrice: remainingItem.unitPrice * remainingQuantity,
       status: remainingStatus,
       createdAt: serverTimestamp(),
-      splitFrom: originalOrderId, // 원본 주문 ID 추적
+      splitFrom: originalOrderId,
       notes: `[${originalOrder.orderNumber}]에서 분할된 ${remainingStatus} 주문`,
     };
     
     const newOrderRef = doc(collection(db, 'orders'));
     transaction.set(newOrderRef, remainingOrder);
-    
-    // 남은 주문에 대한 포인트/등급 페널티 적용
     await applyPointChangeByStatus(transaction, originalOrder.userId, { ...remainingOrder, id: newOrderRef.id }, remainingStatus);
 
     // --- 2. 원본 주문을 '픽업 완료' 상태로 수정 ---
@@ -335,24 +330,67 @@ export const splitAndUpdateOrderStatus = async (
       items: [pickedUpItem],
       totalPrice: pickedUpItem.unitPrice * pickedUpQuantity,
       status: 'PICKED_UP' as OrderStatus,
-      pickedUpAt: serverTimestamp(), // DB 업데이트용: FieldValue 타입
+      pickedUpAt: serverTimestamp(),
       notes: `[${newOrderRef.id}]로 ${remainingQuantity}개 분할 처리됨`,
     };
     
     transaction.update(originalOrderRef, pickedUpOrderUpdate);
-
-    // ✅ [수정] 포인트 계산 함수에 전달할 객체를 별도로 생성합니다.
-    // 타입 오류를 해결하기 위해 'pickedUpAt'에 실제 Timestamp 객체를 할당합니다.
     const orderForPointCalculation: Order = {
       ...originalOrder,
       ...pickedUpOrderUpdate,
-      pickedUpAt: Timestamp.now(), // 타입 검사용: Timestamp 타입
+      pickedUpAt: Timestamp.now(),
     };
-
-    // 픽업한 주문에 대한 포인트/등급 보상 적용
     await applyPointChangeByStatus(transaction, originalOrder.userId, orderForPointCalculation, 'PICKED_UP');
+
+    // --- 3. 알림 생성을 위한 정보 반환 ---
+    const userRef = doc(db, 'users', originalOrder.userId);
+    const userSnap = await transaction.get(userRef);
+    if (userSnap.exists()) {
+        return {
+            userId: originalOrder.userId,
+            userDoc: userSnap.data() as UserDocument,
+            productName: originalItem.productName,
+            pickedUpQuantity,
+            remainingQuantity,
+            remainingStatus,
+        };
+    }
+    return null;
   });
+
+  // --- 4. ✅ [수정] 트랜잭션 완료 후 반환된 정보로 알림 전송
+  if (notificationInfo) {
+    // 픽업 완료 알림
+    await createNotification(
+      notificationInfo.userId,
+      `'${notificationInfo.productName}' ${notificationInfo.pickedUpQuantity}개를 픽업해주셔서 감사합니다!`,
+      { type: 'ORDER_PICKED_UP', link: '/mypage/history' }
+    );
+
+    // 남은 수량(노쇼 등)에 대한 알림
+    if (notificationInfo.remainingStatus === 'NO_SHOW') {
+      const newNoShowCount = notificationInfo.userDoc.noShowCount; // applyPointChangeByStatus가 이미 최신 카운트로 업데이트함
+      let noShowMessage = '';
+      let noShowType: NotificationType = 'NO_SHOW_WARNING';
+
+      if (newNoShowCount === 1) {
+          noShowMessage = `[주의] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되었습니다. 앞으로 2회 더 노쇼 시 참여가 제한됩니다.`;
+      } else if (newNoShowCount === 2) {
+          noShowMessage = `[경고] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되었습니다. 다음 노쇼 시 참여가 제한됩니다.`;
+      } else {
+          noShowMessage = `[안내] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되어, 반복된 약속 불이행으로 참여가 제한되었습니다.`;
+          noShowType = 'PARTICIPATION_RESTRICTED';
+      }
+      
+      await createNotification(
+          notificationInfo.userId,
+          noShowMessage,
+          { type: noShowType, link: '/mypage' }
+      );
+    }
+  }
 };
+
 
 /**
  * @description 특정 사용자의 모든 주문 내역을 가져옵니다.
@@ -460,10 +498,6 @@ export const getAllOrdersForAdmin = async (): Promise<Order[]> => {
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
 
-
-/**
- * @description [사용 중단 예정] 전화번호 뒷자리로 주문을 검색합니다. (클라이언트 필터링 방식)
- */
 export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Order[]> => {
   if (!phoneNumber || phoneNumber.length < 4) return [];
   const querySnapshot = await getDocs(collection(db, 'orders'));
@@ -474,9 +508,6 @@ export const searchOrdersByPhoneNumber = async (phoneNumber: string): Promise<Or
   );
 };
 
-/**
- * @description [신규] 전화번호 뒷자리로 주문을 검색합니다. (인덱싱된 필드 사용)
- */
 export const getOrdersByPhoneLast4 = async (phoneLast4: string): Promise<Order[]> => {
   if (!phoneLast4 || phoneLast4.length < 2) return [];
 
@@ -506,8 +537,7 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus): P
  * @description 여러 주문의 상태를 일괄 변경하고, 신뢰도 포인트를 적용하며, 필요시 알림을 보냅니다.
  */
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
-
-  const notificationsToSend: { userId: string; message: string; link: string }[] = [];
+  const notificationsToSend: { userId: string; message: string; link: string; type: NotificationType }[] = [];
 
   await runTransaction(db, async (transaction) => {
     const productIdsToRead = new Set<string>();
@@ -571,23 +601,59 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
           transaction.update(doc(db, 'products', item.productId), { salesHistory: newSalesHistory });
         }
       }
-
+      
       transaction.update(orderRef, updateData);
 
-      if (status === 'PREPAID') {
-        const productName = order.items[0]?.productName || '주문하신 상품';
-        notificationsToSend.push({
-          userId: order.userId,
-          message: `'${productName}' 상품의 선입금이 확인되어 예약이 확정되었습니다!`,
-          link: '/mypage/history'
-        });
+      const productName = order.items[0]?.productName || '주문하신 상품';
+      switch (status) {
+        case 'PREPAID':
+          notificationsToSend.push({
+            userId: order.userId,
+            message: `'${productName}' 상품의 선입금이 확인되어 예약이 확정되었습니다!`,
+            link: '/mypage/history',
+            type: 'PAYMENT_CONFIRMED'
+          });
+          break;
+        case 'PICKED_UP':
+          notificationsToSend.push({
+            userId: order.userId,
+            message: `'${productName}' 상품을 픽업해주셔서 감사합니다! 신뢰 등급에 긍정적으로 반영되었습니다.`,
+            link: '/mypage',
+            type: 'ORDER_PICKED_UP'
+          });
+          break;
+        case 'NO_SHOW':
+          const userRef = doc(db, 'users', order.userId);
+          const userSnap = await transaction.get(userRef);
+          if (userSnap.exists()) {
+              const userDoc = userSnap.data() as UserDocument;
+              const newNoShowCount = userDoc.noShowCount; // applyPointChangeByStatus가 이미 최신 카운트로 업데이트함
+              let noShowMessage = '';
+              let noShowType: NotificationType = 'NO_SHOW_WARNING';
+
+              if (newNoShowCount === 1) {
+                  noShowMessage = `[주의] '${productName}' 상품이 노쇼 처리되었습니다. 앞으로 2회 더 노쇼 시 참여가 제한됩니다.`;
+              } else if (newNoShowCount === 2) {
+                  noShowMessage = `[경고] '${productName}' 상품이 노쇼 처리되었습니다. 다음 노쇼 시 참여가 제한됩니다.`;
+              } else {
+                  noShowMessage = `[안내] '${productName}' 상품이 노쇼 처리되어, 반복된 약속 불이행으로 참여가 제한되었습니다.`;
+                  noShowType = 'PARTICIPATION_RESTRICTED';
+              }
+              notificationsToSend.push({
+                  userId: order.userId,
+                  message: noShowMessage,
+                  link: '/mypage',
+                  type: noShowType
+              });
+          }
+          break;
       }
     }
   });
 
   for (const notif of notificationsToSend) {
     await createNotification(notif.userId, notif.message, {
-      type: 'PAYMENT_CONFIRMED',
+      type: notif.type,
       link: notif.link,
     });
   }

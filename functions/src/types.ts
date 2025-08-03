@@ -1,6 +1,6 @@
 // functions/src/types.ts
-// ✅ [수정] 사용하지 않는 'DocumentData' 타입을 import 구문에서 제거하여 경고를 해결했습니다.
 
+// ✅ [수정] 백엔드 환경에 맞는 'firebase-admin/firestore'에서 타입을 가져옵니다.
 import type { Timestamp, FieldValue } from "firebase-admin/firestore";
 
 // =================================================================
@@ -32,6 +32,7 @@ export interface PointLog {
   isExpired?: boolean;
 }
 
+// ✅ [수정] 프론트엔드와 동일하게 새로운 알림 타입을 모두 추가합니다.
 export type NotificationType =
   | "POINTS_EARNED"
   | "POINTS_USED"
@@ -40,6 +41,9 @@ export type NotificationType =
   | "PICKUP_TODAY"
   | "GENERAL_INFO"
   | "PAYMENT_CONFIRMED"
+  | "ORDER_PICKED_UP"          // 픽업 완료
+  | "NO_SHOW_WARNING"          // 노쇼 경고
+  | "PARTICIPATION_RESTRICTED" // 참여 제한
   | "success"
   | "error";
 
@@ -54,7 +58,7 @@ export interface Notification {
 
 
 // =================================================================
-// 📌 상품 및 판매 관련 타입
+// 📌 상품 및 판매 관련 타입 (프론트엔드와 동일하게 유지)
 // =================================================================
 
 export interface ProductItem {
@@ -125,7 +129,7 @@ export interface Product {
 
 
 // =================================================================
-// 🛒 장바구니 및 주문 관련 타입
+// 🛒 장바구니 및 주문 관련 타입 (프론트엔드와 동일하게 유지)
 // =================================================================
 
 export interface CartItem {
@@ -182,7 +186,7 @@ export interface Order {
 }
 
 // =================================================================
-// ⚙️ 기타 애플리케이션 타입
+// ⚙️ 기타 애플리케이션 타입 (프론트엔드와 동일하게 유지)
 // =================================================================
 export interface UserDocument {
   uid: string;

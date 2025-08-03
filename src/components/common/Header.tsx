@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, CalendarDays, Bell, Crown, Gem, Sparkles, ShieldAlert, ShieldX, TrendingUp, TrendingDown, Info, X, CheckCircle, XCircle, CalendarClock, Banknote } from 'lucide-react'; // ✅ Banknote 아이콘 추가
+import { ChevronLeft, CalendarDays, Bell, Crown, Gem, Sparkles, ShieldAlert, ShieldX, TrendingUp, TrendingDown, Info, X, CheckCircle, XCircle, CalendarClock, Banknote, AlertCircle } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
@@ -24,10 +24,15 @@ const notificationIcons: { [key in NotificationType | 'default']: React.ReactNod
   POINTS_EARNED: <TrendingUp size={20} className="icon-success" />,
   POINTS_USED: <TrendingDown size={20} className="icon-info" />,
   WAITLIST_CONFIRMED: <CheckCircle size={20} className="icon-success" />,
-  PAYMENT_CONFIRMED: <Banknote size={20} className="icon-success" />, // ✅ [추가] 선입금 확인 아이콘
+  PAYMENT_CONFIRMED: <Banknote size={20} className="icon-success" />,
   PICKUP_REMINDER: <CalendarClock size={20} className="icon-warning" />,
   PICKUP_TODAY: <CalendarDays size={20} className="icon-warning" />,
   GENERAL_INFO: <Info size={20} className="icon-info" />,
+  // ✅ [추가] 새로운 알림 타입에 대한 아이콘을 추가합니다.
+  ORDER_PICKED_UP: <CheckCircle size={20} className="icon-success" />,
+  NO_SHOW_WARNING: <AlertCircle size={20} className="icon-danger" />,
+  PARTICIPATION_RESTRICTED: <ShieldX size={20} className="icon-danger" />,
+  // ---
   success: <CheckCircle size={20} className="icon-success" />,
   error: <XCircle size={20} className="icon-danger" />,
   default: <Info size={20} className="icon-info" />,
@@ -159,13 +164,13 @@ const Header: React.FC<HeaderConfig> = (props) => {
         return mainPages[pathname];
     }
     
-const subPages: { [key: string]: string } = {
-    '/mypage/history': '예약 내역',
-    '/mypage/points': '포인트 내역',
-    '/mypage/orders': '나의 픽업 캘린더', // ✅ 이 줄을 추가해주세요!
-    '/mypage/waitlist': '대기 신청',
-    '/mypage/profile': '회원 정보',
-};
+    const subPages: { [key: string]: string } = {
+        '/mypage/history': '예약 내역',
+        '/mypage/points': '포인트 내역',
+        '/mypage/orders': '나의 픽업 캘린더', // ✅ 이 줄을 추가해주세요!
+        '/mypage/waitlist': '대기 신청',
+        '/mypage/profile': '회원 정보',
+    };
 
     for (const path in subPages) {
         if (pathname.startsWith(path)) {
@@ -205,7 +210,7 @@ const subPages: { [key: string]: string } = {
             </div>
             <div className="header-right">
                 {user && (
-                    <button className="new-notification-button" onClick={() => setIsModalOpen(true)} aria-label={`알림 ${unreadCount}개`}>
+                    <button className="new-notification-button" onClick={() => setIsModalOpen(true)} aria-label={`알림 ${unreadCount}개`} data-tutorial-id="header-notifications">
                         <Bell size={22} />
                         {hasPickupToday && <span className="pickup-indicator">!</span>}
                         {unreadCount > 0 && !hasPickupToday && <span className="notification-badge">{unreadCount}</span>}

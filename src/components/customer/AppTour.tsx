@@ -1,0 +1,206 @@
+// src/components/customer/AppTour.tsx
+
+import React from 'react';
+import Joyride, { type Step, type CallBackProps, STATUS } from 'react-joyride';
+import { useAuth } from '@/context/AuthContext';
+import { useTutorial } from '@/context/TutorialContext'; // ✅ [추가]
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/firebase/firebaseConfig';
+
+// 1. 메인 페이지 (ProductListPage) 튜토리얼 단계
+export const mainTourSteps: Step[] = [
+  {
+    target: '[data-tutorial-id="header-notifications"]',
+    content: '새로운 알림이나 오늘 픽업할 상품이 있으면 여기에 표시돼요!',
+    disableBeacon: true,
+  },
+  {
+    target: '[data-tutorial-id="main-banner"]',
+    content: '가장 먼저 보이는 메인 배너에서는 최신 소식과 이벤트 정보를 확인할 수 있어요!',
+  },
+  {
+    target: '[data-tutorial-id="primary-sale-section"]',
+    content: '🔥오늘의 공동구매! 매일 오후 1시에 오픈되는 상품들을 예약할 수 있는 핵심 공간입니다. 옆으로 스크롤해서 더 많은 상품을 확인해보세요!',
+  },
+  {
+    target: '[data-tutorial-id="secondary-sale-section"]',
+    content: '⏰마감임박 추가공구! 아쉽게 놓친 상품이 있다면, 픽업일 점심까지 여기서 마지막으로 예약할 수 있어요.',
+  },
+  {
+    target: '[data-tutorial-id="past-sale-section"]',
+    content: '최근에 마감된 상품들이 날짜별로 정리되어 있어요. 다른 분들이 어떤 상품을 샀는지 구경하고, 앵콜을 요청할 수도 있답니다.',
+    placement: 'top', // ✅ [추가] 화면 잘림 방지를 위해 툴팁을 위쪽에 표시
+  },
+  {
+    target: '[data-tutorial-id="bottom-nav-cart"]',
+    content: '상품을 담았다면 여기서 확인! 예약할 상품과 대기 상품을 모두 관리할 수 있어요.',
+    placement: 'top', // ✅ [추가]
+  },
+  { // ✅ [추가] 고객센터 튜토리얼 단계
+    target: '[data-tutorial-id="bottom-nav-customer-center"]',
+    content: '문의사항이 있거나 매장 정보가 궁금할 땐 고객센터를 이용해주세요.',
+    placement: 'top', // ✅ [추가]
+  },
+  {
+    target: '[data-tutorial-id="bottom-nav-mypage"]',
+    content: '나의 등급, 포인트, 주문 내역 등 모든 내 정보를 여기서 확인하세요. 튜토리얼이 끝나면 마이페이지로 이동해볼까요?',
+    placement: 'top', // ✅ [추가]
+  },
+];
+
+// 2. 상품 상세 페이지 (ProductDetailPage) 튜토리얼 단계
+export const detailPageTourSteps: Step[] = [
+    {
+        target: '[data-tutorial-id="detail-image-gallery"]',
+        content: '상품 이미지를 클릭하면 전체 화면으로 크게 볼 수 있어요.',
+        disableBeacon: true,
+    },
+    {
+        target: '[data-tutorial-id="detail-key-info"]',
+        content: '판매 회차, 마감일, 픽업일 등 중요한 정보는 여기서 확인하세요!',
+    },
+    {
+        target: '[data-tutorial-id="detail-options"]',
+        content: '옵션이 여러 개인 경우, 여기서 원하는 옵션을 선택할 수 있습니다.',
+    },
+    {
+        target: '[data-tutorial-id="detail-quantity-controls"]',
+        content: '여기서 구매할 수량을 조절할 수 있어요. 버튼을 길게 누르면 수량이 빠르게 변경됩니다.',
+    },
+    {
+        target: '[data-tutorial-id="detail-action-button"]',
+        content: '모든 선택이 끝났다면, 이 버튼을 눌러 장바구니에 담거나 대기 신청을 할 수 있습니다.',
+    },
+];
+
+// 3. 장바구니 페이지 (CartPage) 튜토리얼 단계
+export const cartPageTourSteps: Step[] = [
+    {
+        target: '[data-tutorial-id="cart-reservation-list"]',
+        content: '장바구니에 담은 예약 상품들이 여기에 표시됩니다. 상품을 길게 누르면 삭제할 수 있어요.',
+        disableBeacon: true,
+    },
+    {
+        target: '[data-tutorial-id="cart-waitlist-list"]',
+        content: '품절 상품에 대기 신청을 하면 여기에 표시돼요. 재고가 확보되면 자동으로 예약으로 전환됩니다!',
+    },
+    {
+        target: '[data-tutorial-id="cart-checkout-button"]',
+        content: '모든 상품을 확인했다면, 이 버튼을 눌러 최종적으로 예약을 확정하세요!',
+    },
+];
+
+// 4. 픽업 캘린더 페이지 (OrderCalendar) 튜토리얼 단계
+export const calendarPageTourSteps: Step[] = [
+    {
+        target: '[data-tutorial-id="calendar-main"]',
+        content: '이 캘린더에서 나의 픽업 일정을 한눈에 확인할 수 있어요. 날짜에 표시된 색깔은 픽업 상태를 의미합니다.',
+        disableBeacon: true,
+    },
+    {
+        target: '[data-tutorial-id="calendar-legend"]',
+        content: '픽업 예정, 완료, 노쇼 등 각 색상이 어떤 상태를 나타내는지 여기서 확인할 수 있습니다.',
+    },
+    {
+        target: '[data-tutorial-id="calendar-challenge"]',
+        content: '매달 주어지는 간단한 픽업 챌린지에 도전하고, 나의 활동을 점검해보세요!',
+    },
+    {
+        target: '[data-tutorial-id="calendar-main"]',
+        content: '픽업 일정이 있는 날짜를 클릭하면, 그날 찾아가야 할 상품 목록을 아래에서 바로 확인할 수 있답니다.',
+    },
+];
+
+
+interface AppTourProps {
+  steps: Step[];
+  tourKey: string; // ✅ [추가] 튜토리얼을 다시 시작하기 위한 key
+}
+
+const AppTour: React.FC<AppTourProps> = ({ steps, tourKey }) => {
+  const { user, userDocument } = useAuth();
+  const { stopTour } = useTutorial(); // ✅ [추가] stopTour 함수 가져오기
+
+  const handleJoyrideCallback = async (data: CallBackProps) => {
+    const { status } = data;
+    const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
+
+    if (finishedStatuses.includes(status)) {
+      stopTour(); // ✅ [수정] 튜토리얼이 끝나면 상태 업데이트
+
+      if (user?.uid && userDocument && !userDocument.hasCompletedTutorial) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, { hasCompletedTutorial: true });
+        } catch (error) {
+          console.error("튜토리얼 완료 상태 업데이트 실패:", error);
+        }
+      }
+    }
+  };
+
+  if (!steps || steps.length === 0) {
+    return null;
+  }
+
+  return (
+    <Joyride
+      key={tourKey} // ✅ [추가]
+      steps={steps}
+      run={steps.length > 0}
+      continuous
+      showProgress
+      showSkipButton
+      callback={handleJoyrideCallback}
+      scrollOffset={150} // ✅ [수정] 스크롤 버그 해결
+      floaterProps={{
+        styles: {
+          arrow: {
+            length: 8,
+            spread: 12,
+          },
+        },
+      }}
+      locale={{
+        back: '이전',
+        close: '닫기',
+        last: '완료',
+        next: '다음',
+        skip: '건너뛰기',
+      }}
+      styles={{
+        options: {
+          zIndex: 10000,
+          arrowColor: '#fff',
+          backgroundColor: '#fff',
+          primaryColor: 'var(--accent-color)',
+          textColor: 'var(--text-color-primary)',
+        },
+        tooltip: {
+          borderRadius: '12px',
+          padding: '16px 20px',
+          width: '340px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+        },
+        tooltipContent: {
+            padding: '8px 0',
+        },
+        buttonNext: {
+          fontWeight: 600,
+          fontSize: '15px',
+          padding: '10px 16px',
+        },
+        buttonBack: {
+            marginRight: 10,
+            fontWeight: 500,
+        },
+        buttonSkip: {
+            fontSize: '14px',
+            color: 'var(--text-color-secondary)',
+        }
+      }}
+    />
+  );
+};
+
+export default AppTour;

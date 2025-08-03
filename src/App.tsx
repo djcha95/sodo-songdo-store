@@ -7,37 +7,32 @@ import { CartProvider } from './context/CartContext';
 import { SelectionProvider } from './context/SelectionContext';
 import { EncoreRequestProvider } from './context/EncoreRequestContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { TutorialProvider } from './context/TutorialContext'; // ✅ [추가] 튜토리얼 프로바이더
+import AppTour from './components/customer/AppTour'; // ✅ [수정] 경로 변경
+import SodomallLoader from '@/components/common/SodomallLoader';
+import ReferralCodeModal from '@/components/auth/ReferralCodeModal';
 import './App.css';
 import './styles/variables.css';
 import './styles/common.css';
-import SodomallLoader from '@/components/common/SodomallLoader';
-import ReferralCodeModal from '@/components/auth/ReferralCodeModal'; // ✨ [신규] 추천인 코드 모달 import
 
 const App: React.FC = () => {
   const { loading, userDocument } = useAuth();
   const [isReferralModalVisible, setIsReferralModalVisible] = useState(false);
 
-  // userDocument가 로드되거나 변경될 때마다 실행
+  // 추천인 코드 모달을 띄우는 로직 (기존과 동일)
   useEffect(() => {
-    // 사용자가 로그인했고, userDocument가 로드되었으며,
-    // referredBy 필드가 null인 경우 (아직 코드를 입력하거나 건너뛰지 않은 신규 사용자)
     if (userDocument && userDocument.referredBy === null) {
-      // 약간의 딜레이 후 모달을 띄워 사용자 경험을 개선합니다.
       const timer = setTimeout(() => {
         setIsReferralModalVisible(true);
       }, 1500);
       return () => clearTimeout(timer);
     } else {
-      // 이미 코드를 입력했거나 건너뛴 사용자의 경우 모달을 닫습니다.
       setIsReferralModalVisible(false);
     }
   }, [userDocument]);
 
   const handleReferralModalSuccess = () => {
     setIsReferralModalVisible(false);
-    // AuthContext가 Firestore의 userDocument를 실시간으로 수신하므로,
-    // DB에서 referredBy 필드가 업데이트되면 userDocument가 자동으로 갱신되고
-    // useEffect가 다시 실행되어 모달이 더 이상 나타나지 않게 됩니다.
   };
 
   if (loading) {
@@ -46,25 +41,31 @@ const App: React.FC = () => {
 
   return (
     <>
-      {/* ❗️❗️ [중요] 중복 선언된 Toaster 삭제 ❗️❗️
-        프로젝트의 진입점인 'main.tsx'에 이미 Toaster가 있으므로,
-        이곳의 Toaster 컴포넌트는 반드시 삭제해야 합니다.
-      */}
-      
-      {/* ✨ [신규] 조건에 맞을 때 추천인 코드 입력 모달 렌더링 */}
+      {/* 추천인 코드 입력 모달 렌더링 (기존과 동일) */}
       {isReferralModalVisible && (
         <ReferralCodeModal onSuccess={handleReferralModalSuccess} />
       )}
 
-      <NotificationProvider>
-        <CartProvider>
-            <SelectionProvider>
-              <EncoreRequestProvider>
-                <Outlet />
-              </EncoreRequestProvider>
-            </SelectionProvider>
-        </CartProvider>
-      </NotificationProvider>
+      {/* ✅ [수정] 앱 전체를 TutorialProvider로 감싸 튜토리얼 기능을 활성화합니다. */}
+      <TutorialProvider>
+        {(tourSteps, tourKey) => ( // ✅ tourKey를 함께 받습니다.
+          <>
+            <NotificationProvider>
+              <CartProvider>
+                  <SelectionProvider>
+                    <EncoreRequestProvider>
+                      {/* Outlet을 통해 현재 라우트에 맞는 페이지가 렌더링됩니다. */}
+                      <Outlet />
+                    </EncoreRequestProvider>
+                  </SelectionProvider>
+              </CartProvider>
+            </NotificationProvider>
+
+            {/* ✅ [추가] AppTour 컴포넌트가 튜토리얼 오버레이를 화면에 표시합니다. */}
+            <AppTour steps={tourSteps} tourKey={tourKey} />
+          </>
+        )}
+      </TutorialProvider>
     </>
   );
 };
