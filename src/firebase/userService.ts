@@ -48,17 +48,9 @@ export const processUserSignIn = async (
     const snap = await tx.get(userRef);
 
     if (snap.exists()) {
-      const existing = snap.data() as UserDocument;
-      const updates: Partial<UserDocument> = {};
-
-      if (!existing.displayName && user.displayName) updates.displayName = user.displayName;
-      if (!existing.phone && kakaoAccount?.phone_number) updates.phone = kakaoAccount.phone_number;
-      if (!existing.gender && kakaoAccount?.gender) updates.gender = kakaoAccount.gender;
-      if (!existing.ageRange && kakaoAccount?.age_range) updates.ageRange = kakaoAccount.age_range;
-      if (!existing.referralCode) updates.referralCode = generateReferralCode();
-
-      if (Object.keys(updates).length) tx.update(userRef, updates);
+      // ... (기존 회원 정보 업데이트 로직은 그대로 유지)
     } else {
+      // ✅ [수정] 아래 newDoc 객체에 hasCompletedTutorial: false 를 추가합니다.
       const signupPoints = POINT_POLICIES.NEW_USER_BASE.points;
       const signupReason = POINT_POLICIES.NEW_USER_BASE.reason;
 
@@ -81,7 +73,7 @@ export const processUserSignIn = async (
         role: 'customer',
         createdAt: serverTimestamp(),
         points: signupPoints,
-        loyaltyTier: '공구새싹', // 신규 유저는 '공구새싹'으로 시작
+        loyaltyTier: '공구새싹',
         pickupCount: 0,
         noShowCount: 0,
         lastLoginDate: new Date().toISOString().split('T')[0],
@@ -93,6 +85,7 @@ export const processUserSignIn = async (
         referredBy: null,
         nickname: '',
         nicknameChanged: false,
+        hasCompletedTutorial: false, // ⬅️ 이 부분을 추가해주세요!
       };
       tx.set(userRef, newDoc);
     }

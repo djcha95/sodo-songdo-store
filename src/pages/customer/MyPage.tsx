@@ -10,7 +10,7 @@ import {
   ChevronRight, Calendar, BarChart2, Shield, Copy, Gift, UserPlus, Info, TrendingUp, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ReactMarkdown from 'react-markdown'; // ✅ [추가] react-markdown import
+import ReactMarkdown from 'react-markdown';
 import './MyPage.css';
 import toast from 'react-hot-toast';
 import type { LoyaltyTier, UserDocument } from '@/types';
@@ -35,29 +35,55 @@ const getLoyaltyInfo = (tier: LoyaltyTier): {
     }
 };
 
-const getTierProgressInfo = (pickupCount: number, noShowCount: number): {
+/**
+ * ✅ [수정] 등급별 진행 상태를 더 구체적으로 안내하는 함수
+ * @param tier 사용자의 현재 등급
+ * @param pickupCount 누적 픽업 횟수
+ * @param noShowCount 누적 노쇼 횟수
+ * @returns 픽업률과 다음 등급까지의 구체적인 안내 메시지
+ */
+const getTierProgressInfo = (tier: LoyaltyTier, pickupCount: number, noShowCount: number): {
   currentRate: number;
   progressMessage: string;
 } => {
   const totalTransactions = pickupCount + noShowCount;
+  const currentRate = totalTransactions > 0 ? Math.round((pickupCount / totalTransactions) * 100) : 0;
+
+  if (tier === '참여 제한') {
+    return { currentRate, progressMessage: "누적 노쇼 3회 이상으로 참여가 제한되었습니다." };
+  }
+  
   if (totalTransactions === 0) {
-    return { currentRate: 0, progressMessage: "첫 픽업 완료 시 등급이 산정됩니다." };
+      return { currentRate: 0, progressMessage: `첫 픽업 완료 시 등급이 산정됩니다.` };
   }
 
-  const currentRate = Math.round((pickupCount / totalTransactions) * 100);
+  switch (tier) {
+    case '주의 요망':
+      // '공구요정'으로 복귀하려면 픽업률 90% 이상이 필요합니다.
+      // (pickupCount + x) / (totalTransactions + x) >= 0.9  => x >= 9 * noShowCount - pickupCount
+      const pickupsToEscape = Math.max(0, (9 * noShowCount) - pickupCount);
+      return { currentRate, progressMessage: `'공구요정'으로 복귀하려면 약 ${pickupsToEscape}회의 추가 픽업이 필요해요.` };
 
-  if (noShowCount >= 3) return { currentRate, progressMessage: "누적 노쇼 3회로 참여가 제한되었습니다." };
-  if (currentRate >= 98 && pickupCount >= 50) return { currentRate, progressMessage: "최고 등급입니다!👍" };
-  if (currentRate >= 95 && pickupCount >= 20) {
-    const neededPickups = 50 - pickupCount;
-    return { currentRate, progressMessage: `다음 등급까지 픽업 ${neededPickups}회 남았어요!` };
+    case '공구새싹':
+      const neededForFairy = Math.max(0, 5 - pickupCount);
+      return { currentRate, progressMessage: `다음 등급 '공구요정'까지 픽업 ${neededForFairy}회 남았습니다. (픽업률 90%↑)` };
+
+    case '공구요정':
+      const neededForKing = Math.max(0, 20 - pickupCount);
+      return { currentRate, progressMessage: `다음 등급 '공구왕'까지 픽업 ${neededForKing}회 남았습니다. (픽업률 95%↑)` };
+
+    case '공구왕':
+      const neededForGod = Math.max(0, 50 - pickupCount);
+      return { currentRate, progressMessage: `다음 등급 '공구의 신'까지 픽업 ${neededForGod}회 남았습니다. (픽업률 98%↑)` };
+
+    case '공구의 신':
+      return { currentRate, progressMessage: "최고 등급 '공구의 신'입니다! 언제나 감사드립니다. 💖" };
+      
+    default:
+      return { currentRate, progressMessage: "성실한 픽업으로 등급을 올려보세요!" };
   }
-  if (currentRate >= 90 && pickupCount >= 5) {
-    const neededPickups = 20 - pickupCount;
-    return { currentRate, progressMessage: `다음 등급까지 픽업 ${neededPickups}회 남았어요!` };
-  }
-  return { currentRate, progressMessage: "성실한 픽업으로 등급을 올려보세요!" };
 };
+
 
 const getTierClassName = (tier: LoyaltyTier): string => {
   switch (tier) {
@@ -76,7 +102,6 @@ const getTierClassName = (tier: LoyaltyTier): string => {
 // 하위 컴포넌트
 // =================================================================
 
-// 원형 프로그레스 바 컴포넌트
 const CircularProgressBar: React.FC<{ percentage: number; tier: LoyaltyTier }> = ({ percentage, tier }) => {
   const [offset, setOffset] = useState(0);
   const radius = 52;
@@ -117,11 +142,9 @@ const CircularProgressBar: React.FC<{ percentage: number; tier: LoyaltyTier }> =
   );
 };
 
-// ✅ [신설] 신뢰 등급 안내 모달
 const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const tiers: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹'];
   
-  // ✅ [수정] 안내 문구를 변수로 분리
   const guideIntroText = "소도몰의 등급은 복잡한 포인트 점수가 아닌, 오직 **'픽업률'** 로만 결정됩니다. 고객님의 꾸준한 약속이 곧 신뢰 등급이 되는, 아주 간단하고 공정한 방식이에요.";
   const guideOutroText = "높은 신뢰 등급을 가진 고객님들께는 **'선주문'** 이나 **'시크릿 상품'** 참여 기회처럼 특별한 혜택이 가장 먼저 주어집니다!";
 
@@ -148,7 +171,6 @@ const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
               <button onClick={onClose} className="modal-close-button"><X size={24} /></button>
             </div>
             <div className="modal-body">
-              {/* ✅ [수정] <p> 대신 <ReactMarkdown> 사용 */}
               <div className="guide-intro">
                 <ReactMarkdown>{guideIntroText}</ReactMarkdown>
               </div>
@@ -163,7 +185,6 @@ const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
                   );
                 })}
               </div>
-               {/* ✅ [수정] <p> 대신 <ReactMarkdown> 사용 */}
               <div className="guide-outro">
                 <ReactMarkdown>{guideOutroText}</ReactMarkdown>
               </div>
@@ -176,12 +197,16 @@ const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
 };
 
 
-
-// 프로필 카드 컴포넌트
 const UnifiedProfileCard: React.FC<{ userDocument: UserDocument; onTierClick: () => void; }> = ({ userDocument, onTierClick }) => {
   const navigate = useNavigate();
   const loyaltyInfo = useMemo(() => getLoyaltyInfo(userDocument?.loyaltyTier || '공구새싹'), [userDocument?.loyaltyTier]);
-  const progressInfo = useMemo(() => getTierProgressInfo(userDocument?.pickupCount || 0, userDocument?.noShowCount || 0), [userDocument?.pickupCount, userDocument?.noShowCount]);
+  
+  // ✅ [수정] 새로운 getTierProgressInfo 함수를 호출하도록 수정
+  const progressInfo = useMemo(() => getTierProgressInfo(
+    userDocument?.loyaltyTier || '공구새싹',
+    userDocument?.pickupCount || 0,
+    userDocument?.noShowCount || 0
+  ), [userDocument?.loyaltyTier, userDocument?.pickupCount, userDocument?.noShowCount]);
   
   const tierClassName = getTierClassName(loyaltyInfo.tierName);
   const isAdminOrMaster = userDocument.role === 'admin' || userDocument.role === 'master';
@@ -225,8 +250,6 @@ const UnifiedProfileCard: React.FC<{ userDocument: UserDocument; onTierClick: ()
   );
 };
 
-
-// 이전 코드에서 생략되었던 컴포넌트들
 const NicknameSetupSection: React.FC<{ userDocument: UserDocument }> = ({ userDocument }) => {
     const [nicknameInput, setNicknameInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -360,7 +383,7 @@ const MenuList: React.FC = () => {
 const MyPage = () => {
   const { user, userDocument, logout } = useAuth();
   const navigate = useNavigate();
-  const [isTierGuideOpen, setIsTierGuideOpen] = useState(false); // 모달 상태 추가
+  const [isTierGuideOpen, setIsTierGuideOpen] = useState(false);
 
   const handleLogout = useCallback(() => {
     toast((t) => (

@@ -10,13 +10,15 @@ import type {
   LoyaltyTier
 } from '@/types';
 import { Timestamp } from 'firebase/firestore';
-import { getProductById } from '@/firebase'; // ✅ [수정] getReservedQuantitiesMap import 제거
+import { getProductById } from '@/firebase';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
+import { useTutorial } from '@/context/TutorialContext'; // ✅ [신규] useTutorial 훅 import
+import { detailPageTourSteps } from '@/components/customer/AppTour'; // ✅ [신규] 튜토리얼 스텝 import
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
-  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck, AlertTriangle
+  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck, HelpCircle // ✅ [신규] HelpCircle 아이콘 import
 } from 'lucide-react';
 
 // Swiper React components
@@ -95,6 +97,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const { addToCart } = useCart();
   const { user, userDocument, isSuspendedUser } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
+  const { startTour } = useTutorial(); // ✅ [신규]
 
   // --- 상태(State) 선언 ---
   const [product, setProduct] = useState<Product | null>(null);
@@ -153,9 +156,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
       setError(null);
 
       try {
-        // ✅ [수정] getReservedQuantitiesMap() 호출을 제거합니다.
-        // 이 함수는 모든 예약 정보를 클라이언트에서 집계하므로 고객 계정에서 권한 오류를 유발합니다.
-        // 올바른 방법은 백엔드에서 미리 계산된 예약 수량(reservedCount)을 상품 데이터에 포함시켜 제공하는 것입니다.
         const productData = await getProductById(productId);
 
         if (!productData) {
@@ -171,13 +171,9 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           return;
         }
         
-        // ✅ [수정] productData에 포함된 재고 정보를 사용하도록 로직을 변경합니다.
-        // 이제 VariantGroup 타입에 `reservedCount` 필드가 포함되어 있다고 가정하고 처리합니다.
-        // 이 `reservedCount` 필드는 Cloud Function 등을 통해 백엔드에서 업데이트되어야 합니다.
         const roundWithStockData: SalesRound = {
             ...latestRound,
             variantGroups: latestRound.variantGroups.map(vg => {
-                // `vg` 객체 자체에 `reservedCount`가 포함되어 있다고 가정하고, 없으면 0으로 초기화합니다.
                 return {
                     ...vg,
                     reservedCount: (vg as VariantGroup).reservedCount || 0
@@ -186,7 +182,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
         };
 
         setProduct(productData);
-        setDisplayRound(roundWithStockData); // 수정된 데이터를 state에 저장합니다.
+        setDisplayRound(roundWithStockData);
         setCurrentImageIndex(0);
         
         const firstVg = roundWithStockData.variantGroups?.[0];
@@ -201,7 +197,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
 
       } catch (e) {
         console.error("Error fetching product data:", e);
-        // ✅ [수정] Firebase 권한 오류에 대한 더 명확한 메시지를 제공합니다.
         if ((e as any).code === 'permission-denied' || (e as any).code === 'PERMISSION_DENIED') {
             setError('상품 정보를 불러올 권한이 없습니다. 관리자에게 문의하세요.');
         } else {
@@ -438,7 +433,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     return (
       <>
         <div className="main-content-area">
-          <div className="image-gallery-wrapper">
+          <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"> {/* ✅ [신규] data-tutorial-id 추가 */}
             <Swiper
               ref={swiperRef}
               modules={[Pagination, Navigation]}
@@ -472,10 +467,14 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           <div className="product-info-area">
             <div className="product-info-header">
               <h2 className="product-name">{product.groupName}</h2>
+              {/* ✅ [신규] 페이지별 튜토리얼 시작 버튼 */}
+              <button onClick={() => startTour(detailPageTourSteps)} className="tutorial-help-button">
+                <HelpCircle size={20} />
+              </button>
             </div>
             <p className="product-description">{product.description}</p>
 
-            <div className="product-key-info">
+            <div className="product-key-info" data-tutorial-id="detail-key-info"> {/* ✅ [신규] data-tutorial-id 추가 */}
               <div className="info-row">
                 <div className="info-label"><Tag size={16} />판매 회차</div>
                 <div className="info-value"><span className="round-name-badge">{displayRound.roundName}</span></div>
@@ -492,15 +491,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
                 <div className="info-label">{storageIcons?.[product.storageType]}보관 방법</div>
                 <div className={`info-value storage-type-${product.storageType}`}>{storageLabels?.[product.storageType]}</div>
               </div>
-              
-              {displayRound.isPrepaymentRequired && (
-                <div className="info-row">
-                  <div className="info-label"><AlertTriangle size={16} />결제 조건</div>
-                  <div className="info-value">
-                    <span className="prepayment-badge">선입금 필수</span>
-                  </div>
-                </div>
-              )}
               
               {(() => {
                 const tierCount = displayRound.allowedTiers?.length ?? 0;
@@ -592,7 +582,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     return (
         <div className="product-purchase-footer">
             {allAvailableOptions.length > 1 && (
-              <div className="select-wrapper">
+              <div className="select-wrapper" data-tutorial-id="detail-options"> {/* ✅ [신규] data-tutorial-id 추가 */}
                 <select className="price-select" onChange={handleOptionChange} value={allAvailableOptions.findIndex(opt => opt.item.id === selectedItem?.id)}>
                   {allAvailableOptions.map((opt, index) => {
                     const isSingleVg = displayRound.variantGroups.length === 1;
@@ -610,10 +600,10 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
               </div>
             )}
             
-            <div className="purchase-action-row">
+            <div className="purchase-action-row" data-tutorial-id="detail-action-button"> {/* ✅ [신규] data-tutorial-id 추가 */}
               {showQuantityControls && (
                 <>
-                  <div className="quantity-controls-fixed" onClick={(e) => e.stopPropagation()}>
+                  <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls" onClick={(e) => e.stopPropagation()}> {/* ✅ [신규] data-tutorial-id 추가 */}
                       <button {...decrementHandlers} disabled={quantity <= 1} className="quantity-btn">-</button>
                       {isQuantityEditing ? (
                         <input

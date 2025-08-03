@@ -1,7 +1,7 @@
 // src/components/BottomNav.tsx
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext'; // 상대 경로 수정
-import { useCart } from '@/context/CartContext'; // 상대 경로 수정
+import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
 import { FiHome, FiShoppingBag, FiShoppingCart, FiUser, FiSettings, FiMessageSquare } from 'react-icons/fi';
 import './BottomNav.css';
 
@@ -9,7 +9,6 @@ const BottomNav = () => {
   const { isAdmin } = useAuth();
   const { reservationItemCount, waitlistItemCount } = useCart();
 
-  // 예약 상품과 대기 상품 수를 더하여 전체 아이템 수를 계산
   const cartItemCount = reservationItemCount + waitlistItemCount;
 
   const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
@@ -26,7 +25,7 @@ const BottomNav = () => {
         <FiShoppingBag />
         <span>현장 판매</span>
       </NavLink>
-      <NavLink to="/cart" className={getNavLinkClass}>
+      <NavLink to="/cart" className={getNavLinkClass} data-tutorial-id="bottom-nav-cart">
         <div className="cart-icon-wrapper">
           <FiShoppingCart />
           {cartItemCount > 0 && (
@@ -35,12 +34,12 @@ const BottomNav = () => {
         </div>
         <span>장바구니</span>
       </NavLink>
-      {/* ✅ [수정] '고객센터' 메뉴의 경로를 /customer-center 로 수정합니다. */}
-      <NavLink to="/customer-center" className={getNavLinkClass}>
+      {/* ✅ [추가] 고객센터 아이콘에 튜토리얼 ID 추가 */}
+      <NavLink to="/customer-center" className={getNavLinkClass} data-tutorial-id="bottom-nav-customer-center">
         <FiMessageSquare />
         <span>고객센터</span>
       </NavLink>
-      <NavLink to="/mypage" className={getNavLinkClass}>
+      <NavLink to="/mypage" className={getNavLinkClass} data-tutorial-id="bottom-nav-mypage">
         <FiUser />
         <span>마이페이지</span>
       </NavLink>

@@ -47,7 +47,10 @@ export type NotificationType =
   | 'PICKUP_REMINDER'
   | 'PICKUP_TODAY'
   | 'GENERAL_INFO'
-  | 'PAYMENT_CONFIRMED' // ✅ [추가] 선입금(결제) 확인 타입
+  | 'PAYMENT_CONFIRMED'
+  | 'ORDER_PICKED_UP'          // 픽업 완료
+  | 'NO_SHOW_WARNING'          // 노쇼 경고
+  | 'PARTICIPATION_RESTRICTED' // 참여 제한
   | 'success'
   | 'error';
 
@@ -213,7 +216,7 @@ export interface UserDocument {
   displayName: string | null;
   phone: string | null;
   photoURL?: string | null;
-  role: 'master' | 'admin' | 'customer'; 
+  role: 'master' | 'admin' | 'customer';
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
   points: number;
@@ -222,7 +225,7 @@ export interface UserDocument {
   pickupCount: number;
   noShowCount: number;
   lastLoginDate: string;
-  consecutiveLoginDays?: number; // ✅ [추가] 연속 출석일수 추적
+  consecutiveLoginDays?: number;
   isSuspended?: boolean;
   gender?: 'male' | 'female' | null;
   ageRange?: string | null;
@@ -234,7 +237,8 @@ export interface UserDocument {
   referredBy?: string | null;
   nickname?: string;
   nicknameChanged?: boolean;
-  manualTier?: LoyaltyTier | null; // ✨ [추가] 수동 지정 등급 필드
+  manualTier?: LoyaltyTier | null;
+  hasCompletedTutorial?: boolean; // ✅ [추가] 튜토리얼 완료 여부 필드
 }
 
 export interface Banner {
