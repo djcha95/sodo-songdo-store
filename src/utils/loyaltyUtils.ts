@@ -1,4 +1,6 @@
 // src/utils/loyaltyUtils.ts
+// ✅ [확인] 이 파일은 이미 올바른 로직을 가지고 있어 수정이 필요 없습니다.
+// 서버 측('functions/src/utils/helpers.ts') 코드를 이 파일의 로직과 동일하게 수정했습니다.
 
 import type { LoyaltyTier } from '@/types';
 

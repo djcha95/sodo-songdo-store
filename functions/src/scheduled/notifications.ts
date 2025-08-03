@@ -17,16 +17,24 @@ export const sendPickupReminders = onSchedule(
     try {
       const db = getFirestore();
       
-      const now = new Date(); // 변수명을 now로 사용합니다.
+      const now = new Date();
+      
+      // ✅ --- [수정] 시간 계산 로직 단순화 및 표준화 ---
+      // KST 기준으로 '오늘'의 시작과 '내일'의 시작을 계산합니다.
       const kstDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
       const todayStart = new Date(`${kstDateString}T00:00:00.000+09:00`);
-      const todayEnd = new Date(`${kstDateString}T23:59:59.999+09:00`);
+      
+      const tomorrow = new Date(todayStart);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStart = tomorrow;
+      // ✅ --- 수정 끝 ---
       
       const twentyFourHoursAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
 
       const ordersSnapshot = await db.collection("orders")
+        // ✅ [수정] 쿼리 조건을 '오늘 시작' ~ '내일 시작 전'으로 변경하여 안정성 확보
         .where("pickupDate", ">=", todayStart)
-        .where("pickupDate", "<=", todayEnd)
+        .where("pickupDate", "<", tomorrowStart)
         .where("status", "in", ["RESERVED", "PREPAID"])
         .get();
 
@@ -73,7 +81,6 @@ export const sendPickupReminders = onSchedule(
 
         if (urgentItems.length > 0) {
           templateCode = "URGENT_PICKUP_TODAY";
-          // ✅ [수정] 'today'를 'now'로 변경하여 오류를 해결했습니다.
           templateVariables.오늘날짜 = `${now.getMonth() + 1}월 ${now.getDate()}일`;
           templateVariables.긴급상품목록 = urgentItems.map(item => `${item.itemName} ${item.quantity}개`).join('\n');
           templateVariables.추가안내 = standardItems.length > 0 ? `이 외에 ${standardItems.length}건의 다른 픽업 상품도 오늘부터 수령 가능합니다.` : '';
@@ -109,7 +116,7 @@ export const sendPrepaymentReminders = onSchedule(
     
     try {
         const db = getFirestore();
-        const today = new Date(); // 이 함수 내에서는 'today'를 사용하므로 그대로 둡니다.
+        const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
         const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 

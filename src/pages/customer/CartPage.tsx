@@ -1,4 +1,6 @@
 // src/pages/customer/CartPage.tsx
+// ✅ [UX 개선] 선입금 안내 토스트가 자동으로 닫히지 않도록 수정했습니다.
+// 사용자가 계좌번호 등 중요 정보를 충분히 확인하고 직접 닫을 수 있도록 하여 안정성을 높였습니다.
 
 import React, { useState, useMemo, useRef, useEffect, useCallback, startTransition } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -18,115 +20,118 @@ import './CartPage.css';
 import { addWaitlistEntry, getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
+// =================================================================
+// 📌 헬퍼 함수 및 하위 컴포넌트 (기존과 동일)
+// =================================================================
 
 const safeToDate = (date: any): Date | null => {
-  if (!date) return null;
-  if (date instanceof Date) return date;
-  if (typeof date.toDate === 'function') return date.toDate();
-  
-  if (typeof date === 'object' && (date.seconds !== undefined || date._seconds !== undefined)) {
-    const seconds = date.seconds ?? date._seconds;
-    const nanoseconds = date.nanoseconds ?? date._nanoseconds ?? 0;
-    return new Timestamp(seconds, nanoseconds).toDate();
-  }
-  
-  if (typeof date === 'string') {
-    const parsedDate = new Date(date);
-    if (!isNaN(parsedDate.getTime())) return parsedDate;
-  }
-  return null;
-};
-
-
-const CartItemCard: React.FC<{ 
-  item: CartItem; 
-  isSelected: boolean; 
-  isEligible: boolean;
-  onSelect: (id: string) => void; 
-  onImageClick: (e: React.MouseEvent, id: string) => void; 
-}> = ({ item, isSelected, isEligible, onSelect, onImageClick }) => {
-  const { updateCartItemQuantity } = useCart();
-  const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState(item.quantity.toString());
-  const inputRef = useRef<HTMLInputElement>(null);
-  const stockLimit = useMemo(() => item.stock === null || item.stock === -1 ? 999 : item.stock, [item.stock]);
-
-  useEffect(() => { if (!isEditing) setInputValue(item.quantity.toString()); }, [item.quantity, isEditing]);
-  useEffect(() => { if (isEditing && inputRef.current) inputRef.current.focus(); }, [isEditing]);
-  
-  const handleQuantityClick = (e: React.MouseEvent) => { e.stopPropagation(); if (isEligible) setIsEditing(true); };
-  const handleQuantityUpdate = useCallback(() => {
-    const newQuantity = parseInt(inputValue, 10);
-    const finalQuantity = !isNaN(newQuantity) && newQuantity > 0 ? Math.min(newQuantity, stockLimit) : 1;
-    if (finalQuantity !== item.quantity) {
-      updateCartItemQuantity(item.id, finalQuantity);
-      if (newQuantity > stockLimit) showToast('error', `최대 ${stockLimit}개까지만 구매 가능합니다.`);
-      else if (newQuantity < 1) showToast('error', '최소 1개 이상 구매해야 합니다.');
+    if (!date) return null;
+    if (date instanceof Date) return date;
+    if (typeof date.toDate === 'function') return date.toDate();
+    if (typeof date === 'object' && (date.seconds !== undefined || date._seconds !== undefined)) {
+      const seconds = date.seconds ?? date._seconds;
+      const nanoseconds = date.nanoseconds ?? date._nanoseconds ?? 0;
+      return new Timestamp(seconds, nanoseconds).toDate();
     }
-    setIsEditing(false);
-  }, [inputValue, item.id, item.quantity, stockLimit, updateCartItemQuantity]);
+    if (typeof date === 'string') {
+      const parsedDate = new Date(date);
+      if (!isNaN(parsedDate.getTime())) return parsedDate;
+    }
+    return null;
+};
   
-  const handleInputKeyDown = (event: React.KeyboardEvent) => { if (event.key === 'Enter') handleQuantityUpdate(); };
-
-  const createQuantityHandlers = useCallback((change: number) => {
-    const performUpdate = () => {
-      if (!isEligible) return;
-      const newQuantity = item.quantity + change;
-      if (newQuantity < 1 || newQuantity > stockLimit) return;
-      updateCartItemQuantity(item.id, newQuantity);
-    };
-    return useLongPress(performUpdate, performUpdate, { delay: 100 });
-  }, [item, stockLimit, updateCartItemQuantity, isEligible]);
-
-  const decreaseHandlers = createQuantityHandlers(-1);
-  const increaseHandlers = createQuantityHandlers(1);
-
-  const formatPickupDate = (dateValue: any) => {
-    const date = safeToDate(dateValue);
-    if (!date) return '픽업일 정보 없음';
-    return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
-  }
-
-  return (
-    <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${!isEligible ? 'ineligible' : ''}`} onClick={() => onSelect(item.id)}>
-      {!isEligible && (
-          <div className="ineligible-overlay">
-              <ShieldX size={24} />
-              <span>현재 등급으로<br/>예약 불가</span>
+const CartItemCard: React.FC<{ 
+    item: CartItem; 
+    isSelected: boolean; 
+    isEligible: boolean;
+    onSelect: (id: string) => void; 
+    onImageClick: (e: React.MouseEvent, id: string) => void; 
+}> = ({ item, isSelected, isEligible, onSelect, onImageClick }) => {
+    const { updateCartItemQuantity } = useCart();
+    const [isEditing, setIsEditing] = useState(false);
+    const [inputValue, setInputValue] = useState(item.quantity.toString());
+    const inputRef = useRef<HTMLInputElement>(null);
+    const stockLimit = useMemo(() => item.stock === null || item.stock === -1 ? 999 : item.stock, [item.stock]);
+  
+    useEffect(() => { if (!isEditing) setInputValue(item.quantity.toString()); }, [item.quantity, isEditing]);
+    useEffect(() => { if (isEditing && inputRef.current) inputRef.current.focus(); }, [isEditing]);
+    
+    const handleQuantityClick = (e: React.MouseEvent) => { e.stopPropagation(); if (isEligible) setIsEditing(true); };
+    const handleQuantityUpdate = useCallback(() => {
+      const newQuantity = parseInt(inputValue, 10);
+      const finalQuantity = !isNaN(newQuantity) && newQuantity > 0 ? Math.min(newQuantity, stockLimit) : 1;
+      if (finalQuantity !== item.quantity) {
+        updateCartItemQuantity(item.id, finalQuantity);
+        if (newQuantity > stockLimit) showToast('error', `최대 ${stockLimit}개까지만 구매 가능합니다.`);
+        else if (newQuantity < 1) showToast('error', '최소 1개 이상 구매해야 합니다.');
+      }
+      setIsEditing(false);
+    }, [inputValue, item.id, item.quantity, stockLimit, updateCartItemQuantity]);
+    
+    const handleInputKeyDown = (event: React.KeyboardEvent) => { if (event.key === 'Enter') handleQuantityUpdate(); };
+  
+    const createQuantityHandlers = useCallback((change: number) => {
+      const performUpdate = () => {
+        if (!isEligible) return;
+        const newQuantity = item.quantity + change;
+        if (newQuantity < 1 || newQuantity > stockLimit) return;
+        updateCartItemQuantity(item.id, newQuantity);
+      };
+      return useLongPress(performUpdate, performUpdate, { delay: 100 });
+    }, [item, stockLimit, updateCartItemQuantity, isEligible]);
+  
+    const decreaseHandlers = createQuantityHandlers(-1);
+    const increaseHandlers = createQuantityHandlers(1);
+  
+    const formatPickupDate = (dateValue: any) => {
+      const date = safeToDate(dateValue);
+      if (!date) return '픽업일 정보 없음';
+      return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
+    }
+  
+    return (
+      <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${!isEligible ? 'ineligible' : ''}`} onClick={() => onSelect(item.id)}>
+        {!isEligible && (
+            <div className="ineligible-overlay">
+                <ShieldX size={24} />
+                <span>현재 등급으로<br/>예약 불가</span>
+            </div>
+        )}
+        <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
+          <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
+        </div>
+        <div className="item-details-wrapper">
+          <div className="item-header">
+              <div className="item-name-group">
+                  <span className="item-product-name">{item.variantGroupName}</span>
+                  <span className="item-option-name">선택: {item.itemName}</span>
+              </div>
+              <div className="item-pickup-info"><CalendarDays size={14} /><span>{formatPickupDate(item.pickupDate)}</span></div>
           </div>
-      )}
-      <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
-        <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
-      </div>
-      <div className="item-details-wrapper">
-        <div className="item-header">
-            <div className="item-name-group">
-                <span className="item-product-name">{item.variantGroupName}</span>
-                <span className="item-option-name">선택: {item.itemName}</span>
-            </div>
-            <div className="item-pickup-info"><CalendarDays size={14} /><span>{formatPickupDate(item.pickupDate)}</span></div>
-        </div>
-        <div className="item-footer">
-            {item.status === 'WAITLIST' ? (
-              <div className="waitlist-status-badge"><Info size={14}/><span>재고 확보 시 자동 예약 전환</span></div>
-            ) : (
-              <div className="item-total-price">{(item.unitPrice * item.quantity).toLocaleString()}원</div>
-            )}
-            <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}>
-              <button {...decreaseHandlers} disabled={item.quantity <= 1 || !isEligible}><Minus size={18} /></button>
-              {isEditing ? (
-                <input ref={inputRef} type="number" className="quantity-input" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onBlur={handleQuantityUpdate} onKeyDown={handleInputKeyDown} />
+          <div className="item-footer">
+              {item.status === 'WAITLIST' ? (
+                <div className="waitlist-status-badge"><Info size={14}/><span>재고 확보 시 자동 예약 전환</span></div>
               ) : (
-                <span className="quantity-display" onClick={handleQuantityClick}>{item.quantity}</span>
+                <div className="item-total-price">{(item.unitPrice * item.quantity).toLocaleString()}원</div>
               )}
-              <button {...increaseHandlers} disabled={item.quantity >= stockLimit || !isEligible}><Plus size={18} /></button>
-            </div>
+              <div className="item-quantity-controls" onClick={(e) => e.stopPropagation()}>
+                <button {...decreaseHandlers} disabled={item.quantity <= 1 || !isEligible}><Minus size={18} /></button>
+                {isEditing ? (
+                  <input ref={inputRef} type="number" className="quantity-input" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onBlur={handleQuantityUpdate} onKeyDown={handleInputKeyDown} />
+                ) : (
+                  <span className="quantity-display" onClick={handleQuantityClick}>{item.quantity}</span>
+                )}
+                <button {...increaseHandlers} disabled={item.quantity >= stockLimit || !isEligible}><Plus size={18} /></button>
+              </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
+// =================================================================
+// 📌 메인 컴포넌트
+// =================================================================
 
 const CartPage: React.FC = () => {
   const { user, userDocument, isSuspendedUser } = useAuth();
@@ -140,7 +145,6 @@ const CartPage: React.FC = () => {
   const [ineligibleItemIds, setIneligibleItemIds] = useState<Set<string>>(new Set());
   
   const functions = getFunctions(getApp(), 'asia-northeast3');
-  // ✅ [수정] 리팩토링으로 변경된 함수 이름에 'callable-' 접두사를 추가합니다.
   const checkCartStockCallable = httpsCallable<any, any>(functions, 'callable-checkCartStock');
   const submitOrderCallable = httpsCallable<any, any>(functions, 'callable-submitOrder');
 
@@ -306,12 +310,9 @@ const CartPage: React.FC = () => {
         const prepaymentRequired = orderPayload?.wasPrepaymentRequired ?? false;
         
         if (prepaymentRequired) {
-          let hasNavigated = false;
           const toastId = 'prepayment-toast';
 
           const performNavigation = () => {
-            if (hasNavigated) return;
-            hasNavigated = true;
             toast.dismiss(toastId);
             startTransition(() => {
               removeItems(processedItemIds);
@@ -319,8 +320,7 @@ const CartPage: React.FC = () => {
             });
           };
 
-          const autoCloseDuration = 6000;
-          
+          // ✅ [UX 개선] 자동으로 닫히지 않도록 duration을 Infinity로 설정합니다.
           toast.custom((t) => (
             <div className="prepayment-modal-overlay">
               <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
@@ -340,9 +340,8 @@ const CartPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ), { id: toastId, duration: autoCloseDuration });
+          ), { id: toastId, duration: Infinity }); // ✅ duration: Infinity
 
-          setTimeout(performNavigation, autoCloseDuration); 
           return '';
         } else {
           setTimeout(() => {
@@ -366,6 +365,7 @@ const CartPage: React.FC = () => {
     });
   };
 
+  // ... (showOrderConfirmation, getButtonInfo 등 나머지 함수는 기존과 동일)
   const showOrderConfirmation = () => {
     if (eligibleReservationItems.length === 0 && waitlistItems.length === 0) {
       showToast('error', '장바구니에 예약 또는 대기할 상품이 없습니다.');
@@ -409,30 +409,28 @@ const CartPage: React.FC = () => {
     ), { id: 'order-confirmation', duration: Infinity, style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
   };
   
-const getButtonInfo = () => {
-    if (isSuspendedUser) return { text: <><ShieldX size={20} /> 참여 제한</>, disabled: true };
-    if (isProcessingOrder || isSyncing) return { text: '처리 중...', disabled: true };
-    
-    const hasReservation = eligibleReservationItems.length > 0;
-    const hasWaitlist = waitlistItems.length > 0;
-
-    if (hasReservation && hasWaitlist) {
-      return { text: '예약 및 대기 확정하기', disabled: false };
-    }
-    if (hasReservation) {
-      return { text: '예약 확정하기', disabled: false };
-    }
-    if (hasWaitlist) {
-      return { text: '대기 신청 확정하기', disabled: false };
-    }
-    
-    return { text: '예약/대기 상품 없음', disabled: true };
-};
-
-  const buttonInfo = getButtonInfo();
+  const getButtonInfo = () => {
+      if (isSuspendedUser) return { text: <><ShieldX size={20} /> 참여 제한</>, disabled: true };
+      if (isProcessingOrder || isSyncing) return { text: '처리 중...', disabled: true };
+      
+      const hasReservation = eligibleReservationItems.length > 0;
+      const hasWaitlist = waitlistItems.length > 0;
   
+      if (hasReservation && hasWaitlist) {
+        return { text: '예약 및 대기 확정하기', disabled: false };
+      }
+      if (hasReservation) {
+        return { text: '예약 확정하기', disabled: false };
+      }
+      if (hasWaitlist) {
+        return { text: '대기 신청 확정하기', disabled: false };
+      }
+      
+      return { text: '예약/대기 상품 없음', disabled: true };
+  };
+  
+  const buttonInfo = getButtonInfo();
   const allItems = useMemo(() => [...reservationItems, ...waitlistItems], [reservationItems, waitlistItems]);
-  const totalPrice = useMemo(() => reservationItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0), [reservationItems]);
 
   return (
     <div className="cart-page-wrapper">
