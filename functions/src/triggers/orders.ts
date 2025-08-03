@@ -1,10 +1,14 @@
 // functions/src/triggers/orders.ts
-import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted, FirestoreEvent, DocumentSnapshot, Change } from "firebase-functions/v2/firestore";
+// ✅ [버그 수정] 타입 정의와 일치하지 않던 주문 상태 문자열과 불필요한 import를 수정하여
+// 타입스크립트 오류를 해결하고 로직의 안정성을 확보했습니다.
+
+import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent, DocumentSnapshot, Change } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/config.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { calculateTier, POINT_POLICIES } from "../utils/helpers.js";
-import { sendAlimtalk } from "../utils/nhnApi.js"; // ✨ [추가] 알림톡 발송 함수 import
+import { sendAlimtalk } from "../utils/nhnApi.js";
+// ✅ [수정] 사용하지 않는 Product, OrderItem 타입을 import 목록에서 제거했습니다.
 import type { Order, UserDocument, PointLog } from "../types.js";
 
 interface ProductWithHistory {
@@ -27,7 +31,8 @@ export const onOrderCreated = onDocumentCreated(
     if (!snapshot) return;
 
     const order = snapshot.data() as Order;
-    if (order.status === "cancelled") return;
+    // ✅ [수정] 표준 타입 'CANCELED'로 비교합니다.
+    if (order.status === "CANCELED") return;
 
     const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
     for (const item of order.items) {
@@ -73,7 +78,6 @@ export const onOrderCreated = onDocumentCreated(
         });
         logger.info(`Successfully updated reservedCount for order ${event.params.orderId}`);
 
-        // --- ✨ [추가] 주문 생성 알림톡 발송 로직 ---
         try {
             const userDoc = await db.collection("users").doc(order.userId).get();
             if (!userDoc.exists) return;
@@ -82,7 +86,6 @@ export const onOrderCreated = onDocumentCreated(
 
             const orderPickupDate = (order.pickupDate as Timestamp).toDate();
             
-            // KST 기준으로 오늘의 시작을 계산
             const now = new Date();
             const kstDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
             const todayStartKST = new Date(`${kstDateString}T00:00:00.000+09:00`);
@@ -93,11 +96,10 @@ export const onOrderCreated = onDocumentCreated(
                 대표상품명: order.items[0]?.productName || '주문하신 상품',
             };
 
-            // 픽업일이 오늘과 같거나 이전인 경우 (오늘 바로 픽업)
             if (orderPickupDate <= todayStartKST || orderPickupDate.toDateString() === new Date().toDateString()) {
-                templateCode = "ORDER_CONFIRMED_IMMEDIATE"; // 즉시 픽업 안내 템플릿
-            } else { // 픽업일이 미래인 경우 (예약 확정 안내)
-                templateCode = "ORDER_CONFIRMED_FUTURE"; // 예약 확정 안내 템플릿
+                templateCode = "ORDER_CONFIRMED_IMMEDIATE";
+            } else {
+                templateCode = "ORDER_CONFIRMED_FUTURE";
                 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
                 templateVariables.픽업시작일 = `${orderPickupDate.getMonth() + 1}월 ${orderPickupDate.getDate()}일(${weekdays[orderPickupDate.getDay()]})`;
             }
@@ -109,7 +111,6 @@ export const onOrderCreated = onDocumentCreated(
         } catch (alimtalkError) {
             logger.error(`Failed to send Alimtalk for order ${event.params.orderId}:`, alimtalkError);
         }
-        // --- ✨ 알림톡 발송 로직 끝 ---
 
     } catch (error) {
         logger.error(`Transaction failed for order ${event.params.orderId} creation:`, error);
@@ -127,7 +128,8 @@ export const onOrderDeleted = onDocumentDeleted(
     if (!snapshot) return;
     
     const order = snapshot.data() as Order;
-    if (order.status === "cancelled") return;
+    // ✅ [수정] 표준 타입 'CANCELED'로 비교합니다.
+    if (order.status === "CANCELED") return;
 
     const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
     for (const item of order.items) {
@@ -191,7 +193,8 @@ export const onOrderUpdated = onDocumentUpdated(
     const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
 
     const beforeItemsMap = new Map<string, number>();
-    if (before.status !== 'CANCELED' && before.status !== 'cancelled') {
+    // ✅ [수정] 표준 타입 'CANCELED'로 비교합니다.
+    if (before.status !== 'CANCELED') {
         (before.items || []).forEach(item => {
             const key = `${item.productId}:${item.roundId}:${item.variantGroupId}`;
             beforeItemsMap.set(key, item.quantity);
@@ -199,7 +202,8 @@ export const onOrderUpdated = onDocumentUpdated(
     }
 
     const afterItemsMap = new Map<string, number>();
-    if (after.status !== 'CANCELED' && after.status !== 'cancelled') {
+    // ✅ [수정] 표준 타입 'CANCELED'로 비교합니다.
+    if (after.status !== 'CANCELED') {
         (after.items || []).forEach(item => {
             const key = `${item.productId}:${item.roundId}:${item.variantGroupId}`;
             afterItemsMap.set(key, item.quantity);

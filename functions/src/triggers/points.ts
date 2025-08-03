@@ -1,5 +1,6 @@
 // functions/src/triggers/points.ts
-// ✅ [수정] 사용하지 않는 FirestoreEvent, DocumentSnapshot 타입을 import 목록에서 제거했습니다.
+// ✅ [개선] 사용자에게 표시되는 알림 메시지를 한글로 수정하여 일관성을 확보했습니다.
+
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/config.js";
@@ -33,13 +34,14 @@ export const createNotificationOnPointChange = onDocumentCreated(
       return;
     }
 
+    // ✅ [수정] 알림 메시지를 한글로 변경합니다.
     let message = "";
     if (amount > 0) {
-      message = `🎉 You've earned ${amount.toLocaleString()}P for '${reason}'!`;
+      message = `🎉 '${reason}'으로 ${amount.toLocaleString()}P가 적립되었어요!`;
     } else {
-      message = `🛍️ You've used ${Math.abs(
+      message = `🛍️ '${reason}'으로 ${Math.abs(
         amount
-      ).toLocaleString()}P for '${reason}'.`;
+      ).toLocaleString()}P를 사용했어요.`;
     }
 
     const newNotification = {

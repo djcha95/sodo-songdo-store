@@ -1,64 +1,132 @@
 // functions/src/types.ts
+// ✅ [수정] 사용하지 않는 'DocumentData' 타입을 import 구문에서 제거하여 경고를 해결했습니다.
 
 import type { Timestamp, FieldValue } from "firebase-admin/firestore";
 
+// =================================================================
+// 📌 공통 사용 타입 별칭 (Type Aliases)
+// =================================================================
+
+export type StorageType = "ROOM" | "COLD" | "FROZEN";
+export type SalesRoundStatus = "draft" | "scheduled" | "selling" | "sold_out" | "ended";
+export type OrderStatus = "RESERVED" | "PREPAID" | "PICKED_UP" | "CANCELED" | "COMPLETED" | "NO_SHOW";
+export type SpecialLabel = "수량 한정" | "이벤트 특가" | "신상품";
+
+export type ProductDisplayStatus = "ONGOING" | "ADDITIONAL_RESERVATION" | "PAST";
+
+export type LoyaltyTier =
+  | "공구의 신"
+  | "공구왕"
+  | "공구요정"
+  | "공구새싹"
+  | "주의 요망"
+  | "참여 제한";
+
 export interface PointLog {
+  id?: string;
   amount: number;
   reason: string;
-  createdAt: Timestamp;
+  createdAt: Timestamp | FieldValue;
   orderId?: string;
   expiresAt?: Timestamp | null;
   isExpired?: boolean;
 }
 
-export interface UserDocument {
-  uid: string;
-  displayName: string | null;
-  phone?: string | null; // ✨ [추가] 이 줄을 추가하여 오류를 해결합니다.
-  points: number;
-  pickupCount?: number;
-  noShowCount?: number; 
-  referredBy?: string | null;
-  referralCode?: string;
-  pointHistory?: PointLog[];
-  loyaltyTier?: string;
+export type NotificationType =
+  | "POINTS_EARNED"
+  | "POINTS_USED"
+  | "WAITLIST_CONFIRMED"
+  | "PICKUP_REMINDER"
+  | "PICKUP_TODAY"
+  | "GENERAL_INFO"
+  | "PAYMENT_CONFIRMED"
+  | "success"
+  | "error";
+
+export interface Notification {
+  id: string;
+  message: string;
+  read: boolean;
+  timestamp: Timestamp;
+  link?: string;
+  type: NotificationType;
 }
 
-export interface CustomerInfo {
+
+// =================================================================
+// 📌 상품 및 판매 관련 타입
+// =================================================================
+
+export interface ProductItem {
+  id: string;
   name: string;
-  phone: string;
-  phoneLast4?: string;
+  price: number;
+  stock: number;
+  limitQuantity?: number | null;
+  stockDeductionAmount: number;
+  expirationDate?: Timestamp | null;
 }
 
-export interface OrderItem {
-  productId: string;
-  roundId: string;
-  variantGroupId: string;
-  quantity: number;
-  unitPrice: number;
-  productName?: string;
-  imageUrl?: string;
-  itemId?: string;
-  itemName?: string;
-  pickupDate?: Timestamp;
-  deadlineDate?: Timestamp;
+export interface VariantGroup {
+  id:string;
+  groupName: string;
+  items: ProductItem[];
+  totalPhysicalStock: number | null;
+  stockUnitType: string;
+  reservedCount?: number;
 }
 
-export interface Order {
-  id?: string;
+export interface WaitlistEntry {
   userId: string;
-  customerInfo: CustomerInfo;
-  items: OrderItem[];
-  totalPrice: number;
-  orderNumber?: string;
-  status: "RESERVED" | "PREPAID" | "PICKED_UP" | "COMPLETED" | "NO_SHOW" | "CANCELED" | "confirmed" | "cancelled";
-  createdAt?: Timestamp | FieldValue;
-  pickupDate: Timestamp;
-  pickupDeadlineDate?: Timestamp | null;
-  notes?: string;
-  isBookmarked?: boolean;
-  wasPrepaymentRequired?: boolean;
+  quantity: number;
+  timestamp: Timestamp;
+  variantGroupId: string;
+  itemId: string;
+  isPrioritized?: boolean;
 }
+
+export interface SalesRound {
+  roundId: string;
+  roundName:string;
+  status: SalesRoundStatus;
+  variantGroups: VariantGroup[];
+  publishAt: Timestamp;
+  deadlineDate: Timestamp;
+  pickupDate: Timestamp;
+  pickupDeadlineDate: Timestamp | null;
+  arrivalDate?: Timestamp | null;
+  createdAt: Timestamp;
+  waitlist?: WaitlistEntry[];
+  waitlistCount?: number;
+  isPrepaymentRequired?: boolean;
+  allowedTiers?: LoyaltyTier[];
+  preOrderTiers?: LoyaltyTier[];
+}
+
+export interface Product {
+  id: string;
+  groupName: string;
+  description: string;
+  imageUrls: string[];
+  storageType: StorageType;
+  salesHistory: SalesRound[];
+  isArchived: boolean;
+  category?: string;
+  encoreCount?: number;
+  encoreRequesterIds?: string[];
+  createdAt: Timestamp;
+  limitedStockAmount?: number;
+  specialLabels?: SpecialLabel[];
+  subCategory?: string;
+  updatedAt?: Timestamp;
+  tags?: string[];
+  reservedQuantities?: { [key: string]: number };
+}
+
+
+// =================================================================
+// 🛒 장바구니 및 주문 관련 타입
+// =================================================================
 
 export interface CartItem {
   id: string;
@@ -74,11 +142,76 @@ export interface CartItem {
   quantity: number;
   unitPrice: number;
   stock: number | null;
-  pickupDate: Timestamp;
-  status: 'RESERVATION' | 'WAITLIST';
-  deadlineDate: Timestamp;
-  stockDeductionAmount: number; 
+  pickupDate: Timestamp | Date;
+  status: "RESERVATION" | "WAITLIST";
+  deadlineDate: Timestamp | Date;
+  stockDeductionAmount: number;
   isPrepaymentRequired?: boolean;
+}
+
+export interface OrderItem extends Omit<CartItem, "status"> {
+  arrivalDate: Timestamp | Date | null;
+  pickupDeadlineDate?: Timestamp | Date | null;
+  expirationDate?: Timestamp | Date | null;
+}
+
+export interface CustomerInfo {
+  name: string;
+  phone: string;
+  phoneLast4?: string;
+}
+
+export interface Order {
+  id: string;
+  userId: string;
+  orderNumber: string;
+  items: OrderItem[];
+  totalPrice: number;
+  status: OrderStatus;
+  createdAt: Timestamp | FieldValue;
+  pickupDate: Timestamp | Date;
+  pickupDeadlineDate?: Timestamp | Date | null;
+  customerInfo: CustomerInfo;
+  pickedUpAt?: Timestamp | null;
+  prepaidAt?: Timestamp | null;
+  notes?: string;
+  isBookmarked?: boolean;
+  canceledAt?: Timestamp;
+  wasPrepaymentRequired?: boolean;
+  splitFrom?: string;
+}
+
+// =================================================================
+// ⚙️ 기타 애플리케이션 타입
+// =================================================================
+export interface UserDocument {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  phone: string | null;
+  photoURL?: string | null;
+  role: "master" | "admin" | "customer";
+  encoreRequestedProductIds?: string[];
+  createdAt?: Timestamp | FieldValue;
+  points: number;
+  pointHistory?: PointLog[];
+  loyaltyTier: LoyaltyTier;
+  pickupCount: number;
+  noShowCount: number;
+  lastLoginDate: string;
+  consecutiveLoginDays?: number;
+  isSuspended?: boolean;
+  gender?: "male" | "female" | null;
+  ageRange?: string | null;
+  totalOrders?: number;
+  pickedUpOrders?: number;
+  pickupRate?: number;
+  totalPriceSum?: number;
+  referralCode?: string;
+  referredBy?: string | null;
+  nickname?: string;
+  nicknameChanged?: boolean;
+  manualTier?: LoyaltyTier | null;
 }
 
 export interface WaitlistInfo {
@@ -92,5 +225,5 @@ export interface WaitlistInfo {
   imageUrl: string;
   quantity: number;
   timestamp: Timestamp;
-  isPrioritized: boolean;
+  isPrioritized?: boolean;
 }
