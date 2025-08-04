@@ -9,9 +9,8 @@ import {
   deleteDoc,
   getDoc,
 } from 'firebase/firestore';
-import type { UserDocument, Order, OrderStatus, PointLog, Product } from '@/types';
+import type { UserDocument, Order, OrderStatus, PointLog, Product, LoyaltyTier } from '@/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
-
 /**
  * @description 포인트 정책 정의
  * ✅ [수정] 취소 페널티를 '기본 페널티 + 금액 비례' 하이브리드 방식으로 변경
@@ -40,15 +39,22 @@ export const POINT_POLICIES = {
 /**
  * @description 주문 상태 변경에 따라 변경될 사용자 데이터를 계산하여 반환하는 함수
  * ✅ [수정] 트랜잭션 규칙 준수를 위해 직접 읽고 쓰는 대신, 받은 데이터를 기반으로 계산만 수행
+ * ✅ [기능 추가] 등급 변경 시 변경 전/후 등급 정보를 함께 반환
  */
 export const calculateUserUpdateByStatus = (
   userDoc: UserDocument,
   order: Order,
   newStatus: OrderStatus
-): { updateData: Partial<UserDocument>; pointLog: Omit<PointLog, 'id'> | null } | null => {
+): { 
+    updateData: Partial<UserDocument>; 
+    pointLog: Omit<PointLog, 'id'> | null;
+    tierChange: { from: LoyaltyTier; to: LoyaltyTier } | null;
+} | null => {
   let policy: { points: number; reason: string } | null = null;
   let pickupCountIncrement = 0;
   let noShowCountIncrement = 0;
+
+  const oldTier = userDoc.loyaltyTier || '공구새싹';
 
   switch (newStatus) {
     case 'PICKED_UP':
@@ -70,11 +76,8 @@ export const calculateUserUpdateByStatus = (
     // CANCELED 상태는 페널티 정책이 복잡하므로 별도 함수(cancelOrder)에서 처리
   }
 
-  if (!policy || policy.points === 0) {
-    // pickupCount나 noShowCount만 변경되는 경우도 처리
-    if (pickupCountIncrement === 0 && noShowCountIncrement === 0) {
-      return null;
-    }
+  if (!policy && pickupCountIncrement === 0 && noShowCountIncrement === 0) {
+    return null;
   }
 
   const newPoints = (userDoc.points || 0) + (policy?.points || 0);
@@ -82,6 +85,11 @@ export const calculateUserUpdateByStatus = (
   const newNoShowCount = (userDoc.noShowCount || 0) + noShowCountIncrement;
   
   const newTier = calculateTier(newPickupCount, newNoShowCount);
+
+  let tierChange: { from: LoyaltyTier, to: LoyaltyTier } | null = null;
+  if (oldTier !== newTier) {
+      tierChange = { from: oldTier, to: newTier };
+  }
 
   const now = new Date();
   const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
@@ -105,7 +113,7 @@ export const calculateUserUpdateByStatus = (
     updateData.pointHistory = arrayUnion(pointLog);
   }
 
-  return { updateData, pointLog };
+  return { updateData, pointLog, tierChange };
 };
 
 
@@ -292,7 +300,7 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
         const bonusExpiration = new Date();
         bonusExpiration.setFullYear(bonusExpiration.getFullYear() + 1);
         pointLogsToAdd.push({
-          amount: POINT_POLICIES.MONTHLY_ATTENDANCE_BONUS.points,
+          amount: POINT_POLICIES.MONTHLY_ATTENDANCE_BONUS.points, // <- 이렇게 수정
           reason: POINT_POLICIES.MONTHLY_ATTENDANCE_BONUS.reason,
           createdAt: Timestamp.now(),
           expiresAt: Timestamp.fromDate(bonusExpiration),
