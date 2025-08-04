@@ -8,6 +8,8 @@ import { getActiveBanners } from '@/firebase';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Product, Banner, SalesRound } from '@/types';
+// ✅ [수정] Timestamp 타입을 import 합니다.
+import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
@@ -19,7 +21,7 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { getDisplayRound, safeToDate } from '@/utils/productUtils';
+import { getDisplayRound, getDeadlines, safeToDate } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './ProductListPage.css';
 import '@/styles/common.css';
@@ -46,11 +48,12 @@ const ProductListPage: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lastVisibleRef = useRef<number | null>(null); 
+  const lastVisibleRef = useRef<number | null>(null);
   const hasMoreRef = useRef<boolean>(true);
   const PAGE_SIZE = 10;
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'callable-getProductsWithStock'), [functions]);
+  const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
+  
   const { ref: loadMoreRef, inView: isLoadMoreVisible } = useInView({ threshold: 0, triggerOnce: false });
 
   useEffect(() => {
@@ -94,7 +97,7 @@ const ProductListPage: React.FC = () => {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [getProductsWithStockCallable]); // ✅ [수정] 의존성 배열에서 loadingMore 제거
+  }, [getProductsWithStockCallable]);
 
   const handleRefresh = useCallback(async () => { await fetchData(true); }, [fetchData]);
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({ onRefresh: handleRefresh });
@@ -117,21 +120,34 @@ const ProductListPage: React.FC = () => {
     products.forEach(product => {
       const round = getDisplayRound(product);
       if (!round || round.status === 'draft') return;
+
       const allowedTiers = round.allowedTiers || [];
       if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) return;
-      const primaryEndDate = safeToDate(round.deadlineDate);
-      const pickupStartDate = safeToDate(round.pickupDate);
-      const secondaryEndDate = pickupStartDate ? dayjs(pickupStartDate).hour(13).minute(0).second(0).toDate() : null;
-      if (!primaryEndDate || !secondaryEndDate) return;
+      
+      const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
+      
+      if (!primaryEndDate) return;
+
       let currentPhase: 'primary' | 'secondary' | 'past';
-      if (now.isBefore(dayjs(primaryEndDate))) currentPhase = 'primary';
-      else if (now.isBetween(dayjs(primaryEndDate), dayjs(secondaryEndDate), null, '[]')) currentPhase = 'secondary';
-      else currentPhase = 'past';
-      const publishAtDate = safeToDate(round.publishAt);
-      if (round.status === 'scheduled' && publishAtDate && now.isBefore(publishAtDate)) return;
+      if (now.isBefore(dayjs(primaryEndDate))) {
+        currentPhase = 'primary';
+      } else if (secondaryEndDate && now.isBetween(dayjs(primaryEndDate), dayjs(secondaryEndDate), null, '[]')) {
+        currentPhase = 'secondary';
+      } else {
+        currentPhase = 'past';
+      }
+      
+      // ✅ [수정] safeToDate 헬퍼 함수를 사용하여 타입 오류를 해결합니다.
+      if (round.status === 'scheduled' && round.publishAt) {
+          const publishAtDate = safeToDate(round.publishAt);
+          if (publishAtDate && now.isBefore(publishAtDate)) return;
+      }
+
       const productWithState: ProductWithUIState = { ...product, phase: currentPhase, deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, displayRound: round };
-      if (currentPhase === 'primary') tempPrimary.push(productWithState);
-      else if (currentPhase === 'secondary') {
+      
+      if (currentPhase === 'primary') {
+        tempPrimary.push(productWithState);
+      } else if (currentPhase === 'secondary') {
         const isSoldOut = round.variantGroups.every(vg => {
           const totalStock = vg.totalPhysicalStock;
           if (totalStock === null || totalStock === -1) return false;
@@ -141,22 +157,27 @@ const ProductListPage: React.FC = () => {
         });
         if (!isSoldOut) tempSecondary.push(productWithState);
       } else {
-        if (now.diff(dayjs(secondaryEndDate), 'day') <= 7) tempPast.push(productWithState);
+        if (secondaryEndDate && now.diff(dayjs(secondaryEndDate), 'day') <= 7) {
+          tempPast.push(productWithState);
+        }
       }
     });
 
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
-      const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
-      if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
-      pastGroups[dateKey].push(p);
+        if(p.deadlines.secondaryEnd) {
+            const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
+            if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
+            pastGroups[dateKey].push(p);
+        }
     });
+
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
       sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.displayRound.roundName || '').localeCompare(b.displayRound.roundName || ''));
     });
-    const firstPrimarySaleEndDate = tempPrimary.length > 0 ? dayjs(tempPrimary[0].deadlines.primaryEnd) : null;
+    const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
     return { primarySaleProducts: tempPrimary, secondarySaleProducts: tempSecondary, pastProductsByDate: sortedPastGroups, primarySaleEndDate: firstPrimarySaleEndDate };
   }, [products, userDocument]);
       

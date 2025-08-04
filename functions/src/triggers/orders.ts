@@ -1,6 +1,4 @@
 // functions/src/triggers/orders.ts
-// ✅ [기능 추가] 주문 상태 변경(픽업/노쇼) 시 사용자 등급 및 포인트, 알림을 처리하는 트리거 추가
-
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent, DocumentSnapshot, Change } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/config.js";
@@ -11,15 +9,8 @@ import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
 
 
 // =================================================================
-// ✅ [신규] 주문 상태 변경에 따른 사용자 데이터 업데이트 헬퍼 함수
+// 주문 상태 변경에 따른 사용자 데이터 업데이트 헬퍼 함수
 // =================================================================
-/**
- * @description 주문 상태 변경에 따라 변경될 사용자 데이터를 계산합니다. (서버 버전)
- * @param currentUserData 현재 사용자 데이터
- * @param order 변경이 발생한 주문 데이터
- * @param newStatus 새로운 주문 상태 ('PICKED_UP' 또는 'NO_SHOW')
- * @returns { updateData, tierChange } 업데이트할 데이터와 등급 변경 정보
- */
 function calculateUserUpdateFromOrder(
   currentUserData: UserDocument,
   order: Order,
@@ -35,7 +26,6 @@ function calculateUserUpdateFromOrder(
   const oldTier = currentUserData.loyaltyTier || '공구새싹';
 
   if (newStatus === "PICKED_UP") {
-    // 클라이언트 로직과 동일하게 포인트 계산
     const purchasePoints = Math.floor(order.totalPrice * 0.005);
     const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
     const totalPoints = purchasePoints + prepaidBonus;
@@ -58,7 +48,6 @@ function calculateUserUpdateFromOrder(
   const newPickupCount = (currentUserData.pickupCount || 0) + pickupCountIncrement;
   const newNoShowCount = (currentUserData.noShowCount || 0) + noShowCountIncrement;
   
-  // helpers.js에 있는 상향된 기준의 calculateTier 함수 사용
   const newTier = calculateTier(newPickupCount, newNoShowCount);
 
   let tierChange: { from: LoyaltyTier, to: LoyaltyTier } | null = null;
@@ -73,7 +62,7 @@ function calculateUserUpdateFromOrder(
     amount: pointPolicy.points,
     reason: pointPolicy.reason,
     createdAt: Timestamp.now(),
-    orderId: order.id, // 주문 ID를 pointLog에 기록
+    orderId: order.id,
     expiresAt: pointPolicy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
   };
 
@@ -106,94 +95,136 @@ export const onOrderCreated = onDocumentCreated(
   },
   async (event: FirestoreEvent<DocumentSnapshot | undefined, { orderId: string }>) => {
     const snapshot = event.data;
-    if (!snapshot) return;
-
-    const order = snapshot.data() as Order;
-    if (order.status === "CANCELED") return;
-
-    const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
-    for (const item of order.items) {
-        const currentChanges = changesByProduct.get(item.productId) || [];
-        currentChanges.push({
-            roundId: item.roundId,
-            variantGroupId: item.variantGroupId,
-            delta: item.quantity,
-        });
-        changesByProduct.set(item.productId, currentChanges);
+    if (!snapshot) {
+      logger.info("주문 생성 이벤트에 데이터가 없어 스킵합니다.");
+      return;
     }
 
-    try {
-        await db.runTransaction(async (transaction) => {
-            for (const [productId, changes] of changesByProduct.entries()) {
-                const productRef = db.collection("products").doc(productId);
-                const productDoc = await transaction.get(productRef);
+    const order = snapshot.data() as Order;
+    const orderId = event.params.orderId;
 
-                if (!productDoc.exists) {
-                    logger.error(`Product ${productId} not found during order creation.`);
-                    continue;
-                }
-                
-                const productData = productDoc.data() as ProductWithHistory;
-                const newSalesHistory = productData?.salesHistory?.map((round: any) => {
-                    const relevantChanges = changes.filter(c => c.roundId === round.roundId);
-                    if (relevantChanges.length > 0) {
-                        const newVariantGroups = round.variantGroups.map((vg: any) => {
-                            const change = relevantChanges.find(c => c.variantGroupId === vg.id);
-                            if (change) {
-                                const currentReserved = vg.reservedCount || 0;
-                                vg.reservedCount = currentReserved + change.delta;
-                            }
-                            return vg;
-                        });
-                        return { ...round, variantGroups: newVariantGroups };
-                    }
-                    return round;
-                }) || [];
-
-                transaction.update(productRef, { salesHistory: newSalesHistory });
-            }
-        });
-        logger.info(`Successfully updated reservedCount for order ${event.params.orderId}`);
-
-        try {
-            const userDoc = await db.collection("users").doc(order.userId).get();
-            if (!userDoc.exists) return;
-            const userData = userDoc.data() as UserDocument;
-            if (!userData?.phone || !userData.displayName) return;
-
-            const orderPickupDate = (order.pickupDate as Timestamp).toDate();
-            
-            const now = new Date();
-            const kstDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-            const todayStartKST = new Date(`${kstDateString}T00:00:00.000+09:00`);
-
-            let templateCode = "";
-            const templateVariables: { [key: string]: string } = {
-                고객명: userData.displayName,
-                대표상품명: order.items[0]?.productName || '주문하신 상품',
-            };
-
-            if (orderPickupDate <= todayStartKST || orderPickupDate.toDateString() === new Date().toDateString()) {
-                templateCode = "ORDER_CONFIRMED_IMMEDIATE";
-            } else {
-                templateCode = "ORDER_CONFIRMED_FUTURE";
-                const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-                templateVariables.픽업시작일 = `${orderPickupDate.getMonth() + 1}월 ${orderPickupDate.getDate()}일(${weekdays[orderPickupDate.getDay()]})`;
-            }
-
-            if (templateCode) {
-                await sendAlimtalk(userData.phone, templateCode, templateVariables);
-                logger.info(`Successfully sent order confirmation Alimtalk to ${userData.phone} for order ${event.params.orderId}`);
-            }
-        } catch (alimtalkError) {
-            logger.error(`Failed to send Alimtalk for order ${event.params.orderId}:`, alimtalkError);
+    if (order.status !== "CANCELED") {
+        const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
+        for (const item of order.items) {
+            const currentChanges = changesByProduct.get(item.productId) || [];
+            currentChanges.push({
+                roundId: item.roundId,
+                variantGroupId: item.variantGroupId,
+                delta: item.quantity,
+            });
+            changesByProduct.set(item.productId, currentChanges);
         }
 
-    } catch (error) {
-        logger.error(`Transaction failed for order ${event.params.orderId} creation:`, error);
+        try {
+            await db.runTransaction(async (transaction) => {
+                for (const [productId, changes] of changesByProduct.entries()) {
+                    const productRef = db.collection("products").doc(productId);
+                    const productDoc = await transaction.get(productRef);
+                    if (!productDoc.exists) {
+                        logger.error(`Product ${productId} not found during order creation.`);
+                        continue;
+                    }
+                    const productData = productDoc.data() as ProductWithHistory;
+                    const newSalesHistory = productData?.salesHistory?.map((round: any) => {
+                        const relevantChanges = changes.filter(c => c.roundId === round.roundId);
+                        if (relevantChanges.length > 0) {
+                            const newVariantGroups = round.variantGroups.map((vg: any) => {
+                                const change = relevantChanges.find(c => c.variantGroupId === vg.id);
+                                if (change) {
+                                    const currentReserved = vg.reservedCount || 0;
+                                    vg.reservedCount = currentReserved + change.delta;
+                                }
+                                return vg;
+                            });
+                            return { ...round, variantGroups: newVariantGroups };
+                        }
+                        return round;
+                    }) || [];
+                    transaction.update(productRef, { salesHistory: newSalesHistory });
+                }
+            });
+            logger.info(`Successfully updated reservedCount for order ${orderId}`);
+        } catch (error) {
+            logger.error(`Transaction failed for order ${orderId} creation:`, error);
+            return;
+        }
+    }
+
+    logger.info(`신규 주문(${orderId})이 생성되어, 주문 확정 알림톡 발송을 시작합니다.`);
+    try {
+        const userDoc = await db.collection("users").doc(order.userId).get();
+        if (!userDoc.exists) {
+            logger.error(`주문(${orderId})에 대한 사용자(${order.userId})를 찾을 수 없습니다.`);
+            return;
+        }
+        const userData = userDoc.data() as UserDocument;
+        if (!userData?.phone || !userData.displayName) {
+            logger.warn(`사용자(${order.userId})의 전화번호 또는 이름 정보가 없습니다.`);
+            return;
+        }
+
+        const normalizeToDate = (value: unknown): Date | null => {
+            if (!value) return null;
+            if ((value as Timestamp).toDate) return (value as Timestamp).toDate();
+            if (value instanceof Date) return value;
+            return null;
+        };
+
+        const pickupStartDate = normalizeToDate(order.pickupDate);
+        const pickupDeadlineDate = normalizeToDate(order.pickupDeadlineDate);
+
+        if (!pickupStartDate || !pickupDeadlineDate) {
+            logger.error(`주문(${orderId})의 픽업 시작일 또는 마감일이 유효하지 않습니다.`);
+            return;
+        }
+
+        const now = new Date();
+        const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const todayStart = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
+        
+        let templateCode = "";
+        const pickupStartDateOnly = new Date(pickupStartDate.getFullYear(), pickupStartDate.getMonth(), pickupStartDate.getDate());
+
+        if (pickupStartDateOnly <= todayStart) {
+            templateCode = "ORD_CONFIRM_NOW";
+        } else {
+            templateCode = "ORD_CONFIRM_FUTURE";
+        }
+
+        const representativeItemName = order.items.length > 0 ? (order.items[0].productName || '주문 상품') : '주문 상품';
+        const otherItemsCount = order.items.length > 1 ? ` 외 ${order.items.length - 1}건` : "";
+        const productNameSummary = `${representativeItemName}${otherItemsCount}`;
+        
+        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+        const formatDate = (date: Date) => `${date.getMonth() + 1}월 ${date.getDate()}일(${weekdays[date.getDay()]})`;
+
+        const templateVariables: { [key: string]: string } = {
+            고객명: userData.displayName,
+            대표상품명: productNameSummary,
+        };
+        
+        if (templateCode === "ORD_CONFIRM_FUTURE") {
+            templateVariables.픽업시작일 = formatDate(pickupStartDate);
+            templateVariables.픽업마감일 = formatDate(pickupDeadlineDate);
+        }
+        
+        // ✅ [최종 수정] 국제 번호(8210...)를 국내 번호(010...) 형식으로 변환합니다.
+        let recipientPhone = (userData.phone || '').replace(/\D/g, '');
+        if (recipientPhone.startsWith('8210')) {
+          recipientPhone = '0' + recipientPhone.slice(2);
+        }
+
+        logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}. Variables:`, templateVariables);
+        
+        await sendAlimtalk(recipientPhone, templateCode, templateVariables);
+        
+        logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 사용자(${order.userId})에게 성공적으로 발송했습니다.`);
+    } catch (alimtalkError) {
+        logger.error(`Failed to send Alimtalk for order ${orderId}:`, alimtalkError);
     }
   }
 );
+
 
 export const onOrderDeleted = onDocumentDeleted(
   {
@@ -256,7 +287,6 @@ export const onOrderDeleted = onDocumentDeleted(
   }
 );
 
-// 재고 수량(reservedCount) 변경을 위한 onOrderUpdated
 export const onOrderUpdatedForStock = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -300,7 +330,6 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
         }
     }
     
-    // 재고 변경이 없으면 함수 종료
     if (changesByProduct.size === 0) {
         return;
     }
@@ -343,9 +372,6 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
 );
 
 
-// =================================================================
-// ✅ [신규] 주문 상태 변경에 따른 사용자 포인트/등급/알림 처리 트리거
-// =================================================================
 export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -360,7 +386,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     const isPickup = before.status !== "PICKED_UP" && after.status === "PICKED_UP";
     const isNoShow = before.status !== "NO_SHOW" && after.status === "NO_SHOW";
     
-    // 픽업 또는 노쇼 상태로의 변경이 아니면 함수를 종료합니다.
     if (!isPickup && !isNoShow) {
       return;
     }
@@ -378,20 +403,15 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
         
         const userData = userDoc.data() as UserDocument;
         
-        // 위에서 정의한 헬퍼 함수를 사용하여 업데이트될 내용을 계산합니다.
-        // 주문 문서의 id를 order 데이터에 추가해줍니다.
         const orderWithId = { ...after, id: event.params.orderId };
         const updateResult = calculateUserUpdateFromOrder(userData, orderWithId, newStatus);
 
         if (updateResult) {
-            // 사용자 문서에 포인트, 등급, 픽업/노쇼 카운트, 포인트 내역을 업데이트합니다.
             transaction.update(userRef, updateResult.updateData);
             
-            // 등급에 변동이 있다면 알림을 생성합니다.
             if (updateResult.tierChange) {
                 const { from, to } = updateResult.tierChange;
                 
-                // 등급 상승/하강 여부 판단 (하위 등급 -> 상위 등급으로의 변경)
                 const tierOrder = ['참여 제한', '주의 요망', '공구새싹', '공구요정', '공구왕', '공구의 신'];
                 const isPromotion = tierOrder.indexOf(from) < tierOrder.indexOf(to);
 
@@ -407,7 +427,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
                     link: "/mypage",
                 };
                 
-                // 트랜잭션 내에서 알림 문서를 생성합니다.
                 const notificationRef = userRef.collection("notifications").doc();
                 transaction.set(notificationRef, newNotification);
             }
@@ -435,7 +454,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
 
-    // ✅ [수정] 이 트리거는 '픽업 완료' 상태로 '최초' 변경될 때만 실행되어야 합니다.
     if (before.status === "PICKED_UP" || after.status !== "PICKED_UP") {
       return;
     }
@@ -456,8 +474,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
 
       const newUser = newUserDoc.data() as UserDocument;
       
-      // ✅ [수정] `updateUserStatsOnOrderStatusChange`가 먼저 실행되어 pickupCount가 이미 증가했을 것을 가정합니다.
-      // 따라서 첫 픽업인지 여부는 pickupCount가 1일 때로 판단합니다.
       const isFirstPickup = (newUser.pickupCount || 0) === 1;
       const wasReferred = newUser.referredBy && newUser.referredBy !== "__SKIPPED__";
 
@@ -486,10 +502,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
           const currentPoints = referrerData.points || 0;
           const newPoints = currentPoints + rewardPoints;
           
-          // 추천인 보너스 지급 시에는 등급을 재계산하지 않는 것이 정책 일관성에 맞습니다.
-          // 등급은 픽업/노쇼 횟수에만 영향을 받기 때문입니다.
-          // const newTier = calculateTier(referrerData.pickupCount || 0, referrerData.noShowCount || 0);
-          
           const now = new Date();
           const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
 
@@ -502,7 +514,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
 
           transaction.update(referrerRef, {
             points: newPoints,
-            // loyaltyTier: newTier, // 포인트 지급으로 등급이 변경되지 않으므로 이 라인 제거
             pointHistory: FieldValue.arrayUnion(pointLog),
           });
         });

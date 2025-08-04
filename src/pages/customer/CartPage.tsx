@@ -1,19 +1,16 @@
 // src/pages/customer/CartPage.tsx
-// ✅ [UX 개선] 선입금 안내 토스트가 자동으로 닫히지 않도록 수정했습니다.
-// 사용자가 계좌번호 등 중요 정보를 충분히 확인하고 직접 닫을 수 있도록 하여 안정성을 높였습니다.
-// ✅ [수정] 예약 상품 목록에 '선택 삭제' 버튼을 추가하여 사용자가 선택한 상품을 편리하게 삭제할 수 있도록 개선했습니다.
 
 import React, { useState, useMemo, useRef, useEffect, useCallback, startTransition } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
-import { useTutorial } from '@/context/TutorialContext'; // ✅ [추가] useTutorial 훅 import
-import { cartPageTourSteps } from '@/components/customer/AppTour'; // ✅ [추가] 튜토리얼 스텝 import
+import { useTutorial } from '@/context/TutorialContext';
+import { cartPageTourSteps } from '@/components/customer/AppTour';
 import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Timestamp } from 'firebase/firestore';
-import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react'; // ✅ [추가] HelpCircle 아이콘 import
+import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -140,7 +137,7 @@ const CartPage: React.FC = () => {
   const { user, userDocument, isSuspendedUser } = useAuth();
   const { reservationItems, waitlistItems, removeItems, updateCartItemQuantity } = useCart();
   const navigate = useNavigate();
-  const { runPageTourIfFirstTime } = useTutorial(); // ✅ [수정] runPageTourIfFirstTime 추가
+  const { runPageTourIfFirstTime } = useTutorial();
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isSyncing, setIsSyncing] = useState(true);
@@ -149,12 +146,12 @@ const CartPage: React.FC = () => {
   const [ineligibleItemIds, setIneligibleItemIds] = useState<Set<string>>(new Set());
   
   const functions = getFunctions(getApp(), 'asia-northeast3');
-  const checkCartStockCallable = httpsCallable<any, any>(functions, 'callable-checkCartStock');
-  const submitOrderCallable = httpsCallable<any, any>(functions, 'callable-submitOrder');
+  
+  // ✅ [수정] 'callable-' 접두사를 제거하여 실제 함수 이름과 일치시킵니다.
+  const checkCartStockCallable = httpsCallable<any, any>(functions, 'checkCartStock');
+  const submitOrderCallable = httpsCallable<any, any>(functions, 'submitOrder');
 
-  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
   useEffect(() => {
-    // 메인 튜토리얼을 마친 사용자에게만 페이지별 튜토리얼을 보여줍니다.
     if (userDocument?.hasCompletedTutorial) {
       runPageTourIfFirstTime('hasSeenCartPage', cartPageTourSteps);
     }
@@ -332,7 +329,6 @@ const CartPage: React.FC = () => {
             });
           };
 
-          // ✅ [UX 개선] 자동으로 닫히지 않도록 duration을 Infinity로 설정합니다.
           toast.custom((t) => (
             <div className="prepayment-modal-overlay">
               <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
@@ -352,7 +348,7 @@ const CartPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ), { id: toastId, duration: Infinity }); // ✅ duration: Infinity
+          ), { id: toastId, duration: Infinity });
 
           return '';
         } else {
@@ -450,10 +446,9 @@ const CartPage: React.FC = () => {
           <div className="cart-items-column">
             <div className="cart-section-header">
               <h2 className="cart-section-title">🛒 예약 상품 ({reservationItems.length}) {isSyncing && <RefreshCw size={18} className="spin-icon" />}</h2>
-              {/* ✅ [수정] 예약 상품 선택 삭제 버튼 추가 */}
               {selectedReservationKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}><XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})</button>)}
             </div>
-            <div data-tutorial-id="cart-reservation-list"> {/* ✅ [추가] data-tutorial-id 추가 */}
+            <div data-tutorial-id="cart-reservation-list">
               {reservationItems.length > 0 ? (
                 <div className="cart-items-list">{reservationItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedReservationKeys.has(item.id)} isEligible={!ineligibleItemIds.has(item.id)} onSelect={(key) => handleItemSelect(key, 'reservation')} onImageClick={handleImageClick} />)}</div>
               ) : (<div className="info-box"><p>장바구니에 담긴 예약 상품이 없습니다.</p></div>)}
@@ -464,7 +459,7 @@ const CartPage: React.FC = () => {
                 <h2 className="cart-section-title"><Hourglass size={18}/> 대기 상품 ({waitlistItems.length})</h2>
                 {selectedWaitlistKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('waitlist')}><XCircle size={16} /> 선택 삭제 ({selectedWaitlistKeys.size})</button>)}
               </div>
-              <div data-tutorial-id="cart-waitlist-list"> {/* ✅ [추가] data-tutorial-id 추가 */}
+              <div data-tutorial-id="cart-waitlist-list">
                 {waitlistItems.length > 0 ? (
                   <div className="cart-items-list">{waitlistItems.map(item => <CartItemCard key={item.id} item={item} isSelected={selectedWaitlistKeys.has(item.id)} isEligible={true} onSelect={(key) => handleItemSelect(key, 'waitlist')} onImageClick={handleImageClick} />)}</div>
                 ) : (<div className="info-box"><p>품절 상품에 '대기 신청'을 하면 여기에 표시됩니다.</p></div>)}
@@ -478,7 +473,7 @@ const CartPage: React.FC = () => {
             )}
           </div>
         <div className="cart-summary-column">
-          <div className="cart-summary-card" data-tutorial-id="cart-checkout-button"> {/* ✅ [추가] data-tutorial-id 추가 */}
+          <div className="cart-summary-card" data-tutorial-id="cart-checkout-button">
             <button 
                 className="checkout-btn" 
                 onClick={showOrderConfirmation} 
