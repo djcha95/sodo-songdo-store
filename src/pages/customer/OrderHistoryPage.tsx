@@ -233,7 +233,6 @@ const AggregatedItemCard: React.FC<{
       onCancel(orderToCancel);
     } 
     else if (cancelDisabledReason) {
-      // ✅ [수정] 다른 커스텀 토스트와 동일하게 기본 스타일을 제거하는 옵션을 추가합니다.
       toast.custom((t) => (
         <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
             <h4 className="toast-header">
@@ -247,7 +246,7 @@ const AggregatedItemCard: React.FC<{
                 </button>
             </div>
         </div>
-      ), { // ✅ 옵션 객체 추가
+      ), {
         duration: Infinity,
         style: {
           background: 'transparent',
@@ -427,8 +426,10 @@ const OrderHistoryPage: React.FC = () => {
     }, [userDocument, runPageTourIfFirstTime]);
       
     const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-    const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
-    const getUserWaitlistCallable = useMemo(() => httpsCallable(functions, 'callable-getUserWaitlist'), [functions]);
+
+    // ✅ [최종 수정] 서버에 배포된 실제 함수 이름과 정확히 일치하도록 수정합니다.
+    const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
+    const getUserWaitlistCallable = useMemo(() => httpsCallable(functions, 'getUserWaitlist'), [functions]);
     
     const basePayload = useMemo(() => {
       if (viewMode === 'pickup') {
