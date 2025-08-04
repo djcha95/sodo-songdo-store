@@ -1,9 +1,9 @@
 // src/components/customer/AppTour.tsx
 
 import React from 'react';
-import Joyride, { type Step, type CallBackProps, STATUS } from 'react-joyride';
+import Joyride, { type Step, type CallBackProps, STATUS, ACTIONS, EVENTS } from 'react-joyride'; // ✅ ACTIONS, EVENTS 추가
 import { useAuth } from '@/context/AuthContext';
-import { useTutorial } from '@/context/TutorialContext'; // ✅ [추가]
+import { useTutorial } from '@/context/TutorialContext';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
 
@@ -29,22 +29,22 @@ export const mainTourSteps: Step[] = [
   {
     target: '[data-tutorial-id="past-sale-section"]',
     content: '최근에 마감된 상품들이 날짜별로 정리되어 있어요. 다른 분들이 어떤 상품을 샀는지 구경하고, 앵콜을 요청할 수도 있답니다.',
-    placement: 'top', // ✅ [추가] 화면 잘림 방지를 위해 툴팁을 위쪽에 표시
+    placement: 'top',
   },
   {
     target: '[data-tutorial-id="bottom-nav-cart"]',
     content: '상품을 담았다면 여기서 확인! 예약할 상품과 대기 상품을 모두 관리할 수 있어요.',
-    placement: 'top', // ✅ [추가]
+    placement: 'top',
   },
-  { // ✅ [추가] 고객센터 튜토리얼 단계
+  {
     target: '[data-tutorial-id="bottom-nav-customer-center"]',
     content: '문의사항이 있거나 매장 정보가 궁금할 땐 고객센터를 이용해주세요.',
-    placement: 'top', // ✅ [추가]
+    placement: 'top',
   },
   {
     target: '[data-tutorial-id="bottom-nav-mypage"]',
     content: '나의 등급, 포인트, 주문 내역 등 모든 내 정보를 여기서 확인하세요. 튜토리얼이 끝나면 마이페이지로 이동해볼까요?',
-    placement: 'top', // ✅ [추가]
+    placement: 'top',
   },
 ];
 
@@ -111,7 +111,7 @@ export const calendarPageTourSteps: Step[] = [
     },
 ];
 
-// ✅ [추가] 5. 고객센터 페이지 (CustomerCenterPage) 튜토리얼 단계
+// 5. 고객센터 페이지 (CustomerCenterPage) 튜토리얼 단계
 export const customerCenterTourSteps: Step[] = [
     {
         target: '[data-tutorial-id="customer-center-quick-links"]',
@@ -129,7 +129,7 @@ export const customerCenterTourSteps: Step[] = [
     },
 ];
 
-// ✅ [추가] 6. 마이페이지 (MyPage) 튜토리얼 단계
+// 6. 마이페이지 (MyPage) 튜토리얼 단계
 export const myPageTourSteps: Step[] = [
     {
         target: '[data-tutorial-id="mypage-profile-card"]',
@@ -150,7 +150,7 @@ export const myPageTourSteps: Step[] = [
     },
 ];
 
-// ✅ [추가] 7. 주문/대기 내역 페이지 (OrderHistoryPage) 튜토리얼 단계
+// 7. 주문/대기 내역 페이지 (OrderHistoryPage) 튜토리얼 단계
 export const orderHistoryTourSteps: Step[] = [
     {
         target: '[data-tutorial-id="history-view-toggle"]',
@@ -170,20 +170,27 @@ export const orderHistoryTourSteps: Step[] = [
 
 interface AppTourProps {
   steps: Step[];
-  tourKey: string; // ✅ [추가] 튜토리얼을 다시 시작하기 위한 key
+  tourKey: string;
 }
 
 const AppTour: React.FC<AppTourProps> = ({ steps, tourKey }) => {
   const { user, userDocument } = useAuth();
-  const { stopTour } = useTutorial(); // ✅ [추가] stopTour 함수 가져오기
+  const { stopTour } = useTutorial();
 
   const handleJoyrideCallback = async (data: CallBackProps) => {
-    const { status } = data;
+    const { status, action, type } = data; // ✅ action, type 추가
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
-    if (finishedStatuses.includes(status)) {
-      stopTour(); // ✅ [수정] 튜토리얼이 끝나면 상태 업데이트
+    // ✅ 툴팁의 'x' 버튼을 눌렀을 때도 투어를 종료시키도록 처리
+    if (action === ACTIONS.CLOSE && type === EVENTS.TOOLTIP) {
+      stopTour();
+      return;
+    }
 
+    if (finishedStatuses.includes(status)) {
+      stopTour();
+
+      // ✅ 기존 로직 유지: 메인 튜토리얼을 한 번이라도 완료했는지 기록
       if (user?.uid && userDocument && !userDocument.hasCompletedTutorial) {
         try {
           const userRef = doc(db, 'users', user.uid);
@@ -201,14 +208,18 @@ const AppTour: React.FC<AppTourProps> = ({ steps, tourKey }) => {
 
   return (
     <Joyride
-      key={tourKey} // ✅ [추가]
+      key={tourKey}
       steps={steps}
       run={steps.length > 0}
+      callback={handleJoyrideCallback}
       continuous
       showProgress
       showSkipButton
-      callback={handleJoyrideCallback}
-      scrollOffset={150} // ✅ [수정] 스크롤 버그 해결
+      // ✅ [수정/추가] 핵심 기능 구현을 위한 props
+      disableOverlayClose={true}   // 오버레이 클릭으로 닫기 방지
+      disableCloseOnEsc={true}     // ESC 키로 닫기 방지
+      spotlightClicks={true}       // 하이라이트된 요소 클릭 시 다음 단계로 진행
+      scrollOffset={150}
       floaterProps={{
         styles: {
           arrow: {
