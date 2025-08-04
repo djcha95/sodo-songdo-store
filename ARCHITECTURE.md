@@ -22,6 +22,14 @@ SODOMALL-APP/
 │   └── utils/           # 공통 유틸리티 함수 보관 (예: 이미지 URL 변환, 등급 계산)
 ├── .env                 # API 키 등 민감한 정보 보관 (Git에 올리면 안 됨)
 ├── firebase.json        # Firebase 호스팅, Firestore 규칙 등 설정
+├── functions/           # ✅ Firebase Cloud Functions (서버리스 백엔드) 소스 코드
+│   ├── src/
+│   │   ├── callable/    # 클라이언트 호출 가능 함수
+│   │   ├── triggers/    # Firestore 데이터 변경 감지 함수
+│   │   ├── scheduled/   # 스케줄링 함수
+│   │   ├── utils/       # Functions에서 사용하는 공통 유틸리티 (helpers.js 등)
+│   │   └── index.ts     # 모든 함수의 진입점
+│   └── package.json
 ├── index.html           # 앱의 진입점이 되는 메인 HTML 파일
 ├── package.json         # 프로젝트 정보 및 의존성 라이브러리 목록
 ├── README.md            # 프로젝트 설명서 (메인 파일)
@@ -39,14 +47,14 @@ SODOMALL-APP/
 ### `src/firebase/폴더`
 
 Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴더입니다.
-`firebaseConfig.ts`: Firebase 초기 설정 코드가 포함되어 있습니다.
-기능별 서비스 파일: Firestore 데이터베이스와의 통신을 기능별로 분리하여 관리합니다.
-`productService.ts`: 상품 정보(생성, 수정, 조회, 대기자 등록) 관련 함수를 관리합니다. `getWaitlistForRound`, `addStockAndProcessWaitlist` 등 대기자 관리 핵심 로직과 **유사 상품명 검색을 위한 `searchProductsByName` 함수가 추가되었습니다.**
-`orderService.ts`: 결제 완료된 '주문' 내역을 관리합니다. **또한, cancelOrder 함수에는 서버사이드 유효성 검사 로직이 추가되어 프론트엔드와 동일한 취소 정책을 서버에서도 이중으로 검증하여, 데이터 정합성과 보안을 강화합니다.**
-`generalService.ts`: 배너, 카테고리 등 여러 곳에서 사용되는 공통 기능을 관리합니다.
-**`pointService.ts`**: **포인트의 '화폐'적 측면을 관리하는 비즈니스 로직의 중심입니다. `POINT_POLICIES` 객체를 통해 포인트 정책을 중앙에서 관리하며, 주문 상태 변경(`applyPointChangeByStatus`), 관리자 수동 조정(`adjustUserPoints`), '대기 순번 상승권' 사용(`applyWaitlistPriorityTicket`) 등 포인트가 변동되는 모든 경우의 수를 처리합니다.**
-**`userService.ts`**: **사용자 정보 처리의 핵심입니다. 신규 가입 시 사용자 문서를 생성하고(`processUserSignIn`), 이때 고유 추천인 코드를 자동으로 발급합니다. 또한, 신규 가입자가 제출한 추천인 코드를 검증하고 보너스 포인트를 지급하는 `submitReferralCode` 함수를 포함합니다.**
-다른 컴포넌트에서는 이 폴더의 각 서비스 파일에 정의된 함수를 import하여 사용함으로써 코드의 일관성과 재사용성을 높입니다.
+- **`firebaseConfig.ts`**: Firebase 초기 설정 코드가 포함되어 있습니다.
+- 기능별 서비스 파일: Firestore 데이터베이스와의 통신을 기능별로 분리하여 관리합니다.
+  - **`productService.ts`**: 상품 정보(생성, 수정, 조회, 대기자 등록) 관련 함수를 관리합니다. `getWaitlistForRound`, `addStockAndProcessWaitlist` 등 대기자 관리 핵심 로직과 **유사 상품명 검색을 위한 `searchProductsByName` 함수가 추가되었습니다.**
+  - **`orderService.ts`**: 결제 완료된 '주문' 내역을 관리합니다. **또한, cancelOrder 함수에는 서버사이드 유효성 검사 로직이 추가되어 프론트엔드와 동일한 취소 정책을 서버에서도 이중으로 검증하여, 데이터 정합성과 보안을 강화합니다.**
+  - **`generalService.ts`**: 배너, 카테고리 등 여러 곳에서 사용되는 공통 기능을 관리합니다.
+  - **`pointService.ts`**: **포인트의 '화폐'적 측면을 관리하는 비즈니스 로직의 중심입니다.** `POINT_POLICIES` 객체를 통해 포인트 정책을 중앙에서 관리하며, 주문 상태 변경(`applyPointChangeByStatus`), 관리자 수동 조정(`adjustUserPoints`), '대기 순번 상승권' 사용(`applyWaitlistPriorityTicket`) 등 포인트가 변동되는 모든 경우의 수를 처리합니다.
+  - **`userService.ts`**: **사용자 정보 처리의 핵심입니다.** 신규 가입 시 사용자 문서를 생성하고(`processUserSignIn`), 이때 고유 추천인 코드를 자동으로 발급합니다. 또한, 신규 가입자가 제출한 추천인 코드를 검증하고 보너스 포인트를 지급하는 `submitReferralCode` 함수를 포함합니다.
+- 다른 컴포넌트에서는 이 폴더의 각 서비스 파일에 정의된 함수를 import하여 사용함으로써 코드의 일관성과 재사용성을 높입니다.
 
 ### `src/App.tsx`
 
@@ -123,13 +131,23 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 
 ### `functions/src/index.ts (Cloud Functions)`
 
--   **Firebase 서버에서 실행되는 백엔드 로직의 중앙 진입점입니다. 실제 로직은 역할(callable, triggers, scheduled, http)에 따라 하위 폴더의 파일들로 분리되어 있으며, 이 파일은 각 파일들을 최종적으로 export하는 역할만 담당하여 유지보수성을 극대화했습니다.**
+-   **Firebase 서버에서 실행되는 백엔드 로직의 중앙 진입점입니다.** 실제 로직은 역할(`callable`, `triggers`, `scheduled`, `http`)에 따라 하위 폴더의 파일들로 분리되어 있으며, 이 파일은 각 파일들을 최종적으로 `export`하는 역할만 담당하여 유지보수성을 극대화했습니다.
 -   **주요 기능:**
     -   **`callable/`**: 클라이언트(React 앱)에서 직접 호출하는 함수들 (실시간 재고 확인, 주문 제출 등)
-    -   **`triggers/`**: Firestore 데이터 변경 시 자동으로 실행되는 함수들 (주문 생성 시 재고 집계, 추천인 보상 등)
+    -   **`triggers/`**: Firestore 데이터 변경 시 자동으로 실행되는 함수들 (주문 생성 시 재고 집계, 추천인 보상, 등급 변경 알림 등)
     -   **`scheduled/`**: 정해진 시간에 주기적으로 실행되는 함수들 (포인트 자동 소멸, 알림톡 발송 등)
     -   **`http/`**: 외부 요청을 받는 HTTP 엔드포인트 (카카오 로그인 토큰 검증 등)
-    
+
+### `functions/src/triggers/orders.ts`
+-   **주문과 관련된 모든 자동화 로직을 처리하는 핵심 트리거 파일**입니다.
+-   주문 생성/삭제/변경 시 상품의 **예약 수량(`reservedCount`)을 업데이트**합니다.
+-   `updateUserStatsOnOrderStatusChange` 함수를 통해, 주문 상태가 'PICKED_UP' 또는 'NO_SHOW'로 변경될 때 **사용자의 포인트, 픽업/노쇼 횟수, 신뢰 등급을 한 번에 업데이트**하고, 등급에 변동이 생기면 **축하 또는 안내 알림을 자동으로 발송**하는 매우 중요한 역할을 담당합니다.
+
+### `functions/src/utils/helpers.ts`
+-   **Cloud Functions 내부에서 사용되는 공통 유틸리티 파일**입니다.
+-   클라이언트의 `loyaltyUtils.ts`와 **100% 동일한 로직의 `calculateTier` 함수**를 포함하여, 서버에서도 일관된 기준으로 등급을 계산하도록 보장합니다.
+-   서버에서 사용되는 **전체 `POINT_POLICIES` 객체**를 정의하여, 모든 서버 기능이 통일된 포인트 정책을 따르도록 합니다.
+
 ### `src/components/common/SodomallLoader.tsx` 외
 
 -   **앱 전체의 로딩 UI를 통일**하고, **상황에 맞는 경험을 제공**하기 위한 공용 컴포넌트 시스템입니다.
@@ -181,7 +199,6 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 ### ✅ [신규] `src/utils/loyaltyUtils.ts`
 -   **신뢰 등급(Tier) 계산의 중심**: 사용자의 누적 픽업(`pickupCount`) 및 노쇼(`noShowCount`) 횟수를 기반으로, '공구의 신'부터 '참여 제한'까지의 **신뢰 등급을 계산하는 순수 함수(`calculateTier`)**를 관리합니다. 포인트와 등급이 분리된 새로운 시스템의 핵심 로직입니다.
 
-
 ### `src/context/CartContext.tsx`
 
 -   **'예약'과 '대기' 상태 통합 관리**: `CartItem` 타입에 `status` 필드를 추가하여, 하나의 장바구니에서 '예약'과 '대기' 상품을 모두 관리합니다. `addToCart` 함수는 두 상태의 상품이 추가될 때 수량을 합치거나 상태를 변경하는 등 복합적인 로직을 처리합니다.
@@ -209,17 +226,17 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 -   **'짧은 클릭'과 '꾹 누르기' 동작을 모두 처리하는 커스텀 훅**입니다.
 -   사용자가 버튼을 짧게 클릭했을 때와 길게 누르고 있을 때의 동작을 명확하게 구분하여, 두 이벤트가 충돌해 기능이 중복 실행되는 문제를 해결합니다. 앱 전체에서 일관된 버튼 인터랙션 경험을 제공하는 핵심적인 역할을 합니다.
 
-✅ [신규] src/context/TutorialContext.tsx
+### ✅ [신규] `src/context/TutorialContext.tsx`
 인터랙티브 튜토리얼의 중앙 제어실: 앱 전체의 튜토리얼 상태를 관리하는 Context입니다.
 
-isTourRunning 상태를 통해 튜토리얼 실행 여부를 전역적으로 공유하여, 무한 스크롤과 같은 다른 기능과의 충돌을 방지합니다.
+`isTourRunning` 상태를 통해 튜토리얼 실행 여부를 전역적으로 공유하여, 무한 스크롤과 같은 다른 기능과의 충돌을 방지합니다.
 
-runPageTourIfFirstTime 함수는 Firestore에 저장된 사용자의 튜토리얼 진행 상태를 확인하고, 각 페이지에 처음 방문했을 때만 튜토리얼이 자동으로 실행되도록 제어하는 핵심 로직을 담당합니다.
+`runPageTourIfFirstTime` 함수는 Firestore에 저장된 사용자의 튜토리얼 진행 상태를 확인하고, 각 페이지에 처음 방문했을 때만 튜토리얼이 자동으로 실행되도록 제어하는 핵심 로직을 담당합니다.
 
-✅ [신규] src/components/customer/AppTour.tsx
-튜토리얼 UI 및 내용 정의: react-joyride 라이브러리를 실제로 렌더링하고, 각 페이지(메인, 상품 상세, 장바구니 등)에서 보여줄 튜토리얼의 단계(steps)와 내용을 모두 이곳에서 중앙 관리합니다.
+### ✅ [신규] `src/components/customer/AppTour.tsx`
+튜토리얼 UI 및 내용 정의: `react-joyride` 라이브러리를 실제로 렌더링하고, 각 페이지(메인, 상품 상세, 장바구니 등)에서 보여줄 튜토리얼의 단계(steps)와 내용을 모두 이곳에서 중앙 관리합니다.
 
-튜토리얼이 종료되면 TutorialContext의 stopTour 함수를 호출하고, 메인 튜토리얼의 경우 Firestore에 완료 상태를 기록하는 역할
+튜토리얼이 종료되면 `TutorialContext`의 `stopTour` 함수를 호출하고, 메인 튜토리얼의 경우 Firestore에 완료 상태를 기록하는 역할
 
 ## ⚖️ 실시간 재고 관리 아키텍처
 
@@ -227,8 +244,8 @@ runPageTourIfFirstTime 함수는 Firestore에 저장된 사용자의 튜토리�
 
 ### 핵심 원칙
 
-- **Source of Truth (신뢰의 원천):** 재고 수량의 최종적인 신뢰 원천은 `orders` 컬렉션에 기록된 실제 주문 내역이다.
-- **비동기적 집계의 한계:** `products` 문서 내에 트리거로 집계되는 `reservedCount` 필드는 편의성을 위해 사용될 수 있으나, 비동기적 업데이트로 인한 지연 가능성이 존재한다. 따라서 **재고를 차감하거나 최종 확인하는 민감한 로직**에서는 이 값에 의존해서는 안 된다.
+-   **Source of Truth (신뢰의 원천):** 재고 수량의 최종적인 신뢰 원천은 `orders` 컬렉션에 기록된 실제 주문 내역이다.
+-   **비동기적 집계의 한계:** `products` 문서 내에 트리거로 집계되는 `reservedCount` 필드는 편의성을 위해 사용될 수 있으나, 비동기적 업데이트로 인한 지연 가능성이 존재한다. 따라서 **재고를 차감하거나 최종 확인하는 민감한 로직**에서는 이 값에 의존해서는 안 된다.
 
 ### 동작 흐름
 

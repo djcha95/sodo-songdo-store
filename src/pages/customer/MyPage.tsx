@@ -52,22 +52,23 @@ const getTierProgressInfo = (tier: LoyaltyTier, pickupCount: number, noShowCount
       return { currentRate: 0, progressMessage: `첫 픽업 완료 시 등급이 산정됩니다.` };
   }
 
+  // ✅ [수정] 새로운 등급 기준에 맞게 다음 등급까지의 남은 횟수 메시지 업데이트
   switch (tier) {
     case '주의 요망':
-      const pickupsToEscape = Math.max(0, (9 * noShowCount) - pickupCount);
-      return { currentRate, progressMessage: `'공구요정'으로 복귀하려면 약 ${pickupsToEscape}회의 추가 픽업이 필요해요.` };
+      const pickupsToEscape = Math.max(0, Math.ceil((noShowCount * 7/3) - pickupCount)); // 70% 도달 계산
+      return { currentRate, progressMessage: `'공구새싹'으로 복귀하려면 약 ${pickupsToEscape}회의 추가 픽업이 필요해요.` };
 
     case '공구새싹':
-      const neededForFairy = Math.max(0, 5 - pickupCount);
-      return { currentRate, progressMessage: `다음 등급 '공구요정'까지 픽업 ${neededForFairy}회 남았습니다. (픽업률 90%↑)` };
+      const neededForFairy = Math.max(0, 30 - pickupCount);
+      return { currentRate, progressMessage: `다음 등급 '공구요정'까지 픽업 ${neededForFairy}회 남았습니다. (픽업 30회 & 픽업률 90%↑)` };
 
     case '공구요정':
-      const neededForKing = Math.max(0, 20 - pickupCount);
-      return { currentRate, progressMessage: `다음 등급 '공구왕'까지 픽업 ${neededForKing}회 남았습니다. (픽업률 95%↑)` };
+      const neededForKing = Math.max(0, 100 - pickupCount);
+      return { currentRate, progressMessage: `다음 등급 '공구왕'까지 픽업 ${neededForKing}회 남았습니다. (픽업 100회 & 픽업률 95%↑)` };
 
     case '공구왕':
-      const neededForGod = Math.max(0, 50 - pickupCount);
-      return { currentRate, progressMessage: `다음 등급 '공구의 신'까지 픽업 ${neededForGod}회 남았습니다. (픽업률 98%↑)` };
+      const neededForGod = Math.max(0, 250 - pickupCount);
+      return { currentRate, progressMessage: `다음 등급 '공구의 신'까지 픽업 ${neededForGod}회 남았습니다. (픽업 250회 & 픽업률 98%↑)` };
 
     case '공구의 신':
       return { currentRate, progressMessage: "최고 등급 '공구의 신'입니다! 언제나 감사드립니다. 💖" };
@@ -135,11 +136,44 @@ const CircularProgressBar: React.FC<{ percentage: number; tier: LoyaltyTier }> =
   );
 };
 
+// ✅ [신규] 등급 기준 상세 정보를 담는 데이터
+const tierDetails = [
+    {
+      tier: '공구의 신',
+      icon: <Crown size={24} />,
+      criteria: '픽업률 98% 이상 & 누적 픽업 250회 이상'
+    },
+    {
+      tier: '공구왕',
+      icon: <Gem size={24} />,
+      criteria: '픽업률 95% 이상 & 누적 픽업 100회 이상'
+    },
+    {
+      tier: '공구요정',
+      icon: <Sparkles size={24} />,
+      criteria: '픽업률 90% 이상 & 누적 픽업 30회 이상'
+    },
+    {
+      tier: '공구새싹',
+      icon: <i className="seedling-icon-mypage">🌱</i>,
+      criteria: '픽업률 70% 이상 (첫 픽업 완료 시 달성)'
+    },
+    {
+      tier: '주의 요망',
+      icon: <ShieldAlert size={24} />,
+      criteria: '픽업률 70% 미만'
+    },
+    {
+      tier: '참여 제한',
+      icon: <ShieldX size={24} />,
+      criteria: '누적 노쇼 3회 이상 시 즉시 적용'
+    }
+];
+
+// ✅ [수정] 등급 안내 모달 UI 및 내용 전면 개편
 const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const tiers: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹'];
-  
-  const guideIntroText = "소도몰의 등급은 복잡한 포인트 점수가 아닌, 오직 **'픽업률'** 로만 결정됩니다. 고객님의 꾸준한 약속이 곧 신뢰 등급이 되는, 아주 간단하고 공정한 방식이에요.";
-  const guideOutroText = "높은 신뢰 등급을 가진 고객님들께는 **'선주문'** 이나 **'시크릿 상품'** 참여 기회처럼 특별한 혜택이 가장 먼저 주어집니다!";
+  const guideIntroText = "소도몰의 등급은 포인트와 무관하며, 오직 **'픽업 약속 이행'**으로만 결정됩니다.\n\n**'주문 건'**을 기준으로, 1건의 주문을 정상 픽업하면 `픽업 1회`가 기록됩니다. (주문한 상품의 개수와는 무관합니다)";
+  const guideOutroText = "높은 신뢰 등급을 가진 고객님들께는 **'선주문'** 이나 **'시크릿 상품'** 참여 기회처럼 특별한 혜택이 가장 먼저 주어집니다! ✨";
 
   return (
     <AnimatePresence>
@@ -167,17 +201,19 @@ const TierGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
               <div className="guide-intro">
                 <ReactMarkdown>{guideIntroText}</ReactMarkdown>
               </div>
-              <div className="tier-list">
-                {tiers.map(tier => {
-                  const info = getLoyaltyInfo(tier);
-                  return (
-                    <div key={tier} className={`tier-item ${getTierClassName(tier)}`}>
-                      <div className="tier-item-icon">{info.icon}</div>
-                      <div className="tier-item-name">{info.tierName}</div>
+
+              <div className="tier-details-list">
+                {tierDetails.map(detail => (
+                  <div key={detail.tier} className={`tier-detail-item ${getTierClassName(detail.tier as LoyaltyTier)}`}>
+                    <div className="tier-detail-icon-name">
+                       <div className="tier-item-icon">{detail.icon}</div>
+                       <div className="tier-item-name">{detail.tier}</div>
                     </div>
-                  );
-                })}
+                    <div className="tier-detail-criteria">{detail.criteria}</div>
+                  </div>
+                ))}
               </div>
+              
               <div className="guide-outro">
                 <ReactMarkdown>{guideOutroText}</ReactMarkdown>
               </div>
