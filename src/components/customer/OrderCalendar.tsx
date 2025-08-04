@@ -264,7 +264,7 @@ const MonthlyChallenge: React.FC<{ orders: Order[], activeMonth: Date }> = ({ or
 
 const OrderCalendar: React.FC = () => {
   const { user, userDocument } = useAuth();
-  const { startTour } = useTutorial(); // ✅ [추가]
+  const { startTour, runPageTourIfFirstTime } = useTutorial(); // ✅ [추가]
   const [selectedDate, setSelectedDate] = useState<ValuePiece>(null);
   const [activeMonth, setActiveMonth] = useState<Date>(new Date());
   const [userOrders, setUserOrders] = useState<Order[]>([]);
@@ -273,6 +273,15 @@ const OrderCalendar: React.FC = () => {
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
+
+  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
+  useEffect(() => {
+    // 메인 튜토리얼을 마친 사용자에게만 페이지별 튜토리얼을 보여줍니다.
+    if (userDocument?.hasCompletedTutorial) {
+      runPageTourIfFirstTime('hasSeenCalendarPage', calendarPageTourSteps);
+    }
+  }, [userDocument, runPageTourIfFirstTime]);
+
 
   useEffect(() => {
     if (user?.uid) {

@@ -18,7 +18,7 @@ import { useTutorial } from '@/context/TutorialContext'; // ✅ [신규] useTuto
 import { detailPageTourSteps } from '@/components/customer/AppTour'; // ✅ [신규] 튜토리얼 스텝 import
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
-  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck, HelpCircle // ✅ [신규] HelpCircle 아이콘 import
+  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck // ✅ [신규] HelpCircle 아이콘 import
 } from 'lucide-react';
 
 // Swiper React components
@@ -97,7 +97,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const { addToCart } = useCart();
   const { user, userDocument, isSuspendedUser } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
-  const { startTour } = useTutorial(); // ✅ [신규]
+  const { runPageTourIfFirstTime } = useTutorial(); // ✅ [수정] runPageTourIfFirstTime 추가
 
   // --- 상태(State) 선언 ---
   const [product, setProduct] = useState<Product | null>(null);
@@ -115,6 +115,15 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const quantityInputRef = useRef<HTMLInputElement>(null);
   const swiperRef = useRef<any>(null);
   const lightboxSwiperRef = useRef<any>(null);
+  
+  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
+  useEffect(() => {
+    // 모달이 열리고, 메인 튜토리얼을 마친 사용자에게만 페이지별 튜토리얼을 보여줍니다.
+    if (isOpen && userDocument?.hasCompletedTutorial) {
+      runPageTourIfFirstTime('hasSeenDetailPage', detailPageTourSteps);
+    }
+  }, [isOpen, userDocument, runPageTourIfFirstTime]);
+
 
   // --- 메모이제이션(useMemo) 로직 ---
   
@@ -467,10 +476,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
           <div className="product-info-area">
             <div className="product-info-header">
               <h2 className="product-name">{product.groupName}</h2>
-              {/* ✅ [신규] 페이지별 튜토리얼 시작 버튼 */}
-              <button onClick={() => startTour(detailPageTourSteps)} className="tutorial-help-button">
-                <HelpCircle size={20} />
-              </button>
             </div>
             <p className="product-description">{product.description}</p>
 

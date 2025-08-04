@@ -1,15 +1,12 @@
 // src/context/AuthContext.tsx
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-// ✅ [수정] signOut 함수를 firebase/auth에서 가져옵니다.
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import type { User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { auth, db } from '../firebase/firebaseConfig'; // 경로 수정
 import { recordDailyVisit } from '@/firebase/pointService';
 import type { UserDocument } from '../types';
 
-// ✅ [수정] logout 함수의 타입 정의를 추가합니다.
 interface AuthContextType {
   user: User | null;
   userDocument: UserDocument | null;
@@ -27,7 +24,6 @@ const AuthContext = createContext<AuthContextType>({
   isMaster: false,
   isSuspendedUser: false,
   loading: true,
-  // ✅ [추가] 기본값에도 logout 함수를 추가합니다.
   logout: async () => {},
 });
 
@@ -39,17 +35,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    // ✅ [수정] onSnapshot 구독 해제 함수를 저장할 변수를 외부에서 선언합니다.
+    let unsubscribeFromSnapshot: Unsubscribe | null = null;
+
+    const unsubscribeFromAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      // ✅ [수정] 사용자 상태가 변경될 때, 기존의 snapshot 구독이 있다면 먼저 해제합니다.
+      if (unsubscribeFromSnapshot) {
+        unsubscribeFromSnapshot();
+      }
+
       setUser(firebaseUser);
+
       if (firebaseUser) {
+        setLoading(true); // 새 사용자 정보 로딩 시작
         const userRef = doc(db, 'users', firebaseUser.uid);
-        const unsubSnapshot = onSnapshot(userRef, (doc) => {
+        
+        // 새로운 snapshot 리스너를 구독하고, 해제 함수를 변수에 저장합니다.
+        unsubscribeFromSnapshot = onSnapshot(userRef, (doc) => {
           if (doc.exists()) {
             const userData = { uid: doc.id, ...doc.data() } as UserDocument;
             setUserDocument(userData);
-            
             recordDailyVisit(firebaseUser.uid);
-
           } else {
             setUserDocument(null);
           }
@@ -59,17 +65,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setUserDocument(null);
             setLoading(false);
         });
-        return () => unsubSnapshot();
       } else {
+        // 사용자가 로그아웃한 경우, 모든 상태를 초기화합니다.
         setUserDocument(null);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    // 컴포넌트가 언마운트될 때 auth 리스너와 snapshot 리스너를 모두 해제합니다.
+    return () => {
+      unsubscribeFromAuth();
+      if (unsubscribeFromSnapshot) {
+        unsubscribeFromSnapshot();
+      }
+    };
   }, []);
   
-  // ✅ [추가] 로그아웃 함수를 구현합니다.
   const logout = useCallback(async () => {
     try {
       await signOut(auth);
@@ -78,20 +89,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  const isAdmin = userDocument?.role === 'admin' || userDocument?.role === 'master';
-  const isMaster = userDocument?.role === 'master';
-  const isSuspendedUser = userDocument?.loyaltyTier === '참여 제한';
-
-  const value = {
-    user,
-    userDocument,
-    isAdmin,
-    isMaster,
-    isSuspendedUser,
-    loading,
-    // ✅ [추가] value 객체에 logout 함수를 포함시켜 다른 컴포넌트에서 사용할 수 있도록 합니다.
-    logout,
-  };
+  // ✅ [수정] useMemo를 사용해 context value 객체의 불필요한 재생성을 방지합니다.
+  const value = useMemo(() => {
+    const isAdmin = userDocument?.role === 'admin' || userDocument?.role === 'master';
+    const isMaster = userDocument?.role === 'master';
+    const isSuspendedUser = userDocument?.loyaltyTier === '참여 제한';
+    
+    return {
+      user,
+      userDocument,
+      isAdmin,
+      isMaster,
+      isSuspendedUser,
+      loading,
+      logout,
+    };
+  }, [user, userDocument, loading, logout]);
 
   return (
     <AuthContext.Provider value={value}>

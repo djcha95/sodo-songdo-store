@@ -38,21 +38,14 @@ export const POINT_POLICIES = {
 
 
 /**
- * @description 주문 상태 변경에 따라 신뢰도 포인트를 적용하는 핵심 함수
- * ✅ [수정] 등급 계산 로직은 이제 외부 loyaltyUtils의 새로운 기준을 따름
+ * @description 주문 상태 변경에 따라 변경될 사용자 데이터를 계산하여 반환하는 함수
+ * ✅ [수정] 트랜잭션 규칙 준수를 위해 직접 읽고 쓰는 대신, 받은 데이터를 기반으로 계산만 수행
  */
-export const applyPointChangeByStatus = async (
-  transaction: any,
-  userId: string,
+export const calculateUserUpdateByStatus = (
+  userDoc: UserDocument,
   order: Order,
   newStatus: OrderStatus
-): Promise<void> => {
-  const userRef = doc(db, 'users', userId);
-  const userDocSnap = await transaction.get(userRef);
-  if (!userDocSnap.exists()) return;
-
-  const userDoc = userDocSnap.data() as UserDocument;
-
+): { updateData: Partial<UserDocument>; pointLog: Omit<PointLog, 'id'> | null } | null => {
   let policy: { points: number; reason: string } | null = null;
   let pickupCountIncrement = 0;
   let noShowCountIncrement = 0;
@@ -67,58 +60,54 @@ export const applyPointChangeByStatus = async (
       if (prepaidBonus > 0) {
         reason = `선결제 ${reason}`;
       }
-
-      policy = {
-        points: totalPoints,
-        reason: reason
-      };
+      policy = { points: totalPoints, reason };
       pickupCountIncrement = 1;
       break;
     case 'NO_SHOW':
       policy = POINT_POLICIES.NO_SHOW;
       noShowCountIncrement = 1;
       break;
-    // 필요한 경우 CANCEL 등의 상태에 대한 포인트 정책을 추가합니다.
-    // case 'CANCELLED':
-    //   const cancelPenaltyPolicy = POINT_POLICIES.CANCEL_PENALTY;
-    //   const ratePenalty = Math.max(cancelPenaltyPolicy.maxRatePenalty, Math.floor(order.totalPrice * cancelPenaltyPolicy.rate) * -1);
-    //   policy = {
-    //     points: cancelPenaltyPolicy.basePoints + ratePenalty,
-    //     reason: cancelPenaltyPolicy.reason
-    //   };
-    //   break;
+    // CANCELED 상태는 페널티 정책이 복잡하므로 별도 함수(cancelOrder)에서 처리
   }
 
-  if (policy && policy.points !== 0) { 
-    const newPoints = (userDoc.points || 0) + policy.points;
-    const newPickupCount = (userDoc.pickupCount || 0) + pickupCountIncrement;
-    const newNoShowCount = (userDoc.noShowCount || 0) + noShowCountIncrement;
-    
-    // ✅ [변경] 새로운 등급 계산 함수 호출
-    const newTier = calculateTier(newPickupCount, newNoShowCount);
-
-    const now = new Date();
-    const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
-
-    const newPointHistoryEntry: Omit<PointLog, 'id'> = {
-      amount: policy.points,
-      reason: policy.reason,
-      createdAt: Timestamp.now(), 
-      orderId: order.id,
-      expiresAt: policy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
-    };
-
-    const updateData: any = {
-      points: newPoints,
-      loyaltyTier: newTier, // 새로운 등급으로 업데이트
-      pointHistory: arrayUnion(newPointHistoryEntry), 
-      pickupCount: newPickupCount,
-      noShowCount: newNoShowCount,
-    };
-
-    transaction.update(userRef, updateData);
+  if (!policy || policy.points === 0) {
+    // pickupCount나 noShowCount만 변경되는 경우도 처리
+    if (pickupCountIncrement === 0 && noShowCountIncrement === 0) {
+      return null;
+    }
   }
+
+  const newPoints = (userDoc.points || 0) + (policy?.points || 0);
+  const newPickupCount = (userDoc.pickupCount || 0) + pickupCountIncrement;
+  const newNoShowCount = (userDoc.noShowCount || 0) + noShowCountIncrement;
+  
+  const newTier = calculateTier(newPickupCount, newNoShowCount);
+
+  const now = new Date();
+  const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
+
+  const pointLog: Omit<PointLog, 'id'> | null = policy ? {
+    amount: policy.points,
+    reason: policy.reason,
+    createdAt: Timestamp.now(), 
+    orderId: order.id,
+    expiresAt: policy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
+  } : null;
+
+  const updateData: Partial<UserDocument> & { pointHistory?: any } = {
+    points: newPoints,
+    loyaltyTier: newTier,
+    pickupCount: newPickupCount,
+    noShowCount: newNoShowCount,
+  };
+  
+  if (pointLog) {
+    updateData.pointHistory = arrayUnion(pointLog);
+  }
+
+  return { updateData, pointLog };
 };
+
 
 /**
  * @description 관리자가 수동으로 사용자의 포인트를 조정합니다.

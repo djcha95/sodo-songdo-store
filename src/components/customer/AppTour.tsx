@@ -111,6 +111,62 @@ export const calendarPageTourSteps: Step[] = [
     },
 ];
 
+// ✅ [추가] 5. 고객센터 페이지 (CustomerCenterPage) 튜토리얼 단계
+export const customerCenterTourSteps: Step[] = [
+    {
+        target: '[data-tutorial-id="customer-center-quick-links"]',
+        content: '가장 자주 사용하는 기능이에요! 버튼을 눌러 소도몰 카카오톡 채널로 이동하거나, 사장님과 1:1 문의를 시작할 수 있습니다.',
+        disableBeacon: true,
+    },
+    {
+        target: '[data-tutorial-id="customer-center-tabs"]',
+        content: '매장 정보, 이용 안내, 자주 묻는 질문 등 궁금한 정보를 탭해서 확인해보세요.',
+    },
+    {
+        target: '[data-tutorial-id="customer-center-map"]',
+        content: '매장 위치가 궁금하다면 지도를 확인해주세요!',
+        placement: 'top',
+    },
+];
+
+// ✅ [추가] 6. 마이페이지 (MyPage) 튜토리얼 단계
+export const myPageTourSteps: Step[] = [
+    {
+        target: '[data-tutorial-id="mypage-profile-card"]',
+        content: '이곳에서 나의 신뢰 등급과 활동 포인트를 한눈에 확인할 수 있어요. 카드를 클릭하면 등급별 혜택을 볼 수 있습니다.',
+        disableBeacon: true,
+    },
+    {
+        target: '[data-tutorial-id="mypage-nickname-setup"]',
+        content: '아직 닉네임을 설정하지 않으셨다면, 여기서 설정해주세요! 소통이 훨씬 원활해집니다.',
+    },
+    {
+        target: '[data-tutorial-id="mypage-referral-code"]',
+        content: '친구에게 내 초대코드를 공유하고 함께 포인트를 받아보세요!',
+    },
+    {
+        target: '[data-tutorial-id="mypage-menu-list"]',
+        content: '주문/대기 내역, 픽업 달력 등 나의 모든 활동 내역은 여기서 확인할 수 있습니다.',
+    },
+];
+
+// ✅ [추가] 7. 주문/대기 내역 페이지 (OrderHistoryPage) 튜토리얼 단계
+export const orderHistoryTourSteps: Step[] = [
+    {
+        target: '[data-tutorial-id="history-view-toggle"]',
+        content: '주문일순, 픽업일순, 대기목록으로 나누어 내역을 편리하게 확인해보세요.',
+        disableBeacon: true,
+    },
+    {
+        target: '[data-tutorial-id="history-cancel-info"]',
+        content: '예약을 취소하고 싶으신가요? 취소하고 싶은 상품 카드를 1.5초간 길게 누르면 취소할 수 있습니다.',
+    },
+    {
+        target: '[data-tutorial-id="history-waitlist-ticket"]',
+        content: '대기 목록에서는 50포인트를 사용해 \'순서 올리기\'가 가능해요. 인기 상품을 더 빨리 받아보세요!',
+    },
+];
+
 
 interface AppTourProps {
   steps: Step[];

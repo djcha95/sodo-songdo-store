@@ -1,6 +1,7 @@
 // src/pages/customer/CartPage.tsx
 // ✅ [UX 개선] 선입금 안내 토스트가 자동으로 닫히지 않도록 수정했습니다.
 // 사용자가 계좌번호 등 중요 정보를 충분히 확인하고 직접 닫을 수 있도록 하여 안정성을 높였습니다.
+// ✅ [수정] 예약 상품 목록에 '선택 삭제' 버튼을 추가하여 사용자가 선택한 상품을 편리하게 삭제할 수 있도록 개선했습니다.
 
 import React, { useState, useMemo, useRef, useEffect, useCallback, startTransition } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -12,7 +13,7 @@ import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Timestamp } from 'firebase/firestore';
-import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote, HelpCircle } from 'lucide-react'; // ✅ [추가] HelpCircle 아이콘 import
+import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react'; // ✅ [추가] HelpCircle 아이콘 import
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -139,7 +140,7 @@ const CartPage: React.FC = () => {
   const { user, userDocument, isSuspendedUser } = useAuth();
   const { reservationItems, waitlistItems, removeItems, updateCartItemQuantity } = useCart();
   const navigate = useNavigate();
-  const { startTour } = useTutorial(); // ✅ [추가]
+  const { runPageTourIfFirstTime } = useTutorial(); // ✅ [수정] runPageTourIfFirstTime 추가
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isSyncing, setIsSyncing] = useState(true);
@@ -150,6 +151,21 @@ const CartPage: React.FC = () => {
   const functions = getFunctions(getApp(), 'asia-northeast3');
   const checkCartStockCallable = httpsCallable<any, any>(functions, 'callable-checkCartStock');
   const submitOrderCallable = httpsCallable<any, any>(functions, 'callable-submitOrder');
+
+  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
+  useEffect(() => {
+    // 메인 튜토리얼을 마친 사용자에게만 페이지별 튜토리얼을 보여줍니다.
+    if (userDocument?.hasCompletedTutorial) {
+      runPageTourIfFirstTime('hasSeenCartPage', cartPageTourSteps);
+    }
+  }, [userDocument, runPageTourIfFirstTime]);
+
+
+  const { eligibleReservationItems, eligibleReservationTotal } = useMemo(() => {
+    const eligibleItems = reservationItems.filter(item => !ineligibleItemIds.has(item.id));
+    const total = eligibleItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+    return { eligibleReservationItems: eligibleItems, eligibleReservationTotal: total };
+  }, [reservationItems, ineligibleItemIds]);
 
   const syncCartWithServerStock = useCallback(async (itemsToCheck: CartItem[]): Promise<boolean> => {
     if (itemsToCheck.length === 0) {
@@ -207,13 +223,6 @@ const CartPage: React.FC = () => {
     syncCartWithServerStock(reservationItems);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userDocument]); 
-
-
-  const { eligibleReservationItems, eligibleReservationTotal } = useMemo(() => {
-    const eligibleItems = reservationItems.filter(item => !ineligibleItemIds.has(item.id));
-    const total = eligibleItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
-    return { eligibleReservationItems: eligibleItems, eligibleReservationTotal: total };
-  }, [reservationItems, ineligibleItemIds]);
 
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
@@ -441,13 +450,8 @@ const CartPage: React.FC = () => {
           <div className="cart-items-column">
             <div className="cart-section-header">
               <h2 className="cart-section-title">🛒 예약 상품 ({reservationItems.length}) {isSyncing && <RefreshCw size={18} className="spin-icon" />}</h2>
-              <div className="cart-header-actions"> {/* Added this div for better layout */}
-                {selectedReservationKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}><XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})</button>)}
-                {/* ✅ [추가] 페이지별 튜토리얼 시작 버튼 */}
-                <button onClick={() => startTour(cartPageTourSteps)} className="tutorial-help-button-inline">
-                  <HelpCircle size={20} />
-                </button>
-              </div>
+              {/* ✅ [수정] 예약 상품 선택 삭제 버튼 추가 */}
+              {selectedReservationKeys.size > 0 && (<button className="bulk-remove-btn" onClick={() => handleBulkRemove('reservation')}><XCircle size={16} /> 선택 삭제 ({selectedReservationKeys.size})</button>)}
             </div>
             <div data-tutorial-id="cart-reservation-list"> {/* ✅ [추가] data-tutorial-id 추가 */}
               {reservationItems.length > 0 ? (

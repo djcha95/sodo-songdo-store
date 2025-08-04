@@ -78,6 +78,14 @@
         - **'오늘이 픽업 마감일'**인 상품을 아직 찾아가지 않은 고객에게만, 마감 1시간 전에 '선입금' 전환을 안내하는 최종 리마인더를 발송하여 불이익을 막을 수 있는 구제책을 제공합니다.
     * **핵심 파일:** `functions/src/scheduled/notifications.ts`, `NHN Cloud Console` (템플릿 관리)
     
+    ✨ 인터랙티브 튜토리얼 시스템
+
+동작: 신규 가입자가 처음 메인 페이지에 방문하면, react-joyride 라이브러리를 활용한 가이드 투어가 자동으로 실행되어 서비스의 핵심 기능을 안내합니다. 메인 튜토리얼을 마친 후에는, 각 주요 페이지(상품 상세, 장바구니, 마이페이지 등)에 처음 방문할 때마다 해당 페이지의 기능을 설명하는 미니 튜토리얼이 한 번씩 자동으로 실행됩니다.
+
+상태 관리: 사용자의 튜토리얼 진행 상태(hasCompletedMain, hasSeenCartPage 등)는 Firestore의 users 문서 내 tutorialProgress 객체에 기록되어, 튜토리얼이 불필요하게 반복 실행되는 것을 방지합니다.
+
+핵심 파일: AppTour.tsx, TutorialContext.tsx, ProductListPage.tsx
+
     ## 🔐 관리자 기능
 
 1.  **상품 및 판매 회차 관리**

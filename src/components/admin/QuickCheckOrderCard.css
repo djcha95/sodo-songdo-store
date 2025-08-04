@@ -1,6 +1,5 @@
 /* src/components/admin/QuickCheckOrderCard.css */
 
-/* ✅ 애니메이션 효과 추가 */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -19,11 +18,33 @@
     flex-direction: column;
     gap: 8px;
     animation: fadeIn 0.4s ease-out;
-
-    /* ✅ [수정] 카드의 가로, 세로 크기를 고정 */
     width: 300px;
     height: 170px;
+    position: relative;
 }
+
+.qco-checkmark {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 32px;
+    height: 32px;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top-right-radius: var(--border-radius-md);
+    border-bottom-left-radius: var(--border-radius-lg);
+    box-shadow: -2px 2px 5px rgba(0,0,0,0.1);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
 
 .qc-order-card:hover {
     transform: translateY(-3px);
@@ -31,12 +52,10 @@
 }
 
 .qc-order-card.selected {
-    /* ✅ 선택 시 파란색 테두리 강조 */
     border: 2px solid var(--primary-color);
     box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
 }
 
-/* ✅ 상태별 배경색상 진하게 변경 */
 .qc-order-card.bg-picked-up-strong { background-color: #cfe2ff; border-color: #9ec5fe; }
 .qc-order-card.bg-prepaid-strong { background-color: #fff3cd; border-color: #ffeeba; }
 .qc-order-card.bg-noshow-strong { background-color: #f8d7da; border-color: #f5c2c7; }
@@ -61,7 +80,7 @@
     flex-direction: column;
     gap: 4px;
     flex-grow: 1; 
-    overflow: hidden; /* ✅ 내용이 넘칠 경우를 대비 */
+    overflow: hidden;
 }
 
 .qco-item {
@@ -75,15 +94,13 @@
 .qco-item-name {
     font-weight: var(--font-weight-semibold);
     color: var(--text-color-dark);
-    
-    /* ✅ [수정] 상품명이 길 경우 2줄까지 표시하고 말줄임표 처리 */
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
-    -webkit-line-clamp: 2; /* 보여줄 줄 수 */
-    line-clamp: 2; /* ✅ [오류 수정] 표준 속성 추가 */
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
-    word-break: keep-all; /* 단어 단위로 줄바꿈 */
+    word-break: keep-all;
 }
 
 .qco-item-qty {
@@ -98,23 +115,22 @@
     background-color: var(--primary-color-light);
 }
 
-/* ✅ 수량 수정 UI 스타일 */
 .qco-qty-editor {
     display: flex;
     align-items: center;
-    gap: 6px; /* 버튼과 입력 필드 사이 간격 */
+    gap: 6px;
 }
 .qco-qty-editor button {
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
-    color: var(--text-color-light); /* 기본 아이콘 색상 */
+    color: var(--text-color-light);
     display: flex;
     align-items: center;
 }
 .qco-qty-editor button:hover {
-    color: var(--primary-color); /* 호버 시 색상 변경 */
+    color: var(--primary-color);
 }
 
 .qco-qty-input {
@@ -125,11 +141,10 @@
     text-align: center;
     font-size: 0.95rem;
     font-weight: var(--font-weight-semibold);
-    /* ✅ [오류 수정] 표준 속성 추가 */
     -moz-appearance: textfield;
     appearance: textfield;
 }
-/* Chrome, Safari, Edge에서 숫자 입력 필드의 스핀 버튼 제거 */
+
 .qco-qty-input::-webkit-outer-spin-button,
 .qco-qty-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -154,4 +169,13 @@
     font-size: 1.15rem;
     font-weight: var(--font-weight-bold);
     color: var(--primary-color-dark);
+}
+
+/* 🎨 [모바일 UI/UX 고도화] 768px 이하 */
+@media (max-width: 768px) {
+    .qc-order-card.selected {
+        /* 선택 시 카드 '팝업' 효과 */
+        transform: scale(1.02);
+        box-shadow: var(--shadow-lg);
+    }
 }
