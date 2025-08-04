@@ -3,14 +3,15 @@
 import React, { useState } from 'react';
 import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/types';
 import toast from 'react-hot-toast';
-import { MinusCircle, PlusCircle } from 'lucide-react';
+// ✅ [최종 수정] CheckSquare 아이콘 추가
+import { MinusCircle, PlusCircle, CheckSquare } from 'lucide-react'; 
 import './QuickCheckOrderCard.css';
 
 interface OrderCardProps {
   group: AggregatedOrderGroup;
   onSelect: (groupKey: string) => void;
   isSelected: boolean;
-  onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void; // ✅ 시그니처 변경
+  onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
 }
 
 const formatDate = (timestamp: any): string => {
@@ -54,7 +55,7 @@ const getStatusClassName = (status: OrderStatus): string => {
 const CardItemRow: React.FC<{
   item: OrderItem;
   totalQuantity: number;
-  onUpdateQuantity: (newQuantity: number) => void; // ✅ 내부 콜백 이름 변경
+  onUpdateQuantity: (newQuantity: number) => void;
 }> = ({ item, totalQuantity, onUpdateQuantity }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [currentQuantity, setCurrentQuantity] = useState(totalQuantity);
@@ -68,8 +69,6 @@ const CardItemRow: React.FC<{
             return;
         }
         onUpdateQuantity(currentQuantity);
-    } else {
-      // 수량이 변경되지 않았으면 아무 작업도 하지 않음
     }
   };
 
@@ -128,7 +127,6 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
   const deadlineDate = pickupDeadlineDate ?? pickupDate;
   const isSingleDayPickup = isSameDay(arrivalDate, deadlineDate);
 
-  // 이 카드는 단일 품목에 대한 집계이므로 onQuantityChange를 직접 호출할 수 있습니다.
   const handleItemQuantityUpdate = (newQuantity: number) => {
     onQuantityChange(group, newQuantity);
   };
@@ -138,6 +136,13 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
       className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)}`}
       onClick={() => onSelect(groupKey)}
     >
+      {/* ✅ [최종 수정] isSelected가 true일 때 체크마크 아이콘을 렌더링합니다. */}
+      {isSelected && (
+        <div className="qco-checkmark">
+          <CheckSquare size={24} />
+        </div>
+      )}
+
       <div className="qco-top-row">
         {isSingleDayPickup ? (
             <span className='today'>🔥 {formatDate(arrivalDate)} 당일픽업</span>

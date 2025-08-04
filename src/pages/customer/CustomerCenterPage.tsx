@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback, startTransition } from 'react';
 import { getStoreInfo, updateStoreInfo } from '@/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { useTutorial } from '@/context/TutorialContext'; // ✅ [추가]
+import { customerCenterTourSteps } from '@/components/customer/AppTour'; // ✅ [추가]
 import type { StoreInfo, GuideItem, FaqItem } from '@/types';
 // ✅ [수정] Users 아이콘 추가
 import { AlertTriangle, MapPin, BookOpen, HelpCircle, Save, X, MessageSquare, Users } from 'lucide-react';
@@ -51,7 +53,8 @@ const defaultFaq: FaqItem[] = [
 ];
 
 const CustomerCenterPage: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, userDocument } = useAuth(); // ✅ [수정] userDocument 추가
+  const { runPageTourIfFirstTime } = useTutorial(); // ✅ [추가]
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
   const [editableInfo, setEditableInfo] = useState<StoreInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +62,13 @@ const CustomerCenterPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'info' | 'guide' | 'faq'>('info');
 
   const hasChanges = !isEqual(storeInfo, editableInfo);
+
+  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
+  useEffect(() => {
+    if (userDocument?.hasCompletedTutorial) {
+      runPageTourIfFirstTime('hasSeenCustomerCenterPage', customerCenterTourSteps);
+    }
+  }, [userDocument, runPageTourIfFirstTime]);
 
   // 데이터 로딩 및 관리 로직 (기존과 동일)
   const fetchStoreInformation = useCallback(async () => {
@@ -109,7 +119,7 @@ const CustomerCenterPage: React.FC = () => {
           </div>
         )}
 
-        <section className="service-section quick-links">
+        <section className="service-section quick-links" data-tutorial-id="customer-center-quick-links"> {/* ✅ [추가] data-tutorial-id */}
           <div className="contact-buttons">
             {/* ✅ [추가] 카카오톡 채널 바로가기 버튼 */}
             <a
@@ -133,7 +143,7 @@ const CustomerCenterPage: React.FC = () => {
           </div>
         </section>
 
-        <div className="service-tabs">
+        <div className="service-tabs" data-tutorial-id="customer-center-tabs"> {/* ✅ [추가] data-tutorial-id */}
           <button onClick={() => { startTransition(() => { setActiveTab('info'); }); }} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16} /> 매장 정보</button>
           <button onClick={() => { startTransition(() => { setActiveTab('guide'); }); }} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16} /> 이용 안내</button>
           <button onClick={() => { startTransition(() => { setActiveTab('faq'); }); }} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16} /> 자주 묻는 질문</button>

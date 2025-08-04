@@ -1,0 +1,68 @@
+/* src/components/admin/CustomerFocusView.css */
+
+.cfv-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: var(--spacing-md) var(--spacing-xl); 
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+.cfv-header {
+    width: 100%;
+}
+.cfv-back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-color-muted);
+    font-weight: var(--font-weight-semibold);
+    padding: var(--spacing-xs) 0;
+    transition: all 0.2s ease;
+}
+.cfv-back-button:hover {
+    color: var(--primary-color);
+    transform: translateX(-3px);
+}
+
+.cfv-body {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: var(--spacing-xl);
+    align-items: flex-start;
+}
+
+.cfv-left-column {
+    position: sticky;
+    top: var(--spacing-xl);
+}
+.cfv-right-column {
+    min-width: 0;
+}
+
+@media (max-width: 1200px) {
+    .cfv-body {
+        grid-template-columns: 320px 1fr;
+    }
+}
+
+@media (max-width: 992px) {
+    .cfv-body {
+        grid-template-columns: 1fr;
+    }
+    .cfv-left-column {
+        position: static;
+        top: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .cfv-container {
+        /* 🦎 [모바일 개선] 상하, 좌우 여백 축소 */
+        padding: var(--spacing-md) var(--spacing-sm);
+    }
+    .cfv-body {
+        gap: var(--spacing-lg);
+    }
+}

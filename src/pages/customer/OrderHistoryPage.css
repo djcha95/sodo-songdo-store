@@ -463,3 +463,36 @@
     font-size: 0.85rem;
   }
 }
+
+/* ✅ [수정] react-hot-toast 커스텀 모달 애니메이션 */
+.confirmation-toast {
+  /* 애니메이션 효과 정의 */
+  transition: all 0.3s ease-out;
+
+  /* 애니메이션 시작 상태 (화면 아래에 숨겨진 상태) */
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+/* 모달이 나타날 때 적용될 최종 상태 */
+.confirmation-toast.animate-enter {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ✅ [기존 코드] react-hot-toast 커스텀 모달 내부 스타일 (변경 없음) */
+.toast-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-color-primary);
+}
+
+.toast-message {
+  margin: 12px 0 20px;
+  font-size: 15px;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
+}

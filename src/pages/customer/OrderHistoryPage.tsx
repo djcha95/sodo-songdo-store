@@ -1,9 +1,10 @@
 // src/pages/customer/OrderHistoryPage.tsx
-// ✅ [UX 개선] '길게 눌러 취소' 기능의 대기 시간을 2.5초에서 1.5초로 단축하여 반응성을 높였습니다.
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useTutorial } from '@/context/TutorialContext';
+import { orderHistoryTourSteps } from '@/components/customer/AppTour';
 import { cancelOrder } from '@/firebase';
 import { cancelWaitlistEntry } from '@/firebase/productService';
 import { applyWaitlistPriorityTicket } from '@/firebase/pointService';
@@ -16,16 +17,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, Inbox, Zap, Info,
+  PackageX, Hourglass, CreditCard, Inbox, Zap, Info
 } from 'lucide-react';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
-import { showToast, showPromiseToast, showCancelOrderToast, showCancelWaitlistToast, showUseTicketToast } from '@/utils/toastUtils';
+import { showToast, showPromiseToast, showUseTicketToast } from '@/utils/toastUtils';
+import toast from 'react-hot-toast';
 
 import './OrderHistoryPage.css';
 
 // =================================================================
-// 📌 타입 정의 및 헬퍼 함수 (기존과 동일)
+// 📌 타입 정의 및 헬퍼 함수 (변경 없음)
 // =================================================================
 
 interface AggregatedItem {
@@ -76,7 +78,7 @@ const formatPickupDateShort = (date: Date): string => {
 const EMPTY_PAYLOAD = {};
 
 // =================================================================
-// 📌 커스텀 훅 (기존과 동일)
+// 📌 커스텀 훅 (변경 없음)
 // =================================================================
 const DATA_PER_PAGE = 10;
 
@@ -189,6 +191,8 @@ const AggregatedItemCard: React.FC<{
 }> = React.memo(({ item, displayDateInfo, onCancel }) => {
   const navigate = useNavigate();
   
+  const longPressActionInProgress = useRef(false);
+
   const { statusText, StatusIcon, statusClass } = useMemo(() => {
     if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
       return { statusText: '선입금 필요', StatusIcon: CreditCard, statusClass: 'status-prepayment_required' };
@@ -202,26 +206,83 @@ const AggregatedItemCard: React.FC<{
     }
   }, [item.status, item.wasPrepaymentRequired]);
 
-  const { cancellable, orderToCancel } = useMemo(() => {
+  const { cancellable, orderToCancel, cancelDisabledReason } = useMemo(() => {
     const latestOrder = item.originalOrders[0];
-    if (!latestOrder || (latestOrder.status !== 'RESERVED' && latestOrder.status !== 'PREPAID')) {
-      return { cancellable: false, orderToCancel: undefined };
+    if (!latestOrder) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null };
     }
-    return { cancellable: true, orderToCancel: latestOrder };
+
+    const isCancellableStatus = latestOrder.status === 'RESERVED' || latestOrder.status === 'PREPAID';
+    if (!isCancellableStatus) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null };
+    }
+
+    const deadline = safeToDate(latestOrder.items[0]?.deadlineDate);
+    if (deadline && new Date() > deadline) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '마감일이 지나 취소할 수 없습니다.' };
+    }
+
+    return { cancellable: true, orderToCancel: latestOrder, cancelDisabledReason: null };
   }, [item.originalOrders]);
 
+  const handleLongPress = () => {
+    if (longPressActionInProgress.current) return;
+    longPressActionInProgress.current = true;
+
+    if (cancellable && orderToCancel && onCancel) {
+      onCancel(orderToCancel);
+    } 
+    else if (cancelDisabledReason) {
+      // ✅ [수정] 다른 커스텀 토스트와 동일하게 기본 스타일을 제거하는 옵션을 추가합니다.
+      toast.custom((t) => (
+        <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
+            <h4 className="toast-header">
+              <Info size={20} />
+              <span>취소 불가 안내</span>
+            </h4>
+            <p className="toast-message">{cancelDisabledReason}</p>
+            <div className="toast-buttons">
+                <button className="common-button button-primary button-medium" onClick={() => toast.dismiss(t.id)}>
+                  확인
+                </button>
+            </div>
+        </div>
+      ), { // ✅ 옵션 객체 추가
+        duration: Infinity,
+        style: {
+          background: 'transparent',
+          boxShadow: 'none',
+          padding: 0,
+        },
+      });
+    }
+  };
+  
+  const handlePressEnd = () => {
+    longPressActionInProgress.current = false;
+  };
+  
   const handlers = useLongPress(
-    () => {
-      if (cancellable && orderToCancel && onCancel) {
-        onCancel(orderToCancel);
-      }
-    },
-    () => {
-      navigate(`/product/${item.productId}`);
-    },
-    // ✅ [UX 개선] 롱프레스 시간을 2.5초에서 1.5초로 단축하여 반응성을 높입니다.
+    handleLongPress,
+    () => { navigate(`/product/${item.productId}`); },
     { initialDelay: 1500 }
   );
+
+  const finalHandlers = {
+    ...handlers,
+    onMouseUp: () => {
+      handlers.onMouseUp();
+      handlePressEnd();
+    },
+    onMouseLeave: () => {
+      handlers.onMouseLeave();
+      handlePressEnd();
+    },
+    onTouchEnd: () => {
+      handlers.onTouchEnd();
+      handlePressEnd();
+    },
+  };
 
   let displayDateText = '';
   if (displayDateInfo?.date) {
@@ -234,11 +295,9 @@ const AggregatedItemCard: React.FC<{
       className={`order-card-v3 ${cancellable ? 'cancellable' : ''}`} 
       layoutId={item.stableId}
       key={item.id}
-      {...handlers}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
+      {...finalHandlers}
+      whileTap={{ scale: 0.97 }}
+      transition={{ duration: 0.2, ease: "easeInOut" }}
     >
       <div className="card-v3-body">
         <div className="item-image-wrapper">
@@ -262,15 +321,43 @@ const AggregatedItemCard: React.FC<{
   );
 });
 
+
 const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: WaitlistInfo) => void; onUseTicket: (item: WaitlistInfo) => void; userPoints: number;}> = React.memo(({ item, onCancel, onUseTicket, userPoints }) => {
     const navigate = useNavigate();
+    
+    const longPressActionInProgress = useRef(false);
+
+    const handleLongPress = () => {
+        if (longPressActionInProgress.current) return;
+        longPressActionInProgress.current = true;
+        onCancel(item);
+    };
+
+    const handlePressEnd = () => {
+        longPressActionInProgress.current = false;
+    };
 
     const handlers = useLongPress(
-      () => onCancel(item),
+      handleLongPress,
       () => navigate(`/product/${item.productId}`),
-      // ✅ [UX 개선] 롱프레스 시간을 2.5초에서 1.5초로 단축합니다.
       { initialDelay: 1500 }
     );
+    
+    const finalHandlers = {
+      ...handlers,
+      onMouseUp: () => {
+        handlers.onMouseUp();
+        handlePressEnd();
+      },
+      onMouseLeave: () => {
+        handlers.onMouseLeave();
+        handlePressEnd();
+      },
+      onTouchEnd: () => {
+        handlers.onTouchEnd();
+        handlePressEnd();
+      },
+    };
     
     const handleTicketClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -282,7 +369,9 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
           className="waitlist-card" 
           layout 
           key={`${item.roundId}-${item.itemId}`}
-          {...handlers}
+          {...finalHandlers}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.2, ease: "easeInOut" }}
         >
           <div className="card-v3-body">
             <div className="item-image-wrapper">
@@ -296,7 +385,11 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
                   <span className="item-quantity">({item.quantity}개)</span>
                 </span>
               </div>
-              <div className="waitlist-actions">
+              <div className="waitlist-actions" data-tutorial-id="history-waitlist-ticket">
+                <div className="cancel-instruction-waitlist">
+                  <Info size={14} />
+                  <span>카드를 길게 눌러 대기를 취소하세요.</span>
+                </div>
                 {item.isPrioritized ? (
                   <button className="priority-ticket-btn used" disabled onClick={(e) => e.stopPropagation()}>
                     <CircleCheck size={16} /> 사용 완료
@@ -319,13 +412,20 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
 });
 
 // =================================================================
-// 📌 메인 컴포넌트 (기존과 동일)
+// 📌 메인 컴포넌트
 // =================================================================
 
 const OrderHistoryPage: React.FC = () => {
     const { user, userDocument } = useAuth();
+    const { runPageTourIfFirstTime } = useTutorial();
     const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('orders');
   
+    useEffect(() => {
+        if (userDocument) { 
+            runPageTourIfFirstTime('hasSeenOrderHistoryPage', orderHistoryTourSteps);
+        }
+    }, [userDocument, runPageTourIfFirstTime]);
+      
     const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
     const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
     const getUserWaitlistCallable = useMemo(() => httpsCallable(functions, 'callable-getUserWaitlist'), [functions]);
@@ -424,34 +524,52 @@ const OrderHistoryPage: React.FC = () => {
     }, [handleScroll]);
     
     const handleCancelOrder = useCallback((orderToCancel: Order) => {
-      showCancelOrderToast(() => {
-        const promise = cancelOrder(orderToCancel);
-        showPromiseToast(promise, {
-          loading: '예약 취소 처리 중...',
-          success: () => {
-            setOrders(prev => prev.map(o => 
-              o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o
-            ));
-            return '예약이 성공적으로 취소되었습니다.';
-          },
-          error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
-        });
-      });
+      toast.custom((t) => (
+        <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
+          <h4 className="toast-header"><AlertCircle size={20} /><span>예약 취소</span></h4>
+          <p className="toast-message">정말 이 예약을 취소하시겠습니까?</p>
+          <div className="toast-buttons">
+            <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
+            <button className="common-button button-danger button-medium" onClick={() => {
+              toast.dismiss(t.id);
+              const promise = cancelOrder(orderToCancel);
+              showPromiseToast(promise, {
+                loading: '예약 취소 처리 중...',
+                success: () => {
+                  setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o));
+                  return '예약이 성공적으로 취소되었습니다.';
+                },
+                error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
+              });
+            }}>취소하기</button>
+          </div>
+        </div>
+      ));
     }, [setOrders]);
   
     const handleCancelWaitlist = useCallback((item: WaitlistInfo) => {
       if (!user) return;
-      showCancelWaitlistToast(item.itemName, item.quantity, () => {
-        const promise = cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId);
-        showPromiseToast(promise, {
-            loading: '대기 취소 처리 중...',
-            success: () => {
-                setWaitlist(prev => prev.filter(w => w.itemId !== item.itemId || w.roundId !== item.roundId));
-                return '대기 신청이 취소되었습니다.';
-            },
-            error: (err: any) => err.message || '대기 취소 중 오류가 발생했습니다.'
-        });
-      });
+      toast.custom((t) => (
+        <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
+          <h4 className="toast-header"><AlertCircle size={20} /><span>대기 취소</span></h4>
+          <p className="toast-message">{`${item.itemName} (${item.quantity}개) 대기 신청을 취소하시겠습니까?`}</p>
+          <div className="toast-buttons">
+            <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
+            <button className="common-button button-danger button-medium" onClick={() => {
+              toast.dismiss(t.id);
+              const promise = cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId);
+              showPromiseToast(promise, {
+                loading: '대기 취소 처리 중...',
+                success: () => {
+                  setWaitlist(prev => prev.filter(w => w.itemId !== item.itemId || w.roundId !== item.roundId));
+                  return '대기 신청이 취소되었습니다.';
+                },
+                error: (err: any) => err.message || '대기 취소 중 오류가 발생했습니다.',
+              });
+            }}>대기 취소</button>
+          </div>
+        </div>
+      ));
     }, [user, setWaitlist]);
   
     const handleUsePriorityTicket = useCallback((item: WaitlistInfo) => {
@@ -494,7 +612,7 @@ const OrderHistoryPage: React.FC = () => {
                 <div className="date-header-container">
                   <DateHeader date={new Date(dateStr)} />
                   {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
-                    <div className="cancel-instruction">
+                    <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
                       <Info size={14} />
                       <span>카드를 길게 눌러 예약을 취소하세요.</span>
                     </div>
@@ -543,7 +661,7 @@ const OrderHistoryPage: React.FC = () => {
     return (
       <div className="customer-page-container">
         <div className="order-history-page">
-          <div className="view-toggle-container">
+          <div className="view-toggle-container" data-tutorial-id="history-view-toggle">
             <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => setViewMode('orders')}>
               <ListOrdered size={18} /> 주문일순
             </button>

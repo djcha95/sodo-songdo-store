@@ -1,15 +1,15 @@
 // src/context/TutorialContext.tsx
 
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'; // useEffect 삭제
 import type { Step } from 'react-joyride';
 import { useAuth } from './AuthContext';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore'; // getDoc 삭제
 import { db } from '@/firebase/firebaseConfig';
 
 interface TutorialContextType {
-  isTourRunning: boolean; // ✅ [추가] 튜토리얼 실행 상태
+  isTourRunning: boolean;
   startTour: (steps: Step[], key?: string) => void;
-  stopTour: () => void; // ✅ [추가] 튜토리얼 중지 함수
+  stopTour: () => void;
   runPageTourIfFirstTime: (pageKey: keyof UserTutorialProgress, steps: Step[]) => void;
 }
 
@@ -18,6 +18,9 @@ export interface UserTutorialProgress {
     hasSeenCartPage?: boolean;
     hasSeenDetailPage?: boolean;
     hasSeenCalendarPage?: boolean;
+    hasSeenCustomerCenterPage?: boolean;
+    hasSeenMyPage?: boolean;
+    hasSeenOrderHistoryPage?: boolean;
 }
 
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
@@ -35,50 +38,43 @@ interface TutorialProviderProps {
 }
 
 export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, userDocument } = useAuth(); // userDocument를 직접 사용
   const [tourSteps, setTourSteps] = useState<Step[]>([]);
   const [tourKey, setTourKey] = useState<string>('initial');
-  const [userProgress, setUserProgress] = useState<UserTutorialProgress>({});
-  const [isTourRunning, setIsTourRunning] = useState(false); // ✅ [추가]
+  const [isTourRunning, setIsTourRunning] = useState(false);
 
-  useEffect(() => {
-    const fetchProgress = async () => {
-      if (user?.uid) {
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setUserProgress(data.tutorialProgress || {});
-        }
-      }
-    };
-    fetchProgress();
-  }, [user]);
+  // AuthContext에서 실시간으로 userDocument를 받으므로, 별도의 fetchProgress 로직 불필요
 
   const startTour = useCallback((steps: Step[], key: string = 'default') => {
-    window.scrollTo(0, 0);
+    // 튜토리얼 시작 시 항상 화면을 맨 위로 스크롤
+    window.scrollTo(0, 0); 
     setTourKey(`${key}-${Date.now()}`);
     setTourSteps(steps);
-    setIsTourRunning(true); // ✅ [추가] 튜토리얼 시작 시 상태를 true로 설정
+    setIsTourRunning(true);
   }, []);
 
   const stopTour = useCallback(() => {
     setTourSteps([]);
-    setIsTourRunning(false); // ✅ [추가] 튜토리얼 종료 시 상태를 false로 설정
+    setIsTourRunning(false);
   }, []);
 
   const runPageTourIfFirstTime = useCallback(async (
     pageKey: keyof UserTutorialProgress,
     steps: Step[]
   ) => {
+    // userDocument가 AuthContext에서 실시간으로 업데이트되므로, userDocument를 직접 사용
+    const userProgress = userDocument?.tutorialProgress || {};
+
     if (user?.uid && !userProgress[pageKey]) {
-      startTour(steps, pageKey);
+      setTimeout(() => {
+        startTour(steps, pageKey);
+      }, 300);
       
       const newProgress = { ...userProgress, [pageKey]: true };
-      setUserProgress(newProgress);
       
       try {
         const userRef = doc(db, 'users', user.uid);
+        // Firestore의 tutorialProgress 필드만 업데이트
         await updateDoc(userRef, {
           tutorialProgress: newProgress
         });
@@ -86,7 +82,7 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
         console.error("페이지 튜토리얼 진행 상태 업데이트 실패:", error);
       }
     }
-  }, [user, userProgress, startTour]);
+  }, [user, userDocument, startTour]); // 의존성 배열에 userDocument 추가
 
   const value = { isTourRunning, startTour, stopTour, runPageTourIfFirstTime };
 

@@ -1,6 +1,9 @@
 // src/types.ts
 
 import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
+// ✅ UserTutorialProgress 타입을 import 해야 아래에서 사용할 수 있습니다.
+// 이 파일이 없다면, 생성하거나 UserTutorialProgress 타입을 이 파일에 직접 정의해야 합니다.
+import type { UserTutorialProgress } from './context/TutorialContext';
 
 // =================================================================
 // 📌 [수정] 신뢰도 포인트 시스템 최종 기획 반영
@@ -229,16 +232,13 @@ export interface UserDocument {
   isSuspended?: boolean;
   gender?: 'male' | 'female' | null;
   ageRange?: string | null;
-  totalOrders?: number;
-  pickedUpOrders?: number;
-  pickupRate?: number;
-  totalPriceSum?: number;
   referralCode?: string;
   referredBy?: string | null;
   nickname?: string;
   nicknameChanged?: boolean;
   manualTier?: LoyaltyTier | null;
-  hasCompletedTutorial?: boolean; // ✅ [추가] 튜토리얼 완료 여부 필드
+  hasCompletedTutorial?: boolean;
+  tutorialProgress?: UserTutorialProgress; // ✅ [추가] 튜토리얼 진행 상태
 }
 
 export interface Banner {

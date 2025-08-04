@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
+import { useTutorial } from '@/context/TutorialContext';
+import { myPageTourSteps } from '@/components/customer/AppTour';
 import {
   Crown, Gem, Sparkles, ShieldAlert, ShieldX, LogOut,
   ChevronRight, Calendar, BarChart2, Shield, Copy, Gift, UserPlus, Info, TrendingUp, X
@@ -35,13 +37,6 @@ const getLoyaltyInfo = (tier: LoyaltyTier): {
     }
 };
 
-/**
- * ✅ [수정] 등급별 진행 상태를 더 구체적으로 안내하는 함수
- * @param tier 사용자의 현재 등급
- * @param pickupCount 누적 픽업 횟수
- * @param noShowCount 누적 노쇼 횟수
- * @returns 픽업률과 다음 등급까지의 구체적인 안내 메시지
- */
 const getTierProgressInfo = (tier: LoyaltyTier, pickupCount: number, noShowCount: number): {
   currentRate: number;
   progressMessage: string;
@@ -59,8 +54,6 @@ const getTierProgressInfo = (tier: LoyaltyTier, pickupCount: number, noShowCount
 
   switch (tier) {
     case '주의 요망':
-      // '공구요정'으로 복귀하려면 픽업률 90% 이상이 필요합니다.
-      // (pickupCount + x) / (totalTransactions + x) >= 0.9  => x >= 9 * noShowCount - pickupCount
       const pickupsToEscape = Math.max(0, (9 * noShowCount) - pickupCount);
       return { currentRate, progressMessage: `'공구요정'으로 복귀하려면 약 ${pickupsToEscape}회의 추가 픽업이 필요해요.` };
 
@@ -201,7 +194,6 @@ const UnifiedProfileCard: React.FC<{ userDocument: UserDocument; onTierClick: ()
   const navigate = useNavigate();
   const loyaltyInfo = useMemo(() => getLoyaltyInfo(userDocument?.loyaltyTier || '공구새싹'), [userDocument?.loyaltyTier]);
   
-  // ✅ [수정] 새로운 getTierProgressInfo 함수를 호출하도록 수정
   const progressInfo = useMemo(() => getTierProgressInfo(
     userDocument?.loyaltyTier || '공구새싹',
     userDocument?.pickupCount || 0,
@@ -216,8 +208,7 @@ const UnifiedProfileCard: React.FC<{ userDocument: UserDocument; onTierClick: ()
     <div className={`unified-profile-card-v2 ${cardClassName}`}>
       <div className="card-v2-background"></div>
       <div className="card-v2-content">
-        {/* --- 신뢰 등급 섹션 --- */}
-        <div className="profile-tier-section-v2" onClick={onTierClick}>
+        <div className="profile-tier-section-v2" onClick={onTierClick} data-tutorial-id="mypage-profile-card">
           <div className="tier-display">
             <div className="tier-icon-name">
               {isAdminOrMaster ? <Shield size={24} /> : loyaltyInfo.icon}
@@ -234,7 +225,6 @@ const UnifiedProfileCard: React.FC<{ userDocument: UserDocument; onTierClick: ()
           )}
         </div>
 
-        {/* --- 활동 포인트 섹션 --- */}
         <div className="profile-points-section-v2" onClick={() => navigate('/mypage/points')}>
           <div className="points-label">
             <TrendingUp size={18} />
@@ -290,7 +280,7 @@ const NicknameSetupSection: React.FC<{ userDocument: UserDocument }> = ({ userDo
     }
 
     return (
-        <div className="nickname-setup-card">
+        <div className="nickname-setup-card" data-tutorial-id="mypage-nickname-setup">
             <div className="nickname-setup-header">
                 <UserPlus size={24} />
                 <h4>닉네임 설정 (최초 1회)</h4>
@@ -330,7 +320,7 @@ const ReferralCodeSection: React.FC<{ referralCode?: string }> = ({ referralCode
   if (!referralCode) return null;
 
   return (
-    <div className="referral-card">
+    <div className="referral-card" data-tutorial-id="mypage-referral-code">
         <div className="referral-info">
             <div className="referral-icon">
                 <Gift size={24} />
@@ -361,7 +351,7 @@ const MenuList: React.FC = () => {
   ];
 
   return (
-    <nav className="mypage-menu-list">
+    <nav className="mypage-menu-list" data-tutorial-id="mypage-menu-list">
       {menuItems.map(item => (
         <div className="menu-list-item" key={item.label} onClick={() => navigate(item.path!)}>
           <div className="menu-item-content">
@@ -382,9 +372,19 @@ const MenuList: React.FC = () => {
 
 const MyPage = () => {
   const { user, userDocument, logout } = useAuth();
+  const { runPageTourIfFirstTime } = useTutorial();
   const navigate = useNavigate();
   const [isTierGuideOpen, setIsTierGuideOpen] = useState(false);
 
+  // ✅ [수정] 페이지 첫 방문 시 튜토리얼을 실행합니다.
+  // TutorialContext의 로직에 따라, 이 페이지의 튜토리얼을 본 적이 없을 때만 실행됩니다.
+  useEffect(() => {
+    if (userDocument) { // userDocument가 로드된 후에 실행하도록 보장합니다.
+      runPageTourIfFirstTime('hasSeenMyPage', myPageTourSteps);
+    }
+  }, [userDocument, runPageTourIfFirstTime]);
+
+  
   const handleLogout = useCallback(() => {
     toast((t) => (
       <div className="confirmation-toast">
@@ -415,7 +415,7 @@ const MyPage = () => {
 
   return (
     <>
-      <div className="mypage-container">
+      <div className="customer-page-container mypage-container">
         
         <UnifiedProfileCard userDocument={userDocument} onTierClick={() => setIsTierGuideOpen(true)} />
 

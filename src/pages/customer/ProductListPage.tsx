@@ -38,7 +38,7 @@ interface ProductWithUIState extends ProductForList {
 
 const ProductListPage: React.FC = () => {
   const { userDocument } = useAuth();
-  const { startTour, isTourRunning } = useTutorial(); // ✅ [수정] isTourRunning 상태 가져오기  
+  const { startTour, isTourRunning } = useTutorial();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<ProductForList[]>([]);
   const [countdown, setCountdown] = useState<string | null>(null);
@@ -94,19 +94,18 @@ const ProductListPage: React.FC = () => {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [loadingMore, getProductsWithStockCallable]);
+  }, [getProductsWithStockCallable]); // ✅ [수정] 의존성 배열에서 loadingMore 제거
 
   const handleRefresh = useCallback(async () => { await fetchData(true); }, [fetchData]);
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({ onRefresh: handleRefresh });
 
   useEffect(() => { fetchData(true); }, [fetchData]);
-  // ✅ [수정] 무한 스크롤을 실행하는 useEffect
+
   useEffect(() => {
-    // 튜토리얼이 실행 중이 아닐 때만 상품을 더 불러오도록 조건을 추가합니다.
     if (isLoadMoreVisible && !loading && !isRefreshing && hasMoreRef.current && !isTourRunning) {
       fetchData(false);
     }
-  }, [isLoadMoreVisible, loading, isRefreshing, fetchData, isTourRunning]); // ✅ 의존성 배열에 isTourRunning 추가
+  }, [isLoadMoreVisible, loading, isRefreshing, fetchData, isTourRunning]);
   
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
