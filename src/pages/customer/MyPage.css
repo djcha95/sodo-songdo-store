@@ -606,3 +606,106 @@
     font-size: 0.8rem;
   }
 }
+
+.mypage-task-section {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* src/pages/customer/MyPage.css 파일 맨 아래 referral-input-card 관련 부분을 교체 */
+
+.referral-input-card {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-color-light);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.referral-input-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: var(--primary-color);
+}
+
+.referral-input-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color-dark);
+}
+
+/* src/pages/customer/MyPage.css 파일에서 이 부분을 찾아 교체해주세요. */
+
+.referral-input-guide {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background-color: var(--background-color-light-gray);
+  padding: 12px;
+  border-radius: 8px;
+  margin: 0 0 16px 0;
+}
+
+.referral-input-guide .guide-text {
+  /* [추가] 텍스트 영역에 대한 스타일 */
+  font-size: 0.85rem;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.referral-input-guide svg {
+  margin-top: 3px;
+  flex-shrink: 0;
+  color: var(--text-color-secondary);
+}
+
+.referral-input-guide strong {
+    color: var(--point-color-accent);
+    font-weight: 600;
+}
+
+.referral-input-form {
+  display: flex;
+  gap: 8px;
+}
+
+.referral-input-form input {
+  flex-grow: 1;
+  border: 1px solid var(--border-color-medium);
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 44px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+  text-transform: uppercase;
+  min-width: 0; /* flex-grow와 함께 사용할 때 너비 축소 보장 */
+}
+
+.referral-input-form input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.referral-input-form input::placeholder {
+    color: var(--text-color-placeholder);
+}
+
+.referral-input-form .common-button {
+  flex-shrink: 0;
+  height: 44px;
+}
+
+/* ✅ [추가] 모바일 화면 대응을 위한 반응형 스타일 */
+@media (max-width: 480px) {
+  .referral-input-form {
+    /* 입력창과 버튼을 가로가 아닌 세로로 쌓음 */
+    flex-direction: column;
+    gap: 10px;
+  }
+}
