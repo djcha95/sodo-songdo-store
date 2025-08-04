@@ -227,6 +227,11 @@ export interface UserDocument {
   loyaltyTier: LoyaltyTier;
   pickupCount: number;
   noShowCount: number;
+
+  // ✅ [수정] 아래 두 줄을 여기에 추가해주세요.
+  totalOrders?: number;
+  pickupRate?: number;
+
   lastLoginDate: string;
   consecutiveLoginDays?: number;
   isSuspended?: boolean;
@@ -238,7 +243,7 @@ export interface UserDocument {
   nicknameChanged?: boolean;
   manualTier?: LoyaltyTier | null;
   hasCompletedTutorial?: boolean;
-  tutorialProgress?: UserTutorialProgress; // ✅ [추가] 튜토리얼 진행 상태
+  tutorialProgress?: UserTutorialProgress;
 }
 
 export interface Banner {
