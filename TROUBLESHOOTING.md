@@ -409,3 +409,29 @@ react-joyride를 이용한 메인 튜토리얼 진행 중, 화면 하단의 메�
 툴팁 위치 조정: 화면 하단에 위치한 요소를 설명할 때 툴팁이 잘리는 문제를 해결하기 위해, AppTour.tsx의 해당 튜토리얼 단계(step)에 placement: 'top' 옵션을 추가했습니다. 이를 통해 툴팁이 대상 요소의 위쪽에 표시되도록 하여, 어떤 상황에서도 내용이 잘리지 않도록 UI를 개선했습니다.
 
 개선 효과: 기능 간의 상태 공유를 통해 의도치 않은 동작 충돌을 방지하는 방법을 학습했으며, 라이브러리에서 제공하는 옵션을 활용하여 UI 안정성을 높이는 경험을 했습니다.
+
+# Cloud Function 배포 및 실행 오류
+
+## 배포 시 `admin.initializeApp is not a function` 오류
+
+-   **원인**: `firebase-admin` 라이브러리를 잘못된 방식으로 `import` 했을 때 발생합니다. `import * as admin from "firebase-admin"` 와 같이 네임스페이스로 불러오는 대신, 기본(default)으로 내보내는 객체를 가져와야 합니다.
+-   **해결**: `functions` 폴더 내 모든 파일에서 `import admin from "firebase-admin";` 구문을 사용하여 `import` 방식을 통일합니다.
+
+## 배포 시 `The default Firebase app already exists` 오류
+
+-   **원인**: Cloud Function을 배포하기 위해 코드를 분석하는 과정에서 `admin.initializeApp()`이 두 번 이상 호출될 때 발생합니다. `index.ts` 외 다른 파일에도 초기화 코드가 중복으로 포함되어 있을 수 있습니다.
+-   **해결**: `functions/src/index.ts` 파일에서 `admin.initializeApp()` 코드를 아래와 같이 수정하여, 이미 초기화된 앱이 없을 때만 실행되도록 보장합니다.
+
+    ```typescript
+    if (admin.apps.length === 0) {
+      admin.initializeApp();
+    }
+    ```
+
+## 실행 시 `500 (Internal Server Error)` 또는 `INTERNAL` 오류
+
+-   **원인**: 배포는 성공했지만, 서버에서 함수가 실행되던 중 내부적으로 충돌했을 때 발생합니다.
+-   **해결**:
+    1.  **Google Cloud 콘솔의 '로그 탐색기'**에서 해당 함수의 로그를 확인하여 실제 서버 측 오류를 파악하는 것이 가장 중요합니다.
+    2.  **주요 원인 1: `admin.firestore is not a function`**: `functions` 폴더 내 파일들 간의 `import admin from "firebase-admin"` 방식이 일치하지 않을 때 발생합니다. 모든 파일에서 동일한 방식으로 `import` 해야 합니다.
+    3.  **주요 원인 2: `FAILED_PRECONDITION` (색인 누락)**: Firestore 쿼리에 필요한 색인(Index)이 없어 발생하는 오류입니다. 오류 로그에 포함된 `https://console.firebase.google.com/...` 링크를 클릭하여 자동으로 색인을 생성할 수 있습니다.

@@ -1,11 +1,17 @@
 // functions/src/index.ts
-// 이 파일은 프로젝트의 모든 함수를 찾아서 Firebase에 알려주는 최종 관문입니다.
-// 아래 목록에 모든 함수 파일이 포함되어 있는지 확인하세요.
+
+import admin from "firebase-admin";
+
+// ✅ [수정] 이미 앱이 초기화되었는지 확인하는 로직을 추가하여
+// 중복 초기화 오류를 방지합니다.
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
 
 // Callable Functions
 export * from "./callable/products.js";
 export * from "./callable/orders.js";
-// export * from "./callable/waitlist.js"; // 파일이 없으므로 이 라인을 주석 처리합니다.
+export * from "./callable/referrals.js";
 
 // HTTP Functions
 export * from "./http/auth.js"; 
@@ -17,4 +23,3 @@ export * from "./scheduled/points.js";
 // Firestore Trigger Functions
 export * from "./triggers/orders.js";
 export * from "./triggers/points.js";
-// export * from "./triggers/users.js"; // 파일이 없으므로 이 라인을 주석 처리합니다.
