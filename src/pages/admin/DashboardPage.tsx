@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService';
+// ✅ [수정] addStockAndProcessWaitlist 함수를 import 합니다.
+import { getProducts, addStockAndProcessWaitlist } from '@/firebase/productService';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
@@ -18,8 +19,8 @@ interface EnrichedGroupItem {
   variantGroupId: string;
   variantGroupName: string;
   uploadDate: string;
-  confirmedReservedQuantity: number; // ✅ [수정] 확정된 예약 수량
-  pendingPrepaymentQuantity: number; // ✅ [추가] 선입금 대기 수량
+  confirmedReservedQuantity: number;
+  pendingPrepaymentQuantity: number;
   waitlistedQuantity: number;
   configuredStock: number;
 }
@@ -32,21 +33,21 @@ const formatDate = (date: Date): string => {
 };
 
 const DashboardPage: React.FC = () => {
-   useDocumentTitle('대시보드');
+  useDocumentTitle('대시보드');
   const [loading, setLoading] = useState(true);
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false); // ✅ [추가] 저장 중 상태 관리
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // ✅ [수정] 선입금 완료된 주문도 함께 가져오도록 쿼리 변경
-      const [products, allPendingOrders] = await Promise.all([
-        getProducts(false),
+      const [productsResponse, allPendingOrders] = await Promise.all([
+        // getProducts는 이제 페이지네이션 객체를 반환하므로 .products로 접근합니다.
+        getProducts(false, 9999), // 모든 상품을 가져오기 위해 큰 페이지 사이즈 설정
         getDocs(query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))),
       ]);
 
-      // ✅ [수정] '확정된 예약'과 '선입금 대기'를 구분하여 집계
       const confirmedReservationMap = new Map<string, number>();
       const pendingPrepaymentMap = new Map<string, number>();
 
@@ -56,11 +57,9 @@ const DashboardPage: React.FC = () => {
           const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
           
           if(order.status === 'RESERVED' && order.wasPrepaymentRequired) {
-            // 선입금이 필요한 '가예약' 상태
             const currentQty = pendingPrepaymentMap.get(groupKey) || 0;
             pendingPrepaymentMap.set(groupKey, currentQty + item.quantity);
           } else {
-            // 재고가 차감된 '진예약' 상태 (일반 예약 또는 선입금 완료)
             const currentQty = confirmedReservationMap.get(groupKey) || 0;
             confirmedReservationMap.set(groupKey, currentQty + item.quantity);
           }
@@ -68,9 +67,8 @@ const DashboardPage: React.FC = () => {
       });
 
       const allDisplayItems: EnrichedGroupItem[] = [];
-      // ✅ [수정] products.products 배열에 접근하도록 수정
-      products.products.forEach((product: Product) => {
-        const uploadDate = product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
+      productsResponse.products.forEach((product: Product) => {
+        const uploadDate = product.createdAt && 'toDate' in product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
 
         product.salesHistory?.forEach((round: SalesRound) => {
           round.variantGroups?.forEach((vg: VariantGroup) => {
@@ -131,51 +129,80 @@ const DashboardPage: React.FC = () => {
     setStockInputs(prev => ({ ...prev, [groupId]: value }));
   };
 
+  // ✅ [수정] 대기열 처리 로직을 포함하도록 핸들러 전면 수정
   const handleBulkSave = async () => {
     if (Object.keys(stockInputs).length === 0) {
       toast.error("변경된 내용이 없습니다.");
       return;
     }
+    setIsSaving(true);
 
-    const updates = Object.entries(stockInputs)
-      .map(([itemId, newStockValue]) => {
-        const item = Object.values(groupedItems).flat().find(i => i.id === itemId);
-        if (!item || newStockValue.trim() === '') return null;
+    const allItems = Object.values(groupedItems).flat();
+    let totalConverted = 0;
+    let totalFailed = 0;
+    let hasError = false;
 
-        const newStock = parseInt(newStockValue, 10);
-        if (isNaN(newStock)) {
-          toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
-          return 'invalid';
+    // Promise.all을 사용하여 모든 재고 추가 및 대기열 처리 작업을 동시에 실행
+    const promises = Object.entries(stockInputs).map(async ([itemId, newStockValue]) => {
+      const item = allItems.find(i => i.id === itemId);
+      if (!item || newStockValue.trim() === '') return;
+
+      const newStock = parseInt(newStockValue, 10);
+      if (isNaN(newStock) || newStock < 0) {
+        toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
+        hasError = true;
+        return;
+      }
+
+      // 추가된 재고량 계산 (기존 재고가 무제한(-1)이면 처리하지 않음)
+      const additionalStock = item.configuredStock !== -1 ? newStock - item.configuredStock : 0;
+
+      // 재고가 실제로 추가된 경우에만 대기열 처리 함수를 호출
+      if (additionalStock > 0) {
+        try {
+          const result = await addStockAndProcessWaitlist(
+            item.productId,
+            item.roundId,
+            item.variantGroupId,
+            additionalStock
+          );
+          totalConverted += result.convertedCount;
+          totalFailed += result.failedCount;
+        } catch (e: any) {
+          console.error(`'${item.productName}' 대기열 처리 실패:`, e);
+          toast.error(`'${item.productName}' 처리 중 오류: ${e.message}`);
+          hasError = true;
         }
-
-        return {
-          productId: item.productId,
-          roundId: item.roundId,
-          variantGroupId: item.variantGroupId,
-          newStock: newStock,
-        };
-      })
-      .filter(u => u !== null);
-
-    if (updates.some(u => u === 'invalid')) return;
-
-    if (updates.length === 0) {
-      toast.error("유효한 변경 내용이 없습니다.");
-      return;
-    }
-
-    const promise = updateMultipleVariantGroupStocks(updates as any);
-
-    await toast.promise(promise, {
-      loading: "모든 변경사항 저장 중...",
-      success: `${updates.length}개의 항목이 성공적으로 업데이트되었습니다!`,
-      error: "업데이트 중 오류가 발생했습니다.",
+      }
     });
 
+    await toast.promise(
+      Promise.all(promises),
+      {
+        loading: "재고 변경 및 대기열 처리 중...",
+        success: () => {
+          if (hasError) return "일부 항목 처리 중 오류가 발생했습니다.";
+          let successMsg = "재고가 성공적으로 업데이트되었습니다.";
+          if (totalConverted > 0) {
+            successMsg += ` ${totalConverted}개의 대기가 예약으로 전환되었습니다!`;
+          }
+          if (totalFailed > 0) {
+            successMsg += ` ${totalFailed}개는 전환에 실패했습니다.`;
+          }
+          return successMsg;
+        },
+        error: "저장 작업 중 예기치 않은 오류가 발생했습니다.",
+      }
+    );
+
+    setIsSaving(false);
     setStockInputs({});
-    fetchData();
+    // 모든 작업 완료 후 데이터 새로고침
+    if (!hasError) {
+      fetchData();
+    }
   };
-  
+
   if (loading) return <SodomallLoader />;
 
   return (
@@ -187,11 +214,12 @@ const DashboardPage: React.FC = () => {
         </div>
         <button
           className="bulk-save-button"
+          // ✅ [수정] isSaving 상태일 때 버튼 비활성화
           onClick={handleBulkSave}
-          disabled={Object.keys(stockInputs).length === 0}
+          disabled={Object.keys(stockInputs).length === 0 || isSaving}
         >
           <SaveAll size={18} />
-          모든 변경사항 저장
+          {isSaving ? '저장 중...' : '모든 변경사항 저장'}
         </button>
       </div>
 
@@ -206,9 +234,7 @@ const DashboardPage: React.FC = () => {
                     <th>No.</th>
                     <th>상품명</th>
                     <th>판매 회차</th>
-                    {/* ✅ [추가] 선입금 대기 컬럼 */}
                     <th className="wait-col"><Hourglass size={14} /> 선입금 대기</th>
-                    {/* ✅ [수정] 예약 -> 확정으로 명칭 변경 */}
                     <th className="reserve-col"><CheckCircle size={14} /> 확정 수량</th>
                     <th>대기 수량</th>
                     <th>남은 수량</th>
@@ -218,7 +244,6 @@ const DashboardPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {groupedItems[date].map((item, index) => {
-                    // ✅ [수정] 남은 수량 계산 시 '확정 수량'만 사용
                     const remainingStock = item.configuredStock === -1 ? -1 : item.configuredStock - item.confirmedReservedQuantity;
                     const displayName = item.productName === item.variantGroupName
                       ? item.productName
@@ -229,9 +254,7 @@ const DashboardPage: React.FC = () => {
                         <td>{index + 1}</td>
                         <td className="product-name-cell">{displayName}</td>
                         <td>{item.roundName}</td>
-                        {/* ✅ [추가] 선입금 대기 수량 표시 */}
                         <td className="quantity-cell wait-col">{item.pendingPrepaymentQuantity > 0 ? item.pendingPrepaymentQuantity : '-'}</td>
-                        {/* ✅ [수정] 확정 수량 표시 */}
                         <td className="quantity-cell reserve-col">{item.confirmedReservedQuantity}</td>
                         <td className="quantity-cell">{item.waitlistedQuantity > 0 ? item.waitlistedQuantity : '-'}</td>
                         <td className="quantity-cell important-cell">
@@ -251,6 +274,7 @@ const DashboardPage: React.FC = () => {
                             placeholder="발주량 입력"
                             value={stockInputs[item.id] || ''}
                             onChange={(e) => handleStockInputChange(item.id, e.target.value)}
+                            disabled={isSaving} // ✅ [추가] 저장 중 입력 비활성화
                           />
                         </td>
                       </tr>

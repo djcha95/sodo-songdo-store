@@ -21,7 +21,6 @@ import {
 } from 'firebase/firestore';
 import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument, PointLog, NotificationType } from '@/types';
-// ✅ [수정] 새로운 계산 함수 import
 import { calculateUserUpdateByStatus, POINT_POLICIES } from './pointService'; 
 import { createNotification } from './notificationService';
 
@@ -45,7 +44,6 @@ export const submitOrder = async (
   reservedCount: number;
   orderId?: string
 }> => {
-
   let reservedItemCount = 0;
   let newOrderId: string | undefined = undefined;
 
@@ -57,96 +55,72 @@ export const submitOrder = async (
     }
     const userDoc = userSnap.data() as UserDocument;
 
-    if (userDoc.loyaltyTier === '참여 제한') {
-      throw new Error('반복적인 약속 불이행으로 인해 현재 공동구매 참여가 제한되었습니다.');
-    }
-
-    const itemsToReserve: OrderItem[] = [];
-    let isAnyItemLimited = false;
-    const productUpdates = new Map<string, SalesRound[]>();
-    const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => doc(db, 'products', id));
+    const productIds = [...new Set(orderData.items.map(item => item.productId))];
+    const productRefs = productIds.map(id => doc(db, 'products', id));
     const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
     const productDataMap = new Map<string, Product>();
-
-    for (const productSnap of productSnaps) {
-      if (!productSnap.exists()) throw new Error(`주문 처리 중 상품을 찾을 수 없습니다 (ID: ${productSnap.id}).`);
-      productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() } as Product);
-    }
-
-    for (const item of orderData.items) {
-      const productData = productDataMap.get(item.productId);
-      if (!productData) throw new Error(`상품 데이터를 처리할 수 없습니다: ${item.productName}`);
-      const salesHistoryForUpdate = productUpdates.has(item.productId)
-        ? productUpdates.get(item.productId)!
-        : JSON.parse(JSON.stringify(productData.salesHistory));
-      const roundIndex = salesHistoryForUpdate.findIndex((r: SalesRound) => r.roundId === item.roundId);
-      if (roundIndex === -1) throw new Error(`판매 회차 정보를 찾을 수 없습니다: ${item.productName}`);
-      const round = salesHistoryForUpdate[roundIndex];
-
-      const allowedTiers = round.allowedTiers || [];
-      if (allowedTiers.length > 0) {
-        if (!userDoc.loyaltyTier || !allowedTiers.includes(userDoc.loyaltyTier)) {
-          throw new Error(`'${item.productName}' 상품은 지정된 등급의 회원만 구매할 수 있습니다.`);
-        }
+    productSnaps.forEach(snap => {
+      if (snap.exists()) {
+        productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
       }
+    });
 
-      const groupIndex = round.variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-      if (groupIndex === -1) throw new Error(`옵션 그룹 정보를 찾을 수 없습니다: ${item.itemName}`);
-
-      const variantGroup = round.variantGroups[groupIndex];
-      const itemIndex = variantGroup.items.findIndex((i: any) => i.id === item.itemId);
-      if (itemIndex === -1) throw new Error(`세부 옵션 정보를 찾을 수 없습니다: ${item.itemName}`);
-      const productItem = variantGroup.items[itemIndex];
-
-      const isLimited = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
-
-      if (isLimited) {
-        isAnyItemLimited = true;
-      } else {
-        const availableStock = productItem.stock === -1 ? Infinity : productItem.stock;
-        if (availableStock < item.quantity) {
-          throw new Error(`죄송합니다. ${item.productName}(${item.itemName})의 재고가 부족합니다.`);
-        }
-
-        if (productItem.stock !== -1) productItem.stock -= item.quantity;
-
-        productUpdates.set(item.productId, salesHistoryForUpdate);
-      }
-
-      itemsToReserve.push({ ...item, stockDeductionAmount: productItem.stockDeductionAmount || 1, arrivalDate: round.arrivalDate ?? null, deadlineDate: round.deadlineDate, pickupDate: round.pickupDate, pickupDeadlineDate: round.pickupDeadlineDate ?? null });
-    }
+    const itemsToReserve = orderData.items;
 
     if (itemsToReserve.length > 0) {
       const newOrderRef = doc(collection(db, 'orders'));
       newOrderId = newOrderRef.id;
-      const originalTotalPrice = itemsToReserve.reduce((total, i) => total + (i.unitPrice * i.quantity), 0);
+      const originalTotalPrice = itemsToReserve.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
-      const phoneLast4 = orderData.customerInfo.phone.slice(-4);
-      const firstItem = orderData.items[0];
-      const productForRound = productDataMap.get(firstItem.productId);
-      const roundForOrder = productForRound?.salesHistory.find(r => r.roundId === firstItem.roundId);
+      // ✅ [수정] 주문 생성 시, 사용자의 주문 횟수와 픽업률을 업데이트합니다.
+const newTotalOrders = (userDoc.totalOrders || 0) + 1;
+    const newPickupRate = newTotalOrders > 0 ? ((userDoc.pickupCount || 0) / newTotalOrders) * 100 : 0;
+    
+    transaction.update(userRef, {
+      totalOrders: newTotalOrders,
+      pickupRate: newPickupRate
+    });
+          // --- 수정 끝 ---
 
       const newOrderData: Omit<Order, 'id'> = {
-        userId: orderData.userId,
-        customerInfo: { ...orderData.customerInfo, phoneLast4 },
+        ...orderData,
         items: itemsToReserve,
-        totalPrice: originalTotalPrice,
-        orderNumber: `SODOMALL-${Date.now()}`,
         status: 'RESERVED',
         createdAt: serverTimestamp(),
-        pickupDate: roundForOrder!.pickupDate,
-        pickupDeadlineDate: roundForOrder!.pickupDeadlineDate ?? null,
-        notes: orderData.notes ?? '',
-        isBookmarked: orderData.isBookmarked ?? false,
-        wasPrepaymentRequired: isAnyItemLimited || orderData.wasPrepaymentRequired,
+        orderNumber: `SODOMALL-${Date.now()}`,
+        totalPrice: originalTotalPrice,
       };
 
       transaction.set(newOrderRef, newOrderData);
       reservedItemCount = itemsToReserve.reduce((sum, i) => sum + i.quantity, 0);
 
-      for (const [productId, updatedSalesHistory] of productUpdates.entries()) {
-        const productRef = doc(db, 'products', productId);
-        transaction.update(productRef, { salesHistory: updatedSalesHistory });
+      const productUpdates = new Map<string, any>();
+      for (const item of itemsToReserve) {
+        const productData = productDataMap.get(item.productId);
+        if (!productData) throw new Error(`재고 확인 실패: 상품(${item.productId})을 찾을 수 없습니다.`);
+        
+        let salesHistory = productUpdates.get(item.productId)?.salesHistory || JSON.parse(JSON.stringify(productData.salesHistory));
+        const roundIndex = salesHistory.findIndex((r: SalesRound) => r.roundId === item.roundId);
+        if (roundIndex === -1) continue;
+
+        const groupIndex = salesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
+        if (groupIndex === -1) continue;
+
+        const variantGroup = salesHistory[roundIndex].variantGroups[groupIndex];
+        const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
+
+        if (isGroupStockManaged) {
+            const deductionAmount = item.quantity * (item.stockDeductionAmount || 1);
+            if (variantGroup.totalPhysicalStock < deductionAmount) {
+                throw new Error(`재고 부족: ${variantGroup.groupName} (${variantGroup.totalPhysicalStock}개 남음)`);
+            }
+            variantGroup.totalPhysicalStock -= deductionAmount;
+        }
+        productUpdates.set(item.productId, { salesHistory });
+      }
+
+      for (const [productId, update] of productUpdates.entries()) {
+        transaction.update(doc(db, 'products', productId), update);
       }
     }
   });
@@ -290,7 +264,6 @@ export const splitAndUpdateOrderStatus = async (
     throw new Error('픽업 수량은 1 이상이어야 합니다.');
   }
 
-  // ✅ [수정] 트랜잭션이 성공적으로 완료되면 알림에 필요한 정보를 반환하도록 구조 변경
   const notificationInfo = await runTransaction(db, async (transaction) => {
     const originalOrderRef = doc(db, 'orders', originalOrderId);
     const originalOrderDoc = await transaction.get(originalOrderRef);
@@ -331,6 +304,12 @@ export const splitAndUpdateOrderStatus = async (
     if (updatedUserDocForRemaining) {
       const calculatedUpdate = calculateUserUpdateByStatus(updatedUserDocForRemaining, { ...remainingOrder, id: newOrderRef.id }, remainingStatus);
       if (calculatedUpdate) {
+        // ✅ [수정] 'undefined' 가능성을 제거하기 위해 null 병합 연산자(??)를 사용합니다.
+        const tempDoc = { ...updatedUserDocForRemaining, ...calculatedUpdate.updateData };
+        const totalOrders = tempDoc.totalOrders ?? 0;
+        const pickupCount = tempDoc.pickupCount ?? 0;
+        calculatedUpdate.updateData.pickupRate = totalOrders > 0 ? (pickupCount / totalOrders) * 100 : 0;
+        // --- 수정 끝 ---
         transaction.update(userRefForRemaining, calculatedUpdate.updateData);
         updatedUserDocForRemaining = { ...updatedUserDocForRemaining, ...calculatedUpdate.updateData };
       }
@@ -361,19 +340,24 @@ export const splitAndUpdateOrderStatus = async (
     if (updatedUserDocForPickedUp) {
       const calculatedUpdate = calculateUserUpdateByStatus(updatedUserDocForPickedUp, orderForPointCalculation, 'PICKED_UP');
       if (calculatedUpdate) {
+        // ✅ [수정] 'undefined' 가능성을 제거하기 위해 null 병합 연산자(??)를 사용합니다.
+        const tempDoc = { ...updatedUserDocForPickedUp, ...calculatedUpdate.updateData };
+        const totalOrders = tempDoc.totalOrders ?? 0;
+        const pickupCount = tempDoc.pickupCount ?? 0;
+        calculatedUpdate.updateData.pickupRate = totalOrders > 0 ? (pickupCount / totalOrders) * 100 : 0;
+
         transaction.update(userRefForPickedUp, calculatedUpdate.updateData);
-        updatedUserDocForPickedUp = { ...updatedUserDocForPickedUp, ...calculatedUpdate.updateData };
+        updatedUserDocForPickedUp = { ...updatedUserDocForPickedUp, ...calculatedUpdate.updateData }
       }
     }
 
 
     // --- 3. 알림 생성을 위한 정보 반환 ---
-    // Note: 여기서는 updatedUserDocForRemaining의 noShowCount를 사용 (마지막으로 업데이트된 정보)
     const finalUserDoc = updatedUserDocForRemaining || updatedUserDocForPickedUp;
     if (finalUserDoc) {
         return {
             userId: originalOrder.userId,
-            userDoc: finalUserDoc, // 최신 사용자 문서 상태
+            userDoc: finalUserDoc,
             productName: originalItem.productName,
             pickedUpQuantity,
             remainingQuantity,
@@ -383,16 +367,13 @@ export const splitAndUpdateOrderStatus = async (
     return null;
   });
 
-  // --- 4. ✅ [수정] 트랜잭션 완료 후 반환된 정보로 알림 전송
   if (notificationInfo) {
-    // 픽업 완료 알림
     await createNotification(
       notificationInfo.userId,
       `'${notificationInfo.productName}' ${notificationInfo.pickedUpQuantity}개를 픽업해주셔서 감사합니다!`,
       { type: 'ORDER_PICKED_UP', link: '/mypage/history' }
     );
 
-    // 남은 수량(노쇼 등)에 대한 알림
     if (notificationInfo.remainingStatus === 'NO_SHOW') {
       const newNoShowCount = notificationInfo.userDoc.noShowCount; 
       let noShowMessage = '';
@@ -402,7 +383,7 @@ export const splitAndUpdateOrderStatus = async (
           noShowMessage = `[주의] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되었습니다. 앞으로 2회 더 노쇼 시 참여가 제한됩니다.`;
       } else if (newNoShowCount === 2) {
           noShowMessage = `[경고] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되었습니다. 다음 노쇼 시 참여가 제한됩니다.`;
-      } else if (newNoShowCount && newNoShowCount >= 3) { // 3회 이상 노쇼일 경우
+      } else if (newNoShowCount && newNoShowCount >= 3) {
           noShowMessage = `[안내] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되어, 반복된 약속 불이행으로 참여가 제한되었습니다.`;
           noShowType = 'PARTICIPATION_RESTRICTED';
       }
@@ -622,9 +603,18 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
       let updatedUserDoc = userDoc; // 알림 생성을 위한 최신 사용자 문서 상태
 
       if (userUpdateResult) {
+        // ✅ [수정] 'undefined' 가능성을 제거하기 위해 null 병합 연산자(??)를 사용합니다.
+        const tempUpdatedUserDoc = { ...userDoc, ...userUpdateResult.updateData };
+        const totalOrders = tempUpdatedUserDoc.totalOrders ?? 0;
+        const pickupCount = tempUpdatedUserDoc.pickupCount ?? 0;
+        const newPickupRate = totalOrders > 0 ? (pickupCount / totalOrders) * 100 : 0;
+        userUpdateResult.updateData.pickupRate = newPickupRate;
+        // --- 수정 끝 ---
+
+        
         transaction.update(userRef, userUpdateResult.updateData);
         // 알림 생성에 사용될 수 있도록, 변경된 사용자 정보를 변수에 저장
-        updatedUserDoc = { ...userDoc, ...userUpdateResult.updateData };
+        updatedUserDoc = { ...userDoc, ...userUpdateResult.updateData, pickupRate: newPickupRate };
       }
 
       // 2-2. 주문 정보 변경
@@ -671,8 +661,8 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
           notificationsToSend.push({ userId: order.userId, message: `'${productName}' 상품을 픽업해주셔서 감사합니다!`, link: '/mypage', type: 'ORDER_PICKED_UP'});
           break;
         case 'NO_SHOW':
-        case 'CANCELED': // 취소 상태도 노쇼와 유사한 알림 로직을 탈 수 있음
-              const newNoShowCount = updatedUserDoc.noShowCount || userDoc.noShowCount || 0; // updateMultipleOrderStatuses의 userDoc은 트랜잭션 시작 시의 값이므로 updatedUserDoc 사용
+        case 'CANCELED':
+              const newNoShowCount = updatedUserDoc.noShowCount || userDoc.noShowCount || 0;
               let alertMessage = '';
               let alertType: NotificationType = 'NO_SHOW_WARNING';
 
@@ -680,7 +670,7 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
                   alertMessage = `[주의] '${productName}' 상품이 ${status === 'NO_SHOW' ? '노쇼' : '취소'} 처리되었습니다. 앞으로 2회 더 누적 시 참여가 제한됩니다.`;
               } else if (newNoShowCount === 2) {
                   alertMessage = `[경고] '${productName}' 상품이 ${status === 'NO_SHOW' ? '노쇼' : '취소'} 처리되었습니다. 다음 누적 시 참여가 제한됩니다.`;
-              } else if (newNoShowCount >= 3) { // 3회 이상 노쇼일 경우
+              } else if (newNoShowCount >= 3) {
                   alertMessage = `[안내] '${productName}' 상품이 ${status === 'NO_SHOW' ? '노쇼' : '취소'} 처리되어, 반복된 약속 불이행으로 참여가 제한되었습니다.`;
                   alertType = 'PARTICIPATION_RESTRICTED';
               }
@@ -833,6 +823,19 @@ export const submitOrderFromWaitlist = async (
   const userDocSnap = await transaction.get(userRef);
   const userDoc = userDocSnap.exists() ? userDocSnap.data() as UserDocument : null;
 
+  // ✅ [수정] 대기열 전환 시, 사용자의 주문 횟수와 픽업률을 업데이트합니다.
+  if (userDoc) {
+    // ✅ [개선] 픽업률을 백분율(0~100)로 계산하도록 * 100을 추가합니다.
+    const newTotalOrders = (userDoc.totalOrders || 0) + 1;
+    const newPickupRate = newTotalOrders > 0 ? ((userDoc.pickupCount || 0) / newTotalOrders) * 100 : 0;
+
+    transaction.update(userRef, {
+        totalOrders: newTotalOrders,
+        pickupRate: newPickupRate
+    });
+  }
+  // --- 수정 끝 ---
+
   const newOrderRef = doc(collection(db, 'orders'));
   const newOrderId = newOrderRef.id;
   const phoneLast4 = userDoc?.phone?.slice(-4) || '';
@@ -912,11 +915,13 @@ export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> 
  */
 export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> => {
   const quantitiesMap = new Map<string, number>();
+  // 'in' 쿼리는 최대 30개의 값을 가질 수 있지만, 여기서는 상태가 2개이므로 괜찮습니다.
   const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
   const querySnapshot = await getDocs(q);
   querySnapshot.forEach((doc) => {
     const order = doc.data() as Order;
     (order.items || []).forEach((item: OrderItem) => {
+      // 키 포맷: productId-roundId-variantGroupId
       const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
       quantitiesMap.set(key, (quantitiesMap.get(key) || 0) + item.quantity);
     });

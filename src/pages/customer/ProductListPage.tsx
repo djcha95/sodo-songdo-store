@@ -4,11 +4,11 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { mainTourSteps } from '@/components/customer/AppTour';
-import { getActiveBanners } from '@/firebase';
+// ✅ [수정] getActiveBanners와 함께 getReservedQuantitiesMap을 import합니다.
+import { getActiveBanners, getReservedQuantitiesMap } from '@/firebase'; 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Product, Banner, SalesRound } from '@/types';
-// ✅ [수정] Timestamp 타입을 import 합니다.
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
@@ -28,13 +28,15 @@ import '@/styles/common.css';
 dayjs.extend(isBetween);
 dayjs.locale('ko');
 
-interface ProductForList extends Product {
-  reservedQuantities?: Record<string, number>;
-}
+// ProductForList에서 더 이상 reservedQuantities를 사용하지 않으므로 제거해도 무방합니다.
+interface ProductForList extends Product {}
+
 interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
   deadlines: { primaryEnd: Date | null; secondaryEnd: Date | null; };
   displayRound: SalesRound;
+  // ✅ [추가] 실시간 예약 수량을 전달하기 위한 속성
+  liveReservedQuantities: Record<string, number>;
 }
 
 const ProductListPage: React.FC = () => {
@@ -42,6 +44,8 @@ const ProductListPage: React.FC = () => {
   const { startTour, isTourRunning } = useTutorial();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<ProductForList[]>([]);
+  // ✅ [추가] 실시간 예약 수량을 저장할 state
+  const [reservedQuantitiesMap, setReservedQuantitiesMap] = useState<Map<string, number>>(new Map());
   const [countdown, setCountdown] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -72,9 +76,14 @@ const ProductListPage: React.FC = () => {
       setLoadingMore(true);
     }
     try {
+      // ✅ [수정] isInitial일 때 배너 정보와 함께 실시간 예약 수량 정보를 가져옵니다.
       if (isInitial) {
-        const activeBanners = await getActiveBanners();
+        const [activeBanners, quantitiesMap] = await Promise.all([
+            getActiveBanners(),
+            getReservedQuantitiesMap()
+        ]);
         setBanners(activeBanners);
+        setReservedQuantitiesMap(quantitiesMap);
       }
       const result: HttpsCallableResult<any> = await getProductsWithStockCallable({ pageSize: PAGE_SIZE, lastVisible: lastVisibleRef.current });
       const { products: newProducts, lastVisible: newLastVisible } = result.data as { products: ProductForList[], lastVisible: number | null };
@@ -96,7 +105,7 @@ const ProductListPage: React.FC = () => {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [getProductsWithStockCallable]);
+  }, [getProductsWithStockCallable, loadingMore]); // fetchData 의존성 배열에서 일부 제거
 
   const handleRefresh = useCallback(async () => { await fetchData(true); }, [fetchData]);
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({ onRefresh: handleRefresh });
@@ -109,6 +118,7 @@ const ProductListPage: React.FC = () => {
     }
   }, [isLoadMoreVisible, loading, isRefreshing, fetchData, isTourRunning]);
   
+  // ✅ [수정] useMemo 로직을 실시간 예약 수량(reservedQuantitiesMap)을 사용하도록 변경
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
@@ -136,13 +146,25 @@ const ProductListPage: React.FC = () => {
         currentPhase = 'past';
       }
       
-      // ✅ [수정] safeToDate 헬퍼 함수를 사용하여 타입 오류를 해결합니다.
       if (round.status === 'scheduled' && round.publishAt) {
           const publishAtDate = safeToDate(round.publishAt);
           if (publishAtDate && now.isBefore(publishAtDate)) return;
       }
+      
+      // 실시간 예약 수량을 ProductCard에 전달하기 위해 객체 생성
+      const liveReservedQuantities: Record<string, number> = {};
+      round.variantGroups.forEach(vg => {
+          const key = `${product.id}-${round.roundId}-${vg.id}`;
+          liveReservedQuantities[key] = reservedQuantitiesMap.get(key) || 0;
+      });
 
-      const productWithState: ProductWithUIState = { ...product, phase: currentPhase, deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, displayRound: round };
+      const productWithState: ProductWithUIState = { 
+          ...product, 
+          phase: currentPhase, 
+          deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
+          displayRound: round,
+          liveReservedQuantities // 실시간 수량 정보 추가
+      };
       
       if (currentPhase === 'primary') {
         tempPrimary.push(productWithState);
@@ -151,7 +173,9 @@ const ProductListPage: React.FC = () => {
           const totalStock = vg.totalPhysicalStock;
           if (totalStock === null || totalStock === -1) return false;
           if (totalStock === 0) return true;
-          const reserved = product.reservedQuantities?.[`${product.id}-${round.roundId}-${vg.id}`] || 0;
+          // 여기서도 실시간 예약 수량을 사용
+          const key = `${product.id}-${round.roundId}-${vg.id}`;
+          const reserved = reservedQuantitiesMap.get(key) || 0;
           return totalStock - reserved <= 0;
         });
         if (!isSoldOut) tempSecondary.push(productWithState);
@@ -172,13 +196,15 @@ const ProductListPage: React.FC = () => {
     });
 
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
-    const sortedPastGroups: { [key: string]: ProductWithUIState[] } = {};
+    const sortedPastGroups: { [key:string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
       sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.displayRound.roundName || '').localeCompare(b.displayRound.roundName || ''));
     });
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
+    
+    // 의존성 배열에 reservedQuantitiesMap 추가
     return { primarySaleProducts: tempPrimary, secondarySaleProducts: tempSecondary, pastProductsByDate: sortedPastGroups, primarySaleEndDate: firstPrimarySaleEndDate };
-  }, [products, userDocument]);
+  }, [products, userDocument, reservedQuantitiesMap]); 
       
   useEffect(() => {
     if (!primarySaleEndDate) { setCountdown(null); return; }
@@ -198,6 +224,7 @@ const ProductListPage: React.FC = () => {
 
   return (
     <div className="customer-page-container">
+      {/* ... (나머지 JSX 코드는 동일) ... */}
       <div className="pull-to-refresh-indicator" style={{ height: `${pullDistance}px` }}>
         <div className="indicator-content">
           {isRefreshing ? <RefreshCw size={24} className="refreshing-icon" /> : <><ArrowDown size={20} className="arrow-icon" style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }} /><span>{isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}</span></>}
