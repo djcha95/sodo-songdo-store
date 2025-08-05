@@ -92,6 +92,8 @@ export const onOrderCreated = onDocumentCreated(
   {
     document: "orders/{orderId}",
     region: "asia-northeast3",
+    // ✅ [오류 수정] NHN 키들을 Secret Manager에서 읽어오도록 설정합니다.
+    secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (event: FirestoreEvent<DocumentSnapshot | undefined, { orderId: string }>) => {
     const snapshot = event.data;
@@ -208,7 +210,6 @@ export const onOrderCreated = onDocumentCreated(
             templateVariables.픽업마감일 = formatDate(pickupDeadlineDate);
         }
         
-        // ✅ [최종 수정] 국제 번호(8210...)를 국내 번호(010...) 형식으로 변환합니다.
         let recipientPhone = (userData.phone || '').replace(/\D/g, '');
         if (recipientPhone.startsWith('8210')) {
           recipientPhone = '0' + recipientPhone.slice(2);
@@ -226,6 +227,7 @@ export const onOrderCreated = onDocumentCreated(
 );
 
 
+// ... (onOrderDeleted, onOrderUpdatedForStock 등 나머지 함수들은 변경 없음)
 export const onOrderDeleted = onDocumentDeleted(
   {
     document: "orders/{orderId}",

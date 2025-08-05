@@ -44,6 +44,8 @@ export type NotificationType =
   | "ORDER_PICKED_UP"          // 픽업 완료
   | "NO_SHOW_WARNING"          // 노쇼 경고
   | "PARTICIPATION_RESTRICTED" // 참여 제한
+  | "TIER_UP"                  // ✅ [추가] 등급 상승 알림 타입
+  | "TIER_DOWN"                // ✅ [추가] 등급 하락 알림 타입
   | "success"
   | "error";
 
@@ -238,4 +240,31 @@ export interface WaitlistInfo {
   quantity: number;
   timestamp: Timestamp;
   isPrioritized?: boolean;
+}
+
+
+// =================================================================
+// 🔔 NHN Cloud API 관련 타입
+// =================================================================
+
+export interface NhnAlimtalkResponse {
+  header: {
+    resultCode: number;
+    resultMessage: string;
+    isSuccessful: boolean;
+  };
+  body?: {
+    data: {
+      requestId: string;
+      requestDate: string;
+      senderGroupingKey: string;
+      messages: {
+        messageId: string;
+        recipientSeq: number;
+        recipientNo: string;
+        resultCode: string;
+        resultMessage: string;
+      }[];
+    };
+  };
 }

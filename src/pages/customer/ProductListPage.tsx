@@ -9,7 +9,6 @@ import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Product, Banner, SalesRound } from '@/types';
 // ✅ [수정] Timestamp 타입을 import 합니다.
-import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
