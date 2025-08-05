@@ -14,7 +14,8 @@ import type { Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, 
 import { getUserDocById } from './userService';
 import { submitOrderFromWaitlist } from './orderService';
 import { calculateTier } from '@/utils/loyaltyUtils';
-
+// ✅ [추가] 알림 생성 함수를 import 합니다.
+import { createNotification } from './notificationService';
 
 // --- BulkActionBar.tsx에서 사용할 함수 추가 ---
 
@@ -789,6 +790,8 @@ export const addStockAndProcessWaitlist = async (
   let availableStock = additionalStock;
   let convertedCount = 0;
   let failedCount = 0;
+  // ✅ [추가] 트랜잭션 성공 후 알림을 보낼 목록
+  const notificationsToSend: { userId: string; productName: string; quantity: number }[] = [];
 
   const productRef = doc(db, 'products', productId);
 
@@ -802,7 +805,19 @@ export const addStockAndProcessWaitlist = async (
     if (roundIndex === -1) throw new Error("판매 회차를 찾을 수 없습니다.");
     
     const round = salesHistory[roundIndex];
-    if (!round.waitlist || round.waitlist.length === 0) return;
+    if (!round.waitlist || round.waitlist.length === 0) {
+        // 대기자가 없는 경우에도 재고는 추가되어야 합니다.
+        const groupIndex = round.variantGroups.findIndex(vg => vg.id === variantGroupId);
+        if (groupIndex !== -1) {
+            const originalStock = round.variantGroups[groupIndex].totalPhysicalStock;
+            if (originalStock !== null && originalStock !== -1) {
+                round.variantGroups[groupIndex].totalPhysicalStock = originalStock + additionalStock;
+                salesHistory[roundIndex] = round;
+                transaction.update(productRef, { salesHistory });
+            }
+        }
+        return; // 대기열 처리 없이 함수 종료
+    }
 
     const sortedWaitlist = round.waitlist.sort((a, b) => {
       if (a.isPrioritized && !b.isPrioritized) return -1;
@@ -822,13 +837,18 @@ export const addStockAndProcessWaitlist = async (
     }
     
     for (const entry of sortedWaitlist) {
-      const itemToProcess = round.variantGroups[groupIndex].items.find(item => item.id === entry.itemId);
-
-      if (itemToProcess && entry.quantity <= availableStock) {
+      // ✅ [수정] 대기열의 variantGroupId와 재고가 추가된 variantGroupId가 일치하는지 확인
+      if (entry.variantGroupId === variantGroupId && entry.quantity <= availableStock) {
         try {
           await submitOrderFromWaitlist(transaction, entry, product, round);
           availableStock -= entry.quantity;
           convertedCount++;
+          // ✅ [추가] 성공 시 알림 보낼 목록에 추가
+          notificationsToSend.push({
+            userId: entry.userId,
+            productName: product.groupName,
+            quantity: entry.quantity,
+          });
         } catch (e) {
             console.error(`주문 전환 실패 (사용자: ${entry.userId}):`, e);
             failedCount++;
@@ -836,7 +856,7 @@ export const addStockAndProcessWaitlist = async (
         }
       } else {
         remainingWaitlist.push(entry);
-        if (entry.isPrioritized) {
+        if (entry.isPrioritized && entry.variantGroupId === variantGroupId) {
           usersToRefund.add(entry.userId);
         }
       }
@@ -856,7 +876,6 @@ export const addStockAndProcessWaitlist = async (
         const refundAmount = 50;
         const newPoints = userData.points + refundAmount;
         
-        // ✅ [수정] calculateTier 함수에 올바른 인자(pickupCount, noShowCount) 전달
         const newTier = calculateTier(userData.pickupCount || 0, userData.noShowCount || 0);
 
         const pointHistoryEntry: Omit<PointLog, 'id'> = {
@@ -872,6 +891,19 @@ export const addStockAndProcessWaitlist = async (
       }
     }
   });
+
+  // ✅ [추가] 트랜잭션이 성공적으로 모두 끝난 후, 알림을 전송합니다.
+  for (const notif of notificationsToSend) {
+    try {
+      await createNotification(
+        notif.userId,
+        `대기하시던 '${notif.productName}' ${notif.quantity}개 상품의 예약이 확정되었습니다!`,
+        { type: 'WAITLIST_CONFIRMED', link: '/mypage/history' }
+      );
+    } catch (error) {
+      console.error(`대기 확정 알림 전송 실패 (ID: ${notif.userId}):`, error);
+    }
+  }
 
   return { convertedCount, failedCount };
 };
