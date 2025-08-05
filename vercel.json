@@ -3,6 +3,10 @@
     {
       "source": "/api/(.*)",
       "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
     }
   ]
 }
