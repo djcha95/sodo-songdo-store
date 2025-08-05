@@ -10,13 +10,18 @@ import {
     searchProductsByName,
     getProductById,
     updateSalesRound,
-    updateProductCoreInfo
+    updateProductCoreInfo,
+    functions 
 } from '@/firebase';
+import { httpsCallable } from 'firebase/functions';
+import type { HttpsCallableResult } from 'firebase/functions';
+
 import type { Category, StorageType, Product, SalesRound, SalesRoundStatus, VariantGroup, ProductItem, LoyaltyTier } from '@/types';
 import toast from 'react-hot-toast';
-import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus } from 'lucide-react';
+import { Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info, FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
+
 
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -31,20 +36,48 @@ interface ProductFormProps {
     mode: ProductFormMode;
     productId?: string;
     roundId?: string;
-    initialState?: { // 새 회차 추가 시 초기 데이터를 받기 위함
+    initialState?: {
         productGroupName: string;
         lastRound?: SalesRound;
     }
 }
 
 interface ProductItemUI { id: string; name: string; price: number | ''; limitQuantity: number | ''; deductionAmount: number | ''; isBundleOption?: boolean; }
-interface VariantGroupUI { id: string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
+interface VariantGroupUI { id:string; groupName: string; totalPhysicalStock: number | ''; stockUnitType: string; expirationDate: Date | null; expirationDateInput: string; items: ProductItemUI[]; }
+
+interface AIParsedData {
+    productType: 'single' | 'group';
+    storageType: StorageType;
+    categoryName: string | null;
+    groupName: string | null;
+    cleanedDescription: string | null;
+    variantGroups: {
+        groupName: string | null;
+        totalPhysicalStock: number | null;
+        expirationDate: string | null; // YYYY-MM-DD
+        pickupDate: string | null;     // YYYY-MM-DD
+        items: {
+            name: string;
+            price: number;
+        }[];
+    }[];
+}
+
 
 // --- 헬퍼 함수 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
 const formatToDateTimeLocal = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const formatDateToYYYYMMDD = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
-const parseDateString = (dateString: string): Date | null => { if (!dateString) return null; const cleaned = dateString.replace(/[^0-9]/g, ''); if (cleaned.length === 6) { const year = parseInt("20" + cleaned.substring(0, 2), 10); const month = parseInt(cleaned.substring(2, 4), 10) - 1; const day = parseInt(cleaned.substring(4, 6), 10); const date = new Date(year, month, day); if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) return date; } if (cleaned.length === 8) { const year = parseInt(cleaned.substring(0, 4), 10); const month = parseInt(cleaned.substring(4, 6), 10) - 1; const day = parseInt(cleaned.substring(6, 8), 10); const date = new Date(year, month, day); if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) return date; } return null; };
+const parseDateString = (dateString: string | null | undefined): Date | null => { 
+    if (!dateString) return null; 
+    const date = new Date(dateString);
+    if (!isNaN(date.getTime())) return date;
+    
+    const cleaned = dateString.replace(/[^0-9]/g, ''); 
+    if (cleaned.length === 6) { const year = parseInt("20" + cleaned.substring(0, 2), 10); const month = parseInt(cleaned.substring(2, 4), 10) - 1; const day = parseInt(cleaned.substring(4, 6), 10); const d = new Date(year, month, day); if (d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) return d; } 
+    if (cleaned.length === 8) { const year = parseInt(cleaned.substring(0, 4), 10); const month = parseInt(cleaned.substring(4, 6), 10) - 1; const day = parseInt(cleaned.substring(6, 8), 10); const d = new Date(year, month, day); if (d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) return d; } 
+    return null; 
+};
 const formatNumberWithCommas = (value: number | ''): string => { if (value === '' || value === null) return ''; return Number(value).toLocaleString('ko-KR'); };
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 
@@ -194,22 +227,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     
     const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
     const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+    const [isParsingWithAI, setIsParsingWithAI] = useState(false);
     
     useEffect(() => {
         switch (mode) {
             case 'newProduct':
                 setPageTitle('신규 대표 상품 등록');
                 setSubmitButtonText('신규 상품 등록하기');
-                if (initialState?.productGroupName) {
-                    setGroupName(initialState.productGroupName);
-                    setVariantGroups(prev => {
-                        const newVgs = [...prev];
-                        if (newVgs[0]) {
-                            newVgs[0].groupName = initialState.productGroupName;
-                        }
-                        return newVgs;
-                    });
-                }
+                if (initialState?.productGroupName) { setGroupName(initialState.productGroupName); setVariantGroups(prev => { const newVgs = [...prev]; if (newVgs[0]) { newVgs[0].groupName = initialState.productGroupName; } return newVgs; }); }
                 break;
             case 'newRound':
                 setPageTitle(`'${initialState?.productGroupName || ''}' 새 회차 추가`);
@@ -228,161 +253,75 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             setIsLoading(true);
             try {
                 const product = await getProductById(productId);
-                if (!product) {
-                    toast.error("상품을 찾을 수 없습니다.");
-                    navigate('/admin/products');
-                    return;
-                }
-
+                if (!product) { toast.error("상품을 찾을 수 없습니다."); navigate('/admin/products'); return; }
                 setGroupName(product.groupName);
                 setDescription(product.description);
                 setSelectedStorageType(product.storageType);
-                if (product.createdAt) {
-                    setCreationDate(convertToDate(product.createdAt) || new Date());
-                }
+                if (product.createdAt) { setCreationDate(convertToDate(product.createdAt) || new Date()); }
                 const mainCat = (await getCategories()).find(c => c.name === product.category);
                 if (mainCat) setSelectedMainCategory(mainCat.id);
                 setInitialImageUrls(product.imageUrls || []);
                 setCurrentImageUrls(product.imageUrls || []);
                 setImagePreviews(product.imageUrls || []);
-                
                 let roundToLoad: SalesRound | undefined;
                 if(mode === 'editRound' && roundId) {
                     roundToLoad = product.salesHistory.find(r => r.roundId === roundId);
-                     if (!roundToLoad) {
-                        toast.error("판매 회차를 찾을 수 없습니다.");
-                        navigate(`/admin/products/edit/${productId}`);
-                        return;
-                    }
+                     if (!roundToLoad) { toast.error("판매 회차를 찾을 수 없습니다."); navigate(`/admin/products/edit/${productId}`); return; }
                     setPageTitle(`'${product.groupName}' 회차 수정`); 
                 } else if (mode === 'newRound') {
                     roundToLoad = initialState?.lastRound || product.salesHistory[0];
-                    if (roundToLoad) {
-                        const roundNumMatch = roundToLoad.roundName.match(/\d+/);
-                        const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : product.salesHistory.length + 1;
-                        setRoundName(`${newRoundNumber}차 판매`);
-                    } else {
-                        setRoundName('1차 판매');
-                    }
+                    if (roundToLoad) { const roundNumMatch = roundToLoad.roundName.match(/\d+/); const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : product.salesHistory.length + 1; setRoundName(`${newRoundNumber}차 판매`); } else { setRoundName('1차 판매'); }
                 }
-
                 if (roundToLoad) {
                     const roundData = roundToLoad as SalesRound & { preOrderTiers?: LoyaltyTier[]; secretForTiers?: LoyaltyTier[] };
-                    
-                    if (mode === 'editRound') {
-                        setRoundName(roundData.roundName);
-                    }
-                    
+                    if (mode === 'editRound') { setRoundName(roundData.roundName); }
                     setProductType((roundData.variantGroups?.length || 0) > 1 || (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
-                    
                     const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
                         const expirationDate = convertToDate(vg.items[0]?.expirationDate);
-                        return {
-                            id: generateUniqueId(),
-                            groupName: vg.groupName,
-                            totalPhysicalStock: vg.totalPhysicalStock ?? '',
-                            stockUnitType: vg.stockUnitType,
-                            expirationDate: expirationDate,
-                            expirationDateInput: expirationDate ? formatDateToYYYYMMDD(expirationDate) : '',
-                            items: (vg.items || []).map((item: ProductItem) => ({
-                                id: generateUniqueId(),
-                                name: item.name,
-                                price: item.price,
-                                limitQuantity: item.limitQuantity ?? '',
-                                deductionAmount: item.stockDeductionAmount,
-                                isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k))
-                            }))
-                        };
+                        return { id: generateUniqueId(), groupName: vg.groupName, totalPhysicalStock: vg.totalPhysicalStock ?? '', stockUnitType: vg.stockUnitType, expirationDate: expirationDate, expirationDateInput: expirationDate ? formatDateToYYYYMMDD(expirationDate) : '', items: (vg.items || []).map((item: ProductItem) => ({ id: generateUniqueId(), name: item.name, price: item.price, limitQuantity: item.limitQuantity ?? '', deductionAmount: item.stockDeductionAmount, isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k)) })) };
                     });
                     setVariantGroups(mappedVGs);
-                    
-                    if(mode === 'editRound') {
-                        setPublishDate(convertToDate(roundData.publishAt) || new Date());
-                        setDeadlineDate(convertToDate(roundData.deadlineDate));
-                        setPickupDate(convertToDate(roundData.pickupDate));
-                        setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate));
-                    }
-                    
+                    if(mode === 'editRound') { setPublishDate(convertToDate(roundData.publishAt) || new Date()); setDeadlineDate(convertToDate(roundData.deadlineDate)); setPickupDate(convertToDate(roundData.pickupDate)); setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate)); }
                     setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
                     setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
                     setPreOrderTiers(roundData.preOrderTiers || ['공구의 신', '공구왕']);
                     setIsSecretProductEnabled(!!roundData.secretForTiers && roundData.secretForTiers.length > 0);
                     setSecretTiers(roundData.secretForTiers || []);
                 }
-
-            } catch (err) {
-                console.error("Error fetching data for form:", err);
-                toast.error("양식 데이터를 불러오는 데 실패했습니다.");
-            } finally {
-                setIsLoading(false);
-            }
+            } catch (err) { console.error("Error fetching data for form:", err); toast.error("양식 데이터를 불러오는 데 실패했습니다."); } finally { setIsLoading(false); }
         };
-
-        if (mode === 'editRound' || mode === 'newRound') {
-            fetchData();
-        }
+        if (mode === 'editRound' || mode === 'newRound') { fetchData(); }
     }, [mode, productId, roundId, navigate, initialState]);
 
     useEffect(() => {
         getCategories().then(setCategories).catch(() => toast.error("카테고리 정보를 불러오는 데 실패했습니다."));
-        if (mode === 'newProduct' && variantGroups.length === 0) {
-            setVariantGroups([{ id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]);
-        }
+        if (mode === 'newProduct' && variantGroups.length === 0) { setVariantGroups([{ id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); }
     }, [mode, variantGroups.length]);
 
     useEffect(() => {
         if (mode === 'editRound') return; 
         const newDeadline = new Date(publishDate);
         const dayOfWeek = newDeadline.getDay();
-        if (dayOfWeek === 6) newDeadline.setDate(newDeadline.getDate() + 2);
-        else if (dayOfWeek === 0) newDeadline.setDate(newDeadline.getDate() + 1);
-        else newDeadline.setDate(newDeadline.getDate() + 1);
+        if (dayOfWeek === 6) newDeadline.setDate(newDeadline.getDate() + 2); else if (dayOfWeek === 0) newDeadline.setDate(newDeadline.getDate() + 1); else newDeadline.setDate(newDeadline.getDate() + 1);
         newDeadline.setHours(13, 0, 0, 0);
         setDeadlineDate(newDeadline);
     }, [publishDate, mode]);
 
     useEffect(() => {
-        if (!pickupDate) {
-            setPickupDeadlineDate(null);
-            return;
-        }
+        if (!pickupDate) { setPickupDeadlineDate(null); return; }
         const newPickupDeadline = new Date(pickupDate);
-        if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') {
-            newPickupDeadline.setDate(newPickupDeadline.getDate() + 1);
-        }
+        if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') { newPickupDeadline.setDate(newPickupDeadline.getDate() + 1); }
         newPickupDeadline.setHours(13, 0, 0, 0);
         setPickupDeadlineDate(newPickupDeadline);
     }, [pickupDate, selectedStorageType]);
     
     useEffect(() => {
-        if (productType === 'single' && variantGroups.length > 0) {
-            setVariantGroups(prev => {
-                const firstGroup = prev[0];
-                if (firstGroup && firstGroup.groupName !== groupName) {
-                    const newVgs = [...prev];
-                    newVgs[0] = { ...firstGroup, groupName: groupName };
-                    return newVgs;
-                }
-                return prev;
-            });
-        }
+        if (productType === 'single' && variantGroups.length > 0) { setVariantGroups(prev => { const firstGroup = prev[0]; if (firstGroup && firstGroup.groupName !== groupName) { const newVgs = [...prev]; newVgs[0] = { ...firstGroup, groupName: groupName }; return newVgs; } return prev; }); }
     }, [groupName, productType]);
 
     useEffect(() => {
-        if (mode !== 'newProduct' || !groupName.trim()) {
-            setSimilarProducts([]);
-            return;
-        }
-        const handler = setTimeout(async () => {
-            setIsCheckingDuplicates(true);
-            try {
-                setSimilarProducts(await searchProductsByName(groupName.trim()));
-            } catch (error) {
-                console.error("Error searching products:", error);
-            } finally {
-                setIsCheckingDuplicates(false);
-            }
-        }, 500);
+        if (mode !== 'newProduct' || !groupName.trim()) { setSimilarProducts([]); return; }
+        const handler = setTimeout(async () => { setIsCheckingDuplicates(true); try { setSimilarProducts(await searchProductsByName(groupName.trim())); } catch (error) { console.error("Error searching products:", error); } finally { setIsCheckingDuplicates(false); } }, 500);
         return () => clearTimeout(handler);
     }, [groupName, mode]);
 
@@ -399,13 +338,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
-        const files = Array.from(e.target.files).filter(file => {
-            if (file.size > MAX_FILE_SIZE) {
-                toast.error(`'${file.name}' 파일 크기가 너무 큽니다 (최대 5MB).`);
-                return false;
-            }
-            return true;
-        });
+        const files = Array.from(e.target.files).filter(file => { if (file.size > MAX_FILE_SIZE) { toast.error(`'${file.name}' 파일 크기가 너무 큽니다 (최대 5MB).`); return false; } return true; });
         setNewImageFiles(prev => [...prev, ...files]);
         files.forEach(file => setImagePreviews(prev => [...prev, URL.createObjectURL(file)]));
         e.target.value = '';
@@ -414,42 +347,109 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     const removeImage = useCallback((indexToRemove: number) => {
         const urlToRemove = imagePreviews[indexToRemove];
         if (!urlToRemove) return;
-        if (urlToRemove.startsWith('blob:')) {
-            URL.revokeObjectURL(urlToRemove);
-            setNewImageFiles(prev => prev.filter(f => URL.createObjectURL(f) !== urlToRemove));
-        } else {
-            setCurrentImageUrls(prev => prev.filter(u => u !== urlToRemove));
-        }
+        if (urlToRemove.startsWith('blob:')) { URL.revokeObjectURL(urlToRemove); setNewImageFiles(prev => prev.filter(f => URL.createObjectURL(f) !== urlToRemove)); } else { setCurrentImageUrls(prev => prev.filter(u => u !== urlToRemove)); }
         setImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove));
     }, [imagePreviews]);
 
     const onDragEnd = (result: DropResult) => {
         if (!result.destination) return;
         const { source, destination } = result;
-        
         const reorderedPreviews = Array.from(imagePreviews);
         const [movedPreview] = reorderedPreviews.splice(source.index, 1);
         reorderedPreviews.splice(destination.index, 0, movedPreview);
         setImagePreviews(reorderedPreviews);
-
-        if(mode === 'newProduct') {
-            const reorderedFiles = Array.from(newImageFiles);
-            const [movedFile] = reorderedFiles.splice(source.index, 1);
-            reorderedFiles.splice(destination.index, 0, movedFile);
-            setNewImageFiles(reorderedFiles);
-        }
+        if(mode === 'newProduct') { const reorderedFiles = Array.from(newImageFiles); const [movedFile] = reorderedFiles.splice(source.index, 1); reorderedFiles.splice(destination.index, 0, movedFile); setNewImageFiles(reorderedFiles); }
     };
     
+    // [오류 수정] 실제 Firebase Functions 호출 코드로 교체
+    const handleAIParse = async () => {
+        if (!description.trim()) {
+            toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.');
+            return;
+        }
+        setIsParsingWithAI(true);
+    
+        // [오류 수정] 사용자님의 설정에 맞게 functions 객체를 사용합니다.
+        const parseProductText = httpsCallable< { text: string }, AIParsedData >(functions, 'parseProductText');
+    
+        const promise = parseProductText({ text: description });
+    
+        toast.promise(promise, {
+            loading: 'AI가 상품 정보를 분석하고 있습니다...',
+            success: (result: HttpsCallableResult<AIParsedData>) => {
+                const data = result.data;
+    
+                // AI 응답으로 폼 상태 전체 업데이트
+                if (data.groupName) setGroupName(data.groupName);
+                if (data.cleanedDescription) setDescription(data.cleanedDescription);
+                if (data.storageType) setSelectedStorageType(data.storageType);
+                if (data.productType) setProductType(data.productType);
+                
+                // ✅ [개선] AI가 분류한 카테고리를 UI에 적용하는 로직
+                if (data.categoryName && categories.length > 0) {
+                    const foundCategory = categories.find(c => c.name === data.categoryName);
+                    if (foundCategory) {
+                        setSelectedMainCategory(foundCategory.id);
+                    } else {
+                        toast.error(`AI가 '${data.categoryName}' 카테고리를 추천했지만, 목록에 없어 선택할 수 없습니다.`);
+                    }
+                }
+
+                const firstVg = data.variantGroups?.[0];
+                if (firstVg?.pickupDate) {
+                    setPickupDate(parseDateString(firstVg.pickupDate));
+                }
+    
+                if (data.variantGroups && data.variantGroups.length > 0) {
+                    const newVariantGroups: VariantGroupUI[] = data.variantGroups.map(vg => {
+                        const expirationDate = parseDateString(vg.expirationDate);
+                        const newItems: ProductItemUI[] = (vg.items || []).map(item => ({
+                            id: generateUniqueId(),
+                            name: item.name,
+                            price: item.price || '',
+                            limitQuantity: '', // 기본값
+                            deductionAmount: 1, // 기본값
+                            isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k))
+                        }));
+                        
+                        if (newItems.length === 0) {
+                            newItems.push({ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false });
+                        }
+
+                        return {
+                            id: generateUniqueId(),
+                            groupName: vg.groupName || data.groupName || '',
+                            totalPhysicalStock: vg.totalPhysicalStock ?? '',
+                            stockUnitType: '개', // 기본값
+                            expirationDate: expirationDate,
+                            expirationDateInput: expirationDate ? formatDateToYYYYMMDD(expirationDate) : (vg.expirationDate || ''),
+                            items: newItems
+                        };
+                    });
+                    setVariantGroups(newVariantGroups);
+                } else {
+                    setVariantGroups([{ id: generateUniqueId(), groupName: data.groupName || '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]);
+                }
+    
+                setIsParsingWithAI(false);
+                return 'AI 분석 완료! 자동으로 입력된 내용을 확인해주세요.';
+            },
+            error: (err: any) => {
+                setIsParsingWithAI(false);
+                const message = err.message || 'AI 분석 중 알 수 없는 오류가 발생했습니다.';
+                return message;
+            },
+        });
+    };
+
     const settingsSummary = useMemo(() => {
         const publishDateTime = new Date(publishDate);
         publishDateTime.setHours(14,0,0,0);
-
         const publishText = `${formatDateToYYYYMMDD(publishDateTime)} 오후 2시`;
         const deadlineText = deadlineDate ? formatToDateTimeLocal(deadlineDate).replace('T', ' ') : '미설정';
         const pickupText = pickupDate ? formatDateToYYYYMMDD(pickupDate) : '미설정';
         const pickupDeadlineText = pickupDeadlineDate ? formatDateToYYYYMMDD(pickupDeadlineDate) : '미설정';
         const participationText = isSecretProductEnabled ? `${secretTiers.join(', ')} 등급만` : '모두 참여 가능';
-
         return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText };
     }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]);
 
@@ -461,12 +461,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             if (isSecretProductEnabled && secretTiers.length === 0) { toast.error("시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요."); return; }
         }
         setIsSubmitting(true);
-
         try {
             const status: SalesRoundStatus = isDraft ? 'draft' : 'scheduled';
             const finalPublishDate = new Date(publishDate);
             finalPublishDate.setHours(14, 0, 0, 0);
-
             const salesRoundData = {
                 roundName: roundName.trim(), status,
                 variantGroups: variantGroups.map(vg => ({
@@ -490,35 +488,21 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                 allowedTiers: isSecretProductEnabled ? secretTiers : ALL_LOYALTY_TIERS.concat(['주의 요망']),
                 preOrderTiers: isPreOrderEnabled ? preOrderTiers : [],
             };
-
             if (mode === 'newProduct') {
-                const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = {
-                    groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType,
-                    category: categories.find(c => c.id === selectedMainCategory)?.name || '',
-                    encoreCount: 0, encoreRequesterIds: [],
-                };
+                const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '', encoreCount: 0, encoreRequesterIds: [], };
                 await addProductWithFirstRound(productData, salesRoundData as any, newImageFiles, creationDate);
                 toast.success(isDraft ? "상품이 임시저장되었습니다." : "신규 상품이 성공적으로 등록되었습니다.");
-            
             } else if (mode === 'newRound' && productId) {
-                // ✅ [수정] 새 회차 추가 시에도 상품 설명을 업데이트하도록 로직 추가
-                const productDataToUpdate: Partial<Product> = {
-                    description: description.trim(),
-                };
+                const productDataToUpdate: Partial<Product> = { description: description.trim(), };
                 await updateProductCoreInfo(productId, productDataToUpdate, [], currentImageUrls, initialImageUrls);
                 await addNewSalesRound(productId, salesRoundData as any);
                 toast.success(isDraft ? "새 회차가 임시저장되었습니다." : "새로운 판매 회차가 추가되었습니다.");
-            
             } else if (mode === 'editRound' && productId && roundId) {
-                const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { 
-                    groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, 
-                    category: categories.find(c => c.id === selectedMainCategory)?.name || '' 
-                };
+                const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '' };
                 await updateProductCoreInfo(productId, productDataToUpdate, newImageFiles, currentImageUrls, initialImageUrls);
                 await updateSalesRound(productId, roundId, salesRoundData as any);
                 toast.success(isDraft ? "수정 내용이 임시저장되었습니다." : "상품 정보가 성공적으로 수정되었습니다.");
             }
-
             navigate('/admin/products');
         } catch (err) {
             toast.error(`저장 중 오류가 발생했습니다: ${(err as Error).message}`);
@@ -532,18 +516,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
     return (
         <>
-            <SettingsModal
-                isOpen={isSettingsModalOpen}
-                onClose={() => setIsSettingsModalOpen(false)}
-                isPreOrderEnabled={isPreOrderEnabled}
-                setIsPreOrderEnabled={setIsPreOrderEnabled}
-                preOrderTiers={preOrderTiers}
-                setPreOrderTiers={setPreOrderTiers}
-                isSecretProductEnabled={isSecretProductEnabled}
-                setIsSecretProductEnabled={setIsSecretProductEnabled}
-                secretTiers={secretTiers}
-                setSecretTiers={setSecretTiers}
-            />
+            <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} isPreOrderEnabled={isPreOrderEnabled} setIsPreOrderEnabled={setIsPreOrderEnabled} preOrderTiers={preOrderTiers} setPreOrderTiers={setPreOrderTiers} isSecretProductEnabled={isSecretProductEnabled} setIsSecretProductEnabled={setIsSecretProductEnabled} secretTiers={secretTiers} setSecretTiers={setSecretTiers} />
             <div className="product-add-page-wrapper smart-form">
                 <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
                     <header className="product-add-header">
@@ -557,14 +530,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                         </div>
                     </header>
                     <main className="main-content-grid-3-col-final">
-                        {/* --- 대표 상품 정보 섹션 --- */}
                         <div className="form-section">
-                            <div className="form-section-title">
-                                <div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div>
+                            <div className="form-section-title"><div className="title-text-group"><Package size={20} className="icon-color-product"/><h3>대표 상품 정보</h3></div>
                                 {mode === 'newProduct' && <div className="product-type-toggle-inline"><button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button><button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button></div>}
                             </div>
                             <p className="section-subtitle">상품의 기본 정보는 모든 판매 회차에 공통 적용됩니다.</p>
-                            
                             <div className="form-group with-validation">
                                 <label>대표 상품명 *</label>
                                 <div className="input-wrapper">
@@ -573,114 +543,46 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                 </div>
                                 {mode === 'newProduct' && similarProducts.length > 0 && (
                                     <div className="similar-products-warning">
-                                        <span><AlertTriangle size={16} />
-                                        유사한 이름의 상품이 이미 존재합니다. 새 회차로 추가하시겠어요?</span>
-                                        <ul>
-                                            {similarProducts.map(p => (
-                                                <li key={p.id} className="similar-product-item">
-                                                    <span>{p.groupName}</span>
-                                                    <button type="button" className="add-round-for-similar-btn" onClick={() => navigate('/admin/products/add', { state: { productId: p.id, productGroupName: p.groupName, lastRound: p.salesHistory[0] } })}>
-                                                        이 상품에 새 회차 추가
-                                                    </button>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                        <span><AlertTriangle size={16} /> 유사한 이름의 상품이 이미 존재합니다. 새 회차로 추가하시겠어요?</span>
+                                        <ul>{similarProducts.map(p => (<li key={p.id} className="similar-product-item"><span>{p.groupName}</span><button type="button" className="add-round-for-similar-btn" onClick={() => navigate('/admin/products/add', { state: { productId: p.id, productGroupName: p.groupName, lastRound: p.salesHistory[0] } })}>이 상품에 새 회차 추가</button></li>))}</ul>
                                     </div>
                                 )}
                             </div>
-                            
-                            {mode === 'newProduct' && (
-                                <div className="form-group">
-                                    <label>상품 등록일</label>
-                                    <div className="input-with-icon">
-                                        <CalendarPlus size={16} className="input-icon" />
-                                        <input 
-                                            type="date" 
-                                            value={formatDateToYYYYMMDD(creationDate)} 
-                                            onChange={e => setCreationDate(new Date(e.target.value + 'T00:00:00'))}
-                                            required 
-                                        />
-                                    </div>
-                                    <p className="input-description">상품이 시스템에 등록된 것으로 표시될 날짜입니다.</p>
-                                </div>
-                            )}
-
-                            {/* ✅ [수정] 상세 설명 필드의 disabled 속성을 완전히 제거하여 항상 수정 가능하도록 변경 */}
+                            {mode === 'newProduct' && (<div className="form-group"><label>상품 등록일</label><div className="input-with-icon"><CalendarPlus size={16} className="input-icon" /><input type="date" value={formatDateToYYYYMMDD(creationDate)} onChange={e => setCreationDate(new Date(e.target.value + 'T00:00:00'))} required /></div><p className="input-description">상품이 시스템에 등록된 것으로 표시될 날짜입니다.</p></div>)}
                             <div className="form-group">
                                 <label>상세 설명</label>
-                                <textarea 
-                                    value={description} 
-                                    onChange={e => setDescription(e.target.value)} 
-                                    rows={4} 
-                                />
+                                <div className="description-wrapper">
+                                    <textarea value={description} onChange={e => setDescription(e.target.value)} rows={8} placeholder="이곳에 상품 안내문을 붙여넣고 [AI로 채우기] 버튼을 눌러보세요." />
+                                    <button type="button" className="ai-parse-button" onClick={handleAIParse} disabled={isParsingWithAI}>
+                                        {isParsingWithAI ? <Loader2 className="spinner-icon" /> : <Bot size={16} />}
+                                        {isParsingWithAI ? '분석 중...' : 'AI로 채우기'}
+                                    </button>
+                                </div>
                             </div>
                             <div className="form-group"><label>카테고리/보관타입</label><div className="category-select-wrapper"><select value={selectedMainCategory} onChange={e=>setSelectedMainCategory(e.target.value)} disabled={mode !== 'editRound' && mode !== 'newProduct'}><option value="">대분류 선택</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                                 <div className="settings-option-group">
                                     {storageTypeOptions.map(opt => 
-                                        <button 
-                                            key={opt.key} 
-                                            type="button" 
-                                            className={`settings-option-btn ${opt.className} ${selectedStorageType===opt.key?'active':''}`} 
-                                            onClick={()=>setSelectedStorageType(opt.key)} 
-                                            disabled={mode !== 'editRound' && mode !== 'newProduct'}>
+                                        <button key={opt.key} type="button" className={`settings-option-btn ${opt.className} ${selectedStorageType===opt.key?'active':''}`} onClick={()=>setSelectedStorageType(opt.key)} disabled={mode !== 'editRound' && mode !== 'newProduct'}>
                                             {opt.name}
                                         </button>
                                     )}
                                 </div>
                             </div>
-                            
                             <div className="form-group">
                                 <label>대표 이미지 *</label>
-                                <DragDropContext onDragEnd={onDragEnd}>
-                                    <Droppable droppableId="image-previews" direction="horizontal">
-                                        {(provided) => (
-                                            <div className="compact-image-uploader" {...provided.droppableProps} ref={provided.innerRef}>
-                                                <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/png, image/jpeg" style={{display:'none'}} disabled={mode !== 'editRound' && mode !== 'newProduct'}/>
-                                                {imagePreviews.map((p, i) => (
-                                                    <Draggable key={p+i} draggableId={p+i.toString()} index={i} isDragDisabled={mode!=='editRound' && mode !== 'newProduct'}>
-                                                        {(provided, snapshot) => (
-                                                            <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`} style={{...provided.draggableProps.style}}>
-                                                                <img src={p} alt={`미리보기 ${i+1}`}/>
-                                                                {mode !== 'newRound' && <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>}
-                                                            </div>
-                                                        )}
-                                                    </Draggable>
-                                                ))}
-                                                {provided.placeholder}
-                                                {imagePreviews.length < 10 && (mode === 'editRound' || mode === 'newProduct') && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}
-                                            </div>
-                                        )}
-                                    </Droppable>
-                                </DragDropContext>
+                                <DragDropContext onDragEnd={onDragEnd}><Droppable droppableId="image-previews" direction="horizontal">{(provided) => (<div className="compact-image-uploader" {...provided.droppableProps} ref={provided.innerRef}><input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/png, image/jpeg" style={{display:'none'}} disabled={mode !== 'editRound' && mode !== 'newProduct'}/>{imagePreviews.map((p, i) => (<Draggable key={p+i} draggableId={p+i.toString()} index={i} isDragDisabled={mode!=='editRound' && mode !== 'newProduct'}>{(provided, snapshot) => (<div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`thumbnail-preview ${snapshot.isDragging ? 'dragging' : ''}`} style={{...provided.draggableProps.style}}><img src={p} alt={`미리보기 ${i+1}`}/>{mode !== 'newRound' && <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn"><X size={10}/></button>}</div>)}</Draggable>))}{provided.placeholder}{imagePreviews.length < 10 && (mode === 'editRound' || mode === 'newProduct') && (<button type="button" onClick={()=>fileInputRef.current?.click()} className="add-thumbnail-btn"><PlusCircle size={20}/></button>)}</div>)}</Droppable></DragDropContext>
                                 {mode === 'newRound' && <p className="input-description">대표 상품 정보는 회차 추가 시에도 수정할 수 있습니다.</p>}
                             </div>
                         </div>
-
-                        {/* --- 판매 옵션 섹션 --- */}
                         <div className="form-section">
                             <div className="form-section-title"><div className="title-text-group"><Box size={20} className="icon-color-option"/><h3>판매 옵션 *</h3></div></div>
                             <p className="section-subtitle">현재 회차에만 적용되는 옵션, 가격, 재고 등을 설정합니다.</p>
-                            
-                            <div className="form-group">
-                                <label>회차명</label>
-                                <input type="text" value={roundName} readOnly disabled />
-                            </div>
-
+                            <div className="form-group"><label>회차명</label><input type="text" value={roundName} readOnly disabled /></div>
                             {variantGroups.map(vg => (
                             <div className="variant-group-card" key={vg.id}>
                                 <div className="variant-group-header">
                                     <div className="form-group full-width"><label>하위 상품 그룹명 *</label><input type="text" value={vg.groupName} onChange={e=>handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? "예: 얼큰소고기맛" : "상품명과 동일하게"} required /></div>
-                                    <div className="form-group">
-                                        <label>
-                                            <Tippy content="판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다.">
-                                                <span>총 재고</span>
-                                            </Tippy>
-                                        </label>
-                                        <div className="stock-input-wrapper">
-                                          <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="실물 재고"/>
-                                          <span className="stock-unit-addon">{vg.stockUnitType || '개'}</span>
-                                        </div>
-                                    </div>
+                                    <div className="form-group"><label><Tippy content="판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다."><span>총 재고</span></Tippy></label><div className="stock-input-wrapper"><input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="실물 재고"/><span className="stock-unit-addon">{vg.stockUnitType || '개'}</span></div></div>
                                     <div className="form-group"><label>유통기한</label><input type="text" value={vg.expirationDateInput} onChange={e=>handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8}/></div>
                                     {productType === 'group' && (<button type="button" onClick={()=>removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? "마지막 그룹은 삭제할 수 없습니다." : "그룹 삭제"}><Trash2 size={16}/></button>)}
                                 </div>
@@ -693,45 +595,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                                 <div className="option-item-actions"><button type="button" onClick={()=>addNewItem(vg.id)} className="add-item-btn">구매 옵션 추가</button></div>
                             </div>
                             ))}
-                            <div className="variant-controls-footer">
-                                <div className="add-group-btn-wrapper">
-                                    {productType === 'group' && variantGroups.length < 5 && 
-                                        <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>
-                                    }
-                                </div>
-                            </div>
+                            <div className="variant-controls-footer"><div className="add-group-btn-wrapper">{productType === 'group' && variantGroups.length < 5 && <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>}</div></div>
                         </div>
-                        
-                        {/* --- 발행 및 기간 설정 섹션 --- */}
                         <div className="form-section sticky-section">
                             <div className="form-section-title"><div className="title-text-group"><SlidersHorizontal size={20} className="icon-color-settings"/><h3>발행 및 기간 설정</h3></div></div>
                             <p className="section-subtitle">상품의 판매 시점 및 조건을 설정합니다.</p>
-                            
                             <div className="form-group">
                                 <label>판매 옵션</label>
                                 <div className="settings-option-group">
-                                    <Tippy content="선입금 필수 상품으로 설정합니다.">
-                                        <button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}>
-                                            <Save size={16} /> 선입금
-                                        </button>
-                                    </Tippy>
-                                    <Tippy content="선주문, 등급별 노출 등 판매 조건을 설정합니다.">
-                                        <button type="button" className={`settings-option-btn ${(isPreOrderEnabled && preOrderTiers.length > 0) || isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSettingsModalOpen(true)}>
-                                            <SlidersHorizontal size={16} /> 등급 설정
-                                        </button>
-                                    </Tippy>
+                                    <Tippy content="선입금 필수 상품으로 설정합니다."><button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}><Save size={16} /> 선입금</button></Tippy>
+                                    <Tippy content="선주문, 등급별 노출 등 판매 조건을 설정합니다."><button type="button" className={`settings-option-btn ${(isPreOrderEnabled && preOrderTiers.length > 0) || isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSettingsModalOpen(true)}><SlidersHorizontal size={16} /> 등급 설정</button></Tippy>
                                 </div>
                             </div>
-                            
-                            <div className="form-group">
-                                <label>발행일 (오후 2시 공개)</label>
-                                <input type="date" value={formatDateToYYYYMMDD(publishDate)} onChange={e => { const newDate = new Date(e.target.value + 'T00:00:00'); setPublishDate(newDate);}} required/>
-                                { mode !== 'editRound' && <p className="input-description">선택한 날짜 오후 2시에 공개됩니다.</p> }
-                            </div>
+                            <div className="form-group"><label>발행일 (오후 2시 공개)</label><input type="date" value={formatDateToYYYYMMDD(publishDate)} onChange={e => { const newDate = new Date(e.target.value + 'T00:00:00'); setPublishDate(newDate);}} required/>{ mode !== 'editRound' && <p className="input-description">선택한 날짜 오후 2시에 공개됩니다.</p> }</div>
                             <div className="form-group"><label>공동구매 마감일 *</label><input type="datetime-local" value={formatToDateTimeLocal(deadlineDate)} onChange={e=>setDeadlineDate(e.target.value?new Date(e.target.value):null)} required/></div>
                             <div className="form-group"><label>픽업 시작일 *</label><input type="date" value={pickupDate ? formatDateToYYYYMMDD(pickupDate) : ''} onChange={e=>setPickupDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
                             <div className="form-group"><label>픽업 마감일 *</label><input type="date" value={pickupDeadlineDate ? formatDateToYYYYMMDD(pickupDeadlineDate) : ''} onChange={e=>setPickupDeadlineDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : null)} required/></div>
-                            
                             <div className="settings-summary-card">
                                 <h4 className="summary-title"><Info size={16} /> 설정 요약</h4>
                                 <ul>

@@ -610,3 +610,20 @@
   border-radius: var(--border-radius-sm);
   border: 1px solid var(--danger-border-color);
 }
+
+/* src/pages/customer/ProductDetailPage.css 파일 하단에 추가 */
+
+/* AI가 생성한 Markdown 설명을 위한 스타일 */
+.product-description {
+  white-space: pre-wrap; /* \n 줄바꿈을 인식하도록 설정 */
+  word-break: keep-all;  /* 단어 단위로 줄바꿈하여 가독성 향상 */
+  line-height: 1.6;
+}
+
+.product-description p {
+  margin-bottom: 1em; /* 단락 간 간격 추가 */
+}
+
+.product-description strong {
+  color: var(--primary-color-dark); /* 강조 텍스트 색상 */
+}

@@ -14,11 +14,11 @@ import { getProductById } from '@/firebase';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
-import { useTutorial } from '@/context/TutorialContext'; // ✅ [신규] useTutorial 훅 import
-import { detailPageTourSteps } from '@/components/customer/AppTour'; // ✅ [신규] 튜토리얼 스텝 import
+import { useTutorial } from '@/context/TutorialContext';
+import { detailPageTourSteps } from '@/components/customer/AppTour';
 import {
   ShoppingCart, ChevronLeft, ChevronRight, X, CalendarDays, Sun, Snowflake,
-  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck // ✅ [신규] HelpCircle 아이콘 import
+  Tag, AlertCircle, PackageCheck, Hourglass, ShieldX, ShieldCheck
 } from 'lucide-react';
 
 // Swiper React components
@@ -30,6 +30,9 @@ import { Pagination, Navigation } from 'swiper/modules';
 import 'swiper/css';
 import 'swiper/css/pagination';
 import 'swiper/css/navigation';
+
+// ✅ [개선] Markdown 뷰어를 import 합니다.
+import ReactMarkdown from 'react-markdown';
 
 
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -97,7 +100,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const { addToCart } = useCart();
   const { user, userDocument, isSuspendedUser } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
-  const { runPageTourIfFirstTime } = useTutorial(); // ✅ [수정] runPageTourIfFirstTime 추가
+  const { runPageTourIfFirstTime } = useTutorial();
 
   // --- 상태(State) 선언 ---
   const [product, setProduct] = useState<Product | null>(null);
@@ -116,9 +119,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
   const swiperRef = useRef<any>(null);
   const lightboxSwiperRef = useRef<any>(null);
   
-  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
   useEffect(() => {
-    // 모달이 열리고, 메인 튜토리얼을 마친 사용자에게만 페이지별 튜토리얼을 보여줍니다.
     if (isOpen && userDocument?.hasCompletedTutorial) {
       runPageTourIfFirstTime('hasSeenDetailPage', detailPageTourSteps);
     }
@@ -442,7 +443,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     return (
       <>
         <div className="main-content-area">
-          <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"> {/* ✅ [신규] data-tutorial-id 추가 */}
+          <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery">
             <Swiper
               ref={swiperRef}
               modules={[Pagination, Navigation]}
@@ -477,9 +478,13 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
             <div className="product-info-header">
               <h2 className="product-name">{product.groupName}</h2>
             </div>
-            <p className="product-description">{product.description}</p>
 
-            <div className="product-key-info" data-tutorial-id="detail-key-info"> {/* ✅ [신규] data-tutorial-id 추가 */}
+            {/* ✅ [개선] 상세 설명을 Markdown 뷰어로 렌더링합니다. */}
+            <div className="product-description">
+                <ReactMarkdown>{product.description.replace(/\\n/g, '  \n')}</ReactMarkdown>
+            </div>
+
+            <div className="product-key-info" data-tutorial-id="detail-key-info">
               <div className="info-row">
                 <div className="info-label"><Tag size={16} />판매 회차</div>
                 <div className="info-value"><span className="round-name-badge">{displayRound.roundName}</span></div>
@@ -587,7 +592,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
     return (
         <div className="product-purchase-footer">
             {allAvailableOptions.length > 1 && (
-              <div className="select-wrapper" data-tutorial-id="detail-options"> {/* ✅ [신규] data-tutorial-id 추가 */}
+              <div className="select-wrapper" data-tutorial-id="detail-options">
                 <select className="price-select" onChange={handleOptionChange} value={allAvailableOptions.findIndex(opt => opt.item.id === selectedItem?.id)}>
                   {allAvailableOptions.map((opt, index) => {
                     const isSingleVg = displayRound.variantGroups.length === 1;
@@ -605,10 +610,10 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, isOpen
               </div>
             )}
             
-            <div className="purchase-action-row" data-tutorial-id="detail-action-button"> {/* ✅ [신규] data-tutorial-id 추가 */}
+            <div className="purchase-action-row" data-tutorial-id="detail-action-button">
               {showQuantityControls && (
                 <>
-                  <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls" onClick={(e) => e.stopPropagation()}> {/* ✅ [신규] data-tutorial-id 추가 */}
+                  <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls" onClick={(e) => e.stopPropagation()}>
                       <button {...decrementHandlers} disabled={quantity <= 1} className="quantity-btn">-</button>
                       {isQuantityEditing ? (
                         <input

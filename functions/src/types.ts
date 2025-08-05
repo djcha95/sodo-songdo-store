@@ -56,6 +56,14 @@ export interface Notification {
   type: NotificationType;
 }
 
+// ✅ [오류 수정] 누락되었던 Category 타입을 추가합니다.
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  order?: number;
+}
+
 
 // =================================================================
 // 📌 상품 및 판매 관련 타입 (프론트엔드와 동일하게 유지)
