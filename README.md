@@ -5,14 +5,16 @@
 ## 🚀 프로젝트 소개
 
 -   **목표:** React와 Firebase를 사용하여 간단한 상품 쇼핑몰 웹사이트를 구축합니다.
--   **주요 기능:** 회원가입/로그인, 상품 목록 및 상세 보기, 장바구니, 주문 관리, **신뢰도와 활동 포인트를 분리한 이중 트랙 보상 시스템**, 친구 초대, 관리자 페이지, 지능형 알림톡 시스템 등
+-   **주요 기능:** 회원가입/로그인, 상품 목록 및 상세 보기, 장바구니, 주문 관리, **신뢰도와 활동 포인트를 분리한 이중 트랙 보상 시스템**, 친구 초대, 관리자 페이지, **AI 상품 정보 자동 등록**, 지능형 알림톡 시스템 등
 
 ## 🛠️ 사용된 기술 스택
 
 -   **프론트엔드:** React, TypeScript, Vite
 -   **백엔드 & 데이터베이스:** Firebase (Firestore, Authentication, Storage)
     -   **Firebase Extensions (Resize Images):** 이미지 업로드 시 WebP 형식 변환 및 리사이징 자동화
-    -   **Cloud Functions (v2):** 서버리스 백엔드 로직 (등급 변경 알림, 포인트 자동 소멸, 추천인 보상 등)
+    -   **Cloud Functions (v2)::** 서버리스 백엔드 로직 (등급 변경 알림, 포인트 자동 소멸, 추천인 보상 등)
+    -   **Google Gemini API:** 상품 정보 자동 추출
+    -   **Google Cloud Secret Manager:** API 키 보안 관리
     -   **NHN Cloud:** 카카오톡 알림톡 발송 중계 서비스
 -   **스타일링:** 일반 CSS (.css)
 -   **UI & 상태관리:**
@@ -32,13 +34,13 @@
 
 프로젝트의 더 자세한 내용은 아래 문서를 참고하세요.
 
--   **[📂 프로젝트 구조 및 아키텍처 (Architecture)](./docs/ARCHITECTURE.md)**
+-   **[📂 프로젝트 구조 및 아키텍처 (Architecture)](./ARCHITECTURE.md)**
     > 폴더 구조, 주요 파일 및 컴포넌트의 역할에 대한 상세 설명서입니다.
 
--   **[✨ 주요 기능 명세 (Features)](./docs/FEATURES.md)**
+-   **[✨ 주요 기능 명세 (Features)](./FEATURES.md)**
     > 회원가입부터 상품 관리, 포인트 시스템까지 각 기능의 상세한 동작 흐름을 설명합니다.
 
--   **[💡 트러블슈팅 및 개선 이력 (Troubleshooting)](./docs/TROUBLESHOOTING.md)**
+-   **[💡 트러블슈팅 및 개선 이력 (Troubleshooting)](./TROUBLESHOOTING.md)**
     > 프로젝트 진행 중 발생했던 주요 문제들과 해결 과정을 기록한 개발 회고록입니다.
 
 ---
