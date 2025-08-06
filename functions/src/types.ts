@@ -240,6 +240,7 @@ export interface UserDocument {
   manualTier?: LoyaltyTier | null;
   hasCompletedTutorial?: boolean;
   tutorialProgress?: UserTutorialProgress;
+  completedMissions?: { [key: string]: boolean };
 }
 
 export interface WaitlistInfo {
