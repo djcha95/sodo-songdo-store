@@ -17,7 +17,8 @@ import toast from 'react-hot-toast';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
-import { addWaitlistEntry, getProductsByIds } from '@/firebase';
+// ❌ 이 줄에서 addWaitlistEntry를 제거합니다.
+import { getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
 // =================================================================
@@ -147,9 +148,11 @@ const CartPage: React.FC = () => {
   
   const functions = getFunctions(getApp(), 'asia-northeast3');
   
-  // ✅ [수정] 'callable-' 접두사를 제거하여 실제 함수 이름과 일치시킵니다.
   const checkCartStockCallable = httpsCallable<any, any>(functions, 'checkCartStock');
   const submitOrderCallable = httpsCallable<any, any>(functions, 'submitOrder');
+  // ✅ [추가] 새로 만든 대기 신청 함수를 연결합니다.
+  const addWaitlistEntryCallable = httpsCallable<any, any>(functions, 'addWaitlistEntry');
+
 
   useEffect(() => {
     if (userDocument?.hasCompletedTutorial) {
@@ -297,8 +300,19 @@ const CartPage: React.FC = () => {
     if (orderPayload) {
       allPromises.push(submitOrderCallable(orderPayload));
     }
+
+    // ✅ [수정] 이 부분을 Cloud Function 호출로 변경합니다.
+    // 기존의 클라이언트 SDK 호출은 보안 규칙에 의해 차단됩니다.
     waitlistItems.forEach(item => {
-      allPromises.push(addWaitlistEntry(item.productId, item.roundId, user.uid, item.quantity, item.variantGroupId, item.itemId));
+      const waitlistPayload = {
+        productId: item.productId,
+        roundId: item.roundId,
+        quantity: item.quantity,
+        variantGroupId: item.variantGroupId,
+        itemId: item.itemId,
+      };
+      // 새로 만든 addWaitlistEntryCallable 함수를 호출합니다.
+      allPromises.push(addWaitlistEntryCallable(waitlistPayload));
     });
 
     showPromiseToast(Promise.all(allPromises), {

@@ -1,20 +1,24 @@
 // src/pages/customer/CustomerCenterPage.tsx
 
-import React, { useEffect, useState, useCallback, startTransition } from 'react';
+import React, { useEffect, useState, useCallback, startTransition, Suspense } from 'react';
 import { getStoreInfo, updateStoreInfo } from '@/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { useTutorial } from '@/context/TutorialContext'; // ✅ [추가]
-import { customerCenterTourSteps } from '@/components/customer/AppTour'; // ✅ [추가]
+import { useTutorial } from '@/context/TutorialContext';
+import { customerCenterTourSteps } from '@/components/customer/AppTour';
 import type { StoreInfo, GuideItem, FaqItem } from '@/types';
-// ✅ [수정] Users 아이콘 추가
 import { AlertTriangle, MapPin, BookOpen, HelpCircle, Save, X, MessageSquare, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
-import InfoTab from '@/components/customer/InfoTab';
+// InfoTab은 무거우므로 lazy loading 처리합니다.
+// import InfoTab from '@/components/customer/InfoTab';
 import GuideTab from '@/components/customer/GuideTab';
 import FaqTab from '@/components/customer/FaqTab';
 import isEqual from 'lodash/isEqual';
 import './CustomerCenterPage.css';
+import InlineSodomallLoader from '@/components/common/InlineSodomallLoader'; // 로딩 컴포넌트 추가
+
+// ✅ [성능 최적화] 무거운 InfoTab(지도 포함)을 React.lazy를 사용해 지연 로딩합니다.
+const InfoTab = React.lazy(() => import('@/components/customer/InfoTab'));
 
 const defaultUsageGuide: GuideItem[] = [
   {
@@ -53,8 +57,8 @@ const defaultFaq: FaqItem[] = [
 ];
 
 const CustomerCenterPage: React.FC = () => {
-  const { isAdmin, userDocument } = useAuth(); // ✅ [수정] userDocument 추가
-  const { runPageTourIfFirstTime } = useTutorial(); // ✅ [추가]
+  const { isAdmin, userDocument } = useAuth();
+  const { runPageTourIfFirstTime } = useTutorial();
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
   const [editableInfo, setEditableInfo] = useState<StoreInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,14 +67,12 @@ const CustomerCenterPage: React.FC = () => {
 
   const hasChanges = !isEqual(storeInfo, editableInfo);
 
-  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
   useEffect(() => {
     if (userDocument?.hasCompletedTutorial) {
       runPageTourIfFirstTime('hasSeenCustomerCenterPage', customerCenterTourSteps);
     }
   }, [userDocument, runPageTourIfFirstTime]);
 
-  // 데이터 로딩 및 관리 로직 (기존과 동일)
   const fetchStoreInformation = useCallback(async () => {
     setLoading(true);
     try {
@@ -119,9 +121,8 @@ const CustomerCenterPage: React.FC = () => {
           </div>
         )}
 
-        <section className="service-section quick-links" data-tutorial-id="customer-center-quick-links"> {/* ✅ [추가] data-tutorial-id */}
+        <section className="service-section quick-links" data-tutorial-id="customer-center-quick-links">
           <div className="contact-buttons">
-            {/* ✅ [추가] 카카오톡 채널 바로가기 버튼 */}
             <a
               href={storeInfo.kakaotalkChannelId ? `http://pf.kakao.com/${storeInfo.kakaotalkChannelId}` : '#'}
               target="_blank"
@@ -143,16 +144,18 @@ const CustomerCenterPage: React.FC = () => {
           </div>
         </section>
 
-        <div className="service-tabs" data-tutorial-id="customer-center-tabs"> {/* ✅ [추가] data-tutorial-id */}
+        <div className="service-tabs" data-tutorial-id="customer-center-tabs">
           <button onClick={() => { startTransition(() => { setActiveTab('info'); }); }} className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}><MapPin size={16} /> 매장 정보</button>
           <button onClick={() => { startTransition(() => { setActiveTab('guide'); }); }} className={`tab-button ${activeTab === 'guide' ? 'active' : ''}`}><BookOpen size={16} /> 이용 안내</button>
           <button onClick={() => { startTransition(() => { setActiveTab('faq'); }); }} className={`tab-button ${activeTab === 'faq' ? 'active' : ''}`}><HelpCircle size={16} /> 자주 묻는 질문</button>
         </div>
 
         <div className="service-content">
-          {activeTab === 'info' && <InfoTab editableInfo={editableInfo} updateField={updateField} isAdmin={isAdmin} />}
-          {activeTab === 'guide' && <GuideTab items={editableInfo.usageGuide || []} isAdmin={isAdmin} updateItem={updateGuideItem} addItem={addGuideItem} removeItem={removeGuideItem} />}
-          {activeTab === 'faq' && <FaqTab items={editableInfo.faq || []} isAdmin={isAdmin} updateItem={updateFaqItem} addItem={addFaqItem} removeItem={removeFaqItem} />}
+          <Suspense fallback={<div className="loading-spinner-container"><InlineSodomallLoader /></div>}>
+            {activeTab === 'info' && <InfoTab editableInfo={editableInfo} updateField={updateField} isAdmin={isAdmin} />}
+            {activeTab === 'guide' && <GuideTab items={editableInfo.usageGuide || []} isAdmin={isAdmin} updateItem={updateGuideItem} addItem={addGuideItem} removeItem={removeGuideItem} />}
+            {activeTab === 'faq' && <FaqTab items={editableInfo.faq || []} isAdmin={isAdmin} updateItem={updateFaqItem} addItem={addFaqItem} removeItem={removeFaqItem} />}
+          </Suspense>
         </div>
       </div>
     </div>

@@ -1,8 +1,10 @@
 // functions/src/triggers/orders.ts
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent, DocumentSnapshot, Change } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
-import { db } from "../utils/config.js";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+// ✅ [수정] dbAdmin을 db라는 별칭으로 가져옵니다.
+import { dbAdmin as db } from "../firebase/admin.js";
+// ✅ [수정] Transaction 타입을 import 합니다.
+import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
 import { calculateTier, POINT_POLICIES } from "../utils/helpers.js";
 import { sendAlimtalk } from "../utils/nhnApi.js";
 import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
@@ -92,7 +94,6 @@ export const onOrderCreated = onDocumentCreated(
   {
     document: "orders/{orderId}",
     region: "asia-northeast3",
-    // ✅ [오류 수정] NHN 키들을 Secret Manager에서 읽어오도록 설정합니다.
     secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (event: FirestoreEvent<DocumentSnapshot | undefined, { orderId: string }>) => {
@@ -118,7 +119,8 @@ export const onOrderCreated = onDocumentCreated(
         }
 
         try {
-            await db.runTransaction(async (transaction) => {
+            // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
+            await db.runTransaction(async (transaction: Transaction) => {
                 for (const [productId, changes] of changesByProduct.entries()) {
                     const productRef = db.collection("products").doc(productId);
                     const productDoc = await transaction.get(productRef);
@@ -173,10 +175,8 @@ export const onOrderCreated = onDocumentCreated(
         };
 
         const pickupStartDate = normalizeToDate(order.pickupDate);
-        const pickupDeadlineDate = normalizeToDate(order.pickupDeadlineDate);
-
-        if (!pickupStartDate || !pickupDeadlineDate) {
-            logger.error(`주문(${orderId})의 픽업 시작일 또는 마감일이 유효하지 않습니다.`);
+        if (!pickupStartDate) {
+            logger.error(`주문(${orderId})의 픽업 시작일이 유효하지 않습니다.`);
             return;
         }
 
@@ -193,21 +193,20 @@ export const onOrderCreated = onDocumentCreated(
             templateCode = "ORD_CONFIRM_FUTURE";
         }
 
-        const representativeItemName = order.items.length > 0 ? (order.items[0].productName || '주문 상품') : '주문 상품';
-        const otherItemsCount = order.items.length > 1 ? ` 외 ${order.items.length - 1}건` : "";
-        const productNameSummary = `${representativeItemName}${otherItemsCount}`;
+        const productList = order.items
+          .map(item => `${item.productName || '주문 상품'} ${item.quantity}개`)
+          .join('\n');
         
         const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
         const formatDate = (date: Date) => `${date.getMonth() + 1}월 ${date.getDate()}일(${weekdays[date.getDay()]})`;
 
         const templateVariables: { [key: string]: string } = {
             고객명: userData.displayName,
-            대표상품명: productNameSummary,
+            상품목록: productList,
         };
         
         if (templateCode === "ORD_CONFIRM_FUTURE") {
             templateVariables.픽업시작일 = formatDate(pickupStartDate);
-            templateVariables.픽업마감일 = formatDate(pickupDeadlineDate);
         }
         
         let recipientPhone = (userData.phone || '').replace(/\D/g, '');
@@ -227,7 +226,6 @@ export const onOrderCreated = onDocumentCreated(
 );
 
 
-// ... (onOrderDeleted, onOrderUpdatedForStock 등 나머지 함수들은 변경 없음)
 export const onOrderDeleted = onDocumentDeleted(
   {
     document: "orders/{orderId}",
@@ -252,7 +250,8 @@ export const onOrderDeleted = onDocumentDeleted(
     }
 
     try {
-        await db.runTransaction(async (transaction) => {
+        // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
+        await db.runTransaction(async (transaction: Transaction) => {
             for (const [productId, changes] of changesByProduct.entries()) {
                 const productRef = db.collection("products").doc(productId);
                 const productDoc = await transaction.get(productRef);
@@ -337,7 +336,8 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
     }
 
     try {
-        await db.runTransaction(async (transaction) => {
+        // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
+        await db.runTransaction(async (transaction: Transaction) => {
             for (const [productId, changes] of changesByProduct.entries()) {
                 const productRef = db.collection("products").doc(productId);
                 const productDoc = await transaction.get(productRef);
@@ -396,7 +396,8 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     const userRef = db.collection("users").doc(after.userId);
     
     try {
-      await db.runTransaction(async (transaction) => {
+      // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
+      await db.runTransaction(async (transaction: Transaction) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists) {
           logger.error(`User ${after.userId} not found for order status update.`);
@@ -496,7 +497,8 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
         const referrerRef = referrerDoc.ref;
         const rewardPoints = POINT_POLICIES.FRIEND_INVITED.points;
         
-        await db.runTransaction(async (transaction) => {
+        // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
+        await db.runTransaction(async (transaction: Transaction) => {
           const freshReferrerDoc = await transaction.get(referrerRef);
           if (!freshReferrerDoc.exists) return;
           

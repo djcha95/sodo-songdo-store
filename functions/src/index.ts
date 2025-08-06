@@ -1,17 +1,14 @@
 // functions/src/index.ts
 
-import admin from "firebase-admin";
-
-// ✅ [수정] 이미 앱이 초기화되었는지 확인하는 로직을 추가하여
-// 중복 초기화 오류를 방지합니다.
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
+// ✅ [수정] 모든 초기화 코드를 제거합니다.
 
 // Callable Functions
 export * from "./callable/products.js";
 export * from "./callable/orders.js";
 export * from "./callable/referrals.js";
+export * from "./callable/waitlist.js";
+export * from "./callable/stock.js";
+export * from "./callable/points.js"; // ✅ 이 줄을 추가해주세요
 
 // HTTP Functions
 export * from "./http/auth.js"; 

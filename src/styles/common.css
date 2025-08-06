@@ -255,26 +255,6 @@
   }
 }
 
-/* --- Status Badge (For Admin Pages) --- */
-.status-badge {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: white;
-  text-transform: capitalize;
-  display: inline-block;
-  white-space: nowrap;
-}
-
-.status-selling { background-color: #2f9e44; } /* 판매중 (초록색) */
-.status-scheduled { background-color: #f76707; } /* 예정 (주황색) */
-.status-ended { background-color: #868e96; } /* 종료 (회색) */
-.status-sold_out { background-color: #c92a2a; } /* 품절 (빨강색) */
-.status-draft { background-color: #495057; } /* 임시저장 (진한회색) */
-.status-unknown { background-color: #ced4da; color: #495057; }
-
-
 /* =============================================== */
 /* ✅ ========== Unified Toast Styles =========== */
 /* =============================================== */

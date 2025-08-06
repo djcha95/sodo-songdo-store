@@ -2,8 +2,10 @@
 import { onRequest, Request } from "firebase-functions/v2/https";
 import { Response } from "express";
 import * as logger from "firebase-functions/logger";
-import { auth, allowedOrigins } from "../utils/config.js";
-import { getAuth } from "firebase-admin/auth";
+// ✅ [수정] authAdmin을 auth라는 별칭으로 가져옵니다.
+import { authAdmin as auth, allowedOrigins } from "../firebase/admin.js";
+// ✅ [수정] 아래 import는 더 이상 필요 없으므로 제거합니다.
+// import { getAuth } from "firebase-admin/auth";
 import axios from "axios";
 
 export const kakaoLogin = onRequest(
@@ -12,9 +14,6 @@ export const kakaoLogin = onRequest(
     cors: allowedOrigins,
   },
   async (request: Request, response: Response) => {
-    // ✅ [수정] CORS 사전 요청(Preflight)을 수동으로 처리하는 로직 추가
-    // 브라우저가 보내는 OPTIONS 요청에 204 No Content로 응답하여
-    // 후속 POST 요청을 안전하게 보낼 수 있도록 허용합니다.
     if (request.method === "OPTIONS") {
       response.status(204).send("");
       return;
@@ -80,7 +79,6 @@ export const setUserRole = onRequest(
     cors: allowedOrigins,
   },
   async (request: Request, response: Response) => {
-    // ✅ [수정] 여기에도 동일하게 OPTIONS 사전 요청 처리 로직을 추가합니다.
     if (request.method === "OPTIONS") {
       response.status(204).send("");
       return;
@@ -94,7 +92,8 @@ export const setUserRole = onRequest(
     }
 
     try {
-      await getAuth().setCustomUserClaims(uid, { role: role });
+      // ✅ [수정] 일관성을 위해 getAuth() 대신 import한 auth 객체를 사용합니다.
+      await auth.setCustomUserClaims(uid, { role: role });
       response.send(`Success! The '${role}' role has been assigned to user (${uid}).`);
     } catch (error) {
       logger.error("Error setting custom claim:", error);

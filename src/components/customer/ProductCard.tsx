@@ -15,12 +15,10 @@ import './ProductCard.css';
 import { determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
-// ProductListPage로부터 주요 정보를 props로 받도록 타입 확장
+// ✅ [수정] liveReservedQuantities 타입을 제거합니다.
 type Product = OriginalProduct & {
   phase?: 'primary' | 'secondary' | 'past';
   displayRound: OriginalSalesRound;
-  // 실시간 예약 수량을 받기 위한 타입
-  liveReservedQuantities?: Record<string, number>;
 }
 
 const QuantityInput: React.FC<{
@@ -101,6 +99,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     
+    // ✅ [수정] displayRound에 이미 reservedCount가 포함되어 있으므로 그대로 사용합니다.
     const singleOptionVg = !isMultiOption ? (displayRound.variantGroups?.[0] as VariantGroup) : undefined;
     const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
@@ -118,25 +117,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const actionState = useMemo<ProductActionState>(() => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg } = cardData;
-
-    const roundWithLiveStock: SalesRound = {
-        ...displayRound,
-        variantGroups: displayRound.variantGroups.map(vg => {
-            const key = `${product.id}-${displayRound.roundId}-${vg.id}`;
-            // ✅ [수정] 불필요한 || vg.reservedCount 제거. liveReservedQuantities가 유일한 정보 소스.
-            const reservedCount = product.liveReservedQuantities?.[key] || 0;
-            return { ...vg, reservedCount };
-        })
-    };
     
-    const state = determineActionState(roundWithLiveStock, userDocument, roundWithLiveStock.variantGroups.find(vg => vg.id === singleOptionVg?.id));
+    // ✅ [수정] 불필요한 재계산 로직을 제거하고, props로 받은 displayRound를 바로 사용합니다.
+    // displayRound에는 이미 Cloud Function이 계산한 정확한 reservedCount가 들어있습니다.
+    const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
     
     if (state === 'PURCHASABLE' && isMultiOption) {
       return 'REQUIRE_OPTION';
     }
     
     return state;
-  }, [cardData, userDocument, product.id, product.liveReservedQuantities]);
+  }, [cardData, userDocument]);
     
   const handleCardClick = useCallback(() => { 
     if (isSuspendedUser) {
@@ -157,9 +148,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
 
-    const key = `${product.id}-${displayRound.roundId}-${singleOptionVg?.id}`;
-    // ✅ [수정] 불필요한 || singleOptionVg?.reservedCount 제거
-    const reserved = product.liveReservedQuantities?.[key] || 0;
+    // ✅ [수정] Cloud Function이 제공한 reservedCount를 직접 사용합니다.
+    const reserved = singleOptionVg?.reservedCount || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
 
@@ -236,9 +226,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     switch (actionState) {
       case 'PURCHASABLE':
-        const key = `${product.id}-${cardData.displayRound.roundId}-${cardData.singleOptionVg?.id}`;
-        // ✅ [수정] 불필요한 || cardData.singleOptionVg?.reservedCount 제거
-        const reserved = product.liveReservedQuantities?.[key] || 0;
+        // ✅ [수정] Cloud Function이 제공한 reservedCount를 직접 사용합니다.
+        const reserved = cardData.singleOptionVg?.reservedCount || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
         const maxStockForUI = Math.floor(remainingStock / (cardData.singleOptionItem?.stockDeductionAmount || 1));
@@ -281,9 +270,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       const totalStock = singleOptionVg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
-        const key = `${product.id}-${displayRound.roundId}-${singleOptionVg.id}`;
-        // ✅ [수정] 불필요한 || singleOptionVg.reservedCount 제거
-        const reserved = product.liveReservedQuantities?.[key] || 0;
+        // ✅ [수정] Cloud Function이 제공한 reservedCount를 직접 사용합니다.
+        const reserved = singleOptionVg.reservedCount || 0;
         const remaining = (totalStock || 0) - reserved;
         stockText = `${remaining}개 남음!`;
       }

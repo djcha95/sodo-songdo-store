@@ -2,39 +2,54 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import { db, allowedOrigins } from "../utils/config.js";
-import { Timestamp } from "firebase-admin/firestore";
-// ✅ [수정] 누락되었던 OrderItem 타입을 import 목록에 추가하여 오류를 해결했습니다.
-import type { Order, OrderItem, CartItem, UserDocument, WaitlistInfo, Product, SalesRound, VariantGroup } from "../types.js";
+import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
+// ✅ [수정] 사용하지 않는 타입을 제거하고 필요한 타입을 추가했습니다.
+import { Timestamp, QueryDocumentSnapshot, DocumentData } from "firebase-admin/firestore";
+import type { Order, OrderItem, CartItem, UserDocument, WaitlistInfo, Product, SalesRound, WaitlistEntry } from "../types.js";
+
+const productConverter = {
+  toFirestore(product: Product): DocumentData { return product; },
+  fromFirestore(snapshot: QueryDocumentSnapshot): Product {
+    return snapshot.data() as Product;
+  }
+};
+const orderConverter = {
+  toFirestore(order: Order): DocumentData { return order; },
+  fromFirestore(snapshot: QueryDocumentSnapshot): Order {
+    return snapshot.data() as Order;
+  }
+};
+const userConverter = {
+  toFirestore(user: UserDocument): DocumentData { return user; },
+  fromFirestore(snapshot: QueryDocumentSnapshot): UserDocument {
+    return snapshot.data() as UserDocument;
+  }
+};
+
 
 export const checkCartStock = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError(
-        "unauthenticated",
-        "The function must be called while authenticated."
-      );
+      throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
     }
     
     const cartItems = request.data.items as CartItem[];
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
-      return {
-        updatedItems: [],
-        removedItemIds: [],
-        isSufficient: true,
-      };
+      return { updatedItems: [], removedItemIds: [], isSufficient: true };
     }
 
     try {
       const productIds = [...new Set(cartItems.map(item => item.productId))];
       const productSnapshots = await Promise.all(
-        productIds.map(id => db.collection("products").doc(id).get())
+        productIds.map(id => db.collection("products").withConverter(productConverter).doc(id).get())
       );
       const productsMap = new Map<string, Product>();
+      
       productSnapshots.forEach(snap => {
         if (snap.exists) {
-            productsMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+            // ✅ [수정] as Product 타입을 명시하여 타입 불일치 오류를 해결합니다.
+            productsMap.set(snap.id, { ...snap.data(), id: snap.id } as Product);
         }
       });
       
@@ -44,8 +59,8 @@ export const checkCartStock = onCall(
 
       for (const item of cartItems) {
         const product = productsMap.get(item.productId);
-        const round = product?.salesHistory.find((r: SalesRound) => r.roundId === item.roundId);
-        const group = round?.variantGroups.find((vg: VariantGroup) => vg.id === item.variantGroupId);
+        const round = product?.salesHistory.find(r => r.roundId === item.roundId);
+        const group = round?.variantGroups.find(vg => vg.id === item.variantGroupId);
         
         if (!product || !round || !group) {
             removedItemIds.push(item.id);
@@ -54,9 +69,7 @@ export const checkCartStock = onCall(
         }
         
         const totalStock = group.totalPhysicalStock;
-        
-        const reservedQuantity = group.reservedCount || 0;
-        
+        const reservedQuantity = (group as any).reservedCount || 0;
         let availableStock = Infinity;
         if (totalStock !== null && totalStock !== -1) {
           availableStock = totalStock - reservedQuantity;
@@ -73,9 +86,7 @@ export const checkCartStock = onCall(
           }
         }
       }
-      
       return { updatedItems, removedItemIds, isSufficient };
-
     } catch (error) {
       logger.error("Error checking stock:", error);
       throw new HttpsError("internal", "Error while checking stock.");
@@ -96,33 +107,39 @@ export const submitOrder = onCall(
         
         try {
           const result = await db.runTransaction(async (transaction) => {
-            const userRef = db.collection('users').doc(userId);
+            const userRef = db.collection('users').withConverter(userConverter).doc(userId);
             const userSnap = await transaction.get(userRef);
             if (!userSnap.exists) {
               throw new HttpsError('not-found', 'User information not found.');
             }
-            const userDoc = userSnap.data() as UserDocument;
+            const userDoc = userSnap.data();
+            // ✅ [수정] userDoc이 undefined일 가능성에 대비한 방어 코드를 추가합니다.
+            if (!userDoc) {
+                throw new HttpsError('internal', 'Failed to read user data.');
+            }
             if (userDoc.loyaltyTier === '참여 제한') {
               throw new HttpsError('permission-denied', 'Your participation in group buys is currently restricted due to repeated promise violations.');
             }
     
             const reservedQuantitiesMap = new Map<string, number>();
-            const ordersQuery = db.collection('orders').where('status', 'in', ['RESERVED', 'PREPAID']);
+            const ordersQuery = db.collection('orders').withConverter(orderConverter).where('status', 'in', ['RESERVED', 'PREPAID']);
             const ordersSnapshot = await transaction.get(ordersQuery);
-            ordersSnapshot.forEach((doc) => {
-                const order = doc.data() as Order;
+            
+            ordersSnapshot.forEach(doc => {
+                const order = doc.data();
                 (order.items || []).forEach((item: OrderItem) => {
                     const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
                     reservedQuantitiesMap.set(key, (reservedQuantitiesMap.get(key) || 0) + item.quantity);
                 });
             });
     
-            const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => db.collection('products').doc(id));
+            const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => db.collection('products').withConverter(productConverter).doc(id));
             const productSnaps = await transaction.getAll(...productRefs);
-            const productDataMap = new Map<string, any>();
+            const productDataMap = new Map<string, Product>();
             for (const productSnap of productSnaps) {
                 if (!productSnap.exists) throw new HttpsError('not-found', `Product not found (ID: ${productSnap.id}).`);
-                productDataMap.set(productSnap.id, { id: productSnap.id, ...productSnap.data() });
+                // ✅ [수정] as Product 타입을 명시하여 타입 불일치 오류를 해결합니다.
+                productDataMap.set(productSnap.id, { ...productSnap.data(), id: productSnap.id } as Product);
             }
             
             const itemsToReserve: OrderItem[] = [];
@@ -130,10 +147,10 @@ export const submitOrder = onCall(
               const productData = productDataMap.get(item.productId);
               if (!productData) throw new HttpsError('internal', `Could not process product data: ${item.productId}`);
               
-              const round = productData.salesHistory.find((r: any) => r.roundId === item.roundId);
+              const round = productData.salesHistory.find(r => r.roundId === item.roundId);
               if (!round) throw new HttpsError('not-found', `Sales round information not found.`);
     
-              const variantGroup = round.variantGroups.find((vg: any) => vg.id === item.variantGroupId);
+              const variantGroup = round.variantGroups.find(vg => vg.id === item.variantGroupId);
               if (!variantGroup) throw new HttpsError('not-found', `Option group information not found.`);
               
               let availableStock = Infinity;
@@ -147,17 +164,17 @@ export const submitOrder = onCall(
                   throw new HttpsError('resource-exhausted', `Sorry, the product ${productData.groupName} is out of stock. (Remaining quantity: ${Math.max(0, availableStock)})`);
               }
                 
-              itemsToReserve.push({ ...item } as OrderItem);
+              itemsToReserve.push({ ...item });
             }
             
             if (itemsToReserve.length > 0) {
                 const newOrderRef = db.collection('orders').doc();
-                const originalTotalPrice = itemsToReserve.reduce((total: number, i: OrderItem) => total + (i.unitPrice * i.quantity), 0);
+                const originalTotalPrice = itemsToReserve.reduce((total, i) => total + (i.unitPrice * i.quantity), 0);
                 
                 const phoneLast4 = orderData.customerInfo.phone.slice(-4);
                 const firstItem = orderData.items[0];
                 const productForRound = productDataMap.get(firstItem.productId);
-                const roundForOrder = productForRound?.salesHistory.find((r: any) => r.roundId === firstItem.roundId);
+                const roundForOrder = productForRound?.salesHistory.find(r => r.roundId === firstItem.roundId);
                 
                 if (!roundForOrder?.pickupDate) {
                   throw new HttpsError('invalid-argument', 'Pickup date information for the ordered product is not set.');
@@ -216,7 +233,7 @@ export const getUserOrders = onCall(
         };
     
         try {
-          let queryBuilder: FirebaseFirestore.Query = db.collection('orders').where('userId', '==', userId);
+          let queryBuilder = db.collection('orders').withConverter(orderConverter).where('userId', '==', userId);
     
           if (orderByField === 'pickupDate') {
             if (startDate) {
@@ -244,10 +261,10 @@ export const getUserOrders = onCall(
           }
     
           const snapshot = await queryBuilder.get();
-          const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+          const orders = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
           
           const lastDocSnapshot = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
-          const lastDocPayload = lastDocSnapshot ? { id: lastDocSnapshot.id, ...lastDocSnapshot.data() } : null;
+          const lastDocPayload = lastDocSnapshot ? { ...lastDocSnapshot.data(), id: lastDocSnapshot.id } : null;
     
           return { data: orders, lastDoc: lastDocPayload };
     
@@ -267,16 +284,16 @@ export const getUserWaitlist = onCall(
         const userId = request.auth.uid;
         
         try {
-          const allProductsSnapshot = await db.collection('products').where('isArchived', '==', false).get();
+          const allProductsSnapshot = await db.collection('products').withConverter(productConverter).where('isArchived', '==', false).get();
           const userWaitlist: WaitlistInfo[] = [];
     
           allProductsSnapshot.forEach(doc => {
-            const product = { id: doc.id, ...doc.data() } as any;
-            (product.salesHistory || []).forEach((round: any) => {
-              (round.waitlist || []).forEach((entry: any) => {
+            const product = { ...doc.data(), id: doc.id };
+            (product.salesHistory || []).forEach((round: SalesRound) => {
+              (round.waitlist || []).forEach((entry: WaitlistEntry) => {
                 if (entry.userId === userId) {
-                  const vg = (round.variantGroups || []).find((v: any) => v.id === entry.variantGroupId);
-                  const item = (vg?.items || []).find((i: any) => i.id === entry.itemId);
+                  const vg = (round.variantGroups || []).find(v => v.id === entry.variantGroupId);
+                  const item = (vg?.items || []).find(i => i.id === entry.itemId);
     
                   userWaitlist.push({
                     productId: product.id,

@@ -397,15 +397,15 @@
 ### ✅ [신규] 34. 인터랙티브 튜토리얼의 무한 스크롤 버그 및 UI 잘림 문제 해결
 문제점:
 
-react-joyride를 이용한 메인 튜토리얼 진행 중, 화면 하단의 메뉴(BottomNav)를 가리키기 위해 페이지가 자동으로 스크롤될 때, ProductListPage의 무한 스크롤 기능이 함께 작동하여 상품을 계속 불러오는 버그가 발생했습니다.
+`react-joyride`를 이용한 메인 튜토리얼 진행 중, 화면 하단의 메뉴(BottomNav)를 가리키기 위해 페이지가 자동으로 스크롤될 때, `ProductListPage`의 무한 스크롤 기능이 함께 작동하여 상품을 계속 불러오는 버그가 발생했습니다.
 
 일부 튜토리얼 단계에서 설명창(툴팁)이 화면 하단에 가려져 내용이 잘리는 UI 문제가 있었습니다.
 
 해결 과정:
 
-전역 상태 공유 (isTourRunning): TutorialContext에 튜토리얼이 현재 실행 중인지 여부를 나타내는 isTourRunning 상태를 추가했습니다. ProductListPage에서는 이 상태값을 구독하여, isTourRunning이 true일 때는 무한 스크롤 로직이 작동하지 않도록 useEffect의 조건문에 방어 코드를 추가하여 문제를 해결했습니다.
+**전역 상태 공유 (isTourRunning)**: `TutorialContext`에 튜토리얼이 현재 실행 중인지 여부를 나타내는 `isTourRunning` 상태를 추가했습니다. `ProductListPage`에서는 이 상태값을 구독하여, `isTourRunning`이 `true`일 때는 무한 스크롤 로직이 작동하지 않도록 `useEffect`의 조건문에 방어 코드를 추가하여 문제를 해결했습니다.
 
-툴팁 위치 조정: 화면 하단에 위치한 요소를 설명할 때 툴팁이 잘리는 문제를 해결하기 위해, AppTour.tsx의 해당 튜토리얼 단계(step)에 placement: 'top' 옵션을 추가했습니다. 이를 통해 툴팁이 대상 요소의 위쪽에 표시되도록 하여, 어떤 상황에서도 내용이 잘리지 않도록 UI를 개선했습니다.
+**툴팁 위치 조정**: 화면 하단에 위치한 요소를 설명할 때 툴팁이 잘리는 문제를 해결하기 위해, `AppTour.tsx`의 해당 튜토리얼 단계(step)에 `placement: 'top'` 옵션을 추가했습니다. 이를 통해 툴팁이 대상 요소의 위쪽에 표시되도록 하여, 어떤 상황에서도 내용이 잘리지 않도록 UI를 개선했습니다.
 
 개선 효과: 기능 간의 상태 공유를 통해 의도치 않은 동작 충돌을 방지하는 방법을 학습했으며, 라이브러리에서 제공하는 옵션을 활용하여 UI 안정성을 높이는 경험을 했습니다.
 
@@ -450,3 +450,56 @@ react-joyride를 이용한 메인 튜토리얼 진행 중, 화면 하단의 메�
     1.  **Google Cloud 콘솔의 '로그 탐색기'**에서 해당 함수의 로그를 확인하여 실제 서버 측 오류를 파악하는 것이 가장 중요합니다.
     2.  **주요 원인 1: `admin.firestore is not a function`**: `functions` 폴더 내 파일들 간의 `import admin from "firebase-admin"` 방식이 일치하지 않을 때 발생합니다. 모든 파일에서 동일한 방식으로 `import` 해야 합니다.
     3.  **주요 원인 2: `FAILED_PRECONDITION` (색인 누락)**: Firestore 쿼리에 필요한 색인(Index)이 없어 발생하는 오류입니다. 오류 로그에 포함된 `https://console.firebase.google.com/...` 링크를 클릭하여 자동으로 색인을 생성할 수 있습니다.
+
+### ✅ [신규] 36. 클라이언트-서버 역할 분리 및 Cloud Functions 연동 오류 해결
+문제점: 클라이언트(React)와 서버(Cloud Functions)의 역할이 명확히 분리되지 않아 복합적인 오류가 발생했습니다.
+1.  **권한 오류**: 고객 페이지(`ProductListPage.tsx`)가 모든 `orders` 문서를 직접 읽으려다 Firestore 보안 규칙에 의해 차단되었습니다. (`Missing or insufficient permissions`)
+2.  **CORS 오류**: 서버 함수를 호출할 때, 허용된 출처(`allowedOrigins`) 설정이 미비하여 브라우저가 요청을 차단했습니다.
+3.  **서버 전용 코드 오류**: `addStockAndProcessWaitlist`와 같이 서버에서만 실행되어야 할 민감한 로직이 클라이언트 코드(`src/firebase/productService.ts`)에 포함되어, `Transaction` 타입 불일치 등 지속적인 오류를 유발했습니다.
+해결 과정:
+1.  **서버 로직 이전**: 클라이언트의 `getReservedQuantitiesMap` 로직을 `getProductsWithStock` Cloud Function으로 이전하여, 서버가 모든 계산을 마친 후 안전한 결과만 클라이언트에 전달하도록 아키텍처를 변경했습니다.
+2.  **역할 기반 분리**: `addStockAndProcessWaitlist`와 같은 모든 서버 전용 로직을 `functions/src/callable/` 폴더 내의 전용 Cloud Function으로 이전하고, 클라이언트 페이지들은 `httpsCallable`을 통해 이 함수들을 호출하도록 수정했습니다.
+3.  **중앙 설정 및 `import` 경로 정리**: `functions/src/firebase/admin.ts` 파일을 생성하여 Firebase Admin SDK 초기화와 CORS 설정을 중앙에서 관리하도록 통일했습니다. 또한, 서버(`functions`)와 클라이언트(`src`) 간의 `import` 경로가 섞이지 않도록 모든 경로를 재검토하고 수정하여 코드의 실행 환경을 명확히 분리했습니다.
+개선 효과: 클라이언트와 서버의 역할을 명확히 분리하여 보안과 안정성을 크게 향상시켰습니다. 또한, 코드의 응집도를 높이고 의존성을 단순화하여 향후 유지보수 및 디버깅이 매우 용이해졌습니다.
+
+### ✅ [신규] 37. 대기 목록 기능 관련 버그 수정
+문제점:
+1.  '대기 확정' 후, `OrderHistoryPage.tsx`의 '대기 목록' 탭에 신청 내역이 표시되지 않았습니다.
+2.  관리자가 재고를 추가해도 대기자가 예약으로 전환되었다는 앱 내 알림이 고객에게 발송되지 않았습니다.
+3.  이미 대기 중인 상품의 수량을 추가하고 싶어도, "이미 대기를 신청한 상품입니다" 오류가 발생하며 막혔습니다.
+원인 분석:
+1.  `OrderHistoryPage`가 존재하지 않는 서버 함수를 호출하여 데이터를 가져오지 못했습니다.
+2.  알림 생성 함수(`createNotification`)가 서버 환경이 아닌 클라이언트용으로 구현되어 있었습니다.
+3.  `addWaitlistEntry` 함수가 신규 신청만 가정하고, 기존 신청의 수량을 업데이트하는 로직이 없었습니다.
+해결:
+1.  **`OrderHistoryPage` 수정**: 잘못된 서버 함수 호출을 제거하고, `src/firebase/productService.ts`에 있는 **클라이언트용 `getUserWaitlist` 함수**를 직접 호출하도록 수정하여 문제를 해결했습니다.
+2.  **서버용 유틸리티 생성**: `functions/src/utils/notificationService.ts`를 새로 만들어 서버 환경에서 알림을 생성하는 로직을 구현하고, `stock.ts` Cloud Function이 이를 호출하도록 수정했습니다.
+3.  **`addWaitlistEntry` 로직 개선**: `waitlist.ts` Cloud Function을 수정하여, 동일한 상품에 대한 대기 신청이 다시 들어오면 기존 대기 수량에 새로운 수량을 더하도록 로직을 개선했습니다.
+
+### ✅ [신규] 38. Cloud Functions 다단계 배포 오류 디버깅
+문제점: Cloud Functions 리팩토링 후, firebase deploy 명령어 실행 시 initializeApp, 모듈 로딩 순서, import 문법 등 다양한 원인으로 배포 전 분석 단계에서 런타임 오류가 반복적으로 발생했습니다.
+오류 로그:
+`TypeError: admin.auth is not a function`
+`FirebaseAppError: The default Firebase app does not exist.`
+`TypeError: Cannot read properties of undefined (reading 'length')`
+`Cannot find module ... Did you mean '...js'?`
+원인: Node.js의 ES Modules 로딩 순서와 CommonJS import 방식 간의 차이를 고려하지 않은 것이 핵심 원인이었습니다. `index.ts`에서 다른 파일을 import하고, 그 파일들이 다시 설정 파일(`config.ts`)을 import하는 과정에서, `initializeApp()`이 실행되기 전에 `getAuth()` 등이 먼저 호출되는 타이밍 문제가 발생했습니다.
+최종 해결:
+**단일 진실 공급원 확립**: `functions/src/firebase/admin.ts`라는 독립적인 파일을 생성하여, Firebase Admin SDK 초기화와 `dbAdmin`, `authAdmin` 객체 생성, `allowedOrigins` 설정을 모두 이 파일에서 책임지도록 했습니다.
+**의존성 단순화**: 다른 모든 Cloud Function 파일(`products.ts`, `orders.ts` 등)은 이제 오직 `admin.ts` 파일 하나만 import하여 준비된 `dbAdmin`, `authAdmin` 객체를 사용하도록 구조를 단순화했습니다.
+**import 문법 통일**: `tsconfig.json`의 `moduleResolution` 설정에 따라, 모든 상대 경로 import 구문에 `.js` 확장자를 명시하는 것으로 문법을 통일하여 모듈 해석 오류를 해결했습니다.
+개선 효과: 복잡한 모듈 로딩 순서에 의존하지 않는, 매우 안정적이고 예측 가능한 서버 아키텍처를 구축했습니다.
+
+### ✅ [신규] 39. 앱 전체 성능 저하 현상 (Non-Passive Listener) 및 React.lazy를 통한 해결
+
+* **문제점**: `OrderHistoryPage` 등 앱의 여러 페이지에서 스크롤 시 버벅이는 등 전반적인 반응 속도가 심각하게 느려졌습니다. 브라우저 콘솔에는 `react-kakao-maps-sdk`에서 발생하는 'Added non-passive event listener' 경고가 지속적으로 출력되었습니다.
+* **원인**: `CustomerCenterPage`의 '매장 정보' 탭(`InfoTab`)에 포함된 `KakaoMap` 컴포넌트가, 해당 탭이 보이지 않을 때도 미리 로딩되어 앱의 메인 스레드를 계속 점유하고 있었습니다. 이로 인해 지도의 이벤트 리스너들이 다른 모든 페이지의 사용자 인터랙션(스크롤, 터치 등)까지 방해하여 앱 전체의 성능 저하를 유발했습니다.
+* **해결**: React의 **지연 로딩(Lazy Loading)** 기법을 도입했습니다. `CustomerCenterPage.tsx`에서 `InfoTab` 컴포넌트를 `React.lazy()`를 사용해 동적으로 import하고, UI를 `<Suspense>`로 감싸주었습니다. 이 방법을 통해 사용자가 '매장 정보' 탭을 실제로 클릭하기 전까지는 무거운 지도 관련 코드를 일절 로드하지 않도록 수정하여, 앱의 초기 로딩 속도와 전반적인 반응성을 크게 향상시켰습니다.
+
+### ✅ [신규] 40. '순서 올리기' 기능 다단계 디버깅 (Permission Denied → Bad Request)
+
+* **문제점**: '1등 고정하기' 버튼 클릭 시, 처음에는 `Missing or insufficient permissions` (Firestore 보안 규칙 위반) 오류가 발생했고, 이를 해결하자 `400 Bad Request` ("필수 정보 누락") 오류가 발생하는 등 복합적인 문제가 나타나며 페이지가 멈췄습니다.
+* **디버깅 과정**:
+    1.  **`Permission Denied` 오류 해결**: 초기 오류는 클라이언트(브라우저)에서 직접 `products` 컬렉션을 수정하려 했기 때문에 발생했습니다. 민감한 로직을 클라이언트(`pointService.ts`)에서 분리하여 **안전한 서버 환경의 Cloud Function(`useWaitlistTicket`)으로 이전**하는 아키텍처 변경을 통해 권한 문제를 해결했습니다.
+    2.  **`Bad Request` 오류 추적**: Cloud Function으로 이전 후, 클라이언트에서는 모든 ID 값을 정상적으로 보내는 것처럼 보였으나 서버에서는 "필수 정보가 누락되었다"는 오류가 계속 발생했습니다. 서버 측(`points.ts`)에 직접 디버깅 로그를 추가하여 확인한 결과, 클라이언트에서 보낸 `{key: value}` 형태의 객체가 서버에 도착했을 때는 첫 번째 값만 남은 **단일 문자열로 변형**되는 알 수 없는 데이터 직렬화 문제를 발견했습니다.
+* **최종 해결**: 데이터가 전송되는 과정의 문제를 우회하기 위해, 클라이언트의 `pointService.ts`와 `OrderHistoryPage.tsx`의 함수 호출 방식을 수정했습니다. 여러 개의 ID 값을 개별 인자로 명확하게 전달받은 후, Cloud Function을 호출하는 **바로 그 시점에 순수한 새 객체(POJO)를 만들어 전달**하도록 변경하여, 데이터가 변형 없이 서버에 도달하도록 보장하여 문제를 최종 해결했습니다.

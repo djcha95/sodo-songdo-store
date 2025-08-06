@@ -199,3 +199,125 @@
 .empty-description { color: #868e96; margin-bottom: 1.5rem; }
 .go-to-shop-btn.common-button { background-color: var(--primary-color); color: white; }
 .go-to-shop-btn.common-button:hover { background-color: var(--primary-color-dark); }
+
+.missions-container {
+  padding: 0 var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.missions-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: 4px;
+  color: var(--text-color-primary);
+}
+
+.missions-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-color-secondary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.missions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.mission-card {
+  background-color: var(--background-color-secondary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color-light);
+  transition: all var(--transition-speed-fast);
+}
+
+.mission-card.completed {
+  background-color: #F0FDF4; /* 완료 시 연한 녹색 배경 */
+  border-color: var(--border-color-success-soft);
+}
+
+.mission-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.mission-icon {
+  flex-shrink: 0;
+  color: var(--primary-color);
+}
+
+.mission-card.completed .mission-icon {
+  color: var(--text-color-success);
+}
+
+.mission-text {
+  flex-grow: 1;
+  min-width: 0; /* flex item 내부의 text가 줄바꿈되도록 함 */
+}
+
+.mission-card-title {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-default);
+  display: block;
+  color: var(--text-color-primary);
+}
+
+.mission-description {
+  font-size: var(--font-size-xs);
+  color: var(--text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mission-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color-secondary);
+  background-color: var(--background-color-tertiary);
+  padding: 4px 10px;
+  border-radius: var(--border-radius-full);
+  flex-shrink: 0;
+}
+
+.mission-label.completed {
+  color: var(--text-color-success);
+  background-color: #DCFCE7; /* 연한 녹색 */
+}
+
+.progress-bar-track {
+    background-color: var(--border-color-light);
+    height: 8px;
+    border-radius: var(--border-radius-full);
+    overflow: hidden;
+    width: 100%;
+    margin-top: var(--spacing-sm);
+}
+.progress-bar-fill {
+    background: linear-gradient(90deg, var(--primary-color-light) 0%, var(--primary-color) 100%);
+    height: 100%;
+    border-radius: var(--border-radius-full);
+}
+
+.mission-card.completed .progress-bar-fill {
+   background: var(--border-color-success);
+}
+
+.attendance-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background-color: var(--primary-color-softer);
+    color: var(--primary-color-dark);
+    font-size: 8px;
+    padding: 1px 3px;
+    border-radius: 4px;
+    font-weight: bold;
+}

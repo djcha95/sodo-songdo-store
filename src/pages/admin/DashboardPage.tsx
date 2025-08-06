@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-// ✅ [수정] addStockAndProcessWaitlist 함수를 import 합니다.
-import { getProducts, addStockAndProcessWaitlist } from '@/firebase/productService';
+import { getProducts } from '@/firebase/productService';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
@@ -9,6 +10,12 @@ import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
 import { TrendingUp, SaveAll, Hourglass, CheckCircle } from 'lucide-react';
 import './DashboardPage.css';
+
+// Cloud Function의 반환 타입을 위한 인터페이스
+interface WaitlistProcessResult {
+  convertedCount: number;
+  failedCount: number;
+}
 
 interface EnrichedGroupItem {
   id: string;
@@ -38,6 +45,10 @@ const DashboardPage: React.FC = () => {
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false); // ✅ [추가] 저장 중 상태 관리
+
+  // Cloud Function 참조 설정
+  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
+  const addStockAndProcessWaitlistCallable = useMemo(() => httpsCallable<any, WaitlistProcessResult>(functions, 'addStockAndProcessWaitlist'), [functions]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -130,79 +141,61 @@ const DashboardPage: React.FC = () => {
   };
 
   // ✅ [수정] 대기열 처리 로직을 포함하도록 핸들러 전면 수정
-  const handleBulkSave = async () => {
-    if (Object.keys(stockInputs).length === 0) {
-      toast.error("변경된 내용이 없습니다.");
-      return;
+const handleBulkSave = async () => {
+  if (Object.keys(stockInputs).length === 0) {
+    toast.error("변경된 내용이 없습니다.");
+    return;
+  }
+  setIsSaving(true);
+
+  const allItems = Object.values(groupedItems).flat();
+  let hasError = false;
+
+  const promises = Object.entries(stockInputs).map(async ([itemId, newStockValue]) => {
+    const item = allItems.find(i => i.id === itemId);
+    if (!item || newStockValue.trim() === '') return;
+
+    const newStock = parseInt(newStockValue, 10);
+    if (isNaN(newStock) || newStock < 0) {
+      toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
+      hasError = true;
+      return Promise.resolve(); // 오류가 있는 경우에도 Promise chain을 중단하지 않음
     }
-    setIsSaving(true);
 
-    const allItems = Object.values(groupedItems).flat();
-    let totalConverted = 0;
-    let totalFailed = 0;
-    let hasError = false;
+    const additionalStock = item.configuredStock !== -1 ? newStock - item.configuredStock : 0;
 
-    // Promise.all을 사용하여 모든 재고 추가 및 대기열 처리 작업을 동시에 실행
-    const promises = Object.entries(stockInputs).map(async ([itemId, newStockValue]) => {
-      const item = allItems.find(i => i.id === itemId);
-      if (!item || newStockValue.trim() === '') return;
-
-      const newStock = parseInt(newStockValue, 10);
-      if (isNaN(newStock) || newStock < 0) {
-        toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
+    if (additionalStock > 0) {
+      const payload = {
+        productId: item.productId,
+        roundId: item.roundId,
+        variantGroupId: item.variantGroupId,
+        additionalStock: additionalStock
+      };
+      // Cloud Function 호출
+      return addStockAndProcessWaitlistCallable(payload).catch(e => {
+        console.error(`'${item.productName}' 대기열 처리 실패:`, e);
+        toast.error(`'${item.productName}' 처리 중 오류: ${(e as Error).message}`);
         hasError = true;
-        return;
-      }
-
-      // 추가된 재고량 계산 (기존 재고가 무제한(-1)이면 처리하지 않음)
-      const additionalStock = item.configuredStock !== -1 ? newStock - item.configuredStock : 0;
-
-      // 재고가 실제로 추가된 경우에만 대기열 처리 함수를 호출
-      if (additionalStock > 0) {
-        try {
-          const result = await addStockAndProcessWaitlist(
-            item.productId,
-            item.roundId,
-            item.variantGroupId,
-            additionalStock
-          );
-          totalConverted += result.convertedCount;
-          totalFailed += result.failedCount;
-        } catch (e: any) {
-          console.error(`'${item.productName}' 대기열 처리 실패:`, e);
-          toast.error(`'${item.productName}' 처리 중 오류: ${e.message}`);
-          hasError = true;
-        }
-      }
-    });
-
-    await toast.promise(
-      Promise.all(promises),
-      {
-        loading: "재고 변경 및 대기열 처리 중...",
-        success: () => {
-          if (hasError) return "일부 항목 처리 중 오류가 발생했습니다.";
-          let successMsg = "재고가 성공적으로 업데이트되었습니다.";
-          if (totalConverted > 0) {
-            successMsg += ` ${totalConverted}개의 대기가 예약으로 전환되었습니다!`;
-          }
-          if (totalFailed > 0) {
-            successMsg += ` ${totalFailed}개는 전환에 실패했습니다.`;
-          }
-          return successMsg;
-        },
-        error: "저장 작업 중 예기치 않은 오류가 발생했습니다.",
-      }
-    );
-
-    setIsSaving(false);
-    setStockInputs({});
-    // 모든 작업 완료 후 데이터 새로고침
-    if (!hasError) {
-      fetchData();
+      });
     }
-  };
+    return Promise.resolve(); // 재고 추가가 없는 경우 즉시 해결
+  });
 
+  await toast.promise(
+    Promise.all(promises),
+    {
+      loading: "재고 변경 및 대기열 처리 중...",
+      success: "모든 변경 작업이 완료되었습니다.",
+      error: "저장 작업 중 예기치 않은 오류가 발생했습니다.",
+    }
+  );
+
+  setIsSaving(false);
+  setStockInputs({});
+  if (!hasError) {
+    fetchData();
+  }
+};
   if (loading) return <SodomallLoader />;
 
   return (

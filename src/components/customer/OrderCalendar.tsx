@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Calendar from 'react-calendar';
+// ✅ [수정] 이름 충돌을 피하기 위해 ReactCalendar로 import 이름을 변경합니다.
+import ReactCalendar from 'react-calendar';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import 'react-calendar/dist/Calendar.css';
@@ -13,18 +14,22 @@ import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useAuth } from '../../context/AuthContext';
-import { useTutorial } from '../../context/TutorialContext'; // ✅ [추가]
-import { calendarPageTourSteps } from '../customer/AppTour'; // ✅ [추가]
+import { useTutorial } from '../../context/TutorialContext';
+import { calendarPageTourSteps } from '../customer/AppTour';
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
+import { ATTENDANCE_MILESTONES } from '../../firebase/pointService';
 
 import Holidays from 'date-holidays';
 import { format, isSameDay, isSameMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
-import type { Order, OrderStatus } from '../../types';
+import type { Order, OrderStatus, UserDocument } from '../../types';
 import toast from 'react-hot-toast';
-import { Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, HelpCircle } from 'lucide-react'; // ✅ [추가]
+// ✅ [수정] lucide-react에서 Calendar 아이콘을 import 합니다.
+import {
+  Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, HelpCircle, Gift, Calendar
+} from 'lucide-react';
 
 // --- 헬퍼 함수 및 타입 ---
 type ValuePiece = Date | null;
@@ -205,58 +210,138 @@ const DetailsBottomSheet: React.FC<{ selectedDate: Date; orders: Order[]; onClos
     );
 };
 
-const MonthlyChallenge: React.FC<{ orders: Order[], activeMonth: Date }> = ({ orders, activeMonth }) => {
-    const challenges = useMemo(() => {
-        const monthlyOrders = orders.filter(o => {
-            const pickupDate = safeToDate(o.pickupDate);
-            return pickupDate && isSameMonth(pickupDate, activeMonth);
-        });
 
-        const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
-        const noShowChallenge = {
-            icon: <ShieldCheck />,
-            title: "노쇼 없이 한 달 보내기",
-            progress: noShowCount === 0 ? 100 : 0,
-            label: noShowCount === 0 ? "달성 완료!" : `${noShowCount}회 발생`,
-        };
+// '이달의 챌린지'가 '오늘의 미션'으로 변경 및 확장되었습니다.
+// --- 미션 시스템 정의 ---
+interface MissionProgress {
+  progress: number; // 0-100
+  label: string;
+  isCompleted: boolean;
+}
 
-        const pickupTarget = 5;
-        const pickupCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'completed').length;
-        const pickupChallenge = {
-            icon: <Target />,
-            title: `이 달에 ${pickupTarget}번 픽업하기`,
-            progress: Math.min((pickupCount / pickupTarget) * 100, 100),
-            label: `${pickupCount} / ${pickupTarget}회`,
-        };
+interface Mission {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  calculateProgress: (userDoc: UserDocument, orders: Order[], activeMonth: Date) => MissionProgress;
+}
 
-        return [noShowChallenge, pickupChallenge];
-    }, [orders, activeMonth]);
+const getNextMilestone = (currentDays: number): number => {
+  const milestones = Object.keys(ATTENDANCE_MILESTONES).map(Number).sort((a, b) => a - b);
+  return milestones.find(m => m > currentDays) || Math.max(...milestones);
+};
+
+const missions: Mission[] = [
+    {
+        id: 'consecutive-login',
+        title: '연속 출석 챌린지',
+        description: '매일 출석해서 보너스 포인트를 획득하세요!',
+        // ✅ [수정] 이제 이 Calendar는 lucide-react의 아이콘을 가리키므로 오류가 발생하지 않습니다.
+        icon: <Calendar size={22} />,
+        calculateProgress: (userDoc) => {
+            const currentDays = userDoc.consecutiveLoginDays || 0;
+            const nextMilestone = getNextMilestone(currentDays);
+            const progress = Math.min((currentDays / nextMilestone) * 100, 100);
+            const isCompleted = currentDays >= nextMilestone;
+            return {
+                progress,
+                label: isCompleted ? `달성!` : `${currentDays} / ${nextMilestone}일`,
+                isCompleted,
+            };
+        },
+    },
+    {
+        id: 'no-show-free',
+        title: '노쇼 없이 한 달 보내기',
+        description: '이 달에 노쇼가 없으면 신뢰도가 올라가요.',
+        icon: <ShieldCheck size={22} />,
+        calculateProgress: (_, orders, activeMonth) => {
+            const monthlyOrders = orders.filter(o => {
+                const pickupDate = safeToDate(o.pickupDate);
+                return pickupDate && isSameMonth(pickupDate, activeMonth);
+            });
+            const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
+            const isCompleted = noShowCount === 0 && monthlyOrders.length > 0;
+            return {
+                progress: isCompleted ? 100 : 0,
+                label: isCompleted ? '달성!' : `${noShowCount}회 발생`,
+                isCompleted,
+            };
+        },
+    },
+    {
+        id: 'monthly-pickup',
+        title: '이 달에 5번 픽업하기',
+        description: '꾸준한 픽업은 등급 상승의 지름길!',
+        icon: <Target size={22} />,
+        calculateProgress: (_, orders, activeMonth) => {
+            const pickupTarget = 5;
+            const monthlyOrders = orders.filter(o => {
+                const pickupDate = safeToDate(o.pickupDate);
+                return pickupDate && isSameMonth(pickupDate, activeMonth);
+            });
+            const pickupCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'completed').length;
+            const progress = Math.min((pickupCount / pickupTarget) * 100, 100);
+            return {
+                progress,
+                label: `${pickupCount} / ${pickupTarget}회`,
+                isCompleted: pickupCount >= pickupTarget,
+            };
+        },
+    },
+    {
+        id: 'first-referral',
+        title: '친구 초대하고 포인트 받기',
+        description: '초대한 친구가 첫 픽업을 완료하면 포인트를 드려요.',
+        icon: <Gift size={22} />,
+        calculateProgress: (userDoc) => {
+            const hasInvited = userDoc.pointHistory?.some(log => log.reason === '친구 초대 성공') ?? false;
+            return {
+                progress: hasInvited ? 100 : 0,
+                label: hasInvited ? '달성 완료!' : '미완료',
+                isCompleted: hasInvited,
+            };
+        },
+    },
+];
+
+const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Order[]; activeMonth: Date }> = ({ userDocument, orders, activeMonth }) => {
+    if (!userDocument) return null;
 
     return (
-        <div className="monthly-challenge-container" data-tutorial-id="calendar-challenge">
-            <h3 className="challenge-title"><Trophy size={18} /> 이달의 챌린지</h3>
-            <div className="challenge-list">
-                {challenges.map(c => (
-                    <div className="challenge-card" key={c.title}>
-                        <div className="challenge-info">
-                            <span className="challenge-icon">{c.icon}</span>
-                            <span className="challenge-text">{c.title}</span>
-                            <span className="challenge-label">{c.label}</span>
+        <div className="missions-container" data-tutorial-id="calendar-challenge">
+            <h3 className="missions-title"><Trophy size={18} /> 오늘의 미션</h3>
+            <p className="missions-subtitle">다양한 미션을 달성하고 혜택을 받아보세요!</p>
+            <div className="missions-list">
+                {missions.map(mission => {
+                    const { progress, label, isCompleted } = mission.calculateProgress(userDocument, orders, activeMonth);
+                    return (
+                        <div className={`mission-card ${isCompleted ? 'completed' : ''}`} key={mission.id}>
+                            <div className="mission-info">
+                                <span className="mission-icon">{mission.icon}</span>
+                                <div className="mission-text">
+                                    <span className="mission-card-title">{mission.title}</span>
+                                    <span className="mission-description">{mission.description}</span>
+                                </div>
+                                <span className={`mission-label ${isCompleted ? 'completed' : ''}`}>{label}</span>
+                            </div>
+                            <div className="progress-bar-track">
+                                <motion.div 
+                                    className="progress-bar-fill" 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${progress}%` }}
+                                    transition={{ duration: 0.8, ease: "easeOut" }}
+                                />
+                            </div>
                         </div>
-                        <div className="progress-bar-track">
-                            <motion.div 
-                                className="progress-bar-fill" 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${c.progress}%` }}
-                                transition={{ duration: 0.8, ease: "easeOut" }}
-                            />
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
 };
+
 
 // =================================================================
 // 메인 컴포넌트
@@ -264,7 +349,7 @@ const MonthlyChallenge: React.FC<{ orders: Order[], activeMonth: Date }> = ({ or
 
 const OrderCalendar: React.FC = () => {
   const { user, userDocument } = useAuth();
-  const { startTour, runPageTourIfFirstTime } = useTutorial(); // ✅ [추가]
+  const { startTour, runPageTourIfFirstTime } = useTutorial();
   const [selectedDate, setSelectedDate] = useState<ValuePiece>(null);
   const [activeMonth, setActiveMonth] = useState<Date>(new Date());
   const [userOrders, setUserOrders] = useState<Order[]>([]);
@@ -274,9 +359,7 @@ const OrderCalendar: React.FC = () => {
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
 
-  // ✅ [추가] 페이지 첫 방문 시 튜토리얼 자동 실행
   useEffect(() => {
-    // 메인 튜토리얼을 마친 사용자에게만 페이지별 튜토리얼을 보여줍니다.
     if (userDocument?.hasCompletedTutorial) {
       runPageTourIfFirstTime('hasSeenCalendarPage', calendarPageTourSteps);
     }
@@ -346,7 +429,7 @@ const OrderCalendar: React.FC = () => {
     const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
     return userOrders.filter(order => {
         const pickupDate = safeToDate(order.pickupDate);
-        return pickupDate && format(pickupDate, 'yyyy-MM-dd') === selectedDateString;
+        return pickupDate && format(pickupDate, 'yyyy-dd') === selectedDateString;
     }).sort((a, b) => (safeToDate(a.createdAt)?.getTime() ?? 0) - (safeToDate(b.createdAt)?.getTime() ?? 0));
   }, [selectedDate, userOrders]);
 
@@ -357,7 +440,6 @@ const OrderCalendar: React.FC = () => {
   return (
     <>
       <div className="order-calendar-page-container">
-        {/* ✅ [추가] 페이지 헤더 */}
         <div className="page-header-container">
           <h1 className="page-title">나의 픽업 캘린더</h1>
           <button onClick={() => startTour(calendarPageTourSteps)} className="tutorial-help-button-inline">
@@ -365,8 +447,9 @@ const OrderCalendar: React.FC = () => {
           </button>
         </div>
         
-        <div className="calendar-wrapper" data-tutorial-id="calendar-main"> {/* ✅ [추가] */}
-          <Calendar
+        <div className="calendar-wrapper" data-tutorial-id="calendar-main">
+          {/* ✅ [수정] Calendar 컴포넌트를 ReactCalendar로 변경합니다. */}
+          <ReactCalendar
             onClickDay={(date) => selectedDate && isSameDay(date, selectedDate) ? setSelectedDate(null) : setSelectedDate(date)}
             value={selectedDate}
             onActiveStartDateChange={({ activeStartDate }) => setActiveMonth(activeStartDate || new Date())}
@@ -376,10 +459,8 @@ const OrderCalendar: React.FC = () => {
                 if (view !== 'month') return null;
                 const isToday = isSameDay(date, new Date());
                 
-                const lastLoginTimestamp = userDocument?.lastLoginDate;
-                const lastLoginDate = lastLoginTimestamp ? safeToDate(lastLoginTimestamp) : null;
-
-                if (isToday && lastLoginDate && isSameDay(lastLoginDate, new Date())) {
+                const lastLoginStr = userDocument?.lastLoginDate;
+                if(isToday && lastLoginStr === format(new Date(), 'yyyy-MM-dd')) {
                     return <div className="attendance-badge">출석✓</div>;
                 }
                 return null;
@@ -399,14 +480,15 @@ const OrderCalendar: React.FC = () => {
             prev2Label={null}
             next2Label={null}
           />
-          <div className="calendar-legend" data-tutorial-id="calendar-legend"> {/* ✅ [추가] */}
+          <div className="calendar-legend" data-tutorial-id="calendar-legend">
               <div className="legend-item"><span className="legend-color-box pending"></span> 픽업 예정</div>
               <div className="legend-item"><span className="legend-color-box completed"></span> 픽업 완료</div>
               <div className="legend-item"><span className="legend-color-box noshow"></span> 노쇼 발생</div>
           </div>
         </div>
         
-        <MonthlyChallenge orders={userOrders} activeMonth={activeMonth} />
+        {/* MonthlyChallenge 대신 새로운 MissionsSection 컴포넌트 사용 */}
+        <MissionsSection userDocument={userDocument} orders={userOrders} activeMonth={activeMonth} />
       </div>
       <AnimatePresence>
         {selectedDate && (
