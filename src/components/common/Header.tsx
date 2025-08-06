@@ -2,22 +2,26 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, CalendarDays, Bell, Crown, Gem, Sparkles, ShieldAlert, ShieldX, TrendingUp, TrendingDown, Info, X, CheckCircle, XCircle, CalendarClock, Banknote, AlertCircle } from 'lucide-react';
+import { ChevronLeft, CalendarDays, Bell, Crown, Gem, Sparkles, ShieldAlert, ShieldX, TrendingUp, TrendingDown, Info, X, CheckCircle, XCircle, CalendarClock, Banknote, AlertCircle, BellRing } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
-import { useNotification } from '@/context/NotificationContext';
+import { useNotifications } from '@/context/NotificationContext';
 import type { Notification, LoyaltyTier, NotificationType } from '@/types';
 import './Header.css';
 
 
-const getLoyaltyInfo = (points: number): { tier: LoyaltyTier; icon: React.ReactNode; nextTierPoints: number | null, color: string } => {
-    if (points >= 500) return { tier: '공구의 신', icon: <Crown size={16} />, nextTierPoints: null, color: 'var(--loyalty-god, #ffc107)' };
-    if (points >= 200) return { tier: '공구왕', icon: <Gem size={16} />, nextTierPoints: 500, color: 'var(--loyalty-king, #4caf50)' };
-    if (points >= 50) return { tier: '공구요정', icon: <Sparkles size={16} />, nextTierPoints: 200, color: 'var(--loyalty-fairy, #2196f3)' };
-    if (points >= 0) return { tier: '공구새싹', icon: <i className="seedling-icon-header">🌱</i>, nextTierPoints: 50, color: 'var(--loyalty-sprout, #8bc34a)' };
-    if (points >= -299) return { tier: '주의 요망', icon: <ShieldAlert size={16} />, nextTierPoints: 0, color: 'var(--loyalty-warning, #ff9800)' };
-    return { tier: '참여 제한', icon: <ShieldX size={16} />, nextTierPoints: 0, color: 'var(--loyalty-restricted, #f44336)' };
+const getLoyaltyInfo = (tier?: LoyaltyTier): { tier: LoyaltyTier; icon: React.ReactNode; color: string } | null => {
+    if (!tier) return null;
+    switch(tier) {
+        case '공구의 신': return { tier: '공구의 신', icon: <Crown size={16} />, color: 'var(--loyalty-god, #ffc107)' };
+        case '공구왕': return { tier: '공구왕', icon: <Gem size={16} />, color: 'var(--loyalty-king, #4caf50)' };
+        case '공구요정': return { tier: '공구요정', icon: <Sparkles size={16} />, color: 'var(--loyalty-fairy, #2196f3)' };
+        case '공구새싹': return { tier: '공구새싹', icon: <i className="seedling-icon-header">🌱</i>, color: 'var(--loyalty-sprout, #8bc34a)' };
+        case '주의 요망': return { tier: '주의 요망', icon: <ShieldAlert size={16} />, color: 'var(--loyalty-warning, #ff9800)' };
+        case '참여 제한': return { tier: '참여 제한', icon: <ShieldX size={16} />, color: 'var(--loyalty-restricted, #f44336)' };
+        default: return null;
+    }
 };
 
 const notificationIcons: { [key in NotificationType | 'default']: React.ReactNode } = {
@@ -28,11 +32,11 @@ const notificationIcons: { [key in NotificationType | 'default']: React.ReactNod
   PICKUP_REMINDER: <CalendarClock size={20} className="icon-warning" />,
   PICKUP_TODAY: <CalendarDays size={20} className="icon-warning" />,
   GENERAL_INFO: <Info size={20} className="icon-info" />,
-  // ✅ [추가] 새로운 알림 타입에 대한 아이콘을 추가합니다.
   ORDER_PICKED_UP: <CheckCircle size={20} className="icon-success" />,
   NO_SHOW_WARNING: <AlertCircle size={20} className="icon-danger" />,
   PARTICIPATION_RESTRICTED: <ShieldX size={20} className="icon-danger" />,
-  // ---
+  TIER_UP: <Crown size={20} className="icon-tier-up" />,
+  TIER_DOWN: <ShieldAlert size={20} className="icon-tier-down" />,
   success: <CheckCircle size={20} className="icon-success" />,
   error: <XCircle size={20} className="icon-danger" />,
   default: <Info size={20} className="icon-info" />,
@@ -48,16 +52,17 @@ const NotificationModal: React.FC<{
 }> = ({ isOpen, onClose }) => {
     const navigate = useNavigate();
     const { userDocument } = useAuth();
-    const { notifications, unreadCount, handleMarkAsRead, markAllAsRead } = useNotification();
+    // ✅ [수정] 오타를 수정하고, 새로 만든 markOneAsRead를 가져옵니다.
+    const { notifications, unreadCount, markOneAsRead, markAllAsRead } = useNotifications();
 
     const loyaltyInfo = useMemo(() => {
         if (!userDocument) return null;
-        return getLoyaltyInfo(userDocument.points || 0);
+        return getLoyaltyInfo(userDocument.loyaltyTier);
     }, [userDocument]);
 
     const onNotificationClick = (notification: Notification) => {
-        // ✅ [수정] isRead -> read
-        if (!notification.read) handleMarkAsRead(notification.id);
+        // ✅ [수정] 존재하지 않는 handleMarkAsRead 대신 markOneAsRead를 사용합니다.
+        if (!notification.read) markOneAsRead(notification.id);
         if (notification.link) navigate(notification.link);
         onClose();
     };
@@ -80,24 +85,23 @@ const NotificationModal: React.FC<{
                     <div className="notification-list">
                         {notifications.length > 0 ? (
                             notifications.map(n => (
-                                // ✅ [수정] isRead -> read
                                 <div key={n.id} className={`notification-item ${n.read ? 'read' : ''}`} onClick={() => onNotificationClick(n)}>
                                     <div className="notification-item-icon">{getNotificationIcon(n.type)}</div>
                                     <div className="notification-item-content">
                                         <p className="notification-message">{n.message}</p>
-                                        <span className="notification-time">{n.timestamp ? formatDistanceToNow(n.timestamp.toDate(), { addSuffix: true, locale: ko }) : ''}</span>
+                                        <span className="notification-time">{n.timestamp && (n.timestamp as any).toDate ? formatDistanceToNow((n.timestamp as any).toDate(), { addSuffix: true, locale: ko }) : ''}</span>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="notification-item no-notifications">새로운 알림이 없습니다.</div>
+                            <div className="notification-item no-notifications"><BellRing size={20}/><p>새로운 알림이 없습니다.</p></div>
                         )}
                     </div>
                 </div>
                  {loyaltyInfo && userDocument && (
                     <div className="notification-modal-footer">
                         <div className="footer-points-section">
-                            <span>내 신뢰도: <strong>{(userDocument.points || 0).toLocaleString()} P</strong></span>
+                            <span>내 신뢰도 포인트: <strong>{(userDocument.points || 0).toLocaleString()} P</strong></span>
                         </div>
                         <div className="footer-tier-section" style={{ '--tier-color': loyaltyInfo.color } as React.CSSProperties}>
                             {loyaltyInfo.icon}
@@ -124,10 +128,10 @@ const Header: React.FC<HeaderConfig> = (props) => {
   const location = useLocation();
   
   const { user } = useAuth();
-  const { notifications, unreadCount } = useNotification();
+  // ✅ [수정] useNotification -> useNotifications 오타를 수정합니다.
+  const { notifications, unreadCount } = useNotifications();
 
   const hasPickupToday = useMemo(() => 
-    // ✅ [수정] isRead -> read
     notifications.some(n => n.type === 'PICKUP_TODAY' && !n.read),
     [notifications]
   );
@@ -167,7 +171,7 @@ const Header: React.FC<HeaderConfig> = (props) => {
     const subPages: { [key: string]: string } = {
         '/mypage/history': '예약 내역',
         '/mypage/points': '포인트 내역',
-        '/mypage/orders': '나의 픽업 캘린더', // ✅ 이 줄을 추가해주세요!
+        '/mypage/orders': '나의 픽업 캘린더',
         '/mypage/waitlist': '대기 신청',
         '/mypage/profile': '회원 정보',
     };

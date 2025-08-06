@@ -35,7 +35,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  white-space: nowrap; /* ✅ [수정] 버튼 내 텍스트 줄바꿈 방지 */
+  white-space: nowrap;
 }
 
 .toggle-btn.active {
@@ -44,38 +44,30 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-/* src/pages/customer/OrderHistoryPage.css 에서 수정할 부분 */
+.date-header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap; 
+  gap: 4px 16px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
 
 .date-header {
   font-size: 1.2rem;
   font-weight: 700;
   color: #111827;
   margin-top: 16px;
-  /* ✅ [제거] 아래쪽 테두리와 패딩은 컨테이너로 이동합니다. */
-  /* padding-bottom: 8px; */
-  /* border-bottom: 2px solid #e5e7eb; */
 }
 
-/* ✅ [수정] 날짜 헤더와 안내 문구를 위한 컨테이너 스타일 수정 */
-.date-header-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  flex-wrap: wrap; /* 화면이 좁으면 줄바꿈 허용 */
-  gap: 4px 16px; /* 줄바꿈 시 상하 간격(4px), 좌우 간격(16px) */
-  margin-bottom: 12px;
-  border-bottom: 2px solid #e5e7eb; /* 테두리를 컨테이너로 이동 */
-}
-
-/* ✅ [수정] 예약 취소 안내 문구 스타일 수정 */
 .cancel-instruction {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
   color: #6b7280;
-  /* padding-bottom: 8px; */ /* 컨테이너에 맞게 패딩 제거 */
-  white-space: nowrap; /* 기본적으로는 줄바꿈 방지 */
+  white-space: nowrap;
 }
 
 /* =================================================================
@@ -90,7 +82,7 @@
 .order-card-v3 {
   background-color: #fff;
   border-radius: 12px;
-  border: 1px solid #e5e7eb; /* Tailwind gray-200 */
+  border: 1px solid #e5e7eb;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
   overflow: hidden;
@@ -140,6 +132,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .product-name-top {
@@ -149,6 +142,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 100px;
 }
 
 .item-options-quantity {
@@ -157,6 +151,7 @@
   gap: 6px;
   font-size: 0.9rem;
   color: #4b5563;
+  flex-wrap: wrap;
 }
 
 .item-option-name {
@@ -171,7 +166,7 @@
 /* =================================================================
    📌 상태 배지
    ================================================================= */
-.status-badge {
+.status-badge, .waitlist-order-badge, .date-info-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -183,11 +178,10 @@
   white-space: nowrap;
 }
 
-.status-badge > svg {
+.status-badge > svg, .waitlist-order-badge > svg {
   flex-shrink: 0;
 }
 
-/* ✅ [수정] 전체적으로 배경색을 더 진하게 변경하여 가독성 향상 */
 .status-prepayment_required { background-color: #ff9923; color: #ffffff; }
 .status-reserved { background-color: #1c82ff; color: #ffffff; }
 .status-prepaid { background-color: #234fff; color: #ffffff; }
@@ -199,11 +193,8 @@
 .date-info-badge {
   background-color: #e5e7eb;
   color: #374151;
-  font-size: 0.75rem;
   font-weight: 500;
   padding: 3px 8px;
-  border-radius: 8px;
-  flex-shrink: 0;
 }
 
 /* =================================================================
@@ -217,39 +208,15 @@
   min-height: 40vh;
 }
 
-.error-message, .info-message {
-  text-align: center;
-  padding: 40px;
-  color: #4b5563;
-  font-size: 1rem;
-  background-color: #f9fafb;
-  border-radius: 12px;
-}
-
-.error-message {
-  color: #b91c1c;
-  background-color: #fee2e2;
-}
-
 .empty-history-container {
   flex-direction: column;
   padding: 60px 20px;
   gap: 16px;
   margin-top: 24px;
 }
-.empty-icon {
-  color: #9ca3af;
-}
-.empty-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1f2937;
-}
-.empty-description {
-  font-size: 1rem;
-  color: #6b7280;
-  margin-bottom: 12px;
-}
+.empty-icon { color: #9ca3af; }
+.empty-title { font-size: 1.5rem; font-weight: 700; color: #1f2937; }
+.empty-description { font-size: 1rem; color: #6b7280; margin-bottom: 12px; }
 .go-to-shop-btn {
   background-color: #1d4ed8;
   color: white;
@@ -261,89 +228,7 @@
   cursor: pointer;
   transition: background-color 0.2s;
 }
-.go-to-shop-btn:hover {
-  background-color: #1d4ed8;
-}
-
-/* =================================================================
-   📌 취소 확인 토스트
-   ================================================================= */
-.confirmation-toast {
-  padding: 20px;
-  background-color: white;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  width: 360px;
-  max-width: 90vw;
-  text-align: left;
-}
-.confirmation-toast h4 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #111827;
-  margin-top: 0;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.confirmation-toast p {
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: #4b5563;
-  margin-top: 0;
-  margin-bottom: 24px;
-  word-break: keep-all;
-}
-.toast-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
-
-/* =================================================================
-   📌 토스트 버튼 (공용 스타일)
-   ================================================================= */
-.common-button {
-  border: 1px solid transparent;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
-}
-.button-medium {
-  padding: 10px 20px;
-  font-size: 0.9rem;
-  border-radius: 8px;
-}
-.button-secondary {
-  background-color: #fff;
-  border-color: #d1d5db;
-  color: #374151;
-}
-.button-secondary:hover {
-  background-color: #f9fafb;
-}
-.button-danger {
-  background-color: #ef4444;
-  color: white;
-  border-color: #ef4444;
-}
-.button-danger:hover {
-  background-color: #dc2626;
-  border-color: #dc2626;
-}
-/* ✨ [신규] 포인트 사용 등 강조 버튼 */
-.button-accent {
-  background-color: #1d4ed8;
-  color: white;
-  border-color: #1d4ed8;
-}
-.button-accent:hover {
-  background-color: #1d4ed8;
-  border-color: #1d4ed8;
-}
+.go-to-shop-btn:hover { background-color: #1d4ed8; }
 
 /* =================================================================
    📌 대기 목록 카드 스타일
@@ -362,7 +247,7 @@
   display: flex;
   align-items: center;
   position: relative;
-  padding-right: 50px; /* 취소 버튼 공간 */
+  cursor: pointer;
 }
 
 .waitlist-card .item-aggregated-info {
@@ -370,8 +255,22 @@
 }
 
 .waitlist-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 8px;
 }
+
+.cancel-instruction-waitlist {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
 
 .priority-ticket-btn {
   display: inline-flex;
@@ -405,27 +304,27 @@
   cursor: default;
 }
 
-.waitlist-cancel-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: none;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 50%;
-  transition: color 0.2s, background-color 0.2s;
+/* ✅ [추가] '1등 고정하기' 버튼을 위한 특별 스타일 */
+.priority-ticket-btn.is-first {
+  background-color: #fef9c3; /* Tailwind yellow-100 */
+  color: #a16207; /* Tailwind yellow-700 */
+  border-color: #facc15; /* Tailwind yellow-400 */
 }
 
-.waitlist-cancel-btn:hover {
-  color: #ef4444;
-  background-color: #fee2e2;
+.priority-ticket-btn.is-first:not(:disabled):hover {
+  background-color: #fde68a; /* Tailwind yellow-200 */
+  border-color: #fca5a5; /* Tailwind yellow-500 */
 }
 
+.waitlist-order-badge {
+  font-weight: 700;
+  background-color: #fefce8;
+  color: #ca8a04;
+  border: 1px solid #fde047;
+}
 
 /* =================================================================
-   📌 ✅ [신규] 무한 스크롤 UI
+   📌 무한 스크롤 및 기타
    ================================================================= */
 .loading-more-spinner {
   display: flex;
@@ -436,7 +335,7 @@
 .end-of-list-message {
   text-align: center;
   padding: 30px 0;
-  color: #9ca3af; /* Tailwind gray-400 */
+  color: #9ca3af;
   font-size: 0.9rem;
   font-weight: 500;
 }
@@ -451,7 +350,7 @@
   }
   .toggle-btn {
     font-size: 0.9rem;
-    padding: 10px 12px; /* ✅ [수정] 모바일에서 좌우 패딩을 살짝 줄여 공간 확보 */
+    padding: 10px 12px;
   }
   .order-cards-grid {
     grid-template-columns: 1fr;
@@ -464,23 +363,39 @@
   }
 }
 
-/* ✅ [수정] react-hot-toast 커스텀 모달 애니메이션 */
-.confirmation-toast {
-  /* 애니메이션 효과 정의 */
-  transition: all 0.3s ease-out;
+@media (max-width: 420px) {
+  .waitlist-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .priority-ticket-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+}
 
-  /* 애니메이션 시작 상태 (화면 아래에 숨겨진 상태) */
+/* =================================================================
+   📌 react-hot-toast 커스텀 모달
+   ================================================================= */
+.confirmation-toast {
+  padding: 20px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  width: 360px;
+  max-width: 90vw;
+  text-align: left;
+  transition: all 0.3s ease-out;
   opacity: 0;
   transform: translateY(20px);
 }
-
-/* 모달이 나타날 때 적용될 최종 상태 */
 .confirmation-toast.animate-enter {
   opacity: 1;
   transform: translateY(0);
 }
-
-/* ✅ [기존 코드] react-hot-toast 커스텀 모달 내부 스타일 (변경 없음) */
 .toast-header {
   display: flex;
   align-items: center;
@@ -488,11 +403,53 @@
   font-size: 18px;
   font-weight: 600;
   color: var(--text-color-primary);
+  margin: 0 0 12px;
 }
-
 .toast-message {
   margin: 12px 0 20px;
   font-size: 15px;
   color: var(--text-color-secondary);
   line-height: 1.5;
+}
+.toast-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.common-button {
+  border: 1px solid transparent;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+.button-medium {
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  border-radius: 8px;
+}
+.button-secondary {
+  background-color: #fff;
+  border-color: #d1d5db;
+  color: #374151;
+}
+.button-secondary:hover { background-color: #f9fafb; }
+.button-danger {
+  background-color: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+.button-danger:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+.button-accent {
+  background-color: #1d4ed8;
+  color: white;
+  border-color: #1d4ed8;
+}
+.button-accent:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
 }

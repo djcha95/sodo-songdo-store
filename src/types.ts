@@ -51,9 +51,12 @@ export type NotificationType =
   | 'PICKUP_TODAY'
   | 'GENERAL_INFO'
   | 'PAYMENT_CONFIRMED'
-  | 'ORDER_PICKED_UP'          // 픽업 완료
-  | 'NO_SHOW_WARNING'          // 노쇼 경고
-  | 'PARTICIPATION_RESTRICTED' // 참여 제한
+  | 'ORDER_PICKED_UP'
+  | 'NO_SHOW_WARNING'
+  | 'PARTICIPATION_RESTRICTED'
+  // ✅ [추가] 등급 변경 알림 타입을 추가합니다.
+  | 'TIER_UP'
+  | 'TIER_DOWN'
   | 'success'
   | 'error';
 
@@ -95,7 +98,8 @@ export interface WaitlistEntry {
   timestamp: Timestamp;
   variantGroupId: string;
   itemId: string;
-  isPrioritized?: boolean; // ✨ [신규] 대기 순번 상승권 사용 여부
+  isPrioritized?: boolean;
+  prioritizedAt?: Timestamp | null; // ✅ 이 줄을 추가해주세요.
 }
 
 export interface SalesRound {
@@ -351,8 +355,9 @@ export interface WaitlistInfo {
   quantity: number;
   timestamp: Timestamp;
   isPrioritized?: boolean;
+  waitlistOrder?: number;
+  prioritizedAt?: Timestamp | null; // ✅ 이 줄을 추가해주세요.
 }
-
 
 export interface UserProfile {
   uid: string;
