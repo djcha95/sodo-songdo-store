@@ -62,9 +62,6 @@ const normalizeProduct = (product: Product): Product => {
 
 // --- Sub Components ---
 
-/**
- * ✅ [신규] 이미지 확대보기를 위한 라이트박스 컴포넌트
- */
 const Lightbox: React.FC<{
     images: string[];
     startIndex: number;
@@ -93,7 +90,6 @@ const Lightbox: React.FC<{
                     {images.map((url, index) => (
                         <SwiperSlide key={index}>
                             <div className="lightbox-swiper-slide">
-                                {/* 원본 이미지를 사용하여 최상의 화질을 제공 */}
                                 <img src={url} alt={`이미지 ${index + 1}`} />
                             </div>
                         </SwiperSlide>
@@ -105,9 +101,6 @@ const Lightbox: React.FC<{
 });
 
 
-/**
- * ✅ [수정] 이미지 슬라이더: 클릭 시 라이트박스를 열도록 onImageClick 핸들러 추가
- */
 const ProductImageSlider: React.FC<{
     images: string[];
     productName: string;
@@ -123,13 +116,11 @@ const ProductImageSlider: React.FC<{
             className="product-swiper"
         >
             {images.map((url, index) => (
-                // 슬라이드 클릭 시 onImageClick 함수 호출
                 <SwiperSlide key={index} onClick={() => onImageClick(index)}>
                     <img src={url} alt={`${productName} 이미지 ${index + 1}`} />
                 </SwiperSlide>
             ))}
         </Swiper>
-        {/* 클릭해서 크게 볼 수 있다는 UI 힌트 추가 */}
         <div className="image-zoom-indicator">
             <Search size={16} />
             <span>클릭해서 크게 보기</span>
@@ -148,8 +139,13 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound }> = React.mem
     );
 });
 const OptionSelector: React.FC<{ round: SalesRound; selectedVariantGroup: VariantGroup | null; onVariantGroupChange: (vg: VariantGroup) => void; }> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange }) => { if (!round.variantGroups || round.variantGroups.length <= 1) return null; return (<div className="select-wrapper" data-tutorial-id="detail-options"><select className="price-select" value={selectedVariantGroup?.id || ''} onChange={(e) => { const selectedId = e.target.value; const newVg = round.variantGroups.find(vg => vg.id === selectedId); if (newVg) onVariantGroupChange(newVg); }}><option value="" disabled>옵션을 선택해주세요.</option>{round.variantGroups.map(vg => (<option key={vg.id} value={vg.id}>{vg.groupName} - {vg.items[0]?.price.toLocaleString()}원</option>))}</select></div>); });
-const QuantityInput: React.FC<{ quantity: number; setQuantity: (fn: (q: number) => number) => void; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => { const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]); const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]); const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 }); const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 }); return (<div className="quantity-controls-fixed"><button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1}><Minus /></button><span className="quantity-display-fixed">{quantity}</span><button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}><Plus /></button></div>); });
-const PurchasePanel: React.FC<{ actionState: ProductActionState; round: SalesRound; selectedVariantGroup: VariantGroup | null; selectedItem: ProductItem | null; quantity: number; setQuantity: (fn: (q: number) => number) => void; onAddToCart: () => void; onWaitlist: () => void; onEncore: () => void; isEncoreRequested: boolean; isEncoreLoading: boolean; }> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onAddToCart, onWaitlist, onEncore, isEncoreRequested, isEncoreLoading }) => { const renderContent = () => { switch (actionState) { case 'PURCHASABLE': const stock = selectedVariantGroup?.totalPhysicalStock; const reserved = selectedVariantGroup?.reservedCount || 0; const limit = selectedItem?.limitQuantity; const stockValue = (typeof stock === 'number') ? stock : null; const limitValue = (typeof limit === 'number') ? limit : null; const effectiveStock = (stockValue === -1 || stockValue === null) ? Infinity : stockValue - reserved; const effectiveLimit = limitValue === null ? Infinity : limitValue; const max = Math.floor(Math.min(effectiveStock / (selectedItem?.stockDeductionAmount || 1), effectiveLimit)); const maxQuantity = isFinite(max) ? max : null; return (<div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={onAddToCart} className="add-to-cart-btn-fixed" data-tutorial-id="detail-add-to-cart"><ShoppingCart size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 담기` : ''}</span></button></div>); case 'WAITLISTABLE': return <button onClick={onWaitlist} className="waitlist-btn-fixed"><Hourglass size={20} /><span>대기 신청하기</span></button>; case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" disabled><Box size={20} /><span>위에서 옵션을 선택해주세요</span></button>; case 'ENDED': case 'ENCORE_REQUESTABLE': if (isEncoreLoading) { return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>; } if (isEncoreRequested) { return <button className="encore-request-btn-fixed requested" disabled><CheckCircle size={20}/><span>요청 완료</span></button>; } return <button onClick={onEncore} className="encore-request-btn-fixed"><Star size={20} /><span>앵콜 요청하기</span></button>; case 'INELIGIBLE': return <div className="action-notice"><Lock size={20} /><div><p><strong>{round.allowedTiers?.join(', ')}</strong> 등급만 참여 가능해요.</p><span>등급을 올리고 다양한 혜택을 만나보세요!</span></div></div>; case 'SCHEDULED': const publishAt = safeToDate(round.publishAt); return <div className="action-notice"><Calendar size={20} /><div><p><strong>판매 예정</strong></p><span>{publishAt ? `${dayjs(publishAt).format('M월 D일 (ddd) HH:mm')}에 공개됩니다.` : ''}</span></div></div>; default: return <button className="add-to-cart-btn-fixed" disabled><span>준비 중입니다</span></button>; } }; return <>{renderContent()}</>; });
+
+// ✅ [수정] 수량 조절 컴포넌트에 튜토리얼 ID 추가
+const QuantityInput: React.FC<{ quantity: number; setQuantity: (fn: (q: number) => number) => void; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => { const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]); const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]); const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 }); const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 }); return (<div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls"><button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1}><Minus /></button><span className="quantity-display-fixed">{quantity}</span><button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}><Plus /></button></div>); });
+
+// ✅ [수정] 모든 주요 액션 버튼에 일관된 튜토리얼 ID(`detail-action-button`) 적용
+const PurchasePanel: React.FC<{ actionState: ProductActionState; round: SalesRound; selectedVariantGroup: VariantGroup | null; selectedItem: ProductItem | null; quantity: number; setQuantity: (fn: (q: number) => number) => void; onAddToCart: () => void; onWaitlist: () => void; onEncore: () => void; isEncoreRequested: boolean; isEncoreLoading: boolean; }> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onAddToCart, onWaitlist, onEncore, isEncoreRequested, isEncoreLoading }) => { const renderContent = () => { switch (actionState) { case 'PURCHASABLE': const stock = selectedVariantGroup?.totalPhysicalStock; const reserved = selectedVariantGroup?.reservedCount || 0; const limit = selectedItem?.limitQuantity; const stockValue = (typeof stock === 'number') ? stock : null; const limitValue = (typeof limit === 'number') ? limit : null; const effectiveStock = (stockValue === -1 || stockValue === null) ? Infinity : stockValue - reserved; const effectiveLimit = limitValue === null ? Infinity : limitValue; const max = Math.floor(Math.min(effectiveStock / (selectedItem?.stockDeductionAmount || 1), effectiveLimit)); const maxQuantity = isFinite(max) ? max : null; return (<div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={onAddToCart} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button"><ShoppingCart size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 담기` : ''}</span></button></div>); case 'WAITLISTABLE': return <button onClick={onWaitlist} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button"><Hourglass size={20} /><span>대기 신청하기</span></button>; case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" disabled><Box size={20} /><span>위에서 옵션을 선택해주세요</span></button>; case 'ENDED': case 'ENCORE_REQUESTABLE': if (isEncoreLoading) { return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>; } if (isEncoreRequested) { return <button className="encore-request-btn-fixed requested" disabled><CheckCircle size={20}/><span>요청 완료</span></button>; } return <button onClick={onEncore} className="encore-request-btn-fixed" data-tutorial-id="detail-action-button"><Star size={20} /><span>앵콜 요청하기</span></button>; case 'INELIGIBLE': return <div className="action-notice"><Lock size={20} /><div><p><strong>{round.allowedTiers?.join(', ')}</strong> 등급만 참여 가능해요.</p><span>등급을 올리고 다양한 혜택을 만나보세요!</span></div></div>; case 'SCHEDULED': const publishAt = safeToDate(round.publishAt); return <div className="action-notice"><Calendar size={20} /><div><p><strong>판매 예정</strong></p><span>{publishAt ? `${dayjs(publishAt).format('M월 D일 (ddd) HH:mm')}에 공개됩니다.` : ''}</span></div></div>; default: return <button className="add-to-cart-btn-fixed" disabled><span>준비 중입니다</span></button>; } }; return <>{renderContent()}</>; });
+
 const ProductDetailSkeleton: React.FC = () => (<div className="product-detail-modal-overlay"><div className="product-detail-modal-content"><div className="modal-scroll-area"><div className="main-content-area skeleton"><div className="image-gallery-wrapper skeleton-box skeleton-image"></div><div className="product-info-area"><div className="skeleton-box skeleton-title" style={{margin: '0 auto'}}></div><div className="skeleton-box skeleton-text" style={{ textAlign: 'center' }}></div><div className="skeleton-box skeleton-text short" style={{ margin: '0.5rem auto', width: '50%' }}></div><div className="skeleton-box skeleton-info-row" style={{marginTop: '1.5rem'}}></div><div className="skeleton-box skeleton-info-row"></div></div></div></div><div className="product-purchase-footer"><div className="skeleton-box" style={{height: '48px', width: '100%'}}></div></div></div></div>);
 
 // --- Main Component ---
@@ -171,7 +167,6 @@ const ProductDetailPage: React.FC = () => {
     const [isEncoreRequested, setIsEncoreRequested] = useState(false);
     const [isEncoreLoading, setIsEncoreLoading] = useState(false);
     
-    // ✅ [추가] 라이트박스(이미지 확대 보기) 상태 추가
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
 
@@ -218,7 +213,6 @@ const ProductDetailPage: React.FC = () => {
         }
     }, [displayRound]);
     
-    // ✅ [추가] 라이트박스 열기/닫기 핸들러
     const handleOpenLightbox = useCallback((index: number) => {
         setLightboxStartIndex(index);
         setIsLightboxOpen(true);
@@ -294,7 +288,8 @@ const ProductDetailPage: React.FC = () => {
                     <button onClick={() => navigate(-1)} className="modal-close-btn-top"><X /></button>
                     <div className="modal-scroll-area">
                         <div className="main-content-area">
-                            <div className="image-gallery-wrapper">
+                            {/* ✅ [수정] 이미지 갤러리 컨테이너에 튜토리얼 ID 추가 */}
+                            <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery">
                                 <ProductImageSlider 
                                     images={product.imageUrls} 
                                     productName={product.groupName} 
@@ -334,7 +329,6 @@ const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
             
-            {/* ✅ [추가] 라이트박스 컴포넌트를 렌더링 */}
             <Lightbox
                 isOpen={isLightboxOpen}
                 onClose={handleCloseLightbox}
@@ -354,4 +348,3 @@ const ProductDetailPageWrapper: React.FC = () => {
 };
 
 export default ProductDetailPageWrapper;
-

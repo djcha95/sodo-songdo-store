@@ -13,6 +13,7 @@ import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useAuth } from '../../context/AuthContext';
+// ✅ [수정] useTutorial 훅을 import하여 'Cannot find name' 오류를 해결합니다.
 import { useTutorial } from '../../context/TutorialContext';
 import { calendarPageTourSteps } from '../customer/AppTour';
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
@@ -32,7 +33,9 @@ import {
 
 // --- 헬퍼 함수 및 타입 ---
 type ValuePiece = Date | null;
-type PickupStatus = 'pending' | 'completed' | 'noshow';
+// ✅ [수정] PickupStatus 타입에 'cancelled'를 추가하여 타입 비교 오류 해결
+type PickupStatus = 'pending' | 'completed' | 'noshow' | 'cancelled';
+
 interface AggregatedItem { 
   id: string; 
   productName: string;
@@ -60,7 +63,8 @@ const safeToDate = (date: any): Date | null => {
     return null;
 };
 
-const getOrderStatusDisplay = (order: Order) => {
+// ✅ [수정] 함수의 반환 타입을 명시하여 타입 추론 오류를 방지합니다.
+const getOrderStatusDisplay = (order: Order): { text: string; Icon: React.ElementType; className: string; type: PickupStatus } => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const pickupDeadline = safeToDate(order.pickupDeadlineDate);
@@ -380,8 +384,8 @@ const OrderCalendar: React.FC = () => {
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
 
   useEffect(() => {
-    if (userDocument?.hasCompletedTutorial) {
-      runPageTourIfFirstTime('hasSeenCalendarPage', calendarPageTourSteps);
+    if (userDocument) {
+        runPageTourIfFirstTime('hasSeenCalendarPage', calendarPageTourSteps);
     }
   }, [userDocument, runPageTourIfFirstTime]);
 
@@ -399,7 +403,7 @@ const OrderCalendar: React.FC = () => {
                     setUserOrders([]);
                 }
             })
-            .catch(err => {
+            .catch((_err) => {
                 setError("주문 내역을 불러오는 데 실패했습니다.");
                 toast.error("주문 내역을 불러오는 데 실패했습니다.");
             })
@@ -414,7 +418,7 @@ const OrderCalendar: React.FC = () => {
         if (pickupDate) {
             const dateStr = format(pickupDate, 'yyyy-MM-dd');
             if (!markers[dateStr]) markers[dateStr] = new Set();
-            markers[dateStr].add(getOrderStatusDisplay(order).type as PickupStatus);
+            markers[dateStr].add(getOrderStatusDisplay(order).type);
         }
     });
     return markers;
@@ -451,7 +455,6 @@ const OrderCalendar: React.FC = () => {
   return (
     <>
       <div className="order-calendar-page-container">
-        
         <div className="calendar-wrapper" data-tutorial-id="calendar-main">
           <ReactCalendar
             onClickDay={(date) => selectedDate && isSameDay(date, selectedDate) ? setSelectedDate(null) : setSelectedDate(date)}
@@ -464,10 +467,9 @@ const OrderCalendar: React.FC = () => {
                 const dateStr = format(date, 'yyyy-MM-dd');
                 const markerSet = calendarDayMarkers[dateStr];
                 
-                const dotIndicators = markerSet ? Array.from(markerSet).map(status => {
-                    if(status === 'cancelled') return null;
+                const dotIndicators = markerSet ? Array.from(markerSet).filter(status => status !== 'cancelled').map(status => {
                     return <div key={status} className={`dot ${status}`}></div>;
-                }).filter(Boolean) : null;
+                }) : null;
 
                 const isToday = isSameDay(date, new Date());
                 const lastLoginStr = userDocument?.lastLoginDate;
@@ -475,7 +477,7 @@ const OrderCalendar: React.FC = () => {
 
                 return (<>
                     {hasAttended && <div className="attendance-badge">출석✓</div>}
-                    {dotIndicators && <div className="dot-indicators">{dotIndicators}</div>}
+                    {dotIndicators && dotIndicators.length > 0 && <div className="dot-indicators">{dotIndicators}</div>}
                 </>);
             }}
             tileClassName={({ date, view }) => {

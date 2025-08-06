@@ -231,11 +231,8 @@ export interface UserDocument {
   loyaltyTier: LoyaltyTier;
   pickupCount: number;
   noShowCount: number;
-
-  // ✅ [수정] 아래 두 줄을 여기에 추가해주세요.
   totalOrders?: number;
   pickupRate?: number;
-
   lastLoginDate: string;
   consecutiveLoginDays?: number;
   isSuspended?: boolean;
@@ -248,6 +245,8 @@ export interface UserDocument {
   manualTier?: LoyaltyTier | null;
   hasCompletedTutorial?: boolean;
   tutorialProgress?: UserTutorialProgress;
+  // ✅ 이 줄을 추가하여 'completedMissions' 속성 누락 오류를 해결합니다.
+  completedMissions?: { [key: string]: boolean };
 }
 
 export interface Banner {

@@ -2,11 +2,13 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
-import { auth, db } from '../firebase/firebaseConfig'; // 경로 수정
+// ✅ [수정] getDoc을 import 합니다.
+import { doc, onSnapshot, getDoc, type Unsubscribe } from 'firebase/firestore';
+import { auth, db } from '../firebase/firebaseConfig';
 import { recordDailyVisit } from '@/firebase/pointService';
 import type { UserDocument } from '../types';
 
+// ✅ [수정] AuthContextType에 refreshUserDocument 함수 타입을 추가합니다.
 interface AuthContextType {
   user: User | null;
   userDocument: UserDocument | null;
@@ -15,6 +17,7 @@ interface AuthContextType {
   isSuspendedUser: boolean;
   loading: boolean;
   logout: () => Promise<void>;
+  refreshUserDocument: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -25,6 +28,8 @@ const AuthContext = createContext<AuthContextType>({
   isSuspendedUser: false,
   loading: true,
   logout: async () => {},
+  // ✅ 기본값을 추가합니다.
+  refreshUserDocument: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -34,23 +39,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userDocument, setUserDocument] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // ✅ [수정] onSnapshot 구독 해제 함수를 저장할 변수를 외부에서 선언합니다.
-    let unsubscribeFromSnapshot: Unsubscribe | null = null;
+  // ✅ [추가] 사용자 정보를 수동으로 새로고침하는 함수
+  const refreshUserDocument = useCallback(async () => {
+    if (auth.currentUser) {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const userDocSnap = await getDoc(userRef);
+      if (userDocSnap.exists()) {
+        setUserDocument(userDocSnap.data() as UserDocument);
+      }
+    }
+  }, []);
 
+  useEffect(() => {
+    let unsubscribeFromSnapshot: Unsubscribe | null = null;
     const unsubscribeFromAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      // ✅ [수정] 사용자 상태가 변경될 때, 기존의 snapshot 구독이 있다면 먼저 해제합니다.
       if (unsubscribeFromSnapshot) {
         unsubscribeFromSnapshot();
       }
-
       setUser(firebaseUser);
-
       if (firebaseUser) {
-        setLoading(true); // 새 사용자 정보 로딩 시작
+        setLoading(true);
         const userRef = doc(db, 'users', firebaseUser.uid);
-        
-        // 새로운 snapshot 리스너를 구독하고, 해제 함수를 변수에 저장합니다.
         unsubscribeFromSnapshot = onSnapshot(userRef, (doc) => {
           if (doc.exists()) {
             const userData = { uid: doc.id, ...doc.data() } as UserDocument;
@@ -66,13 +75,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setLoading(false);
         });
       } else {
-        // 사용자가 로그아웃한 경우, 모든 상태를 초기화합니다.
         setUserDocument(null);
         setLoading(false);
       }
     });
-
-    // 컴포넌트가 언마운트될 때 auth 리스너와 snapshot 리스너를 모두 해제합니다.
     return () => {
       unsubscribeFromAuth();
       if (unsubscribeFromSnapshot) {
@@ -89,7 +95,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  // ✅ [수정] useMemo를 사용해 context value 객체의 불필요한 재생성을 방지합니다.
   const value = useMemo(() => {
     const isAdmin = userDocument?.role === 'admin' || userDocument?.role === 'master';
     const isMaster = userDocument?.role === 'master';
@@ -103,8 +108,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isSuspendedUser,
       loading,
       logout,
+      // ✅ Context 값으로 refreshUserDocument 함수를 전달합니다.
+      refreshUserDocument,
     };
-  }, [user, userDocument, loading, logout]);
+  }, [user, userDocument, loading, logout, refreshUserDocument]);
 
   return (
     <AuthContext.Provider value={value}>
