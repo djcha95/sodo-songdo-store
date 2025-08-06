@@ -24,13 +24,13 @@ export interface SalesRound extends OriginalSalesRound {
 export type ProductActionState =
   | 'LOADING'
   | 'PURCHASABLE'
-  | 'REQUIRE_OPTION'
+  | 'REQUIRE_OPTION' // 옵션 선택이 필요한 상태
   | 'WAITLISTABLE'
   | 'ENCORE_REQUESTABLE'
   | 'SCHEDULED'
   | 'ENDED'
-  | 'INELIGIBLE'
-  | 'AWAITING_STOCK';
+  | 'INELIGIBLE' // 등급 미달
+  | 'AWAITING_STOCK'; // 재고 준비중
 
 export const safeToDate = (date: any): Date | null => {
   if (!date) return null;
@@ -78,7 +78,8 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
   return nonDraftRounds[0] || null;
 };
 
-// ✅ [수정] 로직의 확인 순서를 바로잡아 올바른 상태가 표시되도록 전면 수정
+
+// ✅ [개선] 옵션 선택 필요 상태('REQUIRE_OPTION') 추가 등 로직 개선
 export const determineActionState = (round: SalesRound, userDocument: UserDocument | null, selectedVg?: VariantGroup | null): ProductActionState => {
   // 1. 등급 확인: 참여 자격이 없는지 먼저 확인
   const userTier = userDocument?.loyaltyTier;
@@ -97,9 +98,15 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
         return 'SCHEDULED';
       }
   }
+
+  const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items.length || 0) > 1;
   
   // 3. 1차 판매 기간 (오늘의 공동구매) 확인
   if (primaryDeadline && now.isBefore(primaryDeadline)) {
+    if (hasMultipleOptions && !selectedVg) {
+      return 'REQUIRE_OPTION'; // 옵션 선택 필요
+    }
+    
     let isSoldOut = false;
     if (selectedVg) {
       const totalStock = selectedVg.totalPhysicalStock;
@@ -113,10 +120,15 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
 
   // 4. 2차 판매 기간 (마감임박 추가공구) 확인
   if (finalSaleDeadline && primaryDeadline && now.isBetween(primaryDeadline, finalSaleDeadline, null, '[]')) {
+    if (hasMultipleOptions && !selectedVg) {
+        return 'REQUIRE_OPTION'; // 옵션 선택 필요
+    }
+
     const isLimitedStock = selectedVg ? (selectedVg.totalPhysicalStock !== null && selectedVg.totalPhysicalStock !== -1) : false;
     if (!isLimitedStock) {
       return 'AWAITING_STOCK'; // 2차 판매인데 재고 정보가 없으면 재고 준비중
     }
+
     let isSoldOut = false;
     if (selectedVg) {
       const reserved = selectedVg.reservedCount || 0;
@@ -126,6 +138,10 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
     return isSoldOut ? 'WAITLISTABLE' : 'PURCHASABLE';
   }
 
-  // 5. 모든 판매 기간이 지났으면 '예약 종료'로 최종 판정
+  // 5. 모든 판매 기간이 지났으면 '예약 종료' 또는 '앵콜 요청 가능'
+  if (round.status === 'ended' || round.status === 'sold_out') {
+      return 'ENCORE_REQUESTABLE';
+  }
+
   return 'ENDED';
 };

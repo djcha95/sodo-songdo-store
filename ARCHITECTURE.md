@@ -203,7 +203,7 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 -   `determineActionState`: 상품, 사용자 등급, 재고 등 모든 조건을 고려하여 현재 상품이 '예약 가능', '대기 가능', '참여 등급 아님' 등 어떤 상태인지를 판별하는 통합 함수를 제공합니다. 이를 통해 여러 페이지와 컴포넌트의 동작을 100% 통일시킵니다.
 
 ### ✅ [신규] `src/utils/loyaltyUtils.ts`
--   **신뢰 등급(Tier) 계산의 중심**: 사용자의 누적 픽업(`pickupCount`) 및 노쇼(`noShowCount`) 횟수를 기반으로, '공구의 신'부터 '참여 제한'까지의 **신뢰 등급을 계산하는 순수 함수(`calculateTier`)**를 관리합니다. 포인트와 등급이 분리된 새로운 시스템의 핵심 로직입니다.
+-   **신뢰 등급(Tier) 계산의 중심**: 사용자의 누적 픽업(`pickupCount`) 및 노쇼(`noShowCount`) 횟수를 기반으로, '공구의 신'부터 '참여 제한'까지의 **신뢰 등급을 계산하는 순수 함수(`calculateTier`)**를 관리합니다. 포인트와 등급이 분리된 새로운 시스템의 핵심 로직이며, 서버(`functions/src/utils/helpers.ts`)의 등급 계산 로직과 일관성을 유지하는 클라이언트 측 '단일 진실 공급원(Single Source of Truth)' 역할을 합니다.
 
 ### `src/context/CartContext.tsx`
 

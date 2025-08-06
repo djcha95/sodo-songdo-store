@@ -23,3 +23,6 @@ export const allowedOrigins = [
   "https://sodo-songdo.store",
   "https://www.sodo-songdo.store"
 ];
+
+// ✅ [수정] 다른 파일에서 FieldValue 등을 사용하기 위해 admin 객체를 export합니다.
+export { admin };

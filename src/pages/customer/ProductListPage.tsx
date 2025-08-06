@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { mainTourSteps } from '@/components/customer/AppTour';
-// ✅ getReservedQuantitiesMap 임포트 제거, getActiveBanners만 유지
 import { getActiveBanners } from '@/firebase'; 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
@@ -30,7 +29,6 @@ dayjs.locale('ko');
 
 interface ProductForList extends Product {}
 
-// ✅ ProductCard로 전달될 타입 단순화
 interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
   deadlines: { primaryEnd: Date | null; secondaryEnd: Date | null; };
@@ -42,7 +40,6 @@ const ProductListPage: React.FC = () => {
   const { startTour, isTourRunning } = useTutorial();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<ProductForList[]>([]);
-  // ✅ reservedQuantitiesMap state 제거
   const [countdown, setCountdown] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -50,7 +47,10 @@ const ProductListPage: React.FC = () => {
 
   const lastVisibleRef = useRef<number | null>(null);
   const hasMoreRef = useRef<boolean>(true);
+  // ✅ [수정] state 대신 ref를 사용하여 로딩 중복 호출을 안정적으로 방지
+  const isFetchingRef = useRef<boolean>(false); 
   const PAGE_SIZE = 10;
+  
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
   
@@ -63,22 +63,28 @@ const ProductListPage: React.FC = () => {
   }, [userDocument, startTour]);
 
   const fetchData = useCallback(async (isInitial = false) => {
+    // ✅ [수정] isFetchingRef를 사용하여 중복 실행 방지
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     if (isInitial) {
       setLoading(true);
       setError(null);
       lastVisibleRef.current = null;
       hasMoreRef.current = true;
     } else {
-      if (loadingMore || !hasMoreRef.current) return;
+      if (!hasMoreRef.current) {
+        isFetchingRef.current = false;
+        return;
+      }
       setLoadingMore(true);
     }
+
     try {
-      // ✅ getReservedQuantitiesMap 호출 제거
       if (isInitial) {
         const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
       }
-      // ✅ Cloud Function 호출은 변경 없음
       const result: HttpsCallableResult<any> = await getProductsWithStockCallable({ pageSize: PAGE_SIZE, lastVisible: lastVisibleRef.current });
       const { products: newProducts, lastVisible: newLastVisible } = result.data as { products: ProductForList[], lastVisible: number | null };
       
@@ -96,23 +102,24 @@ const ProductListPage: React.FC = () => {
       setError("상품을 불러오는 중 오류가 발생했습니다.");
       showToast('error', err.message || "데이터 로딩 중 문제가 발생했습니다.");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
       setLoadingMore(false);
+      isFetchingRef.current = false; // ✅ [수정] 작업 완료 후 플래그 해제
     }
-  }, [getProductsWithStockCallable, loadingMore]);
+  }, [getProductsWithStockCallable]);
 
   const handleRefresh = useCallback(async () => { await fetchData(true); }, [fetchData]);
   const { pullDistance, isRefreshing, isThresholdReached } = usePullToRefresh({ onRefresh: handleRefresh });
 
   useEffect(() => { fetchData(true); }, [fetchData]);
 
+  // ✅ [수정] useEffect의 중복 호출 방지 로직은 fetchData 내부로 이전하여 단순화
   useEffect(() => {
-    if (isLoadMoreVisible && !loading && !isRefreshing && hasMoreRef.current && !isTourRunning) {
+    if (isLoadMoreVisible && !loading && !loadingMore && hasMoreRef.current && !isTourRunning) {
       fetchData(false);
     }
-  }, [isLoadMoreVisible, loading, isRefreshing, fetchData, isTourRunning]);
+  }, [isLoadMoreVisible, loading, loadingMore, isTourRunning, fetchData]);
   
-  // ✅ useMemo 로직에서 reservedQuantitiesMap 의존성 제거
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
@@ -155,12 +162,10 @@ const ProductListPage: React.FC = () => {
       if (currentPhase === 'primary') {
         tempPrimary.push(productWithState);
       } else if (currentPhase === 'secondary') {
-        // ✅ Cloud Function에서 주입된 reservedCount를 직접 사용
         const isSoldOut = round.variantGroups.every(vg => {
           const totalStock = vg.totalPhysicalStock;
           if (totalStock === null || totalStock === -1) return false;
           if (totalStock === 0) return true;
-          // 타입 단언을 통해 reservedCount에 접근
           const reserved = (vg as VariantGroup & { reservedCount?: number }).reservedCount || 0;
           return totalStock - reserved <= 0;
         });
