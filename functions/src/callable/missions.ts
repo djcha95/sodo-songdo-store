@@ -3,9 +3,8 @@
 import { https } from 'firebase-functions/v2';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 
-// ✅ [수정] 이제 functions/src 폴더 내의 파일을 정확히 참조합니다.
 import { MISSION_REWARDS } from '../pointService.js';
-import type { UserDocument, Order, PointLog } from '../types.js';
+import type { UserDocument, Order } from '../types.js';
 
 // 클라이언트의 getOrderStatusDisplay와 유사한 로직을 서버에도 구현
 const getOrderStatusDisplay = (order: Order) => {
@@ -20,7 +19,6 @@ const getOrderStatusDisplay = (order: Order) => {
   return { type: 'pending' };
 };
 
-// 클라이언트의 미션 계산 로직을 서버에서도 동일하게 구현 (보안 및 데이터 정합성)
 const calculateServerSideMissionStatus = async (
   db: FirebaseFirestore.Firestore,
   missionId: string,
@@ -28,41 +26,53 @@ const calculateServerSideMissionStatus = async (
 ): Promise<boolean> => {
   const now = new Date();
 
+  // --- 월간 미션용 날짜 계산 ---
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-  const ordersSnapshot = await db.collection('orders')
-    .where('userId', '==', userDoc.uid)
-    .where('pickupDate', '>=', startOfMonth)
-    .where('pickupDate', '<=', endOfMonth)
-    .get();
+  // --- 미션 ID에 따라 분기 ---
+  if (missionId.startsWith('monthly') || missionId === 'no-show-free') {
+    const ordersSnapshot = await db.collection('orders')
+      .where('userId', '==', userDoc.uid)
+      .where('pickupDate', '>=', startOfMonth)
+      .where('pickupDate', '<=', endOfMonth)
+      .get();
+    const monthlyOrders = ordersSnapshot.docs.map(doc => doc.data() as Order);
 
-  const monthlyOrders = ordersSnapshot.docs.map(doc => doc.data() as Order);
-
-  switch (missionId) {
-    case 'no-show-free': {
+    if (missionId === 'no-show-free') {
       const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
       return noShowCount === 0 && monthlyOrders.length > 0;
     }
-    case 'monthly-pickup': {
+    if (missionId === 'monthly-pickup') {
       const pickupTarget = 5;
       const pickupCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'completed').length;
       return pickupCount >= pickupTarget;
     }
-    case 'first-referral': {
-      return userDoc.pointHistory?.some((log: PointLog) => log.reason === '친구 초대 성공') ?? false;
-    }
-    default:
-      return false;
   }
+
+  // ✅ [수정] 'signup-bonus' 미션은 별도 조건 없이 항상 '완료'로 간주하여,
+  // 기존 사용자가 보상을 받을 수 있도록 허용합니다.
+  if (missionId === 'signup-bonus') {
+    return true; 
+  }
+
+  if (missionId.startsWith('consecutive-login-')) {
+    const targetDays = parseInt(missionId.split('-')[2], 10);
+    return (userDoc.consecutiveLoginDays || 0) >= targetDays;
+  }
+  
+  if (missionId.startsWith('referral-count-')) {
+    const targetCount = parseInt(missionId.split('-')[2], 10);
+    const referralCount = userDoc.pointHistory?.filter(log => log.reason === '친구 초대 성공').length ?? 0;
+    return referralCount >= targetCount;
+  }
+
+  return false;
 };
 
 
-// ✅ [수정] https.onCall에 옵션 객체를 추가하여 CORS 정책과 리전을 명시합니다.
 export const claimMissionReward = https.onCall({
-  // 로컬 개발 환경과 실제 배포 환경의 주소를 모두 허용합니다.
   cors: [/localhost:\d+/, "https://sodo-songdo.store", "https://www.sodo-songdo.store"],
-  // 다른 함수들과의 일관성을 위해 리전을 지정합니다.
   region: "asia-northeast3",
 }, async (request) => {
   if (!request.auth) {
@@ -92,7 +102,7 @@ export const claimMissionReward = https.onCall({
 
       const isCompleted = await calculateServerSideMissionStatus(db, missionId, userData);
       if (!isCompleted) {
-        throw new https.HttpsError('failed-precondition', '미션 완료 조건을 충족하지 못했습니다.');
+        throw new https.HttpsError('failed-precondition', '미션 완료 조건을 충족하지 못했습니다. 데이터가 동기화될 때까지 잠시 기다려주세요.');
       }
 
       const reward = MISSION_REWARDS[missionId];
