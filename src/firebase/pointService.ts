@@ -49,13 +49,19 @@ export const POINT_POLICIES = {
 } as const;
 
 /**
- * ✅ [신규] 미션 완료 보상 정책
- * @description 미션 ID를 키로 사용하여 보상 포인트를 정의합니다.
+ * ✅ [수정됨] 미션 완료 보상 정책
+ * @description 모든 미션에 대한 보상 포인트를 정의합니다.
  */
 export const MISSION_REWARDS: { [missionId: string]: { points: number; reason: string } } = {
+  // 기존 월간 미션
   'no-show-free': { points: 50, reason: '미션 완료: 노쇼 없이 한 달' },
   'monthly-pickup': { points: 30, reason: '미션 완료: 이 달의 픽업 5회' },
-  'first-referral': { points: 150, reason: '미션 완료: 첫 친구 초대 성공' }
+
+  // 신규 달성 미션
+  'signup-bonus': { points: 100, reason: '소도몰에 오신 것을 환영합니다!' },
+  'first-nickname-set': { points: 20, reason: '첫 닉네임 설정 완료' },
+  'consecutive-login-3': { points: 10, reason: '미션 완료: 3일 연속 출석' },
+  'referral-count-1': { points: 100, reason: '미션 완료: 첫 친구 초대' },
 };
 
 /**
@@ -131,19 +137,12 @@ export const calculateUserUpdateByStatus = (
   if (pointLog) {
     updateData.pointHistory = arrayUnion(pointLog);
   }
-  
-  // 참고: 실제 프로덕션에서는 이 함수를 호출하는 Cloud Function Trigger에서
-  // 아래와 같은 미션 완료 체크 및 보상 지급 로직을 함께 처리해야 합니다.
-  // 예시:
-  // if (newStatus === 'PICKED_UP') {
-  //   await checkAndAwardMissionCompletion(userId, 'monthly-pickup');
-  // }
 
   return { updateData, pointLog, tierChange };
 };
 
 /**
- * ✅ [신규] 미션 완료 보상을 지급하는 Cloud Function 호출 함수
+ * @description 미션 완료 보상을 지급하는 Cloud Function 호출 함수
  */
 export const claimMissionReward = async (missionId: string, uniquePeriodId: string): Promise<{success: boolean, message: string}> => {
   const functions = getFunctions(getApp(), 'asia-northeast3');
@@ -154,7 +153,13 @@ export const claimMissionReward = async (missionId: string, uniquePeriodId: stri
     return (result.data as {success: boolean, message: string});
   } catch(error: any) {
     console.error("미션 보상 요청 함수 호출 실패:", error);
-    throw new Error(error.message || '미션 보상을 요청하는 중 오류가 발생했습니다.');
+    // Firebase v9 HttpsError는 'code'와 'message'를 직접 가집니다.
+    // details는 서버에서 명시적으로 보낸 경우에만 존재합니다.
+    if (error.code && error.message) {
+        const message = (error.details as any)?.message || error.message;
+        throw new Error(message);
+    }
+    throw new Error('미션 보상을 요청하는 중 알 수 없는 오류가 발생했습니다.');
   }
 };
 

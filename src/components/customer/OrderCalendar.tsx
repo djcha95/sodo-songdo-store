@@ -13,12 +13,11 @@ import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useAuth } from '../../context/AuthContext';
-// ✅ [수정] useTutorial 훅을 import하여 'Cannot find name' 오류를 해결합니다.
 import { useTutorial } from '../../context/TutorialContext';
 import { calendarPageTourSteps } from '../customer/AppTour';
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
-import { ATTENDANCE_MILESTONES, MISSION_REWARDS, claimMissionReward } from '../../firebase/pointService';
+import { MISSION_REWARDS, claimMissionReward } from '../../firebase/pointService';
 import { showPromiseToast } from '@/utils/toastUtils';
 
 import Holidays from 'date-holidays';
@@ -28,12 +27,11 @@ import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderStatus, UserDocument } from '../../types';
 import toast from 'react-hot-toast';
 import {
-  Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, Gift, Calendar, Award
+  Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, Gift, Calendar, Award, UserPlus
 } from 'lucide-react';
 
 // --- 헬퍼 함수 및 타입 ---
 type ValuePiece = Date | null;
-// ✅ [수정] PickupStatus 타입에 'cancelled'를 추가하여 타입 비교 오류 해결
 type PickupStatus = 'pending' | 'completed' | 'noshow' | 'cancelled';
 
 interface AggregatedItem { 
@@ -63,7 +61,6 @@ const safeToDate = (date: any): Date | null => {
     return null;
 };
 
-// ✅ [수정] 함수의 반환 타입을 명시하여 타입 추론 오류를 방지합니다.
 const getOrderStatusDisplay = (order: Order): { text: string; Icon: React.ElementType; className: string; type: PickupStatus } => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -227,51 +224,68 @@ interface Mission {
   title: string;
   description: string;
   icon: React.ReactNode;
-  calculateProgress: (userDoc: UserDocument, orders: Order[], activeMonth: Date) => MissionProgress;
+  displayOrder: number; 
+  calculateProgress: (userDoc: UserDocument | null, orders: Order[], activeMonth: Date) => MissionProgress;
 }
-
-const getNextMilestone = (currentDays: number): number => {
-  const milestones = Object.keys(ATTENDANCE_MILESTONES).map(Number).sort((a, b) => a - b);
-  return milestones.find(m => m > currentDays) || Math.max(...milestones);
-};
 
 const missions: Mission[] = [
     {
-        id: 'consecutive-login',
-        title: '연속 출석 챌린지',
-        description: '매일 출석해서 보너스 포인트를 획득하세요!',
-        icon: <Calendar size={22} />,
-        calculateProgress: (userDoc) => {
-            const currentDays = userDoc.consecutiveLoginDays || 0;
-            const nextMilestone = getNextMilestone(currentDays);
-            const progress = Math.min((currentDays / nextMilestone) * 100, 100);
-            const isCompleted = currentDays >= nextMilestone;
+        id: 'signup-bonus',
+        title: '소도몰 첫 방문 환영!',
+        description: `가입만 해도 ${MISSION_REWARDS['signup-bonus']?.points || ''}P 즉시 지급!`,
+        icon: <Gift size={22} />,
+        displayOrder: 1,
+        // ✅ [수정] '첫 방문 환영' 미션의 로직 변경
+        calculateProgress: (userDoc, _orders, _activeMonth) => {
+            const missionReward = MISSION_REWARDS['signup-bonus'];
+            // 보상 정책이 없으면 안전하게 미완료 처리
+            if (!missionReward) {
+                return { progress: 0, label: '미션 정보 없음', isCompleted: false, uniquePeriodId: `signup-bonus-${userDoc?.uid}`};
+            }
+            // 이미 보상을 받았는지 여부만 확인
+            const hasClaimed = userDoc?.pointHistory?.some(log => log.reason === missionReward.reason) ?? false;
+            
             return {
-                progress,
-                label: isCompleted ? `달성!` : `${currentDays} / ${nextMilestone}일`,
-                isCompleted,
-                uniquePeriodId: `consecutive-${nextMilestone}-${userDoc.uid}`
+                progress: 100, // 항상 진행률은 100%
+                label: hasClaimed ? '획득 완료' : '바로 받기 가능!', // 상태 라벨
+                isCompleted: true, // 모든 사용자에 대해 항상 '완료' 상태로 간주
+                uniquePeriodId: `signup-bonus-${userDoc?.uid}`
             };
         },
     },
     {
-        id: 'no-show-free',
-        title: '노쇼 없이 한 달 보내기',
-        description: `이 달에 노쇼가 없으면 보너스 ${MISSION_REWARDS['no-show-free']?.points || ''}P!`,
-        icon: <ShieldCheck size={22} />,
-        calculateProgress: (_, orders, activeMonth) => {
-            const monthId = format(activeMonth, 'yyyy-MM');
-            const monthlyOrders = orders.filter(o => {
-                const pickupDate = safeToDate(o.pickupDate);
-                return pickupDate && isSameMonth(pickupDate, activeMonth);
-            });
-            const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
-            const isCompleted = noShowCount === 0 && monthlyOrders.length > 0;
+        id: 'consecutive-login-3',
+        title: '3일 연속 출석 챌린지',
+        description: `매일 출석하고 보너스 ${MISSION_REWARDS['consecutive-login-3']?.points || ''}P 받으세요!`,
+        icon: <Calendar size={22} />,
+        displayOrder: 2,
+        calculateProgress: (userDoc, _orders, _activeMonth) => {
+            const currentDays = userDoc?.consecutiveLoginDays || 0;
+            const targetDays = 3;
+            const progress = Math.min((currentDays / targetDays) * 100, 100);
             return {
-                progress: isCompleted ? 100 : 0,
-                label: isCompleted ? '달성!' : `${noShowCount}회 발생`,
-                isCompleted,
-                uniquePeriodId: `no-show-free-${monthId}`
+                progress,
+                label: `${currentDays} / ${targetDays}일`,
+                isCompleted: currentDays >= targetDays,
+                uniquePeriodId: `consecutive-login-${targetDays}-${userDoc?.uid}`
+            };
+        },
+    },
+    {
+        id: 'referral-count-1',
+        title: '첫 친구 초대하기',
+        description: `친구 초대 성공 시 ${MISSION_REWARDS['referral-count-1']?.points || ''}P 지급!`,
+        icon: <UserPlus size={22} />,
+        displayOrder: 3,
+        calculateProgress: (userDoc, _orders, _activeMonth) => {
+            const referralCount = userDoc?.pointHistory?.filter(log => log.reason === '친구 초대 성공').length ?? 0;
+            const targetCount = 1;
+            const progress = Math.min((referralCount / targetCount) * 100, 100);
+            return {
+                progress,
+                label: `${referralCount} / ${targetCount}명`,
+                isCompleted: referralCount >= targetCount,
+                uniquePeriodId: `referral-count-${targetCount}-${userDoc?.uid}`
             };
         },
     },
@@ -280,7 +294,8 @@ const missions: Mission[] = [
         title: '이 달에 5번 픽업하기',
         description: `5번 픽업하고 ${MISSION_REWARDS['monthly-pickup']?.points || ''}P 받으세요!`,
         icon: <Target size={22} />,
-        calculateProgress: (_, orders, activeMonth) => {
+        displayOrder: 4,
+        calculateProgress: (_userDoc, orders, activeMonth) => {
             const monthId = format(activeMonth, 'yyyy-MM');
             const pickupTarget = 5;
             const monthlyOrders = orders.filter(o => {
@@ -298,63 +313,84 @@ const missions: Mission[] = [
         },
     },
     {
-        id: 'first-referral',
-        title: '친구 초대하고 포인트 받기',
-        description: `첫 친구 초대 성공 시 ${MISSION_REWARDS['first-referral']?.points || ''}P 지급!`,
-        icon: <Gift size={22} />,
-        calculateProgress: (userDoc) => {
-            const hasInvited = userDoc.pointHistory?.some(log => log.reason === '친구 초대 성공') ?? false;
+        id: 'no-show-free',
+        title: '노쇼 없이 한 달 보내기',
+        description: `이 달에 노쇼가 없으면 보너스 ${MISSION_REWARDS['no-show-free']?.points || ''}P!`,
+        icon: <ShieldCheck size={22} />,
+        displayOrder: 5,
+        calculateProgress: (_userDoc, orders, activeMonth) => {
+            const monthId = format(activeMonth, 'yyyy-MM');
+            const monthlyOrders = orders.filter(o => {
+                const pickupDate = safeToDate(o.pickupDate);
+                return pickupDate && isSameMonth(pickupDate, activeMonth);
+            });
+            const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
+            const isCompleted = noShowCount === 0 && monthlyOrders.length > 0;
             return {
-                progress: hasInvited ? 100 : 0,
-                label: hasInvited ? '달성 완료!' : '미완료',
-                isCompleted: hasInvited,
-                uniquePeriodId: `first-referral-${userDoc.uid}`
+                progress: isCompleted ? 100 : 0,
+                label: isCompleted ? '달성!' : `${noShowCount}회 발생`,
+                isCompleted,
+                uniquePeriodId: `no-show-free-${monthId}`
             };
         },
     },
 ];
 
+
 const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Order[]; activeMonth: Date; onClaimReward: (missionId: string, uniquePeriodId: string) => void; }> = ({ userDocument, orders, activeMonth, onClaimReward }) => {
     if (!userDocument) return null;
+
+    const sortedMissions = useMemo(() => {
+        return missions
+            .map(mission => {
+                const progressData = mission.calculateProgress(userDocument, orders, activeMonth);
+                const isClaimed = userDocument.completedMissions?.[progressData.uniquePeriodId] ?? false;
+                return { ...mission, ...progressData, isClaimed };
+            })
+            .filter(mission => !mission.isClaimed) 
+            .sort((a, b) => {
+                if (a.isCompleted !== b.isCompleted) {
+                    return a.isCompleted ? 1 : -1;
+                }
+                return a.displayOrder - b.displayOrder;
+            });
+    }, [userDocument, orders, activeMonth]);
 
     return (
         <div className="missions-container" data-tutorial-id="calendar-challenge">
             <h3 className="missions-title"><Trophy size={18} /> 오늘의 미션</h3>
             <p className="missions-subtitle">다양한 미션을 달성하고 혜택을 받아보세요!</p>
             <div className="missions-list">
-                {missions.map(mission => {
-                    if (!MISSION_REWARDS[mission.id]) return null;
-
-                    const { progress, label, isCompleted, uniquePeriodId } = mission.calculateProgress(userDocument, orders, activeMonth);
-                    const isClaimed = userDocument.completedMissions?.[uniquePeriodId] ?? false;
+                {sortedMissions.map(mission => {
+                    const points = MISSION_REWARDS[mission.id]?.points;
 
                     return (
-                        <div className={`mission-card ${isCompleted ? 'completed' : ''}`} key={mission.id}>
+                        <div className={`mission-card ${mission.isCompleted ? 'completed' : ''}`} key={mission.id}>
                             <div className="mission-info">
                                 <span className="mission-icon">{mission.icon}</span>
                                 <div className="mission-text">
                                     <span className="mission-card-title">{mission.title}</span>
                                     <span className="mission-description">{mission.description}</span>
                                 </div>
-                                <span className={`mission-label ${isCompleted ? 'completed' : ''}`}>{label}</span>
+                                <span className={`mission-label ${mission.isCompleted ? 'completed' : ''}`}>{mission.label}</span>
                             </div>
                             <div className="progress-bar-track">
                                 <motion.div 
                                     className="progress-bar-fill" 
                                     initial={{ width: 0 }}
-                                    animate={{ width: `${progress}%` }}
+                                    animate={{ width: `${mission.progress}%` }}
                                     transition={{ duration: 0.8, ease: "easeOut" }}
                                 />
                             </div>
-                            {isCompleted && (
+                            {/* ✅ [수정] 'isClaimed'가 아닌 isCompleted로 버튼 표시 여부 결정 */}
+                            {mission.isCompleted && !mission.isClaimed && (
                                <div className="mission-reward-section">
                                   <button 
                                     className="claim-reward-btn"
-                                    onClick={() => onClaimReward(mission.id, uniquePeriodId)}
-                                    disabled={isClaimed}
+                                    onClick={() => onClaimReward(mission.id, mission.uniquePeriodId)}
                                   >
                                     <Award size={16} />
-                                    {isClaimed ? '보상 획득 완료' : `${MISSION_REWARDS[mission.id].points}P 받기`}
+                                    {`${points || ''}P 받기`}
                                   </button>
                                 </div>
                             )}

@@ -503,3 +503,27 @@
     1.  **`Permission Denied` 오류 해결**: 초기 오류는 클라이언트(브라우저)에서 직접 `products` 컬렉션을 수정하려 했기 때문에 발생했습니다. 민감한 로직을 클라이언트(`pointService.ts`)에서 분리하여 **안전한 서버 환경의 Cloud Function(`useWaitlistTicket`)으로 이전**하는 아키텍처 변경을 통해 권한 문제를 해결했습니다.
     2.  **`Bad Request` 오류 추적**: Cloud Function으로 이전 후, 클라이언트에서는 모든 ID 값을 정상적으로 보내는 것처럼 보였으나 서버에서는 "필수 정보가 누락되었다"는 오류가 계속 발생했습니다. 서버 측(`points.ts`)에 직접 디버깅 로그를 추가하여 확인한 결과, 클라이언트에서 보낸 `{key: value}` 형태의 객체가 서버에 도착했을 때는 첫 번째 값만 남은 **단일 문자열로 변형**되는 알 수 없는 데이터 직렬화 문제를 발견했습니다.
 * **최종 해결**: 데이터가 전송되는 과정의 문제를 우회하기 위해, 클라이언트의 `pointService.ts`와 `OrderHistoryPage.tsx`의 함수 호출 방식을 수정했습니다. 여러 개의 ID 값을 개별 인자로 명확하게 전달받은 후, Cloud Function을 호출하는 **바로 그 시점에 순수한 새 객체(POJO)를 만들어 전달**하도록 변경하여, 데이터가 변형 없이 서버에 도달하도록 보장하여 문제를 최종 해결했습니다.
+
+### ✅ [신규] 41. 신규 Cloud Function(v2) 호출 시 CORS 정책 위반 오류 해결
+
+* **문제점**: 새로 개발한 '미션 보상 받기'(`claimMissionReward`) 기능을 로컬 환경(`localhost`)에서 테스트 시, 브라우저 콘솔에 `No 'Access-Control-Allow-Origin' header` 메시지가 출력되며 CORS 정책 위반으로 API 호출이 실패했습니다.
+* **원인**: Cloud Functions v2는 보안이 강화되어, 기본적으로 외부 출처(origin)에서의 직접적인 함수 호출을 허용하지 않습니다.
+* **해결**: `functions/src/callable/missions.ts` 파일의 함수 정의 부분에, 어떤 출처의 요청을 허용할지 명시하는 `cors` 옵션을 직접 추가했습니다. 로컬 개발 환경(`localhost`)과 실제 배포 도메인(`sodo-songdo.store`)을 모두 포함하여, 모든 환경에서 정상적으로 함수를 호출할 수 있도록 문제를 해결했습니다.
+
+    ```typescript
+    // missions.ts
+    export const claimMissionReward = https.onCall({
+      cors: [/localhost:\d+/, "[https://sodo-songdo.store](https://sodo-songdo.store)"],
+      region: "asia-northeast3",
+    }, async (request) => {
+      // ... 함수 로직
+    });
+    ```
+
+### ✅ [신규] 42. 미션 보상 요청 시 '조건 미충족(400 Bad Request)' 오류 해결
+
+* **문제점**: '첫 방문 환영!' 미션의 '보상 받기' 버튼을 클릭했으나, 서버로부터 '미션 완료 조건을 충족하지 못했습니다'라는 메시지와 함께 `400 Bad Request` 오류가 발생하며 보상 지급이 실패했습니다.
+* **원인**: **클라이언트와 서버 간의 '미션 완료' 조건 불일치**가 원인이었습니다.
+    -   **클라이언트(`OrderCalendar.tsx`)**: 기존 사용자에게도 보상 기회를 주기 위해, '첫 방문 환영!' 미션을 **무조건 '완료' 상태로 간주**하고 버튼을 표시했습니다.
+    -   **서버(`missions.ts`)**: 반면, 서버에서는 여전히 **"실제로 사용자의 포인트 내역에 환영 보너스를 받은 기록이 있는가?"**라는 엄격한 조건을 검사하고 있었습니다.
+* **해결**: 클라이언트의 의도와 서버의 로직을 일치시키기 위해, `functions/src/callable/missions.ts` 파일의 서버 측 검증 로직(`calculateServerSideMissionStatus`)을 수정했습니다. `missionId`가 `signup-bonus`일 경우, 다른 조건을 검사하지 않고 **무조건 `true`를 반환**하도록 변경하여, '이미 보상을 받은 경우'를 제외하고는 항상 보상 지급이 가능하도록 문제를 해결했습니다.

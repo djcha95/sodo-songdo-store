@@ -24,3 +24,4 @@ export * from "./scheduled/points.js";
 export * from "./triggers/orders.js";
 export * from "./triggers/points.js";
 export * from "./triggers/products.js";
+export * from "./triggers/users.js"; 
