@@ -49,7 +49,6 @@ const safeToDate = (date: any): Date | null => {
     if (typeof date.toDate === 'function') return date.toDate();
     if (typeof date === 'object' && date.seconds !== undefined) { return new Timestamp(date.seconds, date.nanoseconds || 0).toDate(); }
     if (typeof date === 'string') { const parsedDate = new Date(date); if (!isNaN(parsedDate.getTime())) return parsedDate; }
-    // ✅ [버그 수정] 숫자(타임스탬프)도 Date 객체로 변환하도록 추가
     if (typeof date === 'number' && isFinite(date)) { return new Date(date); }
     return null;
 };
@@ -106,7 +105,6 @@ const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicSta
   }
 };
 
-// ✅ [버그 수정] 유통기한 숫자(타임스탬프)를 처리하도록 로직 개선
 const formatDate = (dateInput: any) => {
     const date = safeToDate(dateInput);
     if (!date || !isFinite(date.getTime())) return '–';
@@ -181,7 +179,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
     const navigate = useNavigate();
     const handleAddNewRound = () => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } });
     if (!item.enrichedVariantGroups || item.enrichedVariantGroups.length === 0) {
-        return (<tr className="master-row error-row"><td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td><td>{index + 1}</td><td colSpan={12}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td><td><div className="action-buttons-wrapper"><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></div></td></tr>);
+        return (<tr className="master-row error-row"><td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td><td>{index + 1}</td><td colSpan={12} style={{color: 'var(--danger-color)'}}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td><td><div className="action-buttons-wrapper"><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></div></td></tr>);
     }
     const isExpandable = item.enrichedVariantGroups.length > 1;
 
@@ -208,7 +206,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
               {editingStockId === vgUniqueId ? (
                 <input type="number" className="stock-input" value={stockInputs[vgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [vgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(vgUniqueId, item)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(vgUniqueId, item); if (e.key === 'Escape') onStockEditStart('', 0); }} />
               ) : vg.configuredStock === -1 ? (
-                // ✅ [UI 개선] '무제한' 배지도 클릭 가능하도록 button으로 변경
                 <button className="stock-display-button unlimited-badge" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정">무제한</button>
               ) : (
                 <button className="stock-display-button" onClick={() => onStockEditStart(vgUniqueId, vg.configuredStock)} title="재고 수량을 클릭하여 수정">{vg.configuredStock}</button>
@@ -262,7 +259,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                       {editingStockId === subVgUniqueId ? (
                         <input type="number" className="stock-input" value={stockInputs[subVgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [subVgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(subVgUniqueId, item)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(subVgUniqueId, item); if (e.key === 'Escape') onStockEditStart('', 0); }} />
                       ) : subVg.configuredStock === -1 ? (
-                        // ✅ [UI 개선] '무제한' 배지도 클릭 가능하도록 button으로 변경
                         <button className="stock-display-button unlimited-badge" onClick={() => onStockEditStart(subVgUniqueId, subVg.configuredStock)} title="재고 수량을 클릭하여 수정">무제한</button>
                       ) : (
                         <button className="stock-display-button" onClick={() => onStockEditStart(subVgUniqueId, subVg.configuredStock)} title="재고 수량을 클릭하여 수정">{subVg.configuredStock}</button>
@@ -282,7 +278,6 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
     const [error, setError] = useState('');
     const [stockToAdd, setStockToAdd] = useState('');
     
-    // ✅ [추가] Cloud Function 참조
     const functions = getFunctions(getApp(), 'asia-northeast3');
     const addStockAndProcessWaitlistCallable = useMemo(() => httpsCallable<any, WaitlistProcessResult>(functions, 'addStockAndProcessWaitlist'), [functions]);
 
@@ -310,12 +305,10 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
             additionalStock: stock,
         };
         
-        // ✅ [수정] Cloud Function을 호출하도록 변경
         const promise = addStockAndProcessWaitlistCallable(payload);
 
         toast.promise(promise, {
             loading: '대기자 예약 전환 처리 중...',
-            // ✅ [수정] result 타입을 명시하여 오류 해결
             success: (result: HttpsCallableResult<WaitlistProcessResult>) => {
                 onSuccess();
                 onClose();
@@ -366,7 +359,6 @@ const ProductListPageAdmin: React.FC = () => {
   const [currentWaitlistData, setCurrentWaitlistData] = useState<{ productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; } | null>(null);
   const navigate = useNavigate();
 
-  // ✅ [추가] Cloud Function 참조
   const functions = getFunctions(getApp(), 'asia-northeast3');
   const addStockAndProcessWaitlistCallable = useMemo(() => httpsCallable<any, WaitlistProcessResult>(functions, 'addStockAndProcessWaitlist'), [functions]);
 
@@ -414,9 +406,21 @@ const ProductListPageAdmin: React.FC = () => {
     (pageData.allProducts || []).forEach(p => {
         (p.salesHistory || []).forEach(r => {
             if (!r.variantGroups || r.variantGroups.length === 0) {
-                console.warn(`Skipping round without variant groups: Product ID ${p.id}, Round ID ${r.roundId}`);
-                return;
+                console.warn(`[데이터 오류] 옵션 그룹이 없는 판매 회차를 발견했습니다. Product ID: ${p.id}, Round ID: ${r.roundId}. 이 회차는 목록에 '데이터 오류'로 표시됩니다.`);
+                flatRounds.push({
+                    productId: p.id,
+                    productName: p.groupName,
+                    productImage: p.imageUrls?.[0] || '/placeholder.svg',
+                    category: p.category || '미지정',
+                    storageType: p.storageType,
+                    round: r,
+                    uniqueId: `${p.id}-${r.roundId}`,
+                    enrichedVariantGroups: [], 
+                    dynamicStatus: { text: "데이터 오류", className: "error" },
+                });
+                return; 
             }
+
             const enrichedVariantGroups: EnrichedVariantGroup[] = r.variantGroups.map(vg => {
                 const key = `${p.id}-${r.roundId}-${vg.id}`;
                 const reservedQuantity = pageData.reservedQuantitiesMap.get(key) || 0;
@@ -497,7 +501,6 @@ const ProductListPageAdmin: React.FC = () => {
     const stockDifference = newStock - originalStock;
     
     if (originalStock !== -1 && newStock !== -1 && stockDifference > 0) {
-        // ✅ [수정] Cloud Function을 호출하도록 변경
         const payload = {
             productId,
             roundId,
@@ -508,7 +511,6 @@ const ProductListPageAdmin: React.FC = () => {
 
         await toast.promise(promise, {
             loading: '재고 추가 및 대기자 전환 처리 중...',
-            // ✅ [수정] result 타입을 명시하여 오류 해결
             success: (result: HttpsCallableResult<WaitlistProcessResult>) => {
                 fetchData();
                 if (result.data.convertedCount > 0) {
@@ -535,9 +537,26 @@ const ProductListPageAdmin: React.FC = () => {
   
   const handleBulkAction = async () => {
     if (selectedItems.size === 0) { toast.error("선택된 항목이 없습니다."); return; }
-    const updates = Array.from(selectedItems).map(id => { const [productId, roundId] = id.split('_'); return { productId, roundId, newStatus: 'ended' as SalesRoundStatus }; });
+    
+    // ✅ [버그 수정] roundId에 '-'가 포함된 경우를 대비해, 첫 번째 '-'를 기준으로 파싱
+    const updates = Array.from(selectedItems).map(id => {
+        const separatorIndex = id.indexOf('-');
+        if (separatorIndex === -1) {
+            console.error("잘못된 형식의 고유 ID입니다 (판매 종료 처리 중):", id);
+            return null;
+        }
+        const productId = id.substring(0, separatorIndex);
+        const roundId = id.substring(separatorIndex + 1);
+        return { productId, roundId, newStatus: 'ended' as SalesRoundStatus };
+    }).filter((item): item is { productId: string; roundId: string; newStatus: SalesRoundStatus } => item !== null);
+
+    if (updates.length === 0) {
+        toast.error("유효한 항목이 없습니다.");
+        return;
+    }
+
     const promise = updateMultipleSalesRoundStatuses(updates);
-    await toast.promise(promise, { loading: `${selectedItems.size}개 항목의 판매를 종료하는 중...`, success: "선택된 항목이 모두 판매 종료 처리되었습니다.", error: "일괄 작업 중 오류가 발생했습니다." });
+    await toast.promise(promise, { loading: `${updates.length}개 항목의 판매를 종료하는 중...`, success: "선택된 항목이 모두 판매 종료 처리되었습니다.", error: "일괄 작업 중 오류가 발생했습니다." });
     setSelectedItems(new Set()); fetchData(); 
   };
 
@@ -557,13 +576,27 @@ const ProductListPageAdmin: React.FC = () => {
                 <button className="common-button button-secondary button-medium" style={{flex: 1}} onClick={() => toast.dismiss(t.id)}>취소</button>
                 <button className="common-button button-danger button-medium" style={{flex: 1}} onClick={async () => {
                     toast.dismiss(t.id);
+                    
+                    // ✅ [버그 수정] roundId에 '-'가 포함된 경우를 대비해, 첫 번째 '-'를 기준으로 파싱
                     const deletions = Array.from(selectedItems).map(id => {
-                        const [productId, roundId] = id.split('_');
+                        const separatorIndex = id.indexOf('-');
+                        if (separatorIndex === -1) {
+                            console.error("잘못된 형식의 고유 ID입니다 (삭제 처리 중):", id);
+                            return null;
+                        }
+                        const productId = id.substring(0, separatorIndex);
+                        const roundId = id.substring(separatorIndex + 1);
                         return { productId, roundId };
-                    });
+                    }).filter((item): item is { productId: string; roundId: string } => item !== null);
+
+                    if (deletions.length === 0) {
+                        toast.error("삭제할 유효한 항목이 없습니다.");
+                        return;
+                    }
+
                     const promise = deleteSalesRounds(deletions);
                     await toast.promise(promise, {
-                        loading: `${selectedItems.size}개 항목을 삭제하는 중...`,
+                        loading: `${deletions.length}개 항목을 삭제하는 중...`,
                         success: "선택된 항목이 모두 삭제되었습니다.",
                         error: "일괄 삭제 중 오류가 발생했습니다."
                     });

@@ -1,9 +1,9 @@
 // src/context/TutorialContext.tsx
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'; // useEffect 삭제
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { Step } from 'react-joyride';
 import { useAuth } from './AuthContext';
-import { doc, updateDoc } from 'firebase/firestore'; // getDoc 삭제
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
 
 interface TutorialContextType {
@@ -16,7 +16,8 @@ interface TutorialContextType {
 export interface UserTutorialProgress {
     hasCompletedMain?: boolean;
     hasSeenCartPage?: boolean;
-    hasSeenDetailPage?: boolean;
+    hasSeenDetailPage?: boolean; // 레거시 속성 (호환성을 위해 유지)
+    hasSeenProductDetailPage?: boolean; // ✅ [오류 해결] 이 줄을 추가하여 타입 문제를 해결합니다.
     hasSeenCalendarPage?: boolean;
     hasSeenCustomerCenterPage?: boolean;
     hasSeenMyPage?: boolean;
@@ -38,15 +39,12 @@ interface TutorialProviderProps {
 }
 
 export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) => {
-  const { user, userDocument } = useAuth(); // userDocument를 직접 사용
+  const { user, userDocument } = useAuth();
   const [tourSteps, setTourSteps] = useState<Step[]>([]);
   const [tourKey, setTourKey] = useState<string>('initial');
   const [isTourRunning, setIsTourRunning] = useState(false);
 
-  // AuthContext에서 실시간으로 userDocument를 받으므로, 별도의 fetchProgress 로직 불필요
-
   const startTour = useCallback((steps: Step[], key: string = 'default') => {
-    // 튜토리얼 시작 시 항상 화면을 맨 위로 스크롤
     window.scrollTo(0, 0); 
     setTourKey(`${key}-${Date.now()}`);
     setTourSteps(steps);
@@ -62,7 +60,6 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
     pageKey: keyof UserTutorialProgress,
     steps: Step[]
   ) => {
-    // userDocument가 AuthContext에서 실시간으로 업데이트되므로, userDocument를 직접 사용
     const userProgress = userDocument?.tutorialProgress || {};
 
     if (user?.uid && !userProgress[pageKey]) {
@@ -74,7 +71,6 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
       
       try {
         const userRef = doc(db, 'users', user.uid);
-        // Firestore의 tutorialProgress 필드만 업데이트
         await updateDoc(userRef, {
           tutorialProgress: newProgress
         });
@@ -82,7 +78,7 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
         console.error("페이지 튜토리얼 진행 상태 업데이트 실패:", error);
       }
     }
-  }, [user, userDocument, startTour]); // 의존성 배열에 userDocument 추가
+  }, [user, userDocument, startTour]);
 
   const value = { isTourRunning, startTour, stopTour, runPageTourIfFirstTime };
 

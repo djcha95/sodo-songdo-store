@@ -44,8 +44,10 @@ export type NotificationType =
   | "PARTICIPATION_RESTRICTED"
   | "TIER_UP"
   | "TIER_DOWN"
+  | "ENCORE_AVAILABLE" // ✅ 이 줄을 추가해주세요.
   | "success"
   | "error";
+
 
 export interface Notification {
   id: string;

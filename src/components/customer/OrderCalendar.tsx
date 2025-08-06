@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-// ✅ [수정] 이름 충돌을 피하기 위해 ReactCalendar로 import 이름을 변경합니다.
 import ReactCalendar from 'react-calendar';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
@@ -18,7 +17,8 @@ import { useTutorial } from '../../context/TutorialContext';
 import { calendarPageTourSteps } from '../customer/AppTour';
 import InlineSodomallLoader from '../common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
-import { ATTENDANCE_MILESTONES } from '../../firebase/pointService';
+import { ATTENDANCE_MILESTONES, MISSION_REWARDS, claimMissionReward } from '../../firebase/pointService';
+import { showPromiseToast } from '@/utils/toastUtils';
 
 import Holidays from 'date-holidays';
 import { format, isSameDay, isSameMonth } from 'date-fns';
@@ -26,9 +26,8 @@ import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderStatus, UserDocument } from '../../types';
 import toast from 'react-hot-toast';
-// ✅ [수정] lucide-react에서 Calendar 아이콘을 import 합니다.
 import {
-  Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, HelpCircle, Gift, Calendar
+  Hourglass, PackageCheck, PackageX, AlertCircle, CalendarX, X, Trophy, ShieldCheck, Target, CreditCard, CircleCheck, Gift, Calendar, Award
 } from 'lucide-react';
 
 // --- 헬퍼 함수 및 타입 ---
@@ -211,12 +210,12 @@ const DetailsBottomSheet: React.FC<{ selectedDate: Date; orders: Order[]; onClos
 };
 
 
-// '이달의 챌린지'가 '오늘의 미션'으로 변경 및 확장되었습니다.
 // --- 미션 시스템 정의 ---
 interface MissionProgress {
   progress: number; // 0-100
   label: string;
   isCompleted: boolean;
+  uniquePeriodId: string;
 }
 
 interface Mission {
@@ -237,7 +236,6 @@ const missions: Mission[] = [
         id: 'consecutive-login',
         title: '연속 출석 챌린지',
         description: '매일 출석해서 보너스 포인트를 획득하세요!',
-        // ✅ [수정] 이제 이 Calendar는 lucide-react의 아이콘을 가리키므로 오류가 발생하지 않습니다.
         icon: <Calendar size={22} />,
         calculateProgress: (userDoc) => {
             const currentDays = userDoc.consecutiveLoginDays || 0;
@@ -248,15 +246,17 @@ const missions: Mission[] = [
                 progress,
                 label: isCompleted ? `달성!` : `${currentDays} / ${nextMilestone}일`,
                 isCompleted,
+                uniquePeriodId: `consecutive-${nextMilestone}-${userDoc.uid}`
             };
         },
     },
     {
         id: 'no-show-free',
         title: '노쇼 없이 한 달 보내기',
-        description: '이 달에 노쇼가 없으면 신뢰도가 올라가요.',
+        description: `이 달에 노쇼가 없으면 보너스 ${MISSION_REWARDS['no-show-free']?.points || ''}P!`,
         icon: <ShieldCheck size={22} />,
         calculateProgress: (_, orders, activeMonth) => {
+            const monthId = format(activeMonth, 'yyyy-MM');
             const monthlyOrders = orders.filter(o => {
                 const pickupDate = safeToDate(o.pickupDate);
                 return pickupDate && isSameMonth(pickupDate, activeMonth);
@@ -267,15 +267,17 @@ const missions: Mission[] = [
                 progress: isCompleted ? 100 : 0,
                 label: isCompleted ? '달성!' : `${noShowCount}회 발생`,
                 isCompleted,
+                uniquePeriodId: `no-show-free-${monthId}`
             };
         },
     },
     {
         id: 'monthly-pickup',
         title: '이 달에 5번 픽업하기',
-        description: '꾸준한 픽업은 등급 상승의 지름길!',
+        description: `5번 픽업하고 ${MISSION_REWARDS['monthly-pickup']?.points || ''}P 받으세요!`,
         icon: <Target size={22} />,
         calculateProgress: (_, orders, activeMonth) => {
+            const monthId = format(activeMonth, 'yyyy-MM');
             const pickupTarget = 5;
             const monthlyOrders = orders.filter(o => {
                 const pickupDate = safeToDate(o.pickupDate);
@@ -287,13 +289,14 @@ const missions: Mission[] = [
                 progress,
                 label: `${pickupCount} / ${pickupTarget}회`,
                 isCompleted: pickupCount >= pickupTarget,
+                uniquePeriodId: `monthly-pickup-${monthId}`
             };
         },
     },
     {
         id: 'first-referral',
         title: '친구 초대하고 포인트 받기',
-        description: '초대한 친구가 첫 픽업을 완료하면 포인트를 드려요.',
+        description: `첫 친구 초대 성공 시 ${MISSION_REWARDS['first-referral']?.points || ''}P 지급!`,
         icon: <Gift size={22} />,
         calculateProgress: (userDoc) => {
             const hasInvited = userDoc.pointHistory?.some(log => log.reason === '친구 초대 성공') ?? false;
@@ -301,12 +304,13 @@ const missions: Mission[] = [
                 progress: hasInvited ? 100 : 0,
                 label: hasInvited ? '달성 완료!' : '미완료',
                 isCompleted: hasInvited,
+                uniquePeriodId: `first-referral-${userDoc.uid}`
             };
         },
     },
 ];
 
-const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Order[]; activeMonth: Date }> = ({ userDocument, orders, activeMonth }) => {
+const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Order[]; activeMonth: Date; onClaimReward: (missionId: string, uniquePeriodId: string) => void; }> = ({ userDocument, orders, activeMonth, onClaimReward }) => {
     if (!userDocument) return null;
 
     return (
@@ -315,7 +319,11 @@ const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Ord
             <p className="missions-subtitle">다양한 미션을 달성하고 혜택을 받아보세요!</p>
             <div className="missions-list">
                 {missions.map(mission => {
-                    const { progress, label, isCompleted } = mission.calculateProgress(userDocument, orders, activeMonth);
+                    if (!MISSION_REWARDS[mission.id]) return null;
+
+                    const { progress, label, isCompleted, uniquePeriodId } = mission.calculateProgress(userDocument, orders, activeMonth);
+                    const isClaimed = userDocument.completedMissions?.[uniquePeriodId] ?? false;
+
                     return (
                         <div className={`mission-card ${isCompleted ? 'completed' : ''}`} key={mission.id}>
                             <div className="mission-info">
@@ -334,6 +342,18 @@ const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Ord
                                     transition={{ duration: 0.8, ease: "easeOut" }}
                                 />
                             </div>
+                            {isCompleted && (
+                               <div className="mission-reward-section">
+                                  <button 
+                                    className="claim-reward-btn"
+                                    onClick={() => onClaimReward(mission.id, uniquePeriodId)}
+                                    disabled={isClaimed}
+                                  >
+                                    <Award size={16} />
+                                    {isClaimed ? '보상 획득 완료' : `${MISSION_REWARDS[mission.id].points}P 받기`}
+                                  </button>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -348,8 +368,8 @@ const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Ord
 // =================================================================
 
 const OrderCalendar: React.FC = () => {
-  const { user, userDocument } = useAuth();
-  const { startTour, runPageTourIfFirstTime } = useTutorial();
+  const { user, userDocument, refreshUserDocument } = useAuth();
+  const { runPageTourIfFirstTime } = useTutorial();
   const [selectedDate, setSelectedDate] = useState<ValuePiece>(null);
   const [activeMonth, setActiveMonth] = useState<Date>(new Date());
   const [userOrders, setUserOrders] = useState<Order[]>([]);
@@ -357,7 +377,7 @@ const OrderCalendar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'callable-getUserOrders'), [functions]);
+  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
 
   useEffect(() => {
     if (userDocument?.hasCompletedTutorial) {
@@ -369,26 +389,17 @@ const OrderCalendar: React.FC = () => {
   useEffect(() => {
     if (user?.uid) {
         setIsLoading(true);
-
-        const payload = { 
-          orderByField: 'pickupDate', 
-          orderDirection: 'asc',
-          pageSize: 1000,
-        };
-
+        const payload = { orderByField: 'pickupDate', orderDirection: 'asc', pageSize: 1000 };
         getUserOrdersCallable(payload)
             .then(result => {
                 const ordersData = (result.data as any)?.data || result.data;
-
                 if (Array.isArray(ordersData)) {
                     setUserOrders(ordersData as Order[]);
                 } else {
-                    console.warn("Expected an array of orders, but received:", result.data);
                     setUserOrders([]);
                 }
             })
             .catch(err => {
-                console.error("주문 내역 로딩 오류:", err);
                 setError("주문 내역을 불러오는 데 실패했습니다.");
                 toast.error("주문 내역을 불러오는 데 실패했습니다.");
             })
@@ -397,28 +408,13 @@ const OrderCalendar: React.FC = () => {
   }, [user, getUserOrdersCallable]);
 
   const calendarDayMarkers = useMemo(() => {
-    const markers: { [key: string]: { status: PickupStatus } } = {};
-    const ordersByDate: { [key:string]: Order[] } = {};
-
+    const markers: { [key: string]: Set<PickupStatus> } = {};
     userOrders.forEach(order => {
         const pickupDate = safeToDate(order.pickupDate);
         if (pickupDate) {
             const dateStr = format(pickupDate, 'yyyy-MM-dd');
-            if (!ordersByDate[dateStr]) ordersByDate[dateStr] = [];
-            ordersByDate[dateStr].push(order);
-        }
-    });
-
-    Object.keys(ordersByDate).forEach(dateStr => {
-        const ordersOnDate = ordersByDate[dateStr];
-        const statuses = ordersOnDate.map(o => getOrderStatusDisplay(o).type);
-
-        if (statuses.includes('noshow')) {
-            markers[dateStr] = { status: 'noshow' };
-        } else if (statuses.includes('pending')) {
-            markers[dateStr] = { status: 'pending' };
-        } else if (ordersOnDate.length > 0 && statuses.every(s => s === 'completed')) {
-            markers[dateStr] = { status: 'completed' };
+            if (!markers[dateStr]) markers[dateStr] = new Set();
+            markers[dateStr].add(getOrderStatusDisplay(order).type as PickupStatus);
         }
     });
     return markers;
@@ -426,12 +422,27 @@ const OrderCalendar: React.FC = () => {
 
   const selectedDateOrders = useMemo(() => {
     if (!selectedDate) return [];
-    const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
     return userOrders.filter(order => {
         const pickupDate = safeToDate(order.pickupDate);
-        return pickupDate && format(pickupDate, 'yyyy-dd') === selectedDateString;
+        return pickupDate && isSameDay(selectedDate, pickupDate);
     }).sort((a, b) => (safeToDate(a.createdAt)?.getTime() ?? 0) - (safeToDate(b.createdAt)?.getTime() ?? 0));
   }, [selectedDate, userOrders]);
+
+  const handleClaimReward = (missionId: string, uniquePeriodId: string) => {
+    const promise = claimMissionReward(missionId, uniquePeriodId);
+    showPromiseToast(promise, {
+      loading: '보상 확인 중...',
+      success: (data) => {
+        if (data.success) {
+          refreshUserDocument(); 
+          return data.message;
+        } else {
+          throw new Error(data.message);
+        }
+      },
+      error: (err: any) => err.message || '보상 요청에 실패했습니다.',
+    });
+  };
 
   if (isLoading) return <div className="order-calendar-page-container--loading"><InlineSodomallLoader /></div>;
   if (error) return <div className="error-message">{error}</div>;
@@ -440,15 +451,8 @@ const OrderCalendar: React.FC = () => {
   return (
     <>
       <div className="order-calendar-page-container">
-        <div className="page-header-container">
-          <h1 className="page-title">나의 픽업 캘린더</h1>
-          <button onClick={() => startTour(calendarPageTourSteps)} className="tutorial-help-button-inline">
-            <HelpCircle size={20} />
-          </button>
-        </div>
         
         <div className="calendar-wrapper" data-tutorial-id="calendar-main">
-          {/* ✅ [수정] Calendar 컴포넌트를 ReactCalendar로 변경합니다. */}
           <ReactCalendar
             onClickDay={(date) => selectedDate && isSameDay(date, selectedDate) ? setSelectedDate(null) : setSelectedDate(date)}
             value={selectedDate}
@@ -457,20 +461,26 @@ const OrderCalendar: React.FC = () => {
             calendarType="gregory"
             tileContent={({ date, view }) => {
                 if (view !== 'month') return null;
-                const isToday = isSameDay(date, new Date());
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const markerSet = calendarDayMarkers[dateStr];
                 
+                const dotIndicators = markerSet ? Array.from(markerSet).map(status => {
+                    if(status === 'cancelled') return null;
+                    return <div key={status} className={`dot ${status}`}></div>;
+                }).filter(Boolean) : null;
+
+                const isToday = isSameDay(date, new Date());
                 const lastLoginStr = userDocument?.lastLoginDate;
-                if(isToday && lastLoginStr === format(new Date(), 'yyyy-MM-dd')) {
-                    return <div className="attendance-badge">출석✓</div>;
-                }
-                return null;
+                const hasAttended = isToday && lastLoginStr === format(new Date(), 'yyyy-MM-dd');
+
+                return (<>
+                    {hasAttended && <div className="attendance-badge">출석✓</div>}
+                    {dotIndicators && <div className="dot-indicators">{dotIndicators}</div>}
+                </>);
             }}
             tileClassName={({ date, view }) => {
                 if (view !== 'month') return null;
                 const classes: string[] = [];
-                const dateStr = format(date, 'yyyy-MM-dd');
-                const marker = calendarDayMarkers[dateStr];
-                if (marker) classes.push(`pickup-tile--${marker.status}`);
                 if (holidays.isHoliday(date)) classes.push('holiday-tile');
                 if (date.getDay() === 6) classes.push('saturday-tile');
                 return classes.join(' ');
@@ -487,8 +497,12 @@ const OrderCalendar: React.FC = () => {
           </div>
         </div>
         
-        {/* MonthlyChallenge 대신 새로운 MissionsSection 컴포넌트 사용 */}
-        <MissionsSection userDocument={userDocument} orders={userOrders} activeMonth={activeMonth} />
+        <MissionsSection 
+          userDocument={userDocument} 
+          orders={userOrders} 
+          activeMonth={activeMonth} 
+          onClaimReward={handleClaimReward}
+        />
       </div>
       <AnimatePresence>
         {selectedDate && (

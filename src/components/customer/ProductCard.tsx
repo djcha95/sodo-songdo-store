@@ -4,9 +4,10 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCart, Hourglass } from 'lucide-react';
+import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCart, Hourglass, Star } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { useEncoreRequest } from '@/context/EncoreRequestContext';
 import toast from 'react-hot-toast';
 import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
@@ -15,7 +16,6 @@ import './ProductCard.css';
 import { determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
-// ✅ [수정] liveReservedQuantities 타입을 제거합니다.
 type Product = OriginalProduct & {
   phase?: 'primary' | 'secondary' | 'past';
   displayRound: OriginalSalesRound;
@@ -85,6 +85,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const location = useLocation();
   const { addToCart } = useCart();
   const { isSuspendedUser, userDocument } = useAuth();
+  const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
   const [quantity, setQuantity] = useState(1);
   const [isJustAdded, setIsJustAdded] = useState(false);
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -99,7 +100,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     const isMultiOption = (displayRound.variantGroups?.length ?? 0) > 1 || (displayRound.variantGroups?.[0]?.items?.length ?? 0) > 1;
     
-    // ✅ [수정] displayRound에 이미 reservedCount가 포함되어 있으므로 그대로 사용합니다.
     const singleOptionVg = !isMultiOption ? (displayRound.variantGroups?.[0] as VariantGroup) : undefined;
     const singleOptionItem = singleOptionVg?.items?.[0] || null;
 
@@ -118,8 +118,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg } = cardData;
     
-    // ✅ [수정] 불필요한 재계산 로직을 제거하고, props로 받은 displayRound를 바로 사용합니다.
-    // displayRound에는 이미 Cloud Function이 계산한 정확한 reservedCount가 들어있습니다.
     const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
     
     if (state === 'PURCHASABLE' && isMultiOption) {
@@ -148,7 +146,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
 
-    // ✅ [수정] Cloud Function이 제공한 reservedCount를 직접 사용합니다.
     const reserved = singleOptionVg?.reservedCount || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -204,6 +201,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
   }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser]);
 
+  const handleEncoreRequest = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!userDocument) { toast.error("로그인이 필요합니다."); return; }
+    if (hasRequestedEncore(product.id)) { toast('이미 앵콜을 요청한 상품입니다!', { icon: '🙌' }); return; }
+    
+    const promise = requestEncore(product.id);
+    toast.promise(promise, {
+      loading: '앵콜 요청 중...',
+      success: '앵콜 요청이 접수되었습니다!',
+      error: '오류가 발생했습니다.'
+    });
+  }, [userDocument, product.id, requestEncore, hasRequestedEncore]);
 
   if (!cardData) return null;
 
@@ -226,7 +235,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     switch (actionState) {
       case 'PURCHASABLE':
-        // ✅ [수정] Cloud Function이 제공한 reservedCount를 직접 사용합니다.
         const reserved = cardData.singleOptionVg?.reservedCount || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -247,6 +255,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>);
       case 'REQUIRE_OPTION':
         return <button className="options-btn" onClick={handleCardClick}>옵션 선택하기 <ChevronRight size={16} /></button>;
+      case 'ENCORE_REQUESTABLE':
+        const requested = hasRequestedEncore(product.id);
+        return <button className={`encore-btn ${requested ? 'requested' : ''}`} onClick={handleEncoreRequest} disabled={requested || encoreLoading}><Star size={16} /> {encoreLoading ? '처리중' : requested ? '요청완료' : '앵콜 요청'}</button>;
+
       case 'AWAITING_STOCK':
         return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
       case 'ENDED':
@@ -270,7 +282,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       const totalStock = singleOptionVg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
-        // ✅ [수정] Cloud Function이 제공한 reservedCount를 직접 사용합니다.
         const reserved = singleOptionVg.reservedCount || 0;
         const remaining = (totalStock || 0) - reserved;
         stockText = `${remaining}개 남음!`;
@@ -292,7 +303,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <TopBadge />
         <div className="card-image-container">
           <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
-          {product.phase === 'past' && <div className="card-overlay-badge">예약 마감</div>}
+          {/* ✅ [수정] "예약 마감" 오버레이 제거 */}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

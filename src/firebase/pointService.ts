@@ -1,25 +1,24 @@
 // src/firebase/pointService.ts
 
 import { db } from './firebaseConfig';
-import { getApp } from 'firebase/app'; // ✅ [추가] getApp import
-import { getFunctions, httpsCallable } from 'firebase/functions'; // ✅ [추가] getFunctions, httpsCallable import
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
   doc,
   runTransaction,
   Timestamp,
   arrayUnion,
   deleteDoc,
-  } from 'firebase/firestore';
+  getDoc,
+} from 'firebase/firestore';
 import type { UserDocument, Order, OrderStatus, PointLog, LoyaltyTier } from '@/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
 
 
 /**
  * @description 연속 출석 보상 정책
- * 사용자의 제안에 따라 다양한 연속 출석 milestone에 보상을 지급합니다.
- * 필요에 따라 자유롭게 항목을 추가하거나 수정할 수 있습니다.
  */
-export const ATTENDANCE_MILESTONES: { [key: number]: { points: number; reason: string } } = {
+export const ATTENDANCE_MILESTONES: { [key: number]: { points: number; reason:string } } = {
   7: { points: 10, reason: '7일 연속 출석 달성!' },
   15: { points: 25, reason: '15일 연속 출석 달성!' },
   30: { points: 70, reason: '30일 연속 출석! (한달)' },
@@ -41,7 +40,6 @@ export const POINT_POLICIES = {
     reason: '예약 취소 (마감 후)'
   },
   DAILY_LOGIN: { points: 1, reason: '일일 첫 로그인' },
-  // MONTHLY_ATTENDANCE_BONUS는 ATTENDANCE_MILESTONES로 통합되어 제거되었습니다.
   REVIEW_CREATED: { points: 5, reason: '리뷰 작성' },
   FRIEND_INVITED: { points: 100, reason: '친구 초대 성공' },
   COMMUNITY_PROMOTION: { points: 200, reason: '커뮤니티 홍보 인증' },
@@ -50,6 +48,15 @@ export const POINT_POLICIES = {
   USE_WAITLIST_TICKET: { points: -50, reason: '대기 순번 상승권 사용'},
 } as const;
 
+/**
+ * ✅ [신규] 미션 완료 보상 정책
+ * @description 미션 ID를 키로 사용하여 보상 포인트를 정의합니다.
+ */
+export const MISSION_REWARDS: { [missionId: string]: { points: number; reason: string } } = {
+  'no-show-free': { points: 50, reason: '미션 완료: 노쇼 없이 한 달' },
+  'monthly-pickup': { points: 30, reason: '미션 완료: 이 달의 픽업 5회' },
+  'first-referral': { points: 150, reason: '미션 완료: 첫 친구 초대 성공' }
+};
 
 /**
  * @description 주문 상태 변경에 따라 변경될 사용자 데이터를 계산하여 반환하는 함수
@@ -124,8 +131,31 @@ export const calculateUserUpdateByStatus = (
   if (pointLog) {
     updateData.pointHistory = arrayUnion(pointLog);
   }
+  
+  // 참고: 실제 프로덕션에서는 이 함수를 호출하는 Cloud Function Trigger에서
+  // 아래와 같은 미션 완료 체크 및 보상 지급 로직을 함께 처리해야 합니다.
+  // 예시:
+  // if (newStatus === 'PICKED_UP') {
+  //   await checkAndAwardMissionCompletion(userId, 'monthly-pickup');
+  // }
 
   return { updateData, pointLog, tierChange };
+};
+
+/**
+ * ✅ [신규] 미션 완료 보상을 지급하는 Cloud Function 호출 함수
+ */
+export const claimMissionReward = async (missionId: string, uniquePeriodId: string): Promise<{success: boolean, message: string}> => {
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const claimReward = httpsCallable(functions, 'claimMissionReward');
+  
+  try {
+    const result = await claimReward({ missionId, uniquePeriodId });
+    return (result.data as {success: boolean, message: string});
+  } catch(error: any) {
+    console.error("미션 보상 요청 함수 호출 실패:", error);
+    throw new Error(error.message || '미션 보상을 요청하는 중 오류가 발생했습니다.');
+  }
 };
 
 
@@ -173,12 +203,36 @@ export const adjustUserPoints = async (
 };
 
 /**
- * @description [수정] 대기 순번 상승권 사용을 위해 Cloud Function을 호출합니다.
+ * @description 사용자의 포인트 적립/사용 내역을 가져옵니다.
  */
+export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
+  if (!userId) {
+    console.error("User ID is required to get point history.");
+    return [];
+  }
+
+  const userRef = doc(db, 'users', userId);
+  const userDoc = await getDoc(userRef);
+
+  if (!userDoc.exists()) {
+    console.error("User document not found for ID:", userId);
+    return [];
+  }
+
+  const userData = userDoc.data() as UserDocument;
+  const history = (userData.pointHistory as PointLog[]) || [];
+
+  return history.sort((a, b) => {
+    const aTime = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
+    const bTime = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
+    return bTime - aTime;
+  });
+};
+
+
 /**
- * @description [수정] 대기 순번 상승권 사용을 위해 Cloud Function을 호출합니다.
+ * @description 대기 순번 상승권 사용을 위해 Cloud Function을 호출합니다.
  */
-// ✅ [오류 해결] 데이터를 객체가 아닌 개별 인자로 받아 명확성을 높입니다.
 export const applyWaitlistPriorityTicket = async (
   productId: string,
   roundId: string,
@@ -188,7 +242,6 @@ export const applyWaitlistPriorityTicket = async (
   const useWaitlistTicket = httpsCallable(functions, 'useWaitlistTicket');
 
   try {
-    // ✅ [오류 해결] 호출 직전에 받은 인자들로 깨끗한 객체를 만들어 전달합니다.
     const payload = { productId, roundId, itemId };
     const result = await useWaitlistTicket(payload);
     
@@ -263,7 +316,6 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
       }
       
       const newPoints = (userData.points || 0) + pointsToAdd;
-      // 등급은 픽업/노쇼 횟수에만 영향을 받으므로 여기서는 재계산하지 않습니다.
       
       const updateData = {
         points: newPoints,

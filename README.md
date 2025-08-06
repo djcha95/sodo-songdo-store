@@ -9,24 +9,28 @@
 
 ## 🛠️ 사용된 기술 스택
 
--   **프론트엔드:** React, TypeScript, Vite
--   **백엔드 & 데이터베이스:** Firebase (Firestore, Authentication, Storage)
-    -   **Firebase Extensions (Resize Images):** 이미지 업로드 시 WebP 형식 변환 및 리사이징 자동화
-    -   **Cloud Functions (v2)::** 서버리스 백엔드 로직 (등급 변경 알림, 포인트 자동 소멸, 추천인 보상 등)
-    -   **Google Gemini API:** 상품 정보 자동 추출
+-   **Core:** React, TypeScript, Vite
+-   **Backend & Database:** Firebase (Firestore, Authentication, Storage)
+    -   **Cloud Functions (v2):** 서버리스 백엔드 로직
+    -   **Firebase Extensions:** 이미지 리사이징 자동화 (Resize Images)
+-   **External Services:**
+    -   **Google Gemini API:** AI 상품 정보 자동 추출
     -   **Google Cloud Secret Manager:** API 키 보안 관리
     -   **NHN Cloud:** 카카오톡 알림톡 발송 중계 서비스
--   **스타일링:** 일반 CSS (.css)
--   **UI & 상태관리:**
-    -   `react-hot-toast`: 사용자 피드백 알림(Toast) 메시지
-    -   `lucide-react`: 경량 SVG 아이콘 라이브러리
-    -   `dayjs`: 날짜 및 시간 처리 유틸리티
-    -   `react-beautiful-dnd`: 목록 아이템 드래그앤드롭(순서 변경) 기능
--   **전역 상태 관리**: React Context API (`useAuth`, `useCart` 등 커스텀 훅 활용)
--   **테스트:**
-    -   `Vitest`: Vite 기반 테스팅 프레임워크
-    -   `React Testing Library`: 사용자 관점의 컴포넌트 테스트 라이브러리
--   **배포:** Vercel
+-   **Routing & State Management:**
+    -   `react-router-dom`: 클라이언트 사이드 라우팅
+    -   `React Context API`: 전역 상태 관리 (`useAuth`, `useCart` 등)
+-   **Styling & UI:**
+    -   `CSS Modules`: 컴포넌트 단위 스타일링
+    -   `lucide-react`: 경량 SVG 아이콘
+    -   `react-hot-toast`: 전역 알림(Toast) 메시지
+    -   `react-beautiful-dnd`: 드래그앤드롭(순서 변경) 기능
+    -   `react-joyride`: 인터랙티브 튜토리얼 기능
+-   **Utilities:**
+    -   `dayjs`: 날짜 및 시간 처리
+-   **Testing & Deployment:**
+    -   `Vitest` & `React Testing Library`: 컴포넌트 및 유닛 테스트
+    -   `Vercel`: 프론트엔드 배포
 
 ---
 

@@ -4,6 +4,8 @@
     padding: 1rem 1rem 100px 1rem;
     max-width: 500px;
     margin: 0 auto;
+    width: 100%; /* ✅ [추가] 너비를 100%로 명확히 하여 max-width와 함께 안정적으로 작동하도록 함 */
+    box-sizing: border-box; /* ✅ [추가] 패딩과 테두리를 너비에 포함시켜 오버플로우 방지 */
 }
 
 .order-calendar-page-container--loading {
@@ -13,9 +15,22 @@
     height: 60vh;
 }
 
+.page-header-container {
+  margin-bottom: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.page-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+
 .calendar-wrapper {
     width: 100%;
     margin-bottom: 2rem;
+    box-sizing: border-box; /* ✅ [추가] 내부 요소의 안정성 강화 */
 }
 
 /* --- react-calendar 커스텀 --- */
@@ -24,20 +39,20 @@
     border: none;
     border-radius: 16px;
     font-family: 'Pretendard', sans-serif;
-    background-color: #fff;
+    background-color: var(--background-color-primary);
     padding: 0.5rem;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
 }
 .react-calendar button {
     border-radius: 8px;
-    transition: background-color 0.2s, box-shadow 0.2s, color 0.2s, transform 0.1s;
+    transition: all var(--transition-speed-fast);
 }
 .react-calendar__navigation button {
     font-size: 1.1rem;
     font-weight: 600;
 }
 .react-calendar__navigation button:hover {
-    background-color: #f1f3f5;
+    background-color: var(--background-color-secondary);
 }
 .react-calendar__tile { 
     height: 55px;
@@ -60,46 +75,46 @@
     background: var(--primary-color) !important;
     color: white !important;
     transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(0, 87, 255, 0.5);
+    box-shadow: var(--shadow-lg-primary);
 }
 .react-calendar__month-view__weekdays__weekday abbr {
     text-decoration: none; font-weight: 500;
-    color: #868e96; font-size: 0.8rem;
+    color: var(--text-color-secondary); font-size: 0.8rem;
 }
 .saturday-tile abbr { color: #007bff; }
 .holiday-tile { color: #d93025; }
 
-/* --- 상태별 타일 색상 --- */
-.pickup-tile--pending { background-color: #bbdefb; color: #0d47a1; }
-.pickup-tile--pending abbr { color: #0d47a1 !important; }
-.pickup-tile--completed { background-color: #c8e6c9; color: #1b5e20; }
-.pickup-tile--completed abbr { color: #1b5e20 !important; }
-.pickup-tile--noshow { background-color: #ffe0b2; color: #e65100; }
-.pickup-tile--noshow abbr { color: #e65100 !important; }
-
-/* --- 픽업 예정일 느낌표(!) 표시 --- */
-.pickup-tile--pending::after {
-    content: '!'; position: absolute; top: 5px; right: 5px;
-    font-size: 1rem; font-weight: 800; color: #1976d2;
-    animation: bounce 1.5s infinite;
+/* --- 상태별 타일 점(dot) 인디케이터 --- */
+.react-calendar__tile .dot-indicators {
+    display: flex;
+    gap: 4px;
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
 }
-@keyframes bounce {
-  0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
-  40% {transform: translateY(-4px);}
-  60% {transform: translateY(-2px);}
+.react-calendar__tile .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
 }
+.dot.pending { background-color: #1e88e5; }
+.dot.completed { background-color: #43a047; }
+.dot.noshow { background-color: #f4511e; }
 
-/* --- ✅ [수정] 출석 배지 스타일 --- */
+
+/* --- 출석 배지 스타일 --- */
 .attendance-badge {
-    margin-top: 0px; 
-    padding: 1px 5px;
-    font-size: 0.5rem;
-    font-weight: 700;
-    border-radius: 6px;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    background-color: var(--success-color-soft);
+    color: var(--success-color-dark);
+    font-size: 8px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: bold;
     line-height: 1.2;
-    background-color: #20c997;
-    color: white;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 /* --- 범례(Legend) 스타일 --- */
@@ -109,43 +124,10 @@
     padding: 0.5rem; font-size: 0.85rem; color: #495057;
 }
 .legend-item { display: flex; align-items: center; gap: 0.5rem; }
-.legend-color-box { width: 14px; height: 14px; border-radius: 4px; }
-.legend-color-box.pending { background-color: #bbdefb; border: 1px solid #90caf9; }
-.legend-color-box.completed { background-color: #c8e6c9; border: 1px solid #a5d6a7; }
-.legend-color-box.noshow { background-color: #ffe0b2; border: 1px solid #ffcc80; }
-
-/* --- 이달의 챌린지 --- */
-.monthly-challenge-container {
-    background-color: #f8f9fa;
-    border-radius: 12px;
-    padding: 1rem;
-}
-.challenge-title {
-    display: flex; align-items: center; gap: 0.5rem;
-    font-size: 1.1rem; font-weight: 600;
-    margin: 0 0 1rem 0; color: #495057;
-}
-.challenge-list { display: flex; flex-direction: column; gap: 1rem; }
-.challenge-card {
-    background-color: #fff; border-radius: 8px;
-    padding: 0.75rem 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-.challenge-info {
-    display: flex; align-items: center; gap: 0.5rem;
-    margin-bottom: 0.5rem; font-size: 0.9rem;
-}
-.challenge-icon { color: var(--primary-color); }
-.challenge-text { font-weight: 500; flex-grow: 1; color: #343a40; }
-.challenge-label { font-size: 0.8rem; font-weight: 600; color: #868e96; }
-.progress-bar-track {
-    width: 100%; height: 8px; background-color: #e9ecef;
-    border-radius: 4px; overflow: hidden;
-}
-.progress-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #74ebd5 0%, #acb6e5 100%);
-    border-radius: 4px;
-}
+.legend-color-box { width: 10px; height: 10px; border-radius: 50%; }
+.legend-color-box.pending { background-color: #1e88e5; }
+.legend-color-box.completed { background-color: #43a047; }
+.legend-color-box.noshow { background-color: #f4511e; }
 
 /* --- 바텀 시트(Bottom Sheet) 스타일 --- */
 .bottom-sheet-overlay {
@@ -186,7 +168,6 @@
 }
 .no-orders-message svg { color: #adb5bd; }
 
-/* ✅ [제거] 기존 V2 카드 스타일은 OrderHistoryPage.css에서 가져오므로 제거합니다. */
 
 .empty-calendar-container {
     display: flex; flex-direction: column; align-items: center;
@@ -200,10 +181,15 @@
 .go-to-shop-btn.common-button { background-color: var(--primary-color); color: white; }
 .go-to-shop-btn.common-button:hover { background-color: var(--primary-color-dark); }
 
+
+/* --- 오늘의 미션 섹션 스타일 --- */
 .missions-container {
-  padding: 0 var(--spacing-md);
+  /* ✅ [수정] 불필요한 내부 좌우 여백 제거 */
+  padding: 0;
   margin-top: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
+  width: 100%; /* ✅ [추가] 너비 100% 명시 */
+  box-sizing: border-box; /* ✅ [추가] 안정성 강화 */
 }
 
 .missions-title {
@@ -229,7 +215,7 @@
 }
 
 .mission-card {
-  background-color: var(--background-color-secondary);
+  background-color: var(--background-color-primary);
   border-radius: var(--border-radius-lg);
   padding: var(--spacing-md);
   border: 1px solid var(--border-color-light);
@@ -237,7 +223,7 @@
 }
 
 .mission-card.completed {
-  background-color: #F0FDF4; /* 완료 시 연한 녹색 배경 */
+  background-color: #F0FDF4;
   border-color: var(--border-color-success-soft);
 }
 
@@ -259,7 +245,7 @@
 
 .mission-text {
   flex-grow: 1;
-  min-width: 0; /* flex item 내부의 text가 줄바꿈되도록 함 */
+  min-width: 0;
 }
 
 .mission-card-title {
@@ -281,7 +267,7 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-color-secondary);
-  background-color: var(--background-color-tertiary);
+  background-color: var(--background-color-secondary);
   padding: 4px 10px;
   border-radius: var(--border-radius-full);
   flex-shrink: 0;
@@ -289,7 +275,7 @@
 
 .mission-label.completed {
   color: var(--text-color-success);
-  background-color: #DCFCE7; /* 연한 녹색 */
+  background-color: #DCFCE7; 
 }
 
 .progress-bar-track {
@@ -310,14 +296,34 @@
    background: var(--border-color-success);
 }
 
-.attendance-badge {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    background-color: var(--primary-color-softer);
-    color: var(--primary-color-dark);
-    font-size: 8px;
-    padding: 1px 3px;
-    border-radius: 4px;
-    font-weight: bold;
+.mission-reward-section {
+    margin-top: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+    border-top: 1px dashed var(--border-color-light);
+    display: flex;
+    justify-content: flex-end;
+}
+.claim-reward-btn {
+    background-color: var(--accent-color);
+    color: white;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    padding: 6px 14px;
+    border-radius: var(--border-radius-md);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all var(--transition-speed-fast);
+}
+.claim-reward-btn:hover {
+    background-color: var(--accent-color-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+.claim-reward-btn:disabled {
+    background-color: var(--border-color-light);
+    color: var(--text-color-secondary);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
