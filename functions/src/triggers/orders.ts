@@ -1,9 +1,7 @@
 // functions/src/triggers/orders.ts
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent, DocumentSnapshot, Change } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
-// ✅ [수정] dbAdmin을 db라는 별칭으로 가져옵니다.
 import { dbAdmin as db } from "../firebase/admin.js";
-// ✅ [수정] Transaction 타입을 import 합니다.
 import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
 import { calculateTier, POINT_POLICIES } from "../utils/helpers.js";
 import { sendAlimtalk } from "../utils/nhnApi.js";
@@ -12,6 +10,7 @@ import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
 
 // =================================================================
 // 주문 상태 변경에 따른 사용자 데이터 업데이트 헬퍼 함수
+// (이하 기존 코드와 동일)
 // =================================================================
 function calculateUserUpdateFromOrder(
   currentUserData: UserDocument,
@@ -106,6 +105,7 @@ export const onOrderCreated = onDocumentCreated(
     const order = snapshot.data() as Order;
     const orderId = event.params.orderId;
 
+    // ✅ [공통 로직] 주문 생성 시 재고 수량(reservedCount) 업데이트는 항상 실행
     if (order.status !== "CANCELED") {
         const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
         for (const item of order.items) {
@@ -119,7 +119,6 @@ export const onOrderCreated = onDocumentCreated(
         }
 
         try {
-            // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
             await db.runTransaction(async (transaction: Transaction) => {
                 for (const [productId, changes] of changesByProduct.entries()) {
                     const productRef = db.collection("products").doc(productId);
@@ -154,19 +153,9 @@ export const onOrderCreated = onDocumentCreated(
         }
     }
 
-    logger.info(`신규 주문(${orderId})이 생성되어, 주문 확정 알림톡 발송을 시작합니다.`);
+    // ✅ [수정] 즉시 픽업 건에 대한 알림톡 발송 로직만 남깁니다.
+    logger.info(`신규 주문(${orderId}) 생성. 즉시 픽업 알림이 필요한지 확인합니다.`);
     try {
-        const userDoc = await db.collection("users").doc(order.userId).get();
-        if (!userDoc.exists) {
-            logger.error(`주문(${orderId})에 대한 사용자(${order.userId})를 찾을 수 없습니다.`);
-            return;
-        }
-        const userData = userDoc.data() as UserDocument;
-        if (!userData?.phone || !userData.displayName) {
-            logger.warn(`사용자(${order.userId})의 전화번호 또는 이름 정보가 없습니다.`);
-            return;
-        }
-
         const normalizeToDate = (value: unknown): Date | null => {
             if (!value) return null;
             if ((value as Timestamp).toDate) return (value as Timestamp).toDate();
@@ -176,56 +165,60 @@ export const onOrderCreated = onDocumentCreated(
 
         const pickupStartDate = normalizeToDate(order.pickupDate);
         if (!pickupStartDate) {
-            logger.error(`주문(${orderId})의 픽업 시작일이 유효하지 않습니다.`);
+            logger.error(`주문(${orderId})의 픽업 시작일이 유효하지 않아 즉시 픽업 알림을 건너뜁니다.`);
             return;
         }
 
         const now = new Date();
         const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
         const todayStart = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
-        
-        let templateCode = "";
         const pickupStartDateOnly = new Date(pickupStartDate.getFullYear(), pickupStartDate.getMonth(), pickupStartDate.getDate());
 
+        // 픽업 시작일이 오늘이거나 이미 지난 경우에만 '즉시 픽업' 알림을 보냅니다.
         if (pickupStartDateOnly <= todayStart) {
-            templateCode = "ORD_CONFIRM_NOW";
+            const userDoc = await db.collection("users").doc(order.userId).get();
+            if (!userDoc.exists) {
+                logger.error(`주문(${orderId})에 대한 사용자(${order.userId})를 찾을 수 없습니다.`);
+                return;
+            }
+            const userData = userDoc.data() as UserDocument;
+            if (!userData?.phone || !userData.displayName) {
+                logger.warn(`사용자(${order.userId})의 전화번호 또는 이름 정보가 없어 알림을 보내지 못했습니다.`);
+                return;
+            }
+
+            const templateCode = "ORD_CONFIRM_NOW";
+            const productList = order.items
+              .map(item => `${item.productName || '주문 상품'} ${item.quantity}개`)
+              .join('\n');
+            
+            const templateVariables: { [key: string]: string } = {
+                고객명: userData.displayName,
+                상품목록: productList,
+            };
+            
+            let recipientPhone = (userData.phone || '').replace(/\D/g, '');
+            if (recipientPhone.startsWith('8210')) {
+              recipientPhone = '0' + recipientPhone.slice(2);
+            }
+
+            logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}.`);
+            await sendAlimtalk(recipientPhone, templateCode, templateVariables);
+            logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 성공적으로 발송했습니다.`);
         } else {
-            templateCode = "ORD_CONFIRM_FUTURE";
+            // 미래 픽업 건은 스케줄링 함수가 처리하므로 여기서는 아무 작업도 하지 않고 로그만 남깁니다.
+            logger.info(`주문(${orderId})은 미래 픽업 건이므로, 스케줄링된 일괄 알림으로 처리됩니다.`);
         }
 
-        const productList = order.items
-          .map(item => `${item.productName || '주문 상품'} ${item.quantity}개`)
-          .join('\n');
-        
-        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-        const formatDate = (date: Date) => `${date.getMonth() + 1}월 ${date.getDate()}일(${weekdays[date.getDay()]})`;
-
-        const templateVariables: { [key: string]: string } = {
-            고객명: userData.displayName,
-            상품목록: productList,
-        };
-        
-        if (templateCode === "ORD_CONFIRM_FUTURE") {
-            templateVariables.픽업시작일 = formatDate(pickupStartDate);
-        }
-        
-        let recipientPhone = (userData.phone || '').replace(/\D/g, '');
-        if (recipientPhone.startsWith('8210')) {
-          recipientPhone = '0' + recipientPhone.slice(2);
-        }
-
-        logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}. Variables:`, templateVariables);
-        
-        await sendAlimtalk(recipientPhone, templateCode, templateVariables);
-        
-        logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 사용자(${order.userId})에게 성공적으로 발송했습니다.`);
     } catch (alimtalkError) {
-        logger.error(`Failed to send Alimtalk for order ${orderId}:`, alimtalkError);
+        logger.error(`Failed to process Alimtalk for order ${orderId}:`, alimtalkError);
     }
   }
 );
 
 
+// 이하 onOrderDeleted, onOrderUpdatedForStock 등 기존 함수들은 그대로 유지합니다.
+// ... (기존 코드 생략) ...
 export const onOrderDeleted = onDocumentDeleted(
   {
     document: "orders/{orderId}",
@@ -250,7 +243,6 @@ export const onOrderDeleted = onDocumentDeleted(
     }
 
     try {
-        // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
         await db.runTransaction(async (transaction: Transaction) => {
             for (const [productId, changes] of changesByProduct.entries()) {
                 const productRef = db.collection("products").doc(productId);
@@ -336,7 +328,6 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
     }
 
     try {
-        // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
         await db.runTransaction(async (transaction: Transaction) => {
             for (const [productId, changes] of changesByProduct.entries()) {
                 const productRef = db.collection("products").doc(productId);
@@ -396,7 +387,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     const userRef = db.collection("users").doc(after.userId);
     
     try {
-      // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
       await db.runTransaction(async (transaction: Transaction) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists) {
@@ -497,7 +487,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
         const referrerRef = referrerDoc.ref;
         const rewardPoints = POINT_POLICIES.FRIEND_INVITED.points;
         
-        // ✅ [수정] transaction 파라미터에 타입을 명시합니다.
         await db.runTransaction(async (transaction: Transaction) => {
           const freshReferrerDoc = await transaction.get(referrerRef);
           if (!freshReferrerDoc.exists) return;
