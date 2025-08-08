@@ -6,16 +6,23 @@ import CustomerProfileSummary from './CustomerProfileSummary';
 import CustomerActionTabs from './CustomerActionTabs';
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
-import './CustomerFocusView.css'; // CSS 파일은 나중에 생성합니다.
+import './CustomerFocusView.css';
 
 interface CustomerFocusViewProps {
     user: UserDocument;
     orders: Order[];
     onBack: () => void;
-    onActionComplete: () => void;
+    onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
+    onActionSuccess: () => void;
 }
 
-const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({ user, orders, onBack, onActionComplete }) => {
+const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({ 
+    user, 
+    orders, 
+    onBack, 
+    onStatUpdate, 
+    onActionSuccess 
+}) => {
     return (
         <motion.div 
             className="cfv-container"
@@ -35,7 +42,12 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({ user, orders, onB
                     <CustomerProfileSummary user={user} />
                 </aside>
                 <main className="cfv-right-column">
-                    <CustomerActionTabs user={user} orders={orders} onActionComplete={onActionComplete} />
+                    <CustomerActionTabs 
+                        user={user} 
+                        orders={orders} 
+                        onStatUpdate={onStatUpdate}
+                        onActionSuccess={onActionSuccess}
+                    />
                 </main>
             </div>
         </motion.div>

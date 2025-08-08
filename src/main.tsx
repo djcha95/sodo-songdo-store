@@ -15,6 +15,7 @@ import SodomallLoader from './components/common/SodomallLoader';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { TutorialProvider } from './context/TutorialContext';
+import { LaunchProvider } from './context/LaunchContext'; // ✅ [추가] LaunchProvider import
 
 // --- 페이지 컴포넌트 lazy loading ---
 
@@ -164,12 +165,14 @@ createRoot(document.getElementById('root')!).render(
       />
       <AuthProvider>
         <CartProvider>
-          {/* ✅ 오류 수정: TutorialProvider의 children을 함수 형태로 변경 */}
           <TutorialProvider>
             {() => (
-              <Suspense fallback={<SodomallLoader />}>
-                <RouterProvider router={router} />
-              </Suspense>
+              // ✅ [추가] 라우터 전체를 LaunchProvider로 감싸줍니다.
+              <LaunchProvider>
+                <Suspense fallback={<SodomallLoader />}>
+                  <RouterProvider router={router} />
+                </Suspense>
+              </LaunchProvider>
             )}
           </TutorialProvider>
         </CartProvider>

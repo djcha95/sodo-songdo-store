@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async'; // 1. Helmet import
+import { Helmet } from 'react-helmet-async'; 
 
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useTutorial } from '@/context/TutorialContext';
+import { useLaunch } from '@/context/LaunchContext';
 import { detailPageTourSteps } from '@/components/customer/AppTour';
 
 import { getProductById, functions } from '@/firebase';
@@ -15,7 +16,7 @@ import { Timestamp } from 'firebase/firestore';
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType } from '@/types';
 import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
-import { getOptimizedImageUrl } from '@/utils/imageUtils';
+import OptimizedImage from '@/components/common/OptimizedImage';
 
 import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
@@ -93,7 +94,11 @@ const Lightbox: React.FC<{
                     {images.map((url, index) => (
                         <SwiperSlide key={index}>
                             <div className="lightbox-swiper-slide">
-                                <img src={url} alt={`이미지 ${index + 1}`} />
+                                <OptimizedImage 
+                                    originalUrl={url} 
+                                    size="1080x1080" 
+                                    alt={`이미지 ${index + 1}`} 
+                                />
                             </div>
                         </SwiperSlide>
                     ))}
@@ -120,7 +125,11 @@ const ProductImageSlider: React.FC<{
         >
             {images.map((url, index) => (
                 <SwiperSlide key={index} onClick={() => onImageClick(index)}>
-                    <img src={url} alt={`${productName} 이미지 ${index + 1}`} />
+                    <OptimizedImage
+                        originalUrl={url}
+                        size="1080x1080"
+                        alt={`${productName} 이미지 ${index + 1}`}
+                    />
                 </SwiperSlide>
             ))}
         </Swiper>
@@ -216,6 +225,7 @@ const ProductDetailPage: React.FC = () => {
     const { userDocument } = useAuth();
     const { addToCart } = useCart();
     const { runPageTourIfFirstTime } = useTutorial();
+    const { isPreLaunch, launchDate } = useLaunch(); 
 
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
@@ -262,9 +272,10 @@ const ProductDetailPage: React.FC = () => {
         if (!product) return null;
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
-
-    const optimizedImages = useMemo(() => {
-        return product?.imageUrls.map(url => getOptimizedImageUrl(url, '1080x1080')) || [];
+    
+    // ✅ [수정] 비어있거나 유효하지 않은 URL을 미리 걸러내는 로직 추가
+    const originalImageUrls = useMemo(() => {
+        return product?.imageUrls?.filter(url => typeof url === 'string' && url.trim() !== '') || [];
     }, [product?.imageUrls]);
 
     useEffect(() => {
@@ -292,6 +303,14 @@ const ProductDetailPage: React.FC = () => {
     }, [displayRound, userDocument, selectedVariantGroup]);
 
     const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
+        if (isPreLaunch) {
+            toast(
+                `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 
+                { icon: '🗓️', position: "top-center" }
+            );
+            return;
+        }
+
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
 
         const cartItem: CartItem = {
@@ -314,7 +333,8 @@ const ProductDetailPage: React.FC = () => {
         }
         
         navigate(-1);
-    }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate]);
+     }, [isPreLaunch, launchDate, product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate]);
+
     
     const handleEncore = useCallback(async () => {
         if (isEncoreLoading || isEncoreRequested) return;
@@ -337,7 +357,6 @@ const ProductDetailPage: React.FC = () => {
 
     if (loading) return (
         <>
-            {/* 로딩 중일 때도 기본 OG 태그를 설정해줄 수 있습니다. */}
             <Helmet>
                 <title>상품 정보 로딩 중... | 소도몰</title>
             </Helmet>
@@ -363,15 +382,13 @@ const ProductDetailPage: React.FC = () => {
         </>
     );
     
-    // 2. 동적 OG 태그를 위한 정보 준비
     const ogTitle = `${product.groupName} - 소도몰`;
     const ogDescription = product.description?.replace(/<br\s*\/?>/gi, ' ').substring(0, 100) + '...' || '소도몰에서 특별한 상품을 만나보세요!';
-    const ogImage = getOptimizedImageUrl(product.imageUrls[0], '1200x630') || 'https://www.sodo-songdo.store/sodomall-preview.png';
+    const ogImage = originalImageUrls[0] || 'https://www.sodo-songdo.store/sodomall-preview.png';
     const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
     return (
         <>
-            {/* 3. Helmet 컴포넌트를 사용하여 동적 OG 태그 설정 */}
             <Helmet>
                 <title>{ogTitle}</title>
                 <meta property="og:title" content={ogTitle} />
@@ -388,7 +405,7 @@ const ProductDetailPage: React.FC = () => {
                         <div className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery">
                                 <ProductImageSlider 
-                                    images={optimizedImages} 
+                                    images={originalImageUrls}
                                     productName={product.groupName} 
                                     onImageClick={handleOpenLightbox}
                                 />
@@ -428,7 +445,7 @@ const ProductDetailPage: React.FC = () => {
             <Lightbox
                 isOpen={isLightboxOpen}
                 onClose={handleCloseLightbox}
-                images={optimizedImages}
+                images={originalImageUrls}
                 startIndex={lightboxStartIndex}
             />
         </>
