@@ -342,3 +342,82 @@ tr.status-row-COMPLETED { background-color: #fafff5; }
         max-width: 80px;
     }
 }
+
+/* ... 기존 CSS 코드 ... */
+
+/* 실행 취소(되돌리기) 버튼을 위한 스타일 */
+.status-display-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center; /* 모바일 중앙 정렬 대비 */
+  gap: 8px;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: var(--border-radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.revert-button {
+  background-color: transparent;
+  border: 1px solid var(--text-color-light);
+  color: var(--text-color-secondary);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.revert-button:hover {
+  background-color: var(--text-color-light);
+  color: #fff;
+  border-color: var(--text-color-secondary);
+  transform: rotate(-90deg);
+}
+
+/* 모바일 뷰에서 버튼과 배지가 잘 보이도록 정렬 */
+@media (max-width: 768px) {
+    .status-display-wrapper {
+        justify-content: space-between;
+    }
+}
+
+/* ... 기존 CSS ... */
+
+/* ✅ [UI 개선] 상태 셀 스타일 추가 */
+.status-cell-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 중요: 요소들을 양 끝으로 분산 */
+  min-height: 38px; /* select 태그와 높이를 맞추기 위함 */
+  width: 100%;
+}
+
+.revert-button {
+  background-color: var(--background-color-secondary);
+  border: 1px solid var(--border-color-light);
+  color: var(--text-color-secondary);
+  border-radius: var(--border-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.revert-button:hover {
+  background-color: var(--border-color-light);
+  color: var(--text-color-dark);
+}

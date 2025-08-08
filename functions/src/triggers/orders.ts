@@ -1,4 +1,5 @@
 // functions/src/triggers/orders.ts
+
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent, DocumentSnapshot, Change } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
@@ -8,14 +9,16 @@ import { sendAlimtalk } from "../utils/nhnApi.js";
 import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
 
 
-// =================================================================
-// 주문 상태 변경에 따른 사용자 데이터 업데이트 헬퍼 함수
-// (이하 기존 코드와 동일)
-// =================================================================
+// ✅ [핵심 수정] 주문 상태 변경의 '방향'을 명시하기 위한 타입 정의
+type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED";
+
+/**
+ * @description ✅ [핵심 수정] 주문 상태 변경 유형(확정/취소)에 따라 사용자 정보를 계산하는 헬퍼 함수
+ */
 function calculateUserUpdateFromOrder(
   currentUserData: UserDocument,
   order: Order,
-  newStatus: "PICKED_UP" | "NO_SHOW"
+  updateType: OrderUpdateType
 ): { 
     updateData: any;
     tierChange: { from: LoyaltyTier; to: LoyaltyTier } | null;
@@ -23,31 +26,43 @@ function calculateUserUpdateFromOrder(
   let pointPolicy: { points: number; reason: string } | null = null;
   let pickupCountIncrement = 0;
   let noShowCountIncrement = 0;
-
+  
   const oldTier = currentUserData.loyaltyTier || '공구새싹';
 
-  if (newStatus === "PICKED_UP") {
-    const purchasePoints = Math.floor(order.totalPrice * 0.005);
-    const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
-    const totalPoints = purchasePoints + prepaidBonus;
-    
-    let reason = `구매 확정 (결제액: ₩${order.totalPrice.toLocaleString()})`;
-    if (prepaidBonus > 0) {
-      reason = `선결제 ${reason}`;
+  switch (updateType) {
+    case "PICKUP_CONFIRMED": {
+      const purchasePoints = Math.floor(order.totalPrice * 0.005);
+      const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
+      const totalPoints = purchasePoints + prepaidBonus;
+      let reason = `구매 확정 (주문: ...${order.id.slice(-6)})`;
+      if (prepaidBonus > 0) reason = `선결제 ${reason}`;
+      pointPolicy = { points: totalPoints, reason };
+      pickupCountIncrement = 1;
+      break;
     }
-    pointPolicy = { points: totalPoints, reason };
-    pickupCountIncrement = 1;
-
-  } else if (newStatus === "NO_SHOW") {
-    pointPolicy = POINT_POLICIES.NO_SHOW;
-    noShowCountIncrement = 1;
+    case "NO_SHOW_CONFIRMED": {
+      pointPolicy = { ...POINT_POLICIES.NO_SHOW, reason: `${POINT_POLICIES.NO_SHOW.reason} (주문: ...${order.id.slice(-6)})` };
+      noShowCountIncrement = 1;
+      break;
+    }
+    case "PICKUP_REVERTED": {
+      const pointsToRevert = Math.floor(order.totalPrice * 0.005) + (order.wasPrepaymentRequired ? 5 : 0);
+      pointPolicy = { points: -pointsToRevert, reason: `픽업 처리 취소 (주문: ...${order.id.slice(-6)})` };
+      pickupCountIncrement = -1;
+      break;
+    }
+    case "NO_SHOW_REVERTED": {
+      pointPolicy = { points: -POINT_POLICIES.NO_SHOW.points, reason: `노쇼 처리 취소 (주문: ...${order.id.slice(-6)})` };
+      noShowCountIncrement = -1;
+      break;
+    }
   }
 
   if (!pointPolicy) return null;
 
   const newPoints = (currentUserData.points || 0) + pointPolicy.points;
-  const newPickupCount = (currentUserData.pickupCount || 0) + pickupCountIncrement;
-  const newNoShowCount = (currentUserData.noShowCount || 0) + noShowCountIncrement;
+  const newPickupCount = Math.max(0, (currentUserData.pickupCount || 0) + pickupCountIncrement);
+  const newNoShowCount = Math.max(0, (currentUserData.noShowCount || 0) + noShowCountIncrement);
   
   const newTier = calculateTier(newPickupCount, newNoShowCount);
 
@@ -55,16 +70,17 @@ function calculateUserUpdateFromOrder(
   if (oldTier !== newTier) {
       tierChange = { from: oldTier, to: newTier };
   }
-
+  
   const now = new Date();
-  const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
+  // 포인트가 지급될 때만 만료일을 1년 뒤로 설정, 차감/회수 시에는 null
+  const expirationDate = pointPolicy.points > 0 ? new Date(now.setFullYear(now.getFullYear() + 1)) : null;
 
   const newPointLog: Omit<PointLog, 'id'> = {
     amount: pointPolicy.points,
     reason: pointPolicy.reason,
     createdAt: Timestamp.now(),
     orderId: order.id,
-    expiresAt: pointPolicy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
+    expiresAt: expirationDate ? Timestamp.fromDate(expirationDate) : null,
   };
 
   const updateData = {
@@ -105,7 +121,6 @@ export const onOrderCreated = onDocumentCreated(
     const order = snapshot.data() as Order;
     const orderId = event.params.orderId;
 
-    // ✅ [공통 로직] 주문 생성 시 재고 수량(reservedCount) 업데이트는 항상 실행
     if (order.status !== "CANCELED") {
         const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
         for (const item of order.items) {
@@ -153,7 +168,6 @@ export const onOrderCreated = onDocumentCreated(
         }
     }
 
-    // ✅ [수정] 즉시 픽업 건에 대한 알림톡 발송 로직만 남깁니다.
     logger.info(`신규 주문(${orderId}) 생성. 즉시 픽업 알림이 필요한지 확인합니다.`);
     try {
         const normalizeToDate = (value: unknown): Date | null => {
@@ -174,7 +188,6 @@ export const onOrderCreated = onDocumentCreated(
         const todayStart = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
         const pickupStartDateOnly = new Date(pickupStartDate.getFullYear(), pickupStartDate.getMonth(), pickupStartDate.getDate());
 
-        // 픽업 시작일이 오늘이거나 이미 지난 경우에만 '즉시 픽업' 알림을 보냅니다.
         if (pickupStartDateOnly <= todayStart) {
             const userDoc = await db.collection("users").doc(order.userId).get();
             if (!userDoc.exists) {
@@ -206,7 +219,6 @@ export const onOrderCreated = onDocumentCreated(
             await sendAlimtalk(recipientPhone, templateCode, templateVariables);
             logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 성공적으로 발송했습니다.`);
         } else {
-            // 미래 픽업 건은 스케줄링 함수가 처리하므로 여기서는 아무 작업도 하지 않고 로그만 남깁니다.
             logger.info(`주문(${orderId})은 미래 픽업 건이므로, 스케줄링된 일괄 알림으로 처리됩니다.`);
         }
 
@@ -216,9 +228,6 @@ export const onOrderCreated = onDocumentCreated(
   }
 );
 
-
-// 이하 onOrderDeleted, onOrderUpdatedForStock 등 기존 함수들은 그대로 유지합니다.
-// ... (기존 코드 생략) ...
 export const onOrderDeleted = onDocumentDeleted(
   {
     document: "orders/{orderId}",
@@ -365,6 +374,9 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
 );
 
 
+// functions/src/triggers/orders.ts
+
+// ✅ [핵심 개선] updateUserStatsOnOrderStatusChange 함수
 export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -376,14 +388,35 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
 
-    const isPickup = before.status !== "PICKED_UP" && after.status === "PICKED_UP";
-    const isNoShow = before.status !== "NO_SHOW" && after.status === "NO_SHOW";
+    let updateType: OrderUpdateType | null = null;
+    const now = new Date();
+
+    // 상태 변경 유형을 명확하게 감지
+    if (before.status !== "PICKED_UP" && after.status === "PICKED_UP") {
+      updateType = "PICKUP_CONFIRMED";
+    } else if (before.status !== "NO_SHOW" && after.status === "NO_SHOW") {
+      updateType = "NO_SHOW_CONFIRMED";
+    } else if (before.status === "PICKED_UP" && after.status !== "PICKED_UP") {
+      updateType = "PICKUP_REVERTED";
+    } else if (before.status === "NO_SHOW" && after.status !== "NO_SHOW") {
+      updateType = "NO_SHOW_REVERTED";
+    } 
+    // ✅ [비즈니스 로직 추가] CANCELED 상태 변경 감지
+    else if (before.status !== "CANCELED" && after.status === "CANCELED") {
+      const pickupDeadline = (after.pickupDeadlineDate as Timestamp)?.toDate() || (after.pickupDate as Timestamp)?.toDate();
+      // 마감일이 지났다면 '노쇼'와 동일하게 처리
+      if (pickupDeadline && now > pickupDeadline) {
+        logger.info(`Order ${event.params.orderId} canceled after deadline. Processing as NO_SHOW.`);
+        updateType = "NO_SHOW_CONFIRMED";
+      }
+
+    }
     
-    if (!isPickup && !isNoShow) {
+    if (!updateType) {
+      // 우리가 관심 있는 상태 변경이 아니면 함수 종료
       return;
     }
     
-    const newStatus = isPickup ? "PICKED_UP" : "NO_SHOW";
     const userRef = db.collection("users").doc(after.userId);
     
     try {
@@ -397,14 +430,13 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
         const userData = userDoc.data() as UserDocument;
         
         const orderWithId = { ...after, id: event.params.orderId };
-        const updateResult = calculateUserUpdateFromOrder(userData, orderWithId, newStatus);
+        const updateResult = calculateUserUpdateFromOrder(userData, orderWithId, updateType);
 
         if (updateResult) {
             transaction.update(userRef, updateResult.updateData);
             
             if (updateResult.tierChange) {
                 const { from, to } = updateResult.tierChange;
-                
                 const tierOrder = ['참여 제한', '주의 요망', '공구새싹', '공구요정', '공구왕', '공구의 신'];
                 const isPromotion = tierOrder.indexOf(from) < tierOrder.indexOf(to);
 
@@ -425,13 +457,12 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
             }
         }
       });
-      logger.info(`Successfully updated user stats for order ${event.params.orderId} to status ${newStatus}`);
+      logger.info(`Successfully updated user stats for order ${event.params.orderId} to status ${updateType}`);
     } catch (error) {
        logger.error(`Transaction failed for user stats update on order ${event.params.orderId}:`, error);
     }
   }
 );
-
 
 export const rewardReferrerOnFirstPickup = onDocumentUpdated(
   {
@@ -447,72 +478,78 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
 
+    // ✅ [수정] 이 로직은 오직 '첫 픽업' 시에만 동작해야 하므로, 상태가 'PICKED_UP'으로 '변경'되는 시점만 감지
     if (before.status === "PICKED_UP" || after.status !== "PICKED_UP") {
       return;
     }
 
-    const newUserId = after.userId;
-    if (!newUserId) {
+    const userId = after.userId;
+    if (!userId) {
       logger.warn("No userId in order data.");
       return;
     }
-    const newUserRef = db.collection("users").doc(newUserId);
+    const userRef = db.collection("users").doc(userId);
 
     try {
-      const newUserDoc = await newUserRef.get();
-      if (!newUserDoc.exists) {
-        logger.warn(`User document for orderer (ID: ${newUserId}) not found.`);
-        return;
-      }
-
-      const newUser = newUserDoc.data() as UserDocument;
-      
-      const isFirstPickup = (newUser.pickupCount || 0) === 1;
-      const wasReferred = newUser.referredBy && newUser.referredBy !== "__SKIPPED__";
-
-      if (isFirstPickup && wasReferred) {
-        logger.info(`First pickup user (ID: ${newUserId}) confirmed. Starting referrer reward process.`);
-
-        const referrerQuery = db.collection("users")
-          .where("referralCode", "==", newUser.referredBy)
-          .limit(1);
-
-        const referrerSnapshot = await referrerQuery.get();
-        if (referrerSnapshot.empty) {
-          logger.warn(`User with referral code (${newUser.referredBy}) not found.`);
-          return;
-        }
-
-        const referrerDoc = referrerSnapshot.docs[0];
-        const referrerRef = referrerDoc.ref;
-        const rewardPoints = POINT_POLICIES.FRIEND_INVITED.points;
-        
-        await db.runTransaction(async (transaction: Transaction) => {
-          const freshReferrerDoc = await transaction.get(referrerRef);
-          if (!freshReferrerDoc.exists) return;
-          
-          const referrerData = freshReferrerDoc.data() as UserDocument;
-          const currentPoints = referrerData.points || 0;
-          const newPoints = currentPoints + rewardPoints;
-          
-          const now = new Date();
-          const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
-
-          const pointLog: Omit<PointLog, "id"> = {
-            amount: rewardPoints,
-            reason: `${POINT_POLICIES.FRIEND_INVITED.reason} (${newUser.displayName || "신규 회원"}님)`,
-            createdAt: Timestamp.now(),
-            expiresAt: Timestamp.fromDate(expirationDate),
-          };
-
-          transaction.update(referrerRef, {
-            points: newPoints,
-            pointHistory: FieldValue.arrayUnion(pointLog),
-          });
+        const userDoc = await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(userRef);
+            if (!doc.exists) {
+                logger.warn(`User document for orderer (ID: ${userId}) not found.`);
+                return null;
+            }
+            return doc.data() as UserDocument;
         });
+
+        if (!userDoc) return;
         
-        logger.info(`Successfully awarded ${rewardPoints}P to referrer (ID: ${referrerRef.id}).`);
-      }
+        // 트랜잭션 외부에서 읽은 pickupCount를 사용. 
+        // updateUserStatsOnOrderStatusChange가 먼저 실행되어 pickupCount가 1로 업데이트된 상태임.
+        const isFirstPickup = userDoc.pickupCount === 1;
+        const wasReferred = userDoc.referredBy && userDoc.referredBy !== "__SKIPPED__";
+        
+        if (isFirstPickup && wasReferred) {
+            logger.info(`First pickup user (ID: ${userId}) confirmed. Starting referrer reward process.`);
+
+            const referrerQuery = db.collection("users")
+                .where("referralCode", "==", userDoc.referredBy)
+                .limit(1);
+
+            const referrerSnapshot = await referrerQuery.get();
+            if (referrerSnapshot.empty) {
+                logger.warn(`User with referral code (${userDoc.referredBy}) not found.`);
+                return;
+            }
+
+            const referrerDoc = referrerSnapshot.docs[0];
+            const referrerRef = referrerDoc.ref;
+            const rewardPoints = POINT_POLICIES.FRIEND_INVITED.points;
+
+            await db.runTransaction(async (transaction: Transaction) => {
+                const freshReferrerDoc = await transaction.get(referrerRef);
+                if (!freshReferrerDoc.exists) return;
+                
+                const referrerData = freshReferrerDoc.data() as UserDocument;
+                const currentPoints = referrerData.points || 0;
+                const newPoints = currentPoints + rewardPoints;
+                
+                const now = new Date();
+                const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
+
+                const pointLog: Omit<PointLog, "id"> = {
+                    amount: rewardPoints,
+                    reason: `${POINT_POLICIES.FRIEND_INVITED.reason} (${userDoc.displayName || "신규 회원"}님)`,
+                    createdAt: Timestamp.now(),
+                    expiresAt: Timestamp.fromDate(expirationDate),
+                };
+
+                transaction.update(referrerRef, {
+                    points: newPoints,
+                    pointHistory: FieldValue.arrayUnion(pointLog),
+                });
+            });
+            
+            logger.info(`Successfully awarded ${rewardPoints}P to referrer (ID: ${referrerRef.id}).`);
+        }
     } catch (error) {
       logger.error("An error occurred while processing the referrer reward:", error);
     }

@@ -3,8 +3,6 @@
 import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
 // ✅ UserTutorialProgress 타입을 import 해야 아래에서 사용할 수 있습니다.
 // 이 파일이 없다면, 생성하거나 UserTutorialProgress 타입을 이 파일에 직접 정의해야 합니다.
-import type { UserTutorialProgress } from './context/TutorialContext';
-
 // =================================================================
 // 📌 [수정] 신뢰도 포인트 시스템 최종 기획 반영
 // =================================================================
@@ -69,6 +67,16 @@ export interface Notification {
   type: NotificationType;
 }
 
+// ✅ [추가] 튜토리얼 진행 상태 타입을 중앙에서 관리합니다.
+export interface UserTutorialProgress {
+    hasCompletedMain?: boolean;
+    hasSeenCartPage?: boolean;
+    hasSeenProductDetailPage?: boolean;
+    hasSeenCalendarPage?: boolean;
+    hasSeenCustomerCenterPage?: boolean;
+    hasSeenMyPage?: boolean;
+    hasSeenOrderHistoryPage?: boolean;
+}
 
 // =================================================================
 // 📌 상품 및 판매 관련 타입

@@ -33,7 +33,6 @@ export interface PointLog {
 // ✅ [동기화] 프론트엔드와 백엔드의 모든 알림 타입을 통합합니다.
 export type NotificationType =
   | "POINTS_EARNED"
-  | "POINTS_USED"
   | "WAITLIST_CONFIRMED"
   | "PICKUP_REMINDER"
   | "PICKUP_TODAY"
@@ -90,13 +89,11 @@ export interface VariantGroup {
 }
 
 export interface WaitlistEntry {
-  userId: string;
-  quantity: number;
-  timestamp: Timestamp;
-  variantGroupId: string;
-  itemId: string;
-  isPrioritized?: boolean;
-  prioritizedAt?: Timestamp | null; // ✅ 이 줄을 추가해주세요.
+  userId: string;
+  quantity: number;
+  timestamp: Timestamp;
+  variantGroupId: string;
+  itemId: string;
 }
 
 

@@ -9,12 +9,12 @@ import {
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import toast from 'react-hot-toast';
-import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle } from 'lucide-react';
+import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle, Undo2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
 
-
+// ✅ [핵심 개선] ActionableOrderTable 컴포넌트 수정
 const ActionableOrderTable: React.FC<{ 
     orders: Order[];
     onStatusChange: (order: Order, newStatus: OrderStatus) => void; 
@@ -56,29 +56,49 @@ const ActionableOrderTable: React.FC<{
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedOrders.map(order => (
-                                // 🎨 [모바일 UI/UX 고도화] tr에 상태별 클래스 추가
-                                <tr key={order.id} className={`status-row-${order.status}`}>
-                                    <td>{format((order.createdAt as Timestamp).toDate(), 'M/d(eee)', { locale: ko })}</td>
-                                    <td>{order.items.map(item => `${item.productName} (${item.quantity}개)`).join(', ')}</td>
-                                    <td>{order.totalPrice.toLocaleString()}원</td>
-                                    <td>
-                                        <div className="status-select-wrapper">
-                                            <select
-                                                value={order.status}
-                                                onChange={(e) => onStatusChange(order, e.target.value as OrderStatus)}
-                                                className={`status-select ${statusInfo[order.status]?.className || ''}`}
-                                            >
-                                                {statusOptions.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {sortedOrders.map(order => {
+                                const isFinalState = ['PICKED_UP', 'NO_SHOW', 'CANCELED'].includes(order.status);
+                                return (
+                                    <tr key={order.id} className={`status-row-${order.status}`}>
+                                        <td>{format((order.createdAt as Timestamp).toDate(), 'M/d(eee)', { locale: ko })}</td>
+                                        <td>{order.items.map(item => `${item.productName} (${item.quantity}개)`).join(', ')}</td>
+                                        <td>{order.totalPrice.toLocaleString()}원</td>
+                                        {/* ✅ [UI 개선] 상태 셀 렌더링 로직 수정 */}
+                                        <td className="status-cell">
+                                            <div className="status-cell-content">
+                                                {isFinalState ? (
+                                                    <>
+                                                        <span className={`status-badge ${statusInfo[order.status]?.className || ''}`}>
+                                                            {statusInfo[order.status]?.label}
+                                                        </span>
+                                                        {order.status !== 'CANCELED' && (
+                                                            <button 
+                                                              onClick={() => onStatusChange(order, 'RESERVED')} 
+                                                              className="revert-button"
+                                                              title="이전 상태로 되돌리기"
+                                                            >
+                                                                <Undo2 size={14} /> 되돌리기
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <select
+                                                        value={order.status}
+                                                        onChange={(e) => onStatusChange(order, e.target.value as OrderStatus)}
+                                                        className={`status-select ${statusInfo[order.status]?.className || ''}`}
+                                                    >
+                                                        {statusOptions.map(opt => !['PICKED_UP', 'NO_SHOW', 'CANCELED'].includes(opt.value) &&
+                                                            <option key={opt.value} value={opt.value}>
+                                                                {opt.label}
+                                                            </option>
+                                                        )}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -87,6 +107,8 @@ const ActionableOrderTable: React.FC<{
     );
 };
 
+// TrustManagementCard, CustomerActionTabs 등 나머지 컴포넌트는 이전 버전과 동일
+// ... (이전과 동일한 나머지 코드)
 const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
     const [pickupCount, setPickupCount] = useState(user.pickupCount || 0);
     const [noShowCount, setNoShowCount] = useState(user.noShowCount || 0);
@@ -218,17 +240,20 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     };
 
     const handleStatusUpdate = (status: OrderStatus) => {
+        if (selectedGroupKeys.length === 0) return;
         const orderIdsToUpdate = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
         handleAction(() => updateMultipleOrderStatuses(orderIdsToUpdate, status), { loading: '상태 변경 중...', success: '상태가 변경되었습니다.', error: '상태 변경 실패' });
     };
     
+    // ✅ [핵심 개선] '처리 취소' 버튼의 클릭 이벤트 처리
     const handleTableStatusChange = (order: Order, newStatus: OrderStatus) => {
         if (order.status === newStatus) return;
 
         const originalStatus = order.status;
         let actionPromise: Promise<any>;
 
-        if (['RESERVED', 'PREPAID'].includes(newStatus) && !['RESERVED', 'PREPAID'].includes(originalStatus)) {
+        // '처리 취소' 버튼을 누르면 newStatus는 'RESERVED'가 되므로, 아래 조건이 실행됨
+        if (newStatus === 'RESERVED' && ['PICKED_UP', 'NO_SHOW'].includes(originalStatus)) {
              actionPromise = revertOrderStatus([order.id], originalStatus);
         } else {
              actionPromise = updateMultipleOrderStatuses([order.id], newStatus);
@@ -236,8 +261,8 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
 
         handleAction(() => actionPromise, { loading: '상태 변경 중...', success: '상태가 변경되었습니다.', error: '상태 변경 실패' });
     };
-
     const handleDelete = () => {
+        if (selectedGroupKeys.length === 0) return;
         const orderIdsToDelete = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
         handleAction(() => deleteMultipleOrders(orderIdsToDelete), { loading: '주문 삭제 중...', success: '삭제되었습니다.', error: '삭제 실패' });
     };
@@ -294,12 +319,12 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                 <div className="cat-action-footer">
                     <span className="cat-footer-summary">{splitInfo.group.item.productName}: {splitInfo.group.totalQuantity}개 중 {splitInfo.newQuantity}개</span>
                     <div className="cat-footer-actions">
-                        <button onClick={handleSplit} className="common-button button-pickup"><GitCommit size={16} /> 분할 픽업</button>
+                         <button onClick={handleSplit} className="common-button button-pickup"><GitCommit size={16} /> 분할 픽업</button>
                     </div>
                 </div>
             )
         }
-
+        
         const allSelectedArePrepaid = selectedGroups.length > 0 && selectedGroups.every(g => g.status === 'PREPAID');
         
         const prepaymentButton = allSelectedArePrepaid ? (

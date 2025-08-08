@@ -10,8 +10,10 @@ import type {
 import { Timestamp } from 'firebase/firestore';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 
 dayjs.extend(isBetween);
+dayjs.extend(isSameOrAfter);
 
 export interface VariantGroup extends OriginalVariantGroup {
   reservedCount?: number;
@@ -61,25 +63,53 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: Date | nu
   return { primaryEnd, secondaryEnd };
 };
 
+// ✅ [개선] 가독성 및 유지보수성을 위해 우선순위 기반 정렬 로직으로 리팩토링
 export const getDisplayRound = (product: Product): OriginalSalesRound | null => {
   if (!product.salesHistory || product.salesHistory.length === 0) return null;
-  const now = new Date();
-  const sellingRounds = product.salesHistory.filter(r => r.status === 'selling');
-  if (sellingRounds.length > 0) {
-    return sellingRounds.sort((a, b) => (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0))[0];
-  }
-  const nowSellingScheduled = product.salesHistory.filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! <= now).sort((_a, b) => (safeToDate(b.publishAt)?.getTime() ?? 0) - (safeToDate(b.publishAt)?.getTime() ?? 0));
-  if (nowSellingScheduled.length > 0) return nowSellingScheduled[0];
-  const futureScheduledRounds = product.salesHistory.filter(r => r.status === 'scheduled' && safeToDate(r.publishAt) && safeToDate(r.publishAt)! > now).sort((a, b) => (safeToDate(a.publishAt)?.getTime() ?? 0) - (safeToDate(b.publishAt)?.getTime() ?? 0));
-  if (futureScheduledRounds.length > 0) return futureScheduledRounds[0];
-  const pastRounds = product.salesHistory.filter(r => r.status === 'ended' || r.status === 'sold_out').sort((a, b) => (safeToDate(b.deadlineDate)?.getTime() ?? 0) - (safeToDate(a.deadlineDate)?.getTime() ?? 0));
-  if (pastRounds.length > 0) return pastRounds[0];
-  const nonDraftRounds = product.salesHistory.filter(r => r.status !== 'draft').sort((a, b) => (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0));
-  return nonDraftRounds[0] || null;
+  const now = dayjs();
+
+  // 각 판매 회차의 상태에 따라 우선순위를 부여하는 함수
+  const getPhasePriority = (round: OriginalSalesRound): number => {
+    const publishAt = safeToDate(round.publishAt);
+    if (round.status === 'selling') return 1; // 1순위: 현재 판매 중
+    if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 2; // 2순위: 게시 시간이 지난 판매 예정 (판매 중으로 간주)
+    if (round.status === 'scheduled' && publishAt && now.isBefore(publishAt)) return 3; // 3순위: 미래의 판매 예정
+    if (round.status === 'ended' || round.status === 'sold_out') return 4; // 4순위: 지난 공구
+    return 5; // 5순위: 기타
+  };
+
+  const sortedHistory = [...product.salesHistory]
+    .filter(r => r.status !== 'draft') // 'draft' 상태는 항상 제외
+    .sort((a, b) => {
+      const priorityA = getPhasePriority(a);
+      const priorityB = getPhasePriority(b);
+      
+      // 우선순위가 다르면 순위가 높은(숫자가 낮은) 것을 앞으로
+      if (priorityA !== priorityB) return priorityA - priorityB;
+
+      // 우선순위가 같을 경우, 2차 정렬 기준 적용
+      switch (priorityA) {
+        case 1: // 판매 중
+        case 2: // 게시된 판매 예정
+          // 최신순 (생성일 기준 내림차순)
+          return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
+        case 3: // 미래의 판매 예정
+          // 가장 빨리 다가오는 순 (게시일 기준 오름차순)
+          return (safeToDate(a.publishAt)?.getTime() ?? 0) - (safeToDate(b.publishAt)?.getTime() ?? 0);
+        case 4: // 지난 공구
+          // 가장 최근에 마감된 순 (마감일 기준 내림차순)
+          return (safeToDate(b.deadlineDate)?.getTime() ?? 0) - (safeToDate(a.deadlineDate)?.getTime() ?? 0);
+        default:
+          // 기타 (생성일 기준 내림차순)
+          return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
+      }
+    });
+
+  // 정렬된 목록의 첫 번째 항목을 반환
+  return sortedHistory[0] || null;
 };
 
 
-// ✅ [개선] 옵션 선택 필요 상태('REQUIRE_OPTION') 추가 등 로직 개선
 export const determineActionState = (round: SalesRound, userDocument: UserDocument | null, selectedVg?: VariantGroup | null): ProductActionState => {
   // 1. 등급 확인: 참여 자격이 없는지 먼저 확인
   const userTier = userDocument?.loyaltyTier;

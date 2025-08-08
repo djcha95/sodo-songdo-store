@@ -23,13 +23,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* ⬇️⬇️⬇️ [수정] 이 부분을 아래와 같이 바꿔주세요 ⬇️⬇️⬇️ */
-    "noImplicitAny": false, // 이 한 줄을 추가하여 오류를 해결합니다.
+    /* Path Aliases */
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     }
-    /* ⬆️⬆️⬆️ 여기까지 ⬆️⬆️⬆️ */
   },
   "include": ["src"]
 }

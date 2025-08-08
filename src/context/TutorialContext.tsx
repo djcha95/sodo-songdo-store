@@ -5,6 +5,7 @@ import type { Step } from 'react-joyride';
 import { useAuth } from './AuthContext';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
+import type { UserTutorialProgress } from '@/types';
 
 interface TutorialContextType {
   isTourRunning: boolean;
@@ -13,16 +14,7 @@ interface TutorialContextType {
   runPageTourIfFirstTime: (pageKey: keyof UserTutorialProgress, steps: Step[]) => void;
 }
 
-export interface UserTutorialProgress {
-    hasCompletedMain?: boolean;
-    hasSeenCartPage?: boolean;
-    hasSeenDetailPage?: boolean; // 레거시 속성 (호환성을 위해 유지)
-    hasSeenProductDetailPage?: boolean; // ✅ [오류 해결] 이 줄을 추가하여 타입 문제를 해결합니다.
-    hasSeenCalendarPage?: boolean;
-    hasSeenCustomerCenterPage?: boolean;
-    hasSeenMyPage?: boolean;
-    hasSeenOrderHistoryPage?: boolean;
-}
+// ✅ [삭제] UserTutorialProgress 타입 정의를 types.ts로 이전했습니다.
 
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
 

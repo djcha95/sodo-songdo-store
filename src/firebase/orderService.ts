@@ -1,4 +1,6 @@
 // src/firebase/orderService.ts
+
+// ✅ [수정] 사용하지 않는 서비스(pointService, notificationService)와 일부 타입 import를 제거합니다.
 import { db } from './firebaseConfig';
 import {
   collection,
@@ -15,38 +17,18 @@ import {
   deleteField,
   limit,
   startAfter,
-  arrayUnion,
   Timestamp,
 } from 'firebase/firestore';
 import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
-import type { Order, OrderStatus, OrderItem, Product, SalesRound, UserDocument, PointLog, NotificationType } from '@/types';
-import { calculateUserUpdateByStatus, POINT_POLICIES } from './pointService'; 
-import { createNotification } from './notificationService';
-
-
-const safeToDate = (date: any): Date | null => {
-  if (!date) return null;
-  if (date instanceof Date) return date;
-  if (typeof date.toDate === 'function') return date.toDate();
-  if (typeof date === 'object' && date.seconds !== undefined) {
-    return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
-  }
-  return null;
-};
+import type { Order, OrderStatus, OrderItem } from '@/types';
 
 /**
- * @description 주문을 생성합니다. (더 복잡한 재고 확인 로직은 Cloud Function으로 이전됨)
+ * @description ✅ [수정] 주문 생성 시 클라이언트가 사용자 정보를 직접 수정하지 않도록 변경합니다.
+ * 주문 생성에만 집중하고, 사용자 정보 업데이트(totalOrders 등)는 서버 트리거에 위임합니다.
  */
 export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
-): Promise<{
-  reservedCount: number;
-  orderId?: string
-}> => {
-  // 참고: 이 함수는 Cloud Function 'submitOrder'를 호출하는 것으로 대체하는 것이
-  // 더 안전하고 일관된 재고 관리에 도움이 됩니다.
-  // 현재는 클라이언트 측 로직으로 유지합니다.
-  let reservedItemCount = 0;
+): Promise<{ orderId?: string }> => {
   let newOrderId: string | undefined = undefined;
 
   await runTransaction(db, async (transaction) => {
@@ -55,19 +37,10 @@ export const submitOrder = async (
     if (!userSnap.exists()) {
       throw new Error('주문 처리 중 사용자 정보를 찾을 수 없습니다.');
     }
-    const userDoc = userSnap.data() as UserDocument;
 
     const newOrderRef = doc(collection(db, 'orders'));
     newOrderId = newOrderRef.id;
     const originalTotalPrice = orderData.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-
-    const newTotalOrders = (userDoc.totalOrders || 0) + 1;
-    const newPickupRate = newTotalOrders > 0 ? ((userDoc.pickupCount || 0) / newTotalOrders) * 100 : 0;
-  
-    transaction.update(userRef, {
-      totalOrders: newTotalOrders,
-      pickupRate: newPickupRate
-    });
 
     const newOrderData: Omit<Order, 'id'> = {
       ...orderData,
@@ -78,14 +51,15 @@ export const submitOrder = async (
     };
 
     transaction.set(newOrderRef, newOrderData);
-    reservedItemCount = orderData.items.reduce((sum, i) => sum + i.quantity, 0);
   });
 
-  return { reservedCount: reservedItemCount, orderId: newOrderId };
+  return { orderId: newOrderId };
 };
 
+
 /**
- * @description 사용자의 예약을 취소합니다.
+ * @description ✅ [수정] 사용자의 예약을 취소합니다. 마감 후 패널티 포인트 부과 로직을 제거합니다.
+ * 이 로직은 서버의 onUpdate 트리거가 'CANCELED' 상태를 감지하여 처리하는 것이 더 안전합니다.
  */
 export const cancelOrder = async (order: Order): Promise<void> => {
   const orderRef = doc(db, 'orders', order.id);
@@ -98,38 +72,48 @@ export const cancelOrder = async (order: Order): Promise<void> => {
     if (currentOrder.status !== 'RESERVED' && currentOrder.status !== 'PREPAID') {
       throw new Error("예약 또는 결제 완료 상태의 주문만 취소할 수 있습니다.");
     }
-
-    const userRef = doc(db, 'users', currentOrder.userId);
-    const userSnap = await transaction.get(userRef);
     
+    // 오직 주문 상태와 취소 시각만 기록하고, 포인트 관련 로직은 모두 제거합니다.
     transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
-
-    // 참고: 주문 취소 시 대기자 전환 로직은 Cloud Function의 onUpdate 트리거로 처리하는 것이 이상적입니다.
-
-    const now = new Date();
-    const deadlineDate = safeToDate(currentOrder.items[0]?.deadlineDate);
-    if (deadlineDate && now > deadlineDate && userSnap.exists()) {
-      const cancelPenaltyPolicy = POINT_POLICIES.CANCEL_PENALTY;
-      const ratePenalty = Math.max(cancelPenaltyPolicy.maxRatePenalty, Math.floor(order.totalPrice * cancelPenaltyPolicy.rate) * -1);
-      const totalPenalty = cancelPenaltyPolicy.basePoints + ratePenalty;
-
-      const userDoc = userSnap.data() as UserDocument;
-      const newPoints = (userDoc.points || 0) + totalPenalty;
-      const pointHistoryUpdate: Omit<PointLog, 'id'> = {
-        amount: totalPenalty,
-        reason: cancelPenaltyPolicy.reason,
-        createdAt: Timestamp.now(),
-        orderId: order.id,
-      };
-
-      transaction.update(userRef, {
-        points: newPoints,
-        pointHistory: arrayUnion(pointHistoryUpdate),
-      });
-    }
   });
 };
 
+
+/**
+ * @description ✅ [수정] 여러 주문의 상태를 일괄적으로 변경하는, 단순화된 함수입니다.
+ * 포인트 계산, 등급 산정, 알림 생성 등 모든 복잡한 로직을 제거하고
+ * 오직 'status'와 '관련 timestamp'만 업데이트합니다.
+ * 모든 후속 처리는 서버의 Cloud Function 트리거가 담당합니다.
+ */
+export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
+  if (orderIds.length === 0) return;
+
+  const batch = writeBatch(db);
+  
+  // 상태에 따른 타임스탬프 필드를 결정합니다.
+  let timestampField: string | null = null;
+  if (status === 'PICKED_UP') timestampField = 'pickedUpAt';
+  if (status === 'PREPAID') timestampField = 'prepaidAt';
+  if (status === 'CANCELED') timestampField = 'canceledAt';
+
+  orderIds.forEach(orderId => {
+    const orderRef = doc(db, 'orders', orderId);
+    const updateData: { status: OrderStatus, [key: string]: any } = { status };
+    if (timestampField) {
+      updateData[timestampField] = serverTimestamp();
+    }
+    // 상태와 타임스탬프만 업데이트하는 간단한 작업으로 변경
+    batch.update(orderRef, updateData);
+  });
+
+  await batch.commit();
+};
+
+/**
+ * @description ✅ [수정] 주문 분할 로직에서 포인트/등급/알림 관련 로직을 모두 제거합니다.
+ * 💡 [개선 제안] 이 기능은 여러 문서를 다루는 복잡한 트랜잭션이므로,
+ * 보안과 데이터 정합성을 위해 추후에 'Callable Cloud Function'으로 이전하는 것을 강력히 권장합니다.
+ */
 export const splitAndUpdateOrderStatus = async (
   originalOrderId: string,
   pickedUpQuantity: number,
@@ -139,7 +123,7 @@ export const splitAndUpdateOrderStatus = async (
     throw new Error('픽업 수량은 1 이상이어야 합니다.');
   }
 
-  const notificationInfo = await runTransaction(db, async (transaction) => {
+  await runTransaction(db, async (transaction) => {
     const originalOrderRef = doc(db, 'orders', originalOrderId);
     const originalOrderDoc = await transaction.get(originalOrderRef);
 
@@ -156,6 +140,7 @@ export const splitAndUpdateOrderStatus = async (
       throw new Error('남는 수량이 없어 주문을 분할할 수 없습니다. 일반 상태 변경을 이용해주세요.');
     }
 
+    // 1. 남는 수량에 대한 새 주문 생성
     const remainingItem: OrderItem = { ...originalItem, quantity: remainingQuantity };
     const remainingOrder: Omit<Order, 'id'> = {
       ...originalOrder,
@@ -171,22 +156,7 @@ export const splitAndUpdateOrderStatus = async (
     const newOrderRef = doc(collection(db, 'orders'));
     transaction.set(newOrderRef, remainingOrder);
     
-    const userRefForRemaining = doc(db, 'users', originalOrder.userId);
-    const userSnapForRemaining = await transaction.get(userRefForRemaining);
-    let updatedUserDocForRemaining = userSnapForRemaining.exists() ? userSnapForRemaining.data() as UserDocument : null;
-
-    if (updatedUserDocForRemaining) {
-      const calculatedUpdate = calculateUserUpdateByStatus(updatedUserDocForRemaining, { ...remainingOrder, id: newOrderRef.id }, remainingStatus);
-      if (calculatedUpdate) {
-        const tempDoc = { ...updatedUserDocForRemaining, ...calculatedUpdate.updateData };
-        const totalOrders = tempDoc.totalOrders ?? 0;
-        const pickupCount = tempDoc.pickupCount ?? 0;
-        calculatedUpdate.updateData.pickupRate = totalOrders > 0 ? (pickupCount / totalOrders) * 100 : 0;
-        transaction.update(userRefForRemaining, calculatedUpdate.updateData);
-        updatedUserDocForRemaining = { ...updatedUserDocForRemaining, ...calculatedUpdate.updateData };
-      }
-    }
-
+    // 2. 픽업한 수량만큼 기존 주문 정보 수정
     const pickedUpItem: OrderItem = { ...originalItem, quantity: pickedUpQuantity };
     const pickedUpOrderUpdate = {
       items: [pickedUpItem],
@@ -197,63 +167,16 @@ export const splitAndUpdateOrderStatus = async (
     };
     
     transaction.update(originalOrderRef, pickedUpOrderUpdate);
-    const orderForPointCalculation: Order = {
-      ...originalOrder,
-      ...pickedUpOrderUpdate,
-      pickedUpAt: Timestamp.now(),
-    };
 
-    const userRefForPickedUp = doc(db, 'users', originalOrder.userId);
-    const userSnapForPickedUp = await transaction.get(userRefForPickedUp);
-    let updatedUserDocForPickedUp = userSnapForPickedUp.exists() ? userSnapForPickedUp.data() as UserDocument : null;
-
-    if (updatedUserDocForPickedUp) {
-      const calculatedUpdate = calculateUserUpdateByStatus(updatedUserDocForPickedUp, orderForPointCalculation, 'PICKED_UP');
-      if (calculatedUpdate) {
-        const tempDoc = { ...updatedUserDocForPickedUp, ...calculatedUpdate.updateData };
-        const totalOrders = tempDoc.totalOrders ?? 0;
-        const pickupCount = tempDoc.pickupCount ?? 0;
-        calculatedUpdate.updateData.pickupRate = totalOrders > 0 ? (pickupCount / totalOrders) * 100 : 0;
-        transaction.update(userRefForPickedUp, calculatedUpdate.updateData);
-        updatedUserDocForPickedUp = { ...updatedUserDocForPickedUp, ...calculatedUpdate.updateData }
-      }
-    }
-
-    const finalUserDoc = updatedUserDocForRemaining || updatedUserDocForPickedUp;
-    if (finalUserDoc) {
-        return {
-            userId: originalOrder.userId, userDoc: finalUserDoc, productName: originalItem.productName,
-            pickedUpQuantity, remainingQuantity, remainingStatus,
-        };
-    }
-    return null;
+    // 3. ❌ 포인트, 등급, 알림 관련 로직은 여기서 모두 제거! ❌
+    // 서버의 onCreate, onUpdate 트리거가 새로 생성/수정된 주문들을 감지하고 모든 것을 처리합니다.
   });
-
-  if (notificationInfo) {
-    await createNotification(
-      notificationInfo.userId,
-      `'${notificationInfo.productName}' ${notificationInfo.pickedUpQuantity}개를 픽업해주셔서 감사합니다!`,
-      { type: 'ORDER_PICKED_UP', link: '/mypage/history' }
-    );
-
-    if (notificationInfo.remainingStatus === 'NO_SHOW') {
-      const newNoShowCount = notificationInfo.userDoc.noShowCount; 
-      let noShowMessage = '';
-      let noShowType: NotificationType = 'NO_SHOW_WARNING';
-
-      if (newNoShowCount === 1) {
-          noShowMessage = `[주의] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되었습니다. 앞으로 2회 더 노쇼 시 참여가 제한됩니다.`;
-      } else if (newNoShowCount === 2) {
-          noShowMessage = `[경고] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되었습니다. 다음 노쇼 시 참여가 제한됩니다.`;
-      } else if (newNoShowCount && newNoShowCount >= 3) {
-          noShowMessage = `[안내] '${notificationInfo.productName}' ${notificationInfo.remainingQuantity}개가 노쇼 처리되어, 반복된 약속 불이행으로 참여가 제한되었습니다.`;
-          noShowType = 'PARTICIPATION_RESTRICTED';
-      }
-      
-      await createNotification(notificationInfo.userId, noShowMessage, { type: noShowType, link: '/mypage' });
-    }
-  }
 };
+
+
+// =================================================================
+// 아래의 읽기(Read) 및 기타 함수들은 수정할 필요가 없습니다.
+// =================================================================
 
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   if (!userId) return [];
@@ -312,116 +235,6 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus): P
   const updateData: { status: OrderStatus; pickedUpAt?: FieldValue } = { status };
   if (status === 'PICKED_UP') { updateData.pickedUpAt = serverTimestamp(); }
   await updateDoc(doc(db, 'orders', orderId), updateData);
-};
-
-export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
-  const notificationsToSend: { userId: string; message: string; link: string; type: NotificationType }[] = [];
-  await runTransaction(db, async (transaction) => {
-    const ordersMap = new Map<string, Order>();
-    const usersMap = new Map<string, UserDocument>();
-    const productDocs = new Map<string, Product>();
-    const userIds = new Set<string>();
-    const productIdsToRead = new Set<string>();
-    for (const orderId of orderIds) {
-      const orderRef = doc(db, 'orders', orderId);
-      const orderDoc = await transaction.get(orderRef);
-      if (orderDoc.exists()) {
-        const order = { id: orderId, ...orderDoc.data() } as Order;
-        ordersMap.set(orderId, order);
-        userIds.add(order.userId);
-        if (status === 'PREPAID' && order.wasPrepaymentRequired) {
-          order.items.forEach(item => productIdsToRead.add(item.productId));
-        }
-      }
-    }
-    for (const userId of userIds) {
-      const userRef = doc(db, 'users', userId);
-      const userDoc = await transaction.get(userRef);
-      if (userDoc.exists()) {
-        usersMap.set(userId, { uid: userId, ...userDoc.data() } as UserDocument);
-      }
-    }
-    const productRefs = Array.from(productIdsToRead).map(id => doc(db, 'products', id));
-    if (productRefs.length > 0) {
-      const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-      productSnaps.forEach(snap => {
-        if (snap.exists()) {
-          productDocs.set(snap.id, { id: snap.id, ...snap.data() } as Product);
-        }
-      });
-    }
-    for (const order of ordersMap.values()) {
-      const userDoc = usersMap.get(order.userId);
-      if (!userDoc) continue;
-      const userRef = doc(db, 'users', order.userId);
-      const orderRef = doc(db, 'orders', order.id);
-      const userUpdateResult = calculateUserUpdateByStatus(userDoc, order, status);
-      let updatedUserDoc = userDoc;
-      if (userUpdateResult) {
-        const tempUpdatedUserDoc = { ...userDoc, ...userUpdateResult.updateData };
-        const totalOrders = tempUpdatedUserDoc.totalOrders ?? 0;
-        const pickupCount = tempUpdatedUserDoc.pickupCount ?? 0;
-        const newPickupRate = totalOrders > 0 ? (pickupCount / totalOrders) * 100 : 0;
-        userUpdateResult.updateData.pickupRate = newPickupRate;
-        transaction.update(userRef, userUpdateResult.updateData);
-        updatedUserDoc = { ...userDoc, ...userUpdateResult.updateData, pickupRate: newPickupRate };
-      }
-      const updateData: any = { status };
-      if (status === 'PICKED_UP') updateData.pickedUpAt = serverTimestamp();
-      if (status === 'PREPAID') updateData.prepaidAt = serverTimestamp();
-      if (status === 'PREPAID' && order.wasPrepaymentRequired) {
-        for (const item of order.items) {
-          const productData = productDocs.get(item.productId);
-          if (!productData) throw new Error(`재고 차감 실패: 상품(${item.productId})을 찾을 수 없습니다.`);
-          const newSalesHistory = JSON.parse(JSON.stringify(productData.salesHistory));
-          const roundIndex = newSalesHistory.findIndex((r: SalesRound) => r.roundId === item.roundId);
-          if (roundIndex === -1) continue;
-          const groupIndex = newSalesHistory[roundIndex].variantGroups.findIndex((vg: any) => vg.id === item.variantGroupId);
-          if (groupIndex === -1) continue;
-          const variantGroup = newSalesHistory[roundIndex].variantGroups[groupIndex];
-          const isGroupStockManaged = variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1;
-          if (isGroupStockManaged) {
-            const deductionAmount = item.quantity * (item.stockDeductionAmount || 1);
-            if (variantGroup.totalPhysicalStock < deductionAmount) {
-              throw new Error(`재고 부족: ${variantGroup.groupName} (${variantGroup.totalPhysicalStock}개 남음)`);
-            }
-            variantGroup.totalPhysicalStock -= deductionAmount;
-          }
-          transaction.update(doc(db, 'products', item.productId), { salesHistory: newSalesHistory });
-        }
-      }
-      transaction.update(orderRef, updateData);
-      const productName = order.items[0]?.productName || '주문하신 상품';
-      switch (status) {
-        case 'PREPAID':
-          notificationsToSend.push({ userId: order.userId, message: `'${productName}' 상품의 선입금이 확인되어 예약이 확정되었습니다!`, link: '/mypage/history', type: 'PAYMENT_CONFIRMED'});
-          break;
-        case 'PICKED_UP':
-          notificationsToSend.push({ userId: order.userId, message: `'${productName}' 상품을 픽업해주셔서 감사합니다!`, link: '/mypage', type: 'ORDER_PICKED_UP'});
-          break;
-        case 'NO_SHOW':
-        case 'CANCELED':
-              const newNoShowCount = updatedUserDoc.noShowCount || userDoc.noShowCount || 0;
-              let alertMessage = '';
-              let alertType: NotificationType = 'NO_SHOW_WARNING';
-              if (newNoShowCount === 1) {
-                  alertMessage = `[주의] '${productName}' 상품이 ${status === 'NO_SHOW' ? '노쇼' : '취소'} 처리되었습니다. 앞으로 2회 더 누적 시 참여가 제한됩니다.`;
-              } else if (newNoShowCount === 2) {
-                  alertMessage = `[경고] '${productName}' 상품이 ${status === 'NO_SHOW' ? '노쇼' : '취소'} 처리되었습니다. 다음 누적 시 참여가 제한됩니다.`;
-              } else if (newNoShowCount >= 3) {
-                  alertMessage = `[안내] '${productName}' 상품이 ${status === 'NO_SHOW' ? '노쇼' : '취소'} 처리되어, 반복된 약속 불이행으로 참여가 제한되었습니다.`;
-                  alertType = 'PARTICIPATION_RESTRICTED';
-              }
-              if (alertMessage) {
-                notificationsToSend.push({ userId: order.userId, message: alertMessage, link: '/mypage', type: alertType });
-              }
-          break;
-      }
-    }
-  });
-  for (const notif of notificationsToSend) {
-    await createNotification(notif.userId, notif.message, { type: notif.type, link: notif.link });
-  }
 };
 
 export const updateOrderItemQuantity = async (orderId: string, itemId: string, newQuantity: number): Promise<void> => {

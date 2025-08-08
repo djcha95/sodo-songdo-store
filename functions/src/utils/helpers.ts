@@ -64,5 +64,4 @@ export const POINT_POLICIES = {
   COMMUNITY_PROMOTION: { points: 200, reason: "커뮤니티 홍보 인증" },
   NEW_USER_BASE: { points: 20, reason: "신규 회원 가입" },
   REFERRAL_BONUS_NEW_USER: { points: 30, reason: "추천인 코드 입력" },
-  USE_WAITLIST_TICKET: { points: -50, reason: "대기 순번 상승권 사용" },
 };

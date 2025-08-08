@@ -1,0 +1,48 @@
+/* src/components/admin/UserSearchResult.css */
+
+.user-search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-md);
+  background-color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease-in-out;
+}
+
+.user-search-result-item:hover {
+  background-color: var(--primary-color-softer);
+  border-color: var(--primary-color-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.user-search-result-item .user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-search-result-item .user-name {
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color-dark);
+}
+
+.user-search-result-item .user-phone {
+  font-size: 0.85rem;
+  color: var(--text-color-secondary);
+}
+
+.user-search-result-item .user-tier {
+  padding: 4px 10px;
+  border-radius: var(--border-radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  background-color: var(--bg-color-soft);
+  color: var(--text-color-regular);
+}
