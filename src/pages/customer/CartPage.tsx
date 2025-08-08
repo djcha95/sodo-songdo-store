@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useTutorial } from '@/context/TutorialContext';
+import { useLaunch } from '@/context/LaunchContext';
 import { cartPageTourSteps } from '@/components/customer/AppTour';
 import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
@@ -14,11 +15,12 @@ import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, 
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { getOptimizedImageUrl } from '@/utils/imageUtils';
+import dayjs from 'dayjs';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
 import { getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
+import OptimizedImage from '@/components/common/OptimizedImage';
 
 // =================================================================
 // 📌 헬퍼 함수 및 하위 컴포넌트
@@ -98,7 +100,12 @@ const CartItemCard: React.FC<{
             </div>
         )}
         <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
-          <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
+          <OptimizedImage
+            originalUrl={item.imageUrl}
+            size='200x200'
+            alt={item.productName}
+            className="item-image"
+          />
         </div>
         <div className="item-details-wrapper">
           <div className="item-header">
@@ -138,6 +145,7 @@ const CartPage: React.FC = () => {
   const { reservationItems, waitlistItems, removeItems, updateCartItemQuantity } = useCart();
   const navigate = useNavigate();
   const { runPageTourIfFirstTime } = useTutorial();
+  const { isPreLaunch, launchDate } = useLaunch();
 
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [isSyncing, setIsSyncing] = useState(true);
@@ -218,10 +226,12 @@ const CartPage: React.FC = () => {
     }
   }, [checkCartStockCallable, removeItems, updateCartItemQuantity, userDocument]);
   
-  // ✅ [수정] 장바구니 내용이 변경될 때마다 재고를 다시 확인하도록 의존성 배열을 수정합니다.
+  // ✅ [수정] 의존성을 item들의 id 목록으로 변경하여 불필요한 재호출 방지
+  const reservationItemIds = useMemo(() => reservationItems.map(item => item.id).join(','), [reservationItems]);
+
   useEffect(() => {
     syncCartWithServerStock(reservationItems);
-  }, [reservationItems, syncCartWithServerStock]); 
+  }, [reservationItemIds, syncCartWithServerStock]); 
 
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
@@ -384,12 +394,11 @@ const CartPage: React.FC = () => {
   };
 
   const showOrderConfirmation = () => {
-    if (eligibleReservationItems.length === 0 && waitlistItems.length === 0) {
-      showToast('error', '장바구니에 예약 또는 대기할 상품이 없습니다.');
-      return;
-    }
-    if (isSuspendedUser) {
-      showToast('error', '반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
+    if (isPreLaunch) {
+      toast(
+          `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 
+          { icon: '🗓️', position: "top-center" }
+      );
       return;
     }
     
@@ -427,6 +436,7 @@ const CartPage: React.FC = () => {
   };
   
   const getButtonInfo = () => {
+      if (isPreLaunch) return { text: <><CalendarDays size={20} /> {dayjs(launchDate).format('M/D')} 정식 오픈!</>, disabled: true };
       if (isSuspendedUser) return { text: <><ShieldX size={20} /> 참여 제한</>, disabled: true };
       if (isProcessingOrder || isSyncing) return { text: '처리 중...', disabled: true };
       

@@ -8,6 +8,7 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
+import { useLaunch } from '@/context/LaunchContext'; // ✅ [추가] useLaunch import
 import toast from 'react-hot-toast';
 import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
@@ -86,6 +87,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { addToCart } = useCart();
   const { isSuspendedUser, userDocument } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
+  const { isPreLaunch, launchDate } = useLaunch(); // ✅ [추가] useLaunch 사용
   const [quantity, setQuantity] = useState(1);
   const [isJustAdded, setIsJustAdded] = useState(false);
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -139,6 +141,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   
   const handleAddToCart = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+
+    // ✅ [추가] 사전 런칭 모드일 경우 기능 차단
+    if (isPreLaunch) {
+      toast( `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️' });
+      return;
+    }
+
     if (!cardData || !cardData.singleOptionItem || isJustAdded) return;
     if (isSuspendedUser) {
       toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
@@ -172,10 +181,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
     addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
-  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser]);
+  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser, isPreLaunch, launchDate]);
 
   const handleAddToWaitlist = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+
+    // ✅ [추가] 사전 런칭 모드일 경우 기능 차단
+    if (isPreLaunch) {
+      toast( `🛍️ 대기 신청은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️' });
+      return;
+    }
+
     if (!cardData || !cardData.singleOptionItem || isJustAdded) return;
     if (isSuspendedUser) {
       toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
@@ -199,7 +215,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current);
     setIsJustAdded(true);
     addedTimeoutRef.current = setTimeout(() => setIsJustAdded(false), 1500);
-  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser]);
+  }, [product, quantity, cardData, addToCart, isJustAdded, isSuspendedUser, isPreLaunch, launchDate]);
 
   const handleEncoreRequest = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -229,6 +245,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const storageInfo = getStorageTypeInfo(storageType);
   
   const renderActionControls = () => {
+    // ✅ [추가] 사전 런칭 모드일 경우, 다른 모든 상태보다 우선하여 런칭 안내 버튼 표시
+    if (isPreLaunch) {
+        return <button className="options-btn" onClick={handleCardClick}><Calendar size={16} /> {dayjs(launchDate).format('M월 D일')} 오픈!</button>;
+    }
+
     if (isSuspendedUser) {
       return <div className="options-btn disabled"><ShieldX size={16} /> 참여 제한</div>;
     }
@@ -270,6 +291,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   const TopBadge = () => {
+    if (isPreLaunch) return null; // ✅ 사전 런칭 모드에서는 뱃지 숨김
     if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
 
     const { isMultiOption, singleOptionVg, displayRound } = cardData;
@@ -302,7 +324,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       <div className="product-card-final" onClick={handleCardClick}>
         <TopBadge />
         <div className="card-image-container">
-          {/* ✅ [수정] 이미지가 없을 경우를 대비해 대체(Fallback) URL을 추가합니다. */}
           <img src={getOptimizedImageUrl(product.imageUrls?.[0] || 'https://via.placeholder.com/200x200.png?text=No+Image', '200x200')} alt={product.groupName} loading="lazy" />
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (

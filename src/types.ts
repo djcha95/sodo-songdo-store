@@ -230,6 +230,7 @@ export interface UserDocument {
   email: string | null;
   displayName: string | null;
   phone: string | null;
+  phoneLast4?: string; // ✅ 이 줄을 추가해주세요.
   photoURL?: string | null;
   role: 'master' | 'admin' | 'customer';
   encoreRequestedProductIds?: string[];
