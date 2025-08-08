@@ -13,6 +13,7 @@ import { Timestamp } from 'firebase/firestore';
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType } from '@/types';
 import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
+import { getOptimizedImageUrl } from '@/utils/imageUtils'; // ✅ 1. 이미지 유틸리티 임포트
 
 import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
@@ -140,11 +141,70 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound }> = React.mem
 });
 const OptionSelector: React.FC<{ round: SalesRound; selectedVariantGroup: VariantGroup | null; onVariantGroupChange: (vg: VariantGroup) => void; }> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange }) => { if (!round.variantGroups || round.variantGroups.length <= 1) return null; return (<div className="select-wrapper" data-tutorial-id="detail-options"><select className="price-select" value={selectedVariantGroup?.id || ''} onChange={(e) => { const selectedId = e.target.value; const newVg = round.variantGroups.find(vg => vg.id === selectedId); if (newVg) onVariantGroupChange(newVg); }}><option value="" disabled>옵션을 선택해주세요.</option>{round.variantGroups.map(vg => (<option key={vg.id} value={vg.id}>{vg.groupName} - {vg.items[0]?.price.toLocaleString()}원</option>))}</select></div>); });
 
-// ✅ [수정] 수량 조절 컴포넌트에 튜토리얼 ID 추가
 const QuantityInput: React.FC<{ quantity: number; setQuantity: (fn: (q: number) => number) => void; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => { const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]); const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]); const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 }); const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 }); return (<div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls"><button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1}><Minus /></button><span className="quantity-display-fixed">{quantity}</span><button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}><Plus /></button></div>); });
 
-// ✅ [수정] 모든 주요 액션 버튼에 일관된 튜토리얼 ID(`detail-action-button`) 적용
-const PurchasePanel: React.FC<{ actionState: ProductActionState; round: SalesRound; selectedVariantGroup: VariantGroup | null; selectedItem: ProductItem | null; quantity: number; setQuantity: (fn: (q: number) => number) => void; onAddToCart: () => void; onWaitlist: () => void; onEncore: () => void; isEncoreRequested: boolean; isEncoreLoading: boolean; }> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onAddToCart, onWaitlist, onEncore, isEncoreRequested, isEncoreLoading }) => { const renderContent = () => { switch (actionState) { case 'PURCHASABLE': const stock = selectedVariantGroup?.totalPhysicalStock; const reserved = selectedVariantGroup?.reservedCount || 0; const limit = selectedItem?.limitQuantity; const stockValue = (typeof stock === 'number') ? stock : null; const limitValue = (typeof limit === 'number') ? limit : null; const effectiveStock = (stockValue === -1 || stockValue === null) ? Infinity : stockValue - reserved; const effectiveLimit = limitValue === null ? Infinity : limitValue; const max = Math.floor(Math.min(effectiveStock / (selectedItem?.stockDeductionAmount || 1), effectiveLimit)); const maxQuantity = isFinite(max) ? max : null; return (<div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={onAddToCart} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button"><ShoppingCart size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 담기` : ''}</span></button></div>); case 'WAITLISTABLE': return <button onClick={onWaitlist} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button"><Hourglass size={20} /><span>대기 신청하기</span></button>; case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" disabled><Box size={20} /><span>위에서 옵션을 선택해주세요</span></button>; case 'ENDED': case 'ENCORE_REQUESTABLE': if (isEncoreLoading) { return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>; } if (isEncoreRequested) { return <button className="encore-request-btn-fixed requested" disabled><CheckCircle size={20}/><span>요청 완료</span></button>; } return <button onClick={onEncore} className="encore-request-btn-fixed" data-tutorial-id="detail-action-button"><Star size={20} /><span>앵콜 요청하기</span></button>; case 'INELIGIBLE': return <div className="action-notice"><Lock size={20} /><div><p><strong>{round.allowedTiers?.join(', ')}</strong> 등급만 참여 가능해요.</p><span>등급을 올리고 다양한 혜택을 만나보세요!</span></div></div>; case 'SCHEDULED': const publishAt = safeToDate(round.publishAt); return <div className="action-notice"><Calendar size={20} /><div><p><strong>판매 예정</strong></p><span>{publishAt ? `${dayjs(publishAt).format('M월 D일 (ddd) HH:mm')}에 공개됩니다.` : ''}</span></div></div>; default: return <button className="add-to-cart-btn-fixed" disabled><span>준비 중입니다</span></button>; } }; return <>{renderContent()}</>; });
+const PurchasePanel: React.FC<{ 
+    actionState: ProductActionState; 
+    round: SalesRound; 
+    selectedVariantGroup: VariantGroup | null; 
+    selectedItem: ProductItem | null; 
+    quantity: number; 
+    setQuantity: (fn: (q: number) => number) => void; 
+    onCartAction: (status: 'RESERVATION' | 'WAITLIST') => void;
+    onEncore: () => void; 
+    isEncoreRequested: boolean; 
+    isEncoreLoading: boolean; 
+}> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onCartAction, onEncore, isEncoreRequested, isEncoreLoading }) => { 
+    const renderContent = () => { 
+        switch (actionState) { 
+            case 'PURCHASABLE': 
+                // ✅ 4. 데이터 오류 방어 코드 추가
+                if (!selectedItem) {
+                    return <button className="add-to-cart-btn-fixed" disabled><span>옵션 정보를 불러올 수 없습니다</span></button>;
+                }
+                const stock = selectedVariantGroup?.totalPhysicalStock; 
+                const reserved = selectedVariantGroup?.reservedCount || 0; 
+                const limit = selectedItem?.limitQuantity; 
+                const stockValue = (typeof stock === 'number') ? stock : null; 
+                const limitValue = (typeof limit === 'number') ? limit : null; 
+                const effectiveStock = (stockValue === -1 || stockValue === null) ? Infinity : stockValue - reserved; 
+                const effectiveLimit = limitValue === null ? Infinity : limitValue; 
+                const max = Math.floor(Math.min(effectiveStock / (selectedItem?.stockDeductionAmount || 1), effectiveLimit)); 
+                const maxQuantity = isFinite(max) ? max : null; 
+                return (
+                    <div className="purchase-action-row">
+                        <QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} />
+                        <button onClick={() => onCartAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button">
+                            <ShoppingCart size={20} />
+                            <span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 담기` : ''}</span>
+                        </button>
+                    </div>
+                ); 
+            case 'WAITLISTABLE': 
+                return (
+                    <button onClick={() => onCartAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button">
+                        <Hourglass size={20} />
+                        <span>대기로 장바구니 담기</span>
+                    </button>
+                );
+            case 'REQUIRE_OPTION': 
+                return <button className="add-to-cart-btn-fixed" disabled><Box size={20} /><span>위에서 옵션을 선택해주세요</span></button>; 
+            case 'ENDED': 
+            case 'ENCORE_REQUESTABLE': 
+                if (isEncoreLoading) { return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>; } 
+                if (isEncoreRequested) { return <button className="encore-request-btn-fixed requested" disabled><CheckCircle size={20}/><span>요청 완료</span></button>; } 
+                return <button onClick={onEncore} className="encore-request-btn-fixed" data-tutorial-id="detail-action-button"><Star size={20} /><span>앵콜 요청하기</span></button>; 
+            case 'INELIGIBLE': 
+                return <div className="action-notice"><Lock size={20} /><div><p><strong>{round.allowedTiers?.join(', ')}</strong> 등급만 참여 가능해요.</p><span>등급을 올리고 다양한 혜택을 만나보세요!</span></div></div>; 
+            case 'SCHEDULED': 
+                const publishAt = safeToDate(round.publishAt); 
+                return <div className="action-notice"><Calendar size={20} /><div><p><strong>판매 예정</strong></p><span>{publishAt ? `${dayjs(publishAt).format('M월 D일 (ddd) HH:mm')}에 공개됩니다.` : ''}</span></div></div>; 
+            default: 
+                return <button className="add-to-cart-btn-fixed" disabled><span>준비 중입니다</span></button>; 
+        } 
+    }; 
+    return <>{renderContent()}</>; 
+});
 
 const ProductDetailSkeleton: React.FC = () => (<div className="product-detail-modal-overlay"><div className="product-detail-modal-content"><div className="modal-scroll-area"><div className="main-content-area skeleton"><div className="image-gallery-wrapper skeleton-box skeleton-image"></div><div className="product-info-area"><div className="skeleton-box skeleton-title" style={{margin: '0 auto'}}></div><div className="skeleton-box skeleton-text" style={{ textAlign: 'center' }}></div><div className="skeleton-box skeleton-text short" style={{ margin: '0.5rem auto', width: '50%' }}></div><div className="skeleton-box skeleton-info-row" style={{marginTop: '1.5rem'}}></div><div className="skeleton-box skeleton-info-row"></div></div></div></div><div className="product-purchase-footer"><div className="skeleton-box" style={{height: '48px', width: '100%'}}></div></div></div></div>);
 
@@ -170,7 +230,6 @@ const ProductDetailPage: React.FC = () => {
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
 
-    const addWaitlistEntry = useMemo(() => httpsCallable(functions, 'addWaitlistEntry'), []);
     const requestEncoreCallable = useMemo(() => httpsCallable(functions, 'requestEncore'), []);
 
     useEffect(() => {
@@ -203,6 +262,11 @@ const ProductDetailPage: React.FC = () => {
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
 
+    // ✅ 2. 최적화된 이미지 URL을 계산하는 로직 추가
+    const optimizedImages = useMemo(() => {
+        return product?.imageUrls.map(url => getOptimizedImageUrl(url, '1080x1080')) || [];
+    }, [product?.imageUrls]);
+
     useEffect(() => {
         if (displayRound?.variantGroups?.[0]) {
             const firstVg = displayRound.variantGroups[0];
@@ -227,35 +291,30 @@ const ProductDetailPage: React.FC = () => {
         return determineActionState(displayRound, userDocument, selectedVariantGroup);
     }, [displayRound, userDocument, selectedVariantGroup]);
 
-    const handleAddToCart = useCallback(() => {
+    const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
+
         const cartItem: CartItem = {
             id: `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}-${selectedItem.id}`,
             productId: product.id, productName: product.groupName, roundId: displayRound.roundId,
             roundName: displayRound.roundName, variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName,
             itemId: selectedItem.id, itemName: selectedItem.name, quantity, unitPrice: selectedItem.price,
-            stock: selectedItem.stock, imageUrl: product.imageUrls[0] || '', status: 'RESERVATION',
+            stock: selectedItem.stock, imageUrl: product.imageUrls[0] || '', 
+            status: status, 
             stockDeductionAmount: selectedItem.stockDeductionAmount, deadlineDate: displayRound.deadlineDate,
             pickupDate: displayRound.pickupDate, isPrepaymentRequired: displayRound.isPrepaymentRequired || false
         };
+
         addToCart(cartItem);
-        toast.success(`${quantity}개를 담았어요!`);
+
+        if (status === 'RESERVATION') {
+            toast.success(`${quantity}개를 담았어요!`);
+        } else {
+            toast.success(`대기 상품으로 ${quantity}개를 담았어요.`);
+        }
+        
         navigate(-1);
     }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate]);
-
-    const handleWaitlist = useCallback(async () => {
-        if (!product || !displayRound || !selectedVariantGroup || !selectedItem || !userDocument) return;
-        const waitlistPayload = {
-            productId: product.id, roundId: displayRound.roundId, variantGroupId: selectedVariantGroup.id,
-            itemId: selectedItem.id, quantity: quantity
-        };
-        const promise = addWaitlistEntry(waitlistPayload);
-        toast.promise(promise, {
-            loading: '대기 신청 처리 중...',
-            success: '대기 목록에 추가되었습니다!',
-            error: (err) => err?.message || '대기 신청 중 오류가 발생했습니다.'
-        }).finally(() => navigate(-1));
-    }, [product, displayRound, selectedVariantGroup, selectedItem, quantity, userDocument, addWaitlistEntry, navigate]);
     
     const handleEncore = useCallback(async () => {
         if (isEncoreLoading || isEncoreRequested) return;
@@ -288,10 +347,10 @@ const ProductDetailPage: React.FC = () => {
                     <button onClick={() => navigate(-1)} className="modal-close-btn-top"><X /></button>
                     <div className="modal-scroll-area">
                         <div className="main-content-area">
-                            {/* ✅ [수정] 이미지 갤러리 컨테이너에 튜토리얼 ID 추가 */}
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery">
+                                {/* ✅ 3. 최적화된 이미지 적용 */}
                                 <ProductImageSlider 
-                                    images={product.imageUrls} 
+                                    images={optimizedImages} 
                                     productName={product.groupName} 
                                     onImageClick={handleOpenLightbox}
                                 />
@@ -319,8 +378,7 @@ const ProductDetailPage: React.FC = () => {
                             selectedItem={selectedItem}
                             quantity={quantity}
                             setQuantity={setQuantity}
-                            onAddToCart={handleAddToCart}
-                            onWaitlist={handleWaitlist}
+                            onCartAction={handleCartAction}
                             onEncore={handleEncore}
                             isEncoreRequested={isEncoreRequested}
                             isEncoreLoading={isEncoreLoading}
@@ -329,10 +387,11 @@ const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
             
+            {/* ✅ 3. 최적화된 이미지 적용 */}
             <Lightbox
                 isOpen={isLightboxOpen}
                 onClose={handleCloseLightbox}
-                images={product.imageUrls}
+                images={optimizedImages}
                 startIndex={lightboxStartIndex}
             />
         </>

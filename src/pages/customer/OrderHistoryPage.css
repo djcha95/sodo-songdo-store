@@ -304,25 +304,6 @@
   cursor: default;
 }
 
-/* ✅ [추가] '1등 고정하기' 버튼을 위한 특별 스타일 */
-.priority-ticket-btn.is-first {
-  background-color: #fef9c3; /* Tailwind yellow-100 */
-  color: #a16207; /* Tailwind yellow-700 */
-  border-color: #facc15; /* Tailwind yellow-400 */
-}
-
-.priority-ticket-btn.is-first:not(:disabled):hover {
-  background-color: #fde68a; /* Tailwind yellow-200 */
-  border-color: #fca5a5; /* Tailwind yellow-500 */
-}
-
-.waitlist-order-badge {
-  font-weight: 700;
-  background-color: #fefce8;
-  color: #ca8a04;
-  border: 1px solid #fde047;
-}
-
 /* =================================================================
    📌 무한 스크롤 및 기타
    ================================================================= */

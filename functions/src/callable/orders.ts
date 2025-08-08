@@ -306,7 +306,6 @@ export const getUserWaitlist = onCall(
                     imageUrl: product.imageUrls?.[0] || '',
                     quantity: entry.quantity,
                     timestamp: entry.timestamp,
-                    isPrioritized: entry.isPrioritized || false,
                   });
                 }
               });

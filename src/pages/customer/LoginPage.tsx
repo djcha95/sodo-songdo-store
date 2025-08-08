@@ -146,7 +146,7 @@ const LoginPage: React.FC = () => {
     <div className="login-container">
       <div className="login-box">
         <h2 className="title">소도몰</h2>
-        <p className="subtitle">소비자도!</p>
+        <p className="subtitle">소비자도 도매가로!</p>
         <button
           className="kakao-login-button"
           onClick={handleKakaoLogin}

@@ -17,7 +17,6 @@ import toast from 'react-hot-toast';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
-// ❌ 이 줄에서 addWaitlistEntry를 제거합니다.
 import { getProductsByIds } from '@/firebase';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
@@ -150,7 +149,6 @@ const CartPage: React.FC = () => {
   
   const checkCartStockCallable = httpsCallable<any, any>(functions, 'checkCartStock');
   const submitOrderCallable = httpsCallable<any, any>(functions, 'submitOrder');
-  // ✅ [추가] 새로 만든 대기 신청 함수를 연결합니다.
   const addWaitlistEntryCallable = httpsCallable<any, any>(functions, 'addWaitlistEntry');
 
 
@@ -168,6 +166,10 @@ const CartPage: React.FC = () => {
   }, [reservationItems, ineligibleItemIds]);
 
   const syncCartWithServerStock = useCallback(async (itemsToCheck: CartItem[]): Promise<boolean> => {
+    if (!userDocument) {
+        setIsSyncing(false);
+        return true; 
+    }
     if (itemsToCheck.length === 0) {
       setIsSyncing(false);
       return true;
@@ -175,23 +177,21 @@ const CartPage: React.FC = () => {
     
     setIsSyncing(true);
     try {
-      if (userDocument) {
-        const productIds = [...new Set(itemsToCheck.map(item => item.productId))];
-        const productsInCart = await getProductsByIds(productIds);
-        const productsMap = new Map(productsInCart.map(p => [p.id, p]));
-        const ineligibleIds = new Set<string>();
+      const productIds = [...new Set(itemsToCheck.map(item => item.productId))];
+      const productsInCart = await getProductsByIds(productIds);
+      const productsMap = new Map(productsInCart.map(p => [p.id, p]));
+      const ineligibleIds = new Set<string>();
 
-        itemsToCheck.forEach(item => {
-          const product = productsMap.get(item.productId);
-          const round = product?.salesHistory.find(r => r.roundId === item.roundId);
-          const allowedTiers = round?.allowedTiers || [];
+      itemsToCheck.forEach(item => {
+        const product = productsMap.get(item.productId);
+        const round = product?.salesHistory.find(r => r.roundId === item.roundId);
+        const allowedTiers = round?.allowedTiers || [];
 
-          if (allowedTiers.length > 0 && !allowedTiers.includes(userDocument.loyaltyTier)) {
-            ineligibleIds.add(item.id);
-          }
-        });
-        setIneligibleItemIds(ineligibleIds);
-      }
+        if (allowedTiers.length > 0 && !allowedTiers.includes(userDocument.loyaltyTier)) {
+          ineligibleIds.add(item.id);
+        }
+      });
+      setIneligibleItemIds(ineligibleIds);
 
       const { data } = await checkCartStockCallable({ items: itemsToCheck });
       
@@ -218,11 +218,10 @@ const CartPage: React.FC = () => {
     }
   }, [checkCartStockCallable, removeItems, updateCartItemQuantity, userDocument]);
   
-
+  // ✅ [수정] 장바구니 내용이 변경될 때마다 재고를 다시 확인하도록 의존성 배열을 수정합니다.
   useEffect(() => {
     syncCartWithServerStock(reservationItems);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userDocument]); 
+  }, [reservationItems, syncCartWithServerStock]); 
 
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
@@ -301,8 +300,6 @@ const CartPage: React.FC = () => {
       allPromises.push(submitOrderCallable(orderPayload));
     }
 
-    // ✅ [수정] 이 부분을 Cloud Function 호출로 변경합니다.
-    // 기존의 클라이언트 SDK 호출은 보안 규칙에 의해 차단됩니다.
     waitlistItems.forEach(item => {
       const waitlistPayload = {
         productId: item.productId,
@@ -311,7 +308,6 @@ const CartPage: React.FC = () => {
         variantGroupId: item.variantGroupId,
         itemId: item.itemId,
       };
-      // 새로 만든 addWaitlistEntryCallable 함수를 호출합니다.
       allPromises.push(addWaitlistEntryCallable(waitlistPayload));
     });
 

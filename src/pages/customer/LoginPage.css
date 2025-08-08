@@ -29,7 +29,7 @@
 }
 
 .title {
-  margin-bottom: 10px;
+  margin-bottom: -14px;
   /* [수정] 브랜드 색상에 맞춰 파랑색으로 */
   color: #007bff;
   font-size: 36px;
@@ -38,9 +38,10 @@
 }
 
 .subtitle {
-  margin-bottom: 40px;
+  margin-top: 15px;
+  margin-bottom: 10px;
   color: #666; /* 텍스트 색상 조정 */
-  font-size: 16px;
+  font-size: px;
   font-weight: 500;
 }
 

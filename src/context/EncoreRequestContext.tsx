@@ -1,6 +1,6 @@
 // src/context/EncoreRequestContext.tsx
 
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { updateEncoreRequest } from '../firebase';
 
@@ -13,56 +13,45 @@ interface EncoreRequestContextType {
 const EncoreRequestContext = createContext<EncoreRequestContextType | undefined>(undefined);
 
 export const EncoreRequestProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // [수정] user와 함께 userDocument를 useAuth()로부터 가져옵니다.
-  const { user, userDocument } = useAuth();
-  const [requestedProductIds, setRequestedProductIds] = useState<string[]>([]);
+  // ✅ [수정] userDocument와 함께 refresh 함수를 가져옵니다.
+  const { user, userDocument, refreshUserDocument } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  // [수정] 사용자의 요청 기록을 user가 아닌 userDocument에서 가져와 초기화합니다.
-  useEffect(() => {
-    if (userDocument?.encoreRequestedProductIds) { // [수정]
-      setRequestedProductIds(userDocument.encoreRequestedProductIds); // [수정]
-    } else {
-      setRequestedProductIds([]); // 로그아웃 시 또는 데이터 없을 때 초기화
-    }
-  }, [userDocument]); // [수정] 의존성 배열을 userDocument로 변경합니다.
+  // ✅ [삭제] userDocument와 중복되는 로컬 상태(useState, useEffect)를 모두 제거합니다.
 
-  // '공구 요청' 상태 확인 함수
+  // ✅ [수정] 실시간으로 동기화되는 userDocument에서 직접 데이터를 읽어 상태를 확인합니다.
   const hasRequestedEncore = useCallback((productId: string): boolean => {
-    return requestedProductIds.includes(productId);
-  }, [requestedProductIds]);
+    return userDocument?.encoreRequestedProductIds?.includes(productId) || false;
+  }, [userDocument]);
 
-  // '공구 요청' 실행 함수
   const requestEncore = useCallback(async (productId: string) => {
-    // user 객체는 uid 확인을 위해 여전히 필요합니다.
-    if (!user) {
-      return;
+    if (!user || !userDocument) {
+      throw new Error("앵콜 요청을 하려면 로그인이 필요합니다.");
     }
     if (hasRequestedEncore(productId)) {
-      return;
+      return; // 이미 요청된 경우 함수 종료
     }
 
     setLoading(true);
     try {
-      // 1. Firestore 업데이트: encoreCount 증가 및 사용자 ID 추가
       await updateEncoreRequest(productId, user.uid);
-      
-      // 2. 클라이언트 상태 업데이트
-      setRequestedProductIds(prev => [...prev, productId]);
-
+      // ✅ [수정] 클라이언트 상태를 직접 업데이트하는 대신, AuthContext를 통해 최신 사용자 문서를 다시 불러옵니다.
+      // 이렇게 하면 실시간 데이터와 UI가 항상 일치하게 됩니다.
+      await refreshUserDocument();
     } catch (error) {
       console.error("앵콜 요청 실패:", error);
-      throw new Error("앵콜 요청에 실패했습니다. 다시 시도해 주세요."); // 모달 처리를 위해 에러를 던짐
+      throw new Error("앵콜 요청에 실패했습니다. 다시 시도해 주세요.");
     } finally {
       setLoading(false);
     }
-  }, [user, hasRequestedEncore]);
+  }, [user, userDocument, hasRequestedEncore, refreshUserDocument]);
 
-  const value = {
+  // ✅ [개선] Context value를 useMemo로 감싸 불필요한 리렌더링을 방지합니다.
+  const value = useMemo(() => ({
     hasRequestedEncore,
     requestEncore,
     loading,
-  };
+  }), [hasRequestedEncore, requestEncore, loading]);
 
   return <EncoreRequestContext.Provider value={value}>{children}</EncoreRequestContext.Provider>;
 };

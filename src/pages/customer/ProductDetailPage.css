@@ -52,7 +52,6 @@
   padding-bottom: 80px; /* 푸터 높이만큼 여백 */
 }
 
-/* ✅ [요청 반영] 이미지 갤러리 영역을 정사각형으로 만듭니다. */
 .image-gallery-wrapper {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -74,9 +73,6 @@
 .product-swiper-container .swiper-slide img {
   max-width: 100%;
   max-height: 100%;
-  /* ✅ [요청 반영] 이미지가 정사각형 프레임 안에서 잘리거나 늘어나는 대신,
-       비율을 유지한 채 축소되어 이미지 전체가 보이도록 설정합니다. 
-  */
   object-fit: contain;
 }
 
@@ -101,7 +97,6 @@
   background-color: var(--color-primary);
 }
 
-/* ✅ [UI 수정] 정보 영역 전체를 가운데 정렬 */
 .product-info-area {
   padding: 1.2rem;
   display: flex;
@@ -117,7 +112,6 @@
   line-height: 1.3;
 }
 
-/* ✅ [UI 수정] 상품 설명 가운데 정렬 */
 .product-description {
   color: #555;
   font-size: 0.95rem;
@@ -160,7 +154,6 @@
   font-size: 0.85rem;
 }
 
-/* ✅ [UI 수정] 보관 방법 색상 지정 */
 .info-value.storage-type-ROOM { color: #888; }
 .info-value.storage-type-COLD { color: #e63946; }
 .info-value.storage-type-FROZEN { color: #5c7cfa; }
@@ -239,13 +232,13 @@
     filter: brightness(1.1);
 }
 
-.add-to-cart-btn-fixed { background-color: var(--color-primary); }
+/* ✅ [수정] var() 함수에 대체 색상을 추가하여 변수가 없을 때도 버튼이 보이도록 수정 */
+.add-to-cart-btn-fixed { background-color: var(--color-primary, #2563eb); }
 .add-to-cart-btn-fixed:disabled { background-color: #ccc; }
 .waitlist-btn-fixed { background-color: #fca311; }
-/* ✅ [UI 수정] 앵콜 요청 버튼 색상 변경 */
 .encore-request-btn-fixed { 
-  background-color: #ffb703; /* 밝은 주황색 */
-  color: #222; /* 대비를 위한 어두운 텍스트 */
+  background-color: #ffb703;
+  color: #222;
 }
 
 
@@ -290,11 +283,7 @@
 .skeleton-text.short { width: 40%; }
 .skeleton-info-row { width: 100%; height: 1.5rem; margin-bottom: 0.8rem; }
 
-/* src/pages/customer/ProductDetailPage.css */
-
-/* ... 기존 CSS 코드 ... */
-
-/* --- ✅ [추가] 라이트박스(이미지 확대 보기) 스타일 --- */
+/* 라이트박스(이미지 확대 보기) 스타일 */
 .lightbox-overlay {
   position: fixed;
   top: 0;
@@ -305,7 +294,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1200; /* 상품상세 모달(1000)보다 위에 오도록 설정 */
+  z-index: 1200;
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
@@ -352,19 +341,18 @@
   align-items: center;
   width: 100%;
   height: 100%;
-  padding: 5%; /* 이미지 주변 여백 확보 */
+  padding: 5%;
   box-sizing: border-box;
 }
 
 .lightbox-swiper-slide img {
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain; /* 이미지가 잘리지 않고 비율 유지 */
+  object-fit: contain;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   border-radius: 4px;
 }
 
-/* 라이트박스 Swiper 네비게이션/페이지네이션 버튼 스타일 */
 .lightbox-swiper .swiper-button-next,
 .lightbox-swiper .swiper-button-prev {
   color: #ffffff;
@@ -377,7 +365,6 @@
   background-color: #ffffff;
 }
 
-/* 기존 상품 이미지 슬라이더 위에 '크게 보기' 아이콘 추가 */
 .product-swiper-container {
   position: relative;
   width: 100%;
@@ -385,13 +372,12 @@
 }
 
 .product-swiper-container .swiper-slide {
-  /* 슬라이드 클릭 시 커서 모양 변경 */
   cursor: zoom-in;
 }
 
 .image-zoom-indicator {
   position: absolute;
-  bottom: 40px; /* 페이지네이션과 겹치지 않도록 조정 */
+  bottom: 40px;
   right: 15px;
   background-color: rgba(0, 0, 0, 0.5);
   color: white;
@@ -402,6 +388,6 @@
   align-items: center;
   gap: 5px;
   z-index: 10;
-  pointer-events: none; /* 클릭 이벤트가 이미지로 전달되도록 */
+  pointer-events: none;
   opacity: 0.8;
 }

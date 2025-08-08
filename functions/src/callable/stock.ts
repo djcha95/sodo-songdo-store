@@ -2,10 +2,10 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, FieldValue, Transaction } from "firebase-admin/firestore";
+import { Transaction } from "firebase-admin/firestore";
 import { createNotification } from "../utils/notificationService.js";
 import { submitOrderFromWaitlist } from "../utils/orderService.js";
-import type { Product, WaitlistEntry, UserDocument, PointLog } from "../types.js";
+import type { Product, WaitlistEntry, UserDocument } from "../types.js";
 import * as logger from "firebase-functions/logger";
 
 export const addStockAndProcessWaitlist = onCall({
@@ -28,7 +28,7 @@ export const addStockAndProcessWaitlist = onCall({
 
   try {
     await db.runTransaction(async (transaction: Transaction) => {
-      // --- 1. 읽기 단계: 필요한 모든 문서를 미리 읽어옵니다. (이전과 동일) ---
+      // --- 1. 읽기 단계: 필요한 모든 문서를 미리 읽어옵니다. ---
       const productDoc = await transaction.get(productRef);
       if (!productDoc.exists) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
       const product = { ...productDoc.data(), id: productDoc.id } as Product;
@@ -70,27 +70,13 @@ export const addStockAndProcessWaitlist = onCall({
 
       let availableStock = additionalStock;
       
-      // ✅ [로직 수정] 새로운 3단계 정렬 규칙을 적용합니다.
-      const sortedWaitlist = [...currentRound.waitlist].sort((a, b) => {
-        // 1순위: isPrioritized가 true인 항목이 무조건 앞으로 온다.
-        if (a.isPrioritized && !b.isPrioritized) return -1;
-        if (!a.isPrioritized && b.isPrioritized) return 1;
-
-        // 2순위: isPrioritized가 둘 다 true이면, prioritizedAt이 오래된 순서(선착순)
-        if (a.isPrioritized && b.isPrioritized) {
-          const timeA = a.prioritizedAt?.toMillis() || 0;
-          const timeB = b.prioritizedAt?.toMillis() || 0;
-          return timeA - timeB;
-        }
-
-        // 3순위: isPrioritized가 둘 다 false이면, 기존처럼 timestamp(대기 시작)가 오래된 순서
-        return a.timestamp.toMillis() - b.timestamp.toMillis();
-      });
+      // ✅ [수정] isPrioritized 관련 복잡한 정렬 로직을 단순한 선착순(FIFO)으로 변경합니다.
+      const sortedWaitlist = [...currentRound.waitlist].sort((a, b) => 
+        a.timestamp.toMillis() - b.timestamp.toMillis()
+      );
       
       const remainingWaitlist: WaitlistEntry[] = [];
-      const usersToRefund = new Set<string>();
 
-      // 부분 전환 로직은 이전 수정과 동일하게 유지됩니다.
       for (const entry of sortedWaitlist) {
         if (entry.variantGroupId !== variantGroupId) {
           remainingWaitlist.push(entry);
@@ -117,9 +103,6 @@ export const addStockAndProcessWaitlist = onCall({
           }
         } else {
           remainingWaitlist.push(entry);
-          if (entry.isPrioritized) {
-            usersToRefund.add(entry.userId);
-          }
         }
       }
       
@@ -129,23 +112,7 @@ export const addStockAndProcessWaitlist = onCall({
       
       transaction.update(productRef, { salesHistory });
 
-      // 포인트 환불 로직 (이전과 동일)
-      for (const userId of usersToRefund) {
-          const userData = userDocsMap.get(userId);
-          if (userData) {
-              const userRef = db.collection("users").doc(userId);
-              const refundAmount = 50;
-              const newPoints = (userData.points || 0) + refundAmount;
-              const pointHistoryEntry: Omit<PointLog, 'id'> = {
-                amount: refundAmount, reason: '대기 순번 상승권 환불 (재고 미확보)',
-                createdAt: Timestamp.now(), expiresAt: null,
-              };
-              transaction.update(userRef, {
-                points: newPoints,
-                pointHistory: FieldValue.arrayUnion(pointHistoryEntry),
-              });
-          }
-      }
+      // ✅ [수정] isPrioritized 관련 포인트 환불 로직을 모두 제거합니다.
     });
 
     // --- 3. 트랜잭션 완료 후 알림 전송 ---
