@@ -15,8 +15,9 @@ export * from "./callable/orders.js";
 // 친구 초대 및 추천인 코드 관련 로직을 처리합니다.
 export * from "./callable/referrals.js";
 
-// 포인트 사용(대기 순번 상승권) 및 조회 관련 로직을 처리합니다.
-export * from "./callable/points.js";
+// ✅ [수정] '대기 순번 상승권' 관련 함수 export를 제거했습니다.
+// // 포인트 사용(대기 순번 상승권) 및 조회 관련 로직을 처리합니다.
+// export * from "./callable/points.js";
 
 // 관리자가 재고를 추가하고, 이에 따라 대기자를 예약으로 자동 전환하는 로직을 처리합니다.
 export * from "./callable/stock.js";
@@ -48,7 +49,7 @@ export * from "./scheduled/notifications.js";
 // 획득한 지 1년이 지난 포인트를 매일 자정 자동으로 소멸시킵니다.
 export * from "./scheduled/points.js";
 
-// (✅ 신규 추가) 앱 내 실시간 알림(등급 변경, 재고 확보 등)을 생성하는 공통 유틸리티 함수입니다. [cite: 1]
+// (✅ 신규 추가) 앱 내 실시간 알림(등급 변경, 재고 확보 등)을 생성하는 공통 유틸리티 함수입니다.
 export * from "./utils/notificationService.js";
 
 
