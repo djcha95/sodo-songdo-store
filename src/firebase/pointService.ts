@@ -45,7 +45,8 @@ export const POINT_POLICIES = {
   COMMUNITY_PROMOTION: { points: 200, reason: '커뮤니티 홍보 인증' },
   NEW_USER_BASE: { points: 20, reason: '신규 회원 가입' },
   REFERRAL_BONUS_NEW_USER: { points: 30, reason: '추천인 코드 입력' },
-  USE_WAITLIST_TICKET: { points: -50, reason: '대기 순번 상승권 사용'},
+  // ✅ [수정] '대기 순번 상승권 사용' 정책을 삭제했습니다.
+  // USE_WAITLIST_TICKET: { points: -50, reason: '대기 순번 상승권 사용'},
 } as const;
 
 /**
@@ -153,8 +154,6 @@ export const claimMissionReward = async (missionId: string, uniquePeriodId: stri
     return (result.data as {success: boolean, message: string});
   } catch(error: any) {
     console.error("미션 보상 요청 함수 호출 실패:", error);
-    // Firebase v9 HttpsError는 'code'와 'message'를 직접 가집니다.
-    // details는 서버에서 명시적으로 보낸 경우에만 존재합니다.
     if (error.code && error.message) {
         const message = (error.details as any)?.message || error.message;
         throw new Error(message);
@@ -234,33 +233,16 @@ export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
   });
 };
 
-
-/**
- * @description 대기 순번 상승권 사용을 위해 Cloud Function을 호출합니다.
- */
+// ✅ [수정] '대기 순번 상승권' 사용을 위해 Cloud Function을 호출하던 함수를 삭제했습니다.
+/*
 export const applyWaitlistPriorityTicket = async (
   productId: string,
   roundId: string,
   itemId: string
 ): Promise<void> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const useWaitlistTicket = httpsCallable(functions, 'useWaitlistTicket');
-
-  try {
-    const payload = { productId, roundId, itemId };
-    const result = await useWaitlistTicket(payload);
-    
-    if (!(result.data as any).success) {
-      throw new Error((result.data as any).message || '서버에서 요청 처리에 실패했습니다.');
-    }
-  } catch (error) {
-    console.error("순번 상승권 사용 함수 호출 실패:", error);
-    if (error instanceof Error && 'code' in error && 'message' in error) {
-        throw new Error((error as any).message);
-    }
-    throw new Error('순번 상승권 사용 중 오류가 발생했습니다.');
-  }
+    ...
 };
+*/
 
 /**
  * @description 사용자의 일일 방문을 기록하고 포인트와 등급을 업데이트합니다.

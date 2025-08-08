@@ -7,7 +7,8 @@ import { useTutorial } from '@/context/TutorialContext';
 import { orderHistoryTourSteps } from '@/components/customer/AppTour';
 import { cancelOrder } from '@/firebase/orderService';
 import { getUserWaitlist, cancelWaitlistEntry } from '@/firebase/productService';
-import { applyWaitlistPriorityTicket } from '@/firebase/pointService';
+// ✅ [수정] 'applyWaitlistPriorityTicket' import를 삭제했습니다.
+// import { applyWaitlistPriorityTicket } from '@/firebase/pointService';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import useLongPress from '@/hooks/useLongPress';
@@ -263,7 +264,8 @@ const AggregatedItemCard: React.FC<{
 });
 
 
-const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: WaitlistInfo) => void; onUseTicket: (item: WaitlistInfo) => void; userPoints: number;}> = React.memo(({ item, onCancel, onUseTicket, userPoints }) => {
+// ✅ [수정] WaitlistItemCard에서 '순서 올리기' 관련 props와 로직을 모두 제거했습니다.
+const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: WaitlistInfo) => void; }> = React.memo(({ item, onCancel }) => {
     const navigate = useNavigate();
     const longPressActionInProgress = useRef(false);
 
@@ -277,22 +279,6 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
     const handlers = useLongPress(handleLongPress, () => navigate(`/product/${item.productId}`), { initialDelay: 1500 });
     const finalHandlers = { ...handlers, onMouseUp: () => { handlers.onMouseUp(); handlePressEnd(); }, onMouseLeave: () => { handlers.onMouseLeave(); handlePressEnd(); }, onTouchEnd: () => { handlers.onTouchEnd(); handlePressEnd(); } };
 
-    const handleTicketClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onUseTicket(item);
-    };
-    
-    const renderTicketButton = () => {
-      if (item.isPrioritized) {
-        return <button className="priority-ticket-btn used" disabled onClick={(e) => e.stopPropagation()}><CircleCheck size={16} /> 사용 완료</button>;
-      }
-      const canAfford = userPoints >= 50;
-      if (item.waitlistOrder === 1) {
-        return <button className="priority-ticket-btn is-first" onClick={handleTicketClick} disabled={!canAfford} title={canAfford ? '50포인트로 1등 자리 고정하기' : '포인트가 부족합니다 (50P 필요)'}><Trophy size={16} /> 1등 고정하기</button>;
-      }
-      return <button className="priority-ticket-btn" onClick={handleTicketClick} disabled={!canAfford} title={canAfford ? '50포인트로 순서 올리기' : '포인트가 부족합니다 (50P 필요)'}><Zap size={16} /> 순서 올리기</button>;
-    };
-
     return (
         <motion.div className="waitlist-card" layout {...finalHandlers} whileTap={{ scale: 0.97 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
           <div className="card-v3-body">
@@ -303,9 +289,8 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
                 {item.waitlistOrder && (<span className="waitlist-order-badge"><Bolt size={14} />대기 {item.waitlistOrder}번</span>)}
               </div>
               <div className="info-bottom-row"><span className="item-options-quantity"><span className="item-option-name">{item.itemName}</span><span className="item-quantity">({item.quantity}개)</span></span></div>
-              <div className="waitlist-actions" data-tutorial-id="history-waitlist-ticket">
+              <div className="waitlist-actions">
                 <div className="cancel-instruction-waitlist"><Info size={14} /><span>카드를 길게 눌러 대기를 취소하세요.</span></div>
-                {renderTicketButton()}
               </div>
             </div>
           </div>
@@ -438,102 +423,40 @@ const OrderHistoryPage: React.FC = () => {
         }
       );
     }, [user, setWaitlist]);
+    
+    // ✅ [수정] '순서 올리기' 관련 핸들러 함수를 삭제했습니다.
+    // const handleUsePriorityTicket = useCallback(...)
 
-    const handleUsePriorityTicket = useCallback((item: WaitlistInfo) => {
-      if (!user || !userDocument) return;
-      
-      if (!item.productId || !item.roundId || !item.itemId) {
-        toast.error('오래된 대기 정보라 순번 상승권을 사용할 수 없습니다. 해당 대기를 취소하고 다시 신청해주세요.');
-        return;
-      }
-
-      const originalWaitlist = [...waitlist];
-      const uniqueId = item.timestamp.toMillis();
-
-      toast.custom((t) => (
-        <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
-            <h4 className="toast-header"><Zap size={20} /><span>순번 상승권 사용</span></h4>
-            <p className="toast-message">
-              정말 <strong>50포인트</strong>를 사용해서 대기 순번을 올리시겠습니까?
-            </p>
-            <div className="toast-buttons">
-                <button 
-                  className="common-button button-secondary button-medium" 
-                  onClick={() => toast.dismiss(t.id)}
-                >
-                  취소
-                </button>
-                <button 
-                  className="common-button button-accent button-medium"
-                  onClick={async () => {
-                    toast.dismiss(t.id);
-
-                    const newOptimisticList = originalWaitlist.map(w =>
-                      w.timestamp.toMillis() === uniqueId
-                        ? { ...w, isPrioritized: true, prioritizedAt: Timestamp.now() }
-                        : w
-                    );
-
-                    const sortedOptimisticList = newOptimisticList.sort((a, b) => {
-                      if (a.isPrioritized && !b.isPrioritized) return -1;
-                      if (!a.isPrioritized && b.isPrioritized) return 1;
-                      if (a.isPrioritized && b.isPrioritized) {
-                        const timeA = safeToDate(a.prioritizedAt)?.getTime() || 0;
-                        const timeB = safeToDate(b.prioritizedAt)?.getTime() || 0;
-                        return timeA - timeB;
-                      }
-                      return (safeToDate(a.timestamp)?.getTime() || 0) - (safeToDate(b.timestamp)?.getTime() || 0);
-                    }).map((w, index) => ({ ...w, waitlistOrder: index + 1 }));
-
-                    setWaitlist(sortedOptimisticList);
-
-                    try {
-                      await applyWaitlistPriorityTicket(item.productId, item.roundId, item.itemId);
-                      toast.success('순번 상승권이 적용되었습니다!');
-                    } catch (err: any) {
-                      toast.error(err.message || '오류가 발생했습니다.');
-                      setWaitlist(originalWaitlist);
-                    }
-                  }}
-                >
-                  사용하기
-                </button>
-            </div>
-        </div>
-      ));
-    }, [user, userDocument, waitlist, setWaitlist]);
-
-
-  const renderOrderContent = () => {
-      const isFirstLoading = ordersLoading && orders.length === 0;
-      if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
-      if (orders.length === 0 && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
-      const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
-        const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
-        return viewMode === 'orders' ? dateB - dateA : dateA - dateB;
-      });
-      return (
-        <div className="orders-list">
-          <AnimatePresence>
-            {sortedDates.map((dateStr, index) => (
-              <motion.div key={dateStr} layout>
-                <div className="date-header-container">
-                  <DateHeader date={new Date(dateStr)} />
-                  {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
-                    <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
-                      <Info size={14} /><span>카드를 길게 눌러 예약을 취소하세요.</span>
+    const renderOrderContent = () => {
+        const isFirstLoading = ordersLoading && orders.length === 0;
+        if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
+        if (orders.length === 0 && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
+        const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
+            const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
+            return viewMode === 'orders' ? dateB - dateA : dateA - dateB;
+        });
+        return (
+            <div className="orders-list">
+            <AnimatePresence>
+                {sortedDates.map((dateStr, index) => (
+                <motion.div key={dateStr} layout>
+                    <div className="date-header-container">
+                    <DateHeader date={new Date(dateStr)} />
+                    {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
+                        <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
+                        <Info size={14} /><span>카드를 길게 눌러 예약을 취소하세요.</span>
+                        </div>
+                    )}
                     </div>
-                  )}
-                </div>
-                <div className="order-cards-grid">
-                  {aggregatedItems[dateStr].map(item => (<AggregatedItemCard key={item.id} item={item} displayDateInfo={viewMode === 'orders' ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! } : { type: 'order', date: safeToDate(item.originalOrders[0]?.createdAt)! }} onCancel={handleCancelOrder} />))}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      );
-  };
+                    <div className="order-cards-grid">
+                    {aggregatedItems[dateStr].map(item => (<AggregatedItemCard key={item.id} item={item} displayDateInfo={viewMode === 'orders' ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! } : { type: 'order', date: safeToDate(item.originalOrders[0]?.createdAt)! }} onCancel={handleCancelOrder} />))}
+                    </div>
+                </motion.div>
+                ))}
+            </AnimatePresence>
+            </div>
+        );
+    };
     
   const renderWaitlistContent = () => {
     if (loadingWaitlist) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
@@ -542,12 +465,11 @@ const OrderHistoryPage: React.FC = () => {
       <div className="waitlist-list">
         <AnimatePresence>
           {waitlist.map(item => (
+            // ✅ [수정] WaitlistItemCard에 전달하던 '순서 올리기' 관련 props를 제거했습니다.
             <WaitlistItemCard
               key={`${item.roundId}-${item.itemId}-${item.timestamp.toMillis()}`}
               item={item}
               onCancel={handleCancelWaitlist}
-              onUseTicket={handleUsePriorityTicket}
-              userPoints={userDocument?.points || 0}
             />
           ))}
         </AnimatePresence>

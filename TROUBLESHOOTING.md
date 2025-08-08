@@ -495,9 +495,6 @@
 * **문제점**: `OrderHistoryPage` 등 앱의 여러 페이지에서 스크롤 시 버벅이는 등 전반적인 반응 속도가 심각하게 느려졌습니다. 브라우저 콘솔에는 `react-kakao-maps-sdk`에서 발생하는 'Added non-passive event listener' 경고가 지속적으로 출력되었습니다.
 * **원인**: `CustomerCenterPage`의 '매장 정보' 탭(`InfoTab`)에 포함된 `KakaoMap` 컴포넌트가, 해당 탭이 보이지 않을 때도 미리 로딩되어 앱의 메인 스레드를 계속 점유하고 있었습니다. 이로 인해 지도의 이벤트 리스너들이 다른 모든 페이지의 사용자 인터랙션(스크롤, 터치 등)까지 방해하여 앱 전체의 성능 저하를 유발했습니다.
 * **해결**: React의 **지연 로딩(Lazy Loading)** 기법을 도입했습니다. `CustomerCenterPage.tsx`에서 `InfoTab` 컴포넌트를 `React.lazy()`를 사용해 동적으로 import하고, UI를 `<Suspense>`로 감싸주었습니다. 이 방법을 통해 사용자가 '매장 정보' 탭을 실제로 클릭하기 전까지는 무거운 지도 관련 코드를 일절 로드하지 않도록 수정하여, 앱의 초기 로딩 속도와 전반적인 반응성을 크게 향상시켰습니다.
-
-### ✅ [신규] 40. '순서 올리기' 기능 다단계 디버깅 (Permission Denied → Bad Request)
-
 * **문제점**: '1등 고정하기' 버튼 클릭 시, 처음에는 `Missing or insufficient permissions` (Firestore 보안 규칙 위반) 오류가 발생했고, 이를 해결하자 `400 Bad Request` ("필수 정보 누락") 오류가 발생하는 등 복합적인 문제가 나타나며 페이지가 멈췄습니다.
 * **디버깅 과정**:
     1.  **`Permission Denied` 오류 해결**: 초기 오류는 클라이언트(브라우저)에서 직접 `products` 컬렉션을 수정하려 했기 때문에 발생했습니다. 민감한 로직을 클라이언트(`pointService.ts`)에서 분리하여 **안전한 서버 환경의 Cloud Function(`useWaitlistTicket`)으로 이전**하는 아키텍처 변경을 통해 권한 문제를 해결했습니다.
