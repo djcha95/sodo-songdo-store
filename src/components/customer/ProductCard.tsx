@@ -302,8 +302,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       <div className="product-card-final" onClick={handleCardClick}>
         <TopBadge />
         <div className="card-image-container">
-          <img src={getOptimizedImageUrl(product.imageUrls?.[0], '200x200')} alt={product.groupName} loading="lazy" />
-          {/* ✅ [수정] "예약 마감" 오버레이 제거 */}
+          {/* ✅ [수정] 이미지가 없을 경우를 대비해 대체(Fallback) URL을 추가합니다. */}
+          <img src={getOptimizedImageUrl(product.imageUrls?.[0] || 'https://via.placeholder.com/200x200.png?text=No+Image', '200x200')} alt={product.groupName} loading="lazy" />
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

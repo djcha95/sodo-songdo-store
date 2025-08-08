@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async'; // 1. Helmet import
+
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useTutorial } from '@/context/TutorialContext';
@@ -13,7 +15,7 @@ import { Timestamp } from 'firebase/firestore';
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType } from '@/types';
 import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
-import { getOptimizedImageUrl } from '@/utils/imageUtils'; // ✅ 1. 이미지 유틸리티 임포트
+import { getOptimizedImageUrl } from '@/utils/imageUtils';
 
 import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
@@ -158,7 +160,6 @@ const PurchasePanel: React.FC<{
     const renderContent = () => { 
         switch (actionState) { 
             case 'PURCHASABLE': 
-                // ✅ 4. 데이터 오류 방어 코드 추가
                 if (!selectedItem) {
                     return <button className="add-to-cart-btn-fixed" disabled><span>옵션 정보를 불러올 수 없습니다</span></button>;
                 }
@@ -262,7 +263,6 @@ const ProductDetailPage: React.FC = () => {
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
 
-    // ✅ 2. 최적화된 이미지 URL을 계산하는 로직 추가
     const optimizedImages = useMemo(() => {
         return product?.imageUrls.map(url => getOptimizedImageUrl(url, '1080x1080')) || [];
     }, [product?.imageUrls]);
@@ -335,20 +335,58 @@ const ProductDetailPage: React.FC = () => {
         }
     }, [productId, userDocument, isEncoreRequested, isEncoreLoading, requestEncoreCallable]);
 
-    if (loading) return <ProductDetailSkeleton />;
-    if (error || !product || !displayRound) return (
-        <div className="product-detail-modal-overlay" onClick={() => navigate(-1)}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div>
+    if (loading) return (
+        <>
+            {/* 로딩 중일 때도 기본 OG 태그를 설정해줄 수 있습니다. */}
+            <Helmet>
+                <title>상품 정보 로딩 중... | 소도몰</title>
+            </Helmet>
+            <ProductDetailSkeleton />
+        </>
     );
+
+    if (error || !product || !displayRound) return (
+        <>
+            <Helmet>
+                <title>오류 | 소도몰</title>
+                <meta property="og:title" content="상품을 찾을 수 없습니다" />
+            </Helmet>
+            <div className="product-detail-modal-overlay" onClick={() => navigate(-1)}>
+                <div className="product-detail-modal-content">
+                    <div className="error-message-modal">
+                        <X className="error-icon"/>
+                        <p>{error || '상품 정보를 표시할 수 없습니다.'}</p>
+                        <button onClick={() => navigate('/')} className="error-close-btn">홈으로</button>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+    
+    // 2. 동적 OG 태그를 위한 정보 준비
+    const ogTitle = `${product.groupName} - 소도몰`;
+    const ogDescription = product.description?.replace(/<br\s*\/?>/gi, ' ').substring(0, 100) + '...' || '소도몰에서 특별한 상품을 만나보세요!';
+    const ogImage = getOptimizedImageUrl(product.imageUrls[0], '1200x630') || 'https://www.sodo-songdo.store/sodomall-preview.png';
+    const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
     return (
         <>
+            {/* 3. Helmet 컴포넌트를 사용하여 동적 OG 태그 설정 */}
+            <Helmet>
+                <title>{ogTitle}</title>
+                <meta property="og:title" content={ogTitle} />
+                <meta property="og:description" content={ogDescription} />
+                <meta property="og:image" content={ogImage} />
+                <meta property="og:url" content={ogUrl} />
+                <meta property="og:type" content="product" />
+            </Helmet>
+
             <div className="product-detail-modal-overlay" onClick={() => navigate(-1)}>
                 <div className="product-detail-modal-content" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => navigate(-1)} className="modal-close-btn-top"><X /></button>
                     <div className="modal-scroll-area">
                         <div className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery">
-                                {/* ✅ 3. 최적화된 이미지 적용 */}
                                 <ProductImageSlider 
                                     images={optimizedImages} 
                                     productName={product.groupName} 
@@ -387,7 +425,6 @@ const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
             
-            {/* ✅ 3. 최적화된 이미지 적용 */}
             <Lightbox
                 isOpen={isLightboxOpen}
                 onClose={handleCloseLightbox}

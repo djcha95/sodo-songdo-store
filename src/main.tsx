@@ -2,8 +2,9 @@
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, useParams } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { HelmetProvider } from 'react-helmet-async';
 
 import './index.css';
 
@@ -12,8 +13,8 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import SodomallLoader from './components/common/SodomallLoader'; 
 
 import { AuthProvider } from './context/AuthContext';
-// 더 이상 사용하지 않는 CSS 파일 import를 삭제합니다.
-// import './styles/toast-styles.css';
+import { CartProvider } from './context/CartContext';
+import { TutorialProvider } from './context/TutorialContext';
 
 // --- 페이지 컴포넌트 lazy loading ---
 
@@ -33,11 +34,8 @@ const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryP
 const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
-// ✨ [추가] 픽업 캘린더 페이지 import
 const OrderCalendarPage = React.lazy(() => import('@/components/customer/OrderCalendar'));
-// ✅ [추가] 앵콜 페이지 import
 const EncorePage = React.lazy(() => import('./pages/customer/EncorePage'));
-
 
 // 관리자 페이지
 const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));
@@ -48,27 +46,11 @@ const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
 const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage'));
 const CategoryManagementPage = React.lazy(() => import('@/pages/admin/CategoryManagementPage'));
-// ✨ [수정] 사용되지 않는 페이지 import 제거
-// const MinimalTestPage = React.lazy(() => import('@/pages/admin/MinimalTestPage')); 
-// const AiProductPage = React.lazy(() => import('@/pages/admin/AiProductPage'));
-// const BoardAdminPage = React.lazy(() => import('@/pages/admin/BoardAdminPage'));
-// const CouponAdminPage = React.lazy(() => import('@/pages/admin/CouponAdminPage'));
-// const EncoreAdminPage = React.lazy(() => import('@/pages/admin/EncoreAdminPage'));
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
-// const PickupProcessingPage = React.lazy(() => import('@/pages/admin/PickupProcessingPage'));
-// const ProductArrivalCalendar = React.lazy(() => import('@/components/admin/ProductArrivalCalendar'));
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
-// 새로 만든 페이지 import
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 
 
-const ProductDetailPageWrapper = () => {
-  const { productId } = useParams<{ productId: string }>();
-  return productId ? <ProductDetailPage productId={productId} isOpen={true} onClose={() => window.history.back()} /> : null;
-};
-
-
-// ✨ [수정] 라우팅 구조를 최신 표준에 맞게 재설계
 const router = createBrowserRouter([
   {
     path: "/",
@@ -87,7 +69,6 @@ const router = createBrowserRouter([
             path: "admin",
             element: <Suspense fallback={<SodomallLoader />}><AdminLayout /></Suspense>,
             children: [
-              // ✅ [수정] 관리자 페이지의 기본 경로를 다시 대시보드로 변경합니다.
               { index: true, element: <DashboardPage /> },
               { path: 'dashboard', element: <DashboardPage /> },
               { path: 'quick-check', element: <QuickCheckPage /> },
@@ -116,7 +97,6 @@ const router = createBrowserRouter([
               { path: "cart", element: <CartPage /> },
               { path: "onsite-sale", element: <OnsiteSalePage /> },
               { path: "customer-center", element: <CustomerCenterPage /> },
-              // ✅ [추가] 앵콜 페이지 경로 추가
               { path: "encore", element: <EncorePage /> },
               {
                 path: "mypage",
@@ -124,7 +104,6 @@ const router = createBrowserRouter([
                   { index: true, element: <MyPage /> },
                   { path: "history", element: <OrderHistoryPage /> },
                   { path: "points", element: <PointHistoryPage /> },
-                  // ✨ [추가] 픽업 캘린더 경로 추가
                   { path: "orders", element: <OrderCalendarPage /> },
                 ]
               },
@@ -132,7 +111,7 @@ const router = createBrowserRouter([
           },
           {
             path: "product/:productId",
-            element: <Suspense fallback={<SodomallLoader />}><ProductDetailPageWrapper /></Suspense>,
+            element: <Suspense fallback={<SodomallLoader />}><ProductDetailPage /></Suspense>,
           },
         ]
       },
@@ -150,42 +129,51 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <React.Fragment>
-    <Toaster
-      position="top-center"
-      toastOptions={{
-        duration: 4000, 
-        style: {
-          background: '#fff',
-          color: 'var(--text-color-dark, #343a40)',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          borderRadius: '10px',
-          border: '1px solid #f0f0f0',
-          padding: '12px 16px',
-          fontSize: '1rem',
-          fontWeight: '500',
-        },
-        success: {
-          iconTheme: {
-            primary: 'var(--accent-color, #28a745)',
-            secondary: '#fff',
+    <HelmetProvider>
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 4000, 
+          style: {
+            background: '#fff',
+            color: 'var(--text-color-dark, #343a40)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            borderRadius: '10px',
+            border: '1px solid #f0f0f0',
+            padding: '12px 16px',
+            fontSize: '1rem',
+            fontWeight: '500',
           },
-        },
-        error: {
-          iconTheme: {
-            primary: 'var(--danger-color, #dc3545)',
-            secondary: '#fff',
+          success: {
+            iconTheme: {
+              primary: 'var(--accent-color, #28a745)',
+              secondary: '#fff',
+            },
           },
-        },
-      }}
-      containerStyle={{
-        zIndex: 9999,
-        transform: 'translateZ(0)',
-      }}
-    />
-    <AuthProvider> 
-      <Suspense fallback={<SodomallLoader />}>
-        <RouterProvider router={router} />
-      </Suspense>
-    </AuthProvider>
+          error: {
+            iconTheme: {
+              primary: 'var(--danger-color, #dc3545)',
+              secondary: '#fff',
+            },
+          },
+        }}
+        containerStyle={{
+          zIndex: 9999,
+          transform: 'translateZ(0)',
+        }}
+      />
+      <AuthProvider>
+        <CartProvider>
+          {/* ✅ 오류 수정: TutorialProvider의 children을 함수 형태로 변경 */}
+          <TutorialProvider>
+            {() => (
+              <Suspense fallback={<SodomallLoader />}>
+                <RouterProvider router={router} />
+              </Suspense>
+            )}
+          </TutorialProvider>
+        </CartProvider>
+      </AuthProvider>
+    </HelmetProvider>
   </React.Fragment>
 );
