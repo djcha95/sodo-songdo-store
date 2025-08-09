@@ -153,11 +153,12 @@ const CartPage: React.FC = () => {
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
   const [ineligibleItemIds, setIneligibleItemIds] = useState<Set<string>>(new Set());
   
-  const functions = getFunctions(getApp(), 'asia-northeast3');
+  // ✅ [수정] useMemo를 사용하여 함수 참조를 고정
+  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   
-  const checkCartStockCallable = httpsCallable<any, any>(functions, 'checkCartStock');
-  const submitOrderCallable = httpsCallable<any, any>(functions, 'submitOrder');
-  const addWaitlistEntryCallable = httpsCallable<any, any>(functions, 'addWaitlistEntry');
+  const checkCartStockCallable = useMemo(() => httpsCallable<any, any>(functions, 'checkCartStock'), [functions]);
+  const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functions, 'submitOrder'), [functions]);
+  const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functions, 'addWaitlistEntry'), [functions]);
 
 
   useEffect(() => {
@@ -226,12 +227,12 @@ const CartPage: React.FC = () => {
     }
   }, [checkCartStockCallable, removeItems, updateCartItemQuantity, userDocument]);
   
-  // ✅ [수정] 의존성을 item들의 id 목록으로 변경하여 불필요한 재호출 방지
   const reservationItemIds = useMemo(() => reservationItems.map(item => item.id).join(','), [reservationItems]);
 
   useEffect(() => {
+    // reservationItems 배열 자체가 아니라, 해당 배열의 내용이 변경되었을 때만 동기화하도록 `reservationItemIds`를 사용
     syncCartWithServerStock(reservationItems);
-  }, [reservationItemIds, syncCartWithServerStock]); 
+  }, [reservationItemIds, syncCartWithServerStock]); // syncCartWithServerStock은 이제 안정적인 의존성입니다.
 
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
@@ -277,6 +278,7 @@ const CartPage: React.FC = () => {
     }
     if (isProcessingOrder || (eligibleReservationItems.length === 0 && waitlistItems.length === 0)) return;
 
+    // 최종 제출 직전에 한 번 더 재고를 확인합니다.
     const isStockSufficient = await syncCartWithServerStock(eligibleReservationItems);
     if (!isStockSufficient) return;
 
@@ -501,6 +503,23 @@ const CartPage: React.FC = () => {
             >
                 {buttonInfo.text}
             </button>
+            <div className="cart-summary-details">
+                {eligibleReservationTotal !== reservationItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0) && (
+                    <div className="summary-row warning-text">
+                        <span>(등급 제한 제외)</span>
+                        <span></span>
+                    </div>
+                )}
+            </div>
+            {ineligibleItemIds.size > 0 && (
+                <div className="ineligible-notice-box">
+                    <AlertTriangle size={16} />
+                    <span>
+                        현재 등급으로 참여할 수 없는 상품({ineligibleItemIds.size}개)은<br />
+                        자동으로 제외되었습니다.
+                    </span>
+                </div>
+            )}
           </div>
         </div>
       </div>

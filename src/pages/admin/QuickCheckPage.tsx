@@ -10,7 +10,6 @@ import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { AnimatePresence } from 'framer-motion';
 import { Search, X, Users, SearchSlash, BellRing } from 'lucide-react';
-// import { getFunctions, httpsCallable } from 'firebase/functions'; // 현재 코드에서 사용되지 않음
 import './QuickCheckPage.css';
 
 // ====================================================================
@@ -29,23 +28,25 @@ const AlimtalkTestSender: React.FC = () => {
       setIsLoading(true);
       const toastId = toast.loading('테스트 알림톡 발송 중...');
 
-      // ✅ [핵심 수정] httpsCallable 대신 fetch API를 사용
       try {
-        // 🚨 중요: 아래 URL의 'sso-db' 부분은 본인의 Firebase 프로젝트 ID로 변경해야 할 수 있습니다.
-        // Cloud Functions 로그에 표시되는 URL을 사용하세요.
-        const response = await fetch('https://us-central1-sso-db.cloudfunctions.net/test-testSendAlimtalk', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ data: { recipientPhone, templateCode } }), // Functions v2는 data 객체로 래핑해야 함
-        });
+        // ✅ [핵심 수정 1] 호출하는 함수의 리전을 'asia-northeast3'로 정확하게 수정합니다.
+        const functionUrl = 'https://asia-northeast3-sso-do.cloudfunctions.net/testSendAlimtalk';
+      
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recipientPhone, templateCode }),
+      });
 
-        const result = await response.json();
+        // 응답 본문이 비어있을 수 있으므로 먼저 텍스트로 읽어옵니다.
+        const text = await response.text();
+        const result = text ? JSON.parse(text) : {};
 
         if (!response.ok) {
-          // 서버에서 보낸 에러 메시지를 사용
-          throw new Error(result.error?.message || '알 수 없는 서버 오류');
+          // 서버에서 보낸 에러 메시지(result.error)를 우선적으로 사용합니다.
+          throw new Error(result.error || `서버 응답 오류: ${response.status}`);
         }
 
         toast.success(`[${templateCode}] 발송 요청 성공!`, { id: toastId });
@@ -53,7 +54,7 @@ const AlimtalkTestSender: React.FC = () => {
 
       } catch (error: any) {
         toast.error(`발송 실패: ${error.message}`, { id: toastId });
-        console.error('발송 실패:', error);
+        console.error('발송 실패 상세:', error);
       } finally {
         setIsLoading(false);
       }
@@ -90,7 +91,7 @@ const AlimtalkTestSender: React.FC = () => {
 
 
 // ====================================================================
-// 기존 QuickCheckPage 컴포넌트
+// 기존 QuickCheckPage 컴포넌트 (변경 없음)
 // ====================================================================
 const QuickCheckPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -251,7 +252,6 @@ const QuickCheckPage: React.FC = () => {
             <AnimatePresence mode="wait">
                 {isLoading && <SodomallLoader message="사용자 목록을 불러오는 중..." />}
                 
-                {/* ✅ [수정] `onActionComplete` 대신 `onActionSuccess` 사용을 유지 */}
                 {!isLoading && focusedUser && (
                     <CustomerFocusView 
                         user={focusedUser}

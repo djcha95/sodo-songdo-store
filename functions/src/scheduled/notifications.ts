@@ -3,7 +3,7 @@ import { onSchedule, ScheduledEvent } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { sendAlimtalk } from "../utils/nhnApi.js";
-import type { Order, OrderItem, UserDocument } from "../types.js";
+import type { Order, UserDocument } from "../types.js";
 
 const normalizeToDate = (value: unknown): Date | null => {
     if (!value) return null;
@@ -17,18 +17,11 @@ const normalizeToDate = (value: unknown): Date | null => {
     return null;
 };
 
-type PickupInfo = {
-  item: OrderItem;
-  pickupDate: Timestamp | Date;
-  deadlineDate: Timestamp | Date | null;
-};
-
 export const sendPickupReminders = onSchedule(
   {
     schedule: "every day 09:00",
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
-    // ✅ [추가] NHN API 키(비밀)를 사용한다고 명시
     secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (context: ScheduledEvent) => {
@@ -54,7 +47,7 @@ export const sendPickupReminders = onSchedule(
         return;
       }
       
-      const pickupsByUser = new Map<string, PickupInfo[]>();
+      const pickupsByUser = new Map<string, Order[]>();
       
       ordersSnapshot.forEach(doc => {
         const order = doc.data() as Order;
@@ -64,20 +57,9 @@ export const sendPickupReminders = onSchedule(
           logger.info(`[SKIP] Order ${doc.id} was created recently, skipping reminder.`);
           return;
         }
-        
-        if (!order.pickupDate) {
-            logger.warn(`[SKIP] Order ${doc.id} is missing pickupDate.`);
-            return;
-        }
 
-        const itemsWithDates: PickupInfo[] = order.items.map(item => ({
-            item: item,
-            pickupDate: order.pickupDate,
-            deadlineDate: order.pickupDeadlineDate ?? null,
-        }));
-
-        const existingItems = pickupsByUser.get(order.userId) || [];
-        pickupsByUser.set(order.userId, [...existingItems, ...itemsWithDates]);
+        const existingOrders = pickupsByUser.get(order.userId) || [];
+        pickupsByUser.set(order.userId, [...existingOrders, order]);
       });
 
       if (pickupsByUser.size === 0) {
@@ -85,63 +67,27 @@ export const sendPickupReminders = onSchedule(
         return;
       }
 
-      for (const [userId, pickupInfos] of pickupsByUser.entries()) {
+      for (const [userId, userOrders] of pickupsByUser.entries()) {
         const userDoc = await db.collection("users").doc(userId).get();
         if (!userDoc.exists) continue;
         const userData = userDoc.data() as UserDocument;
         if (!userData?.phone || !userData.displayName) continue;
 
-        const todayString = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-        
-        const todayDeadlineInfos = pickupInfos.filter(info => {
-            const deadline = normalizeToDate(info.deadlineDate);
-            return deadline && deadline.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) === todayString;
-        });
+        const allPickupItems = userOrders.flatMap(order => order.items);
 
-        const futureDeadlineInfos = pickupInfos.filter(info => !todayDeadlineInfos.includes(info));
-
-        if (todayDeadlineInfos.length === 0 && futureDeadlineInfos.length === 0) {
+        if (allPickupItems.length === 0) {
             continue;
         }
 
-        let todayDeadlineText = "";
-        if (todayDeadlineInfos.length > 0) {
-            const productList = todayDeadlineInfos
-                .map(info => `・${info.item.productName || info.item.itemName} ${info.item.quantity}개`)
-                .join('\n');
-            todayDeadlineText = `🚨 오늘 꼭 찾아가세요! (오늘 저녁 8시 마감)\n${productList}`;
-        }
+        const productListText = allPickupItems
+            .map(item => `・${item.productName || '주문 상품'} ${item.quantity}개`)
+            .join('\n');
 
-        let futureDeadlineText = "";
-        if (futureDeadlineInfos.length > 0) {
-            const productList = futureDeadlineInfos
-                .map(info => `・${info.item.productName || info.item.itemName} ${info.item.quantity}개`)
-                .join('\n');
-
-            const earliestDeadline = new Date(Math.min(
-                ...futureDeadlineInfos
-                    .map(info => normalizeToDate(info.deadlineDate)?.getTime())
-                    .filter((time): time is number => time !== undefined)
-            ));
-            const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-            const deadlineStr = `${earliestDeadline.getMonth() + 1}월 ${earliestDeadline.getDate()}일(${weekdays[earliestDeadline.getDay()]})`;
-
-            futureDeadlineText = `🛍️ 오늘부터 여유롭게 찾아가세요 (픽업기한: ~${deadlineStr}까지)\n${productList}`;
-        }
-        
         const templateCode = "STANDARD_PICKUP_STAR";
-        const templateVariables: { [key: string]: string } = {
+        const templateVariables = {
             고객명: userData.displayName,
-            오늘마감상품목록: todayDeadlineText,
-            일반픽업상품목록: futureDeadlineText,
+            오늘픽업상품목록: productListText,
         };
-
-        if (todayDeadlineText && !futureDeadlineText) {
-            templateVariables.오늘마감상품목록 = todayDeadlineText.trim();
-        }
-        if (!todayDeadlineText && futureDeadlineText) {
-            templateVariables.일반픽업상품목록 = futureDeadlineText.trim();
-        }
 
         await sendAlimtalk(userData.phone, templateCode, templateVariables);
       }
@@ -157,7 +103,6 @@ export const sendPrepaymentReminders = onSchedule(
     schedule: "every day 19:00",
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
-    // ✅ [추가] NHN API 키(비밀)를 사용한다고 명시
     secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (context: ScheduledEvent) => {
@@ -201,11 +146,10 @@ export const sendPrepaymentReminders = onSchedule(
             const totalAmount = orders.reduce((sum, order) => sum + order.totalPrice, 0);
 
             const templateCode = "PREPAYMENT_GUIDE_URG";
-            // ✅ [수정] 템플릿에 맞춰 변수명을 '상품목록'과 '총선입금액'으로 수정했습니다.
             const templateVariables: { [key: string]: string } = {
                 고객명: userData.displayName,
                 상품목록: productList,
-                전체금액: totalAmount.toString(),
+                총결제금액: totalAmount.toString(),
             };
             
             await sendAlimtalk(userData.phone, templateCode, templateVariables);
@@ -216,3 +160,88 @@ export const sendPrepaymentReminders = onSchedule(
         logger.error("오후 7시 선입금 안내 알림톡 발송 중 오류 발생:", error);
     }
   });
+
+export const sendFuturePickupConfirmations = onSchedule(
+  {
+    schedule: "every day 13:00",
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+    secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
+  },
+  async (context: ScheduledEvent) => {
+    const now = new Date();
+    const dayOfWeek = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', weekday: 'short' });
+
+    if (dayOfWeek === 'Sat' || dayOfWeek === 'Sun') {
+        logger.info("주말(토/일)에는 미래 픽업 확정 알림을 발송하지 않습니다.");
+        return;
+    }
+
+    logger.info("오후 1시: 미래 픽업 예약 확정 알림톡 발송 작업을 시작합니다.");
+
+    try {
+        const db = getFirestore();
+
+        const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const rangeEnd = kstNow;
+        let rangeStart = new Date(kstNow.getTime() - (24 * 60 * 60 * 1000));
+
+        if (dayOfWeek === 'Mon') {
+            rangeStart = new Date(kstNow.getTime() - (72 * 60 * 60 * 1000));
+        }
+        
+        const todayStart = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
+        const tomorrow = new Date(todayStart);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStart = tomorrow;
+
+        const ordersSnapshot = await db.collection("orders")
+            .where("createdAt", ">=", rangeStart)
+            .where("createdAt", "<", rangeEnd)
+            .where("pickupDate", ">=", tomorrowStart)
+            .where("status", "in", ["RESERVED", "PREPAID"])
+            .get();
+
+        if (ordersSnapshot.empty) {
+            logger.info("알림을 보낼 미래 픽업 주문이 없습니다.");
+            return;
+        }
+
+        const confirmationsByUser = new Map<string, Order[]>();
+        ordersSnapshot.forEach(doc => {
+            const order = doc.data() as Order;
+            const existingOrders = confirmationsByUser.get(order.userId) || [];
+            confirmationsByUser.set(order.userId, [...existingOrders, order]);
+        });
+
+        for (const [userId, userOrders] of confirmationsByUser.entries()) {
+            const userDoc = await db.collection("users").doc(userId).get();
+            if (!userDoc.exists) continue;
+            const userData = userDoc.data() as UserDocument;
+            if (!userData?.phone || !userData.displayName) continue;
+
+            const allItems = userOrders.flatMap(order => order.items);
+            const productListText = allItems
+                .map(item => `・${item.productName || '주문 상품'} ${item.quantity}개`)
+                .join('\n');
+            
+            const earliestPickupDate = userOrders
+                .map(order => (order.pickupDate as Timestamp).toDate())
+                .reduce((earliest, current) => current < earliest ? current : earliest);
+
+            const templateCode = "ORD_CONFIRM_FUTURE";
+            const templateVariables = {
+                고객명: userData.displayName,
+                상품목록: productListText,
+                픽업시작일: earliestPickupDate.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }),
+            };
+
+            await sendAlimtalk(userData.phone, templateCode, templateVariables);
+        }
+        
+        logger.info(`${confirmationsByUser.size}명의 사용자에게 미래 픽업 예약 확정 알림톡을 발송했습니다.`);
+    } catch (error) {
+        logger.error("미래 픽업 예약 확정 알림톡 발송 중 오류 발생:", error);
+    }
+  }
+);
