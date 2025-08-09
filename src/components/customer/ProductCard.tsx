@@ -92,6 +92,32 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [isJustAdded, setIsJustAdded] = useState(false);
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ✅ [수정] 이미지 로딩 폴백(Fallback) 로직
+  // 1. 이미지 URL을 관리할 state를 생성합니다. 초기값은 빈 문자열입니다.
+  const [imageSrc, setImageSrc] = useState('');
+
+  // 2. product.imageUrls가 변경될 때마다 최적화된 이미지 URL로 state를 설정합니다.
+  useEffect(() => {
+    const originalUrl = product.imageUrls?.find(url => typeof url === 'string' && url.trim() !== '');
+    const optimizedUrl = getOptimizedImageUrl(
+      originalUrl || 'https://via.placeholder.com/200x200.png?text=No+Image',
+      '200x200'
+    );
+    setImageSrc(optimizedUrl);
+  }, [product.imageUrls]);
+
+  // 3. 이미지 로딩 실패 시 호출될 에러 핸들러입니다.
+  const handleImageError = useCallback(() => {
+    const originalUrl = product.imageUrls?.find(url => typeof url === 'string' && url.trim() !== '');
+    const fallbackSrc = originalUrl || 'https://via.placeholder.com/200x200.png?text=No+Image';
+    
+    // 무한 루프를 방지하기 위해, 현재 URL이 폴백 URL과 다를 경우에만 상태를 업데이트합니다.
+    if (imageSrc !== fallbackSrc) {
+      setImageSrc(fallbackSrc);
+    }
+  }, [product.imageUrls, imageSrc]);
+
+
   useEffect(() => {
     return () => { if (addedTimeoutRef.current) clearTimeout(addedTimeoutRef.current); };
   }, []);
@@ -228,18 +254,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     });
   }, [userDocument, product.id, requestEncore, hasRequestedEncore]);
 
-  // ✅ [수정] 이미지 URL을 안전하게 가져오기 위한 로직
-  const imageUrl = useMemo(() => {
-    // 1. product.imageUrls 배열에서 유효한(빈 문자열이 아닌) 첫 번째 URL을 찾습니다.
-    const firstValidUrl = product.imageUrls?.find(url => typeof url === 'string' && url.trim() !== '');
-    
-    // 2. 유효한 URL이 있으면 최적화하고, 없으면 플레이스홀더를 사용합니다.
-    return getOptimizedImageUrl(
-      firstValidUrl || 'https://via.placeholder.com/200x200.png?text=No+Image',
-      '200x200'
-    );
-  }, [product.imageUrls]);
-
   if (!cardData) return null;
 
   const { pickupDateFormatted, storageType } = cardData;
@@ -333,8 +347,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       <div className="product-card-final" onClick={handleCardClick}>
         <TopBadge />
         <div className="card-image-container">
-          {/* ✅ [수정] 안전하게 가져온 이미지 URL을 src에 바인딩 */}
-          <img src={imageUrl} alt={product.groupName} loading="lazy" />
+          {/* ✅ [수정] state에 바인딩된 src와 onError 핸들러를 적용합니다. */}
+          <img 
+            src={imageSrc} 
+            alt={product.groupName} 
+            loading="lazy"
+            onError={handleImageError} 
+          />
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>
