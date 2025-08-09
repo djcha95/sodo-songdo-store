@@ -28,6 +28,8 @@ export const sendPickupReminders = onSchedule(
     schedule: "every day 09:00",
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
+    // ✅ [추가] NHN API 키(비밀)를 사용한다고 명시
+    secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (context: ScheduledEvent) => {
     logger.info("오전 9시: 픽업 안내 알림톡 발송 작업을 시작합니다.");
@@ -155,6 +157,8 @@ export const sendPrepaymentReminders = onSchedule(
     schedule: "every day 19:00",
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
+    // ✅ [추가] NHN API 키(비밀)를 사용한다고 명시
+    secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (context: ScheduledEvent) => {
     logger.info("오후 7시: 선입금 최종 안내 알림톡 발송 작업을 시작합니다.");
@@ -201,7 +205,7 @@ export const sendPrepaymentReminders = onSchedule(
             const templateVariables: { [key: string]: string } = {
                 고객명: userData.displayName,
                 상품목록: productList,
-                총선입금액: totalAmount.toString(),
+                전체금액: totalAmount.toString(),
             };
             
             await sendAlimtalk(userData.phone, templateCode, templateVariables);

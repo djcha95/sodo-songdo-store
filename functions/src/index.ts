@@ -24,9 +24,11 @@ export * from "./callable/waitlist.js";
 // 사용자가 달성한 미션에 대한 보상을 요청하고 지급하는 로직을 처리합니다.
 export * from "./callable/missions.js";
 
-// ✅ [추가] 사용자 검색 등 사용자 관련 callable 함수
+// 사용자 검색 등 사용자 관련 callable 함수
 export * from "./callable/users.js";
 
+// ✅ 1. 새로 추가한 테스트 함수 import
+import { testSendAlimtalk } from './callable/testAlimtalk.js';
 
 // =================================================================
 // 2. HTTP Functions (HTTP 요청 함수)
@@ -64,3 +66,13 @@ export * from "./triggers/products.js";
 
 // 신규 회원 가입 시 환영 보너스를 지급하는 등의 사용자 관련 자동화 로직을 처리합니다.
 export * from "./triggers/users.js";
+
+
+// =================================================================
+// 5. Test Functions (테스트용 함수)
+// ✅ 2. 가져온 함수를 'test' 라는 그룹으로 묶어서 export
+// 이렇게 해야 클라이언트에서 'test-testSendAlimtalk' 이름으로 호출 가능
+// =================================================================
+export const test = {
+    testSendAlimtalk,
+};

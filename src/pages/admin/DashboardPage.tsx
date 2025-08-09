@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProducts } from '@/firebase/productService';
 import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
