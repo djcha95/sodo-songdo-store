@@ -51,17 +51,45 @@ export const safeToDate = (date: any): Date | null => {
   return null;
 };
 
+/**
+ * ✅ [수정] 주말 마감 정책을 반영하도록 마감일 계산 로직을 복구합니다.
+ * 토요일 또는 일요일에 발행된 상품은 마감일이 월요일 13시가 됩니다.
+ */
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: Date | null, secondaryEnd: Date | null } => {
   const publishAt = safeToDate(round.publishAt);
   const pickupDate = safeToDate(round.pickupDate);
-  const primaryEnd = publishAt 
-    ? dayjs(publishAt).add(1, 'day').hour(13).minute(0).second(0).toDate()
-    : safeToDate(round.deadlineDate);
+
+  let primaryEnd: Date | null = null;
+  
+  if (publishAt) {
+    let deadlineDate = dayjs(publishAt);
+    const publishDay = deadlineDate.day(); // dayjs에서 일요일은 0, 토요일은 6
+
+    // 1. 주말 정책 적용
+    if (publishDay === 6) { // 토요일에 발행된 경우
+      deadlineDate = deadlineDate.add(2, 'day'); // 마감일은 월요일
+    } else if (publishDay === 0) { // 일요일에 발행된 경우
+      deadlineDate = deadlineDate.add(1, 'day'); // 마감일은 월요일
+    } else { // 평일에 발행된 경우
+      deadlineDate = deadlineDate.add(1, 'day'); // 마감일은 다음 날
+    }
+    
+    // 2. 마감 시간을 오후 1시(13:00)로 설정
+    primaryEnd = deadlineDate.hour(13).minute(0).second(0).millisecond(0).toDate();
+
+  } else {
+    // publishAt이 없는 레거시 데이터를 위한 예외 처리
+    primaryEnd = safeToDate(round.deadlineDate);
+  }
+  
+  // 2차 마감일(픽업 마감일) 로직은 그대로 유지
   const secondaryEnd = pickupDate 
     ? dayjs(pickupDate).hour(13).minute(0).second(0).toDate()
     : null;
+    
   return { primaryEnd, secondaryEnd };
 };
+
 
 // ✅ [개선] 가독성 및 유지보수성을 위해 우선순위 기반 정렬 로직으로 리팩토링
 export const getDisplayRound = (product: Product): OriginalSalesRound | null => {

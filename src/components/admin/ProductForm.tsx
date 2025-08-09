@@ -68,16 +68,47 @@ interface AIParsedData {
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
 const formatToDateTimeLocal = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const formatDateToYYYYMMDD = (date: Date | null): string => { if (!date) return ''; const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
-const parseDateString = (dateString: string | null | undefined): Date | null => { 
-    if (!dateString) return null; 
-    const date = new Date(dateString);
-    if (!isNaN(date.getTime()) && date.getFullYear() > 1970) return date;
+
+/**
+ * ✅ [수정] 다양한 형식의 날짜 문자열을 Date 객체로 파싱하는 함수 (안정성 강화)
+ * @param dateString - '2025-08-09', '250809', '20250809' 등 형식의 날짜 문자열
+ * @returns 유효한 Date 객체 또는 null
+ */
+const parseDateStringToDate = (dateString: string | null | undefined): Date | null => {
+    if (!dateString) return null;
     
-    const cleaned = dateString.replace(/[^0-9]/g, ''); 
-    if (cleaned.length === 6) { const year = parseInt("20" + cleaned.substring(0, 2), 10); const month = parseInt(cleaned.substring(2, 4), 10) - 1; const day = parseInt(cleaned.substring(4, 6), 10); const d = new Date(year, month, day); if (d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) return d; } 
-    if (cleaned.length === 8) { const year = parseInt(cleaned.substring(0, 4), 10); const month = parseInt(cleaned.substring(4, 6), 10) - 1; const day = parseInt(cleaned.substring(6, 8), 10); const d = new Date(year, month, day); if (d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) return d; } 
-    return null; 
+    // 1. YYYY-MM-DD 와 같은 표준 형식 먼저 시도
+    let date = new Date(dateString);
+    if (!isNaN(date.getTime()) && date.getFullYear() > 1970) {
+        return date;
+    }
+
+    // 2. 250809, 20250809 같은 숫자 형식 처리
+    const cleaned = dateString.replace(/[^0-9]/g, '');
+    let year: number, month: number, day: number;
+
+    if (cleaned.length === 6) { // YYMMDD 형식
+        year = parseInt("20" + cleaned.substring(0, 2), 10);
+        month = parseInt(cleaned.substring(2, 4), 10) - 1; // month는 0부터 시작
+        day = parseInt(cleaned.substring(4, 6), 10);
+    } else if (cleaned.length === 8) { // YYYYMMDD 형식
+        year = parseInt(cleaned.substring(0, 4), 10);
+        month = parseInt(cleaned.substring(4, 6), 10) - 1;
+        day = parseInt(cleaned.substring(6, 8), 10);
+    } else {
+        return null; // 인식할 수 없는 숫자 길이
+    }
+
+    date = new Date(year, month, day);
+    
+    // 3. 파싱된 날짜가 유효한지 최종 검증 (예: 250230 -> 2025-03-02로 자동 변경되는 것 방지)
+    if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) {
+        return date;
+    }
+
+    return null;
 };
+
 const formatNumberWithCommas = (value: number | ''): string => { if (value === '' || value === null) return ''; return Number(value).toLocaleString('ko-KR'); };
 const parseFormattedNumber = (value: string): number | '' => { const parsed = parseInt(value.replace(/,/g, ''), 10); return isNaN(parsed) ? '' : parsed; };
 
@@ -329,7 +360,33 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
     const handleProductTypeChange = useCallback((newType: 'single' | 'group') => { if (productType === newType) return; if (productType === 'group' && newType === 'single') { toast.promise(new Promise<void>((resolve) => { setTimeout(() => { setVariantGroups((prev) => prev.slice(0, 1)); setProductType(newType); resolve(); }, 300); }), { loading: '변경 중...', success: '단일 상품으로 전환되었습니다.', error: '전환 실패' }); } else { setProductType(newType); } }, [productType]);
     const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => { setVariantGroups(prev => prev.map(vg => (vg.id === id ? { ...vg, [field]: value } : vg))); }, []);
-    const handleGroupDateBlur = useCallback((id: string, dateStr: string) => { const parsedDate = parseDateString(dateStr); if (dateStr && !parsedDate) { toast.error('유효하지 않은 날짜 형식입니다. (예: 250715 또는 20250715)'); return; } handleVariantGroupChange(id, 'expirationDate', parsedDate); handleVariantGroupChange(id, 'expirationDateInput', parsedDate ? formatDateToYYYYMMDD(parsedDate) : dateStr);}, [handleVariantGroupChange]);
+    
+    /**
+     * ✅ [수정] 유통기한 입력칸에서 포커스가 벗어났을 때 실행되는 함수 (안정성 강화)
+     */
+    const handleGroupDateBlur = useCallback((id: string, dateStr: string) => {
+        // 입력값이 비어있으면 상태를 초기화
+        if (!dateStr.trim()) {
+            handleVariantGroupChange(id, 'expirationDate', null);
+            handleVariantGroupChange(id, 'expirationDateInput', '');
+            return;
+        }
+        
+        const parsedDate = parseDateStringToDate(dateStr);
+        
+        if (parsedDate) {
+            // 파싱 성공: Date 객체와 'YYYY-MM-DD' 형식의 문자열로 모두 업데이트
+            handleVariantGroupChange(id, 'expirationDate', parsedDate);
+            handleVariantGroupChange(id, 'expirationDateInput', formatDateToYYYYMMDD(parsedDate));
+        } else {
+            // 파싱 실패: 에러 토스트를 보여주고, Date 객체는 null로 초기화.
+            // 사용자가 잘못된 입력을 수정할 수 있도록 입력창의 내용은 그대로 둠.
+            toast.error('유효하지 않은 날짜 형식입니다. (예: 250809 또는 2025-08-09)');
+            handleVariantGroupChange(id, 'expirationDate', null);
+            handleVariantGroupChange(id, 'expirationDateInput', dateStr);
+        }
+    }, [handleVariantGroupChange]);
+
     const addNewVariantGroup = useCallback(() => { setVariantGroups(prev => [...prev, { id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개', expirationDate: null, expirationDateInput: '', items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }] }]); }, []);
     const removeVariantGroup = useCallback((id: string) => { if (variantGroups.length > 1) setVariantGroups(prev => prev.filter(vg => vg.id !== id)); else toast.error("최소 1개의 하위 그룹이 필요합니다."); }, [variantGroups.length]);
     const handleItemChange = useCallback((vgId: string, itemId: string, field: keyof Omit<ProductItemUI, 'isBundleOption'>, value: any) => { setVariantGroups(prev => prev.map(vg => vg.id === vgId ? { ...vg, items: vg.items.map(item => { if (item.id === itemId) { const updatedItem = { ...item, [field]: value }; if (field === 'name') { const isBundle = bundleUnitKeywords.some(k => String(value).includes(k)) || !singleUnitKeywords.some(k => String(value).includes(k)); updatedItem.isBundleOption = isBundle; updatedItem.deductionAmount = isBundle ? item.deductionAmount : 1;} return updatedItem; } return item; }) } : vg)); }, []);
@@ -382,10 +439,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                 if (data.productType) setProductType(data.productType);
                 if (data.categoryName && categories.length > 0) { const foundCategory = categories.find(c => c.name === data.categoryName); if (foundCategory) { setSelectedMainCategory(foundCategory.id); } else { toast.error(`AI가 '${data.categoryName}' 카테고리를 추천했지만, 목록에 없어 선택할 수 없습니다.`); } }
                 const firstVg = data.variantGroups?.[0];
-                if (firstVg?.pickupDate) { setPickupDate(parseDateString(firstVg.pickupDate)); }
+                if (firstVg?.pickupDate) { setPickupDate(parseDateStringToDate(firstVg.pickupDate)); }
                 if (data.variantGroups && data.variantGroups.length > 0) {
                     const newVariantGroups: VariantGroupUI[] = data.variantGroups.map(vg => {
-                        const expirationDate = parseDateString(vg.expirationDate);
+                        const expirationDate = parseDateStringToDate(vg.expirationDate);
                         const newItems: ProductItemUI[] = (vg.items || []).map(item => ({ id: generateUniqueId(), name: item.name, price: item.price || '', limitQuantity: '', deductionAmount: 1, isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k)) }));
                         if (newItems.length === 0) { newItems.push({ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }); }
                         return { id: generateUniqueId(), groupName: vg.groupName || data.groupName || '', totalPhysicalStock: vg.totalPhysicalStock ?? '', stockUnitType: '개', expirationDate: expirationDate, expirationDateInput: expirationDate ? formatDateToYYYYMMDD(expirationDate) : (vg.expirationDate || ''), items: newItems };
@@ -414,7 +471,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
 
     const handleSubmit = async (isDraft: boolean = false) => {
-        // ✅ [추가] 날짜 유효성 검증 로직
+        setIsSubmitting(true);
+        // 날짜 유효성 검증 로직
         const MIN_YEAR = 2020;
         const MAX_YEAR = 2100;
         const isValidDateRange = (d: Date | null, fieldName: string) => {
@@ -442,11 +500,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
 
         if (!isDraft) {
-            if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); return; }
-            if (!deadlineDate || !pickupDate || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); return; }
-            if (isSecretProductEnabled && secretTiers.length === 0) { toast.error("시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요."); return; }
+            if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error("대표 이미지를 1개 이상 등록해주세요."); setIsSubmitting(false); return; }
+            if (!deadlineDate || !pickupDate || !pickupDeadlineDate) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
+            if (isSecretProductEnabled && secretTiers.length === 0) { toast.error("시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요."); setIsSubmitting(false); return; }
         }
-        setIsSubmitting(true);
+
         try {
             const status: SalesRoundStatus = isDraft ? 'draft' : 'scheduled';
             const finalPublishDate = new Date(publishDate);
@@ -467,13 +525,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                     })),
                 })),
                 publishAt: Timestamp.fromDate(finalPublishDate),
-                deadlineDate: Timestamp.fromDate(deadlineDate!),
-                pickupDate: Timestamp.fromDate(pickupDate!),
+                deadlineDate: deadlineDate ? Timestamp.fromDate(deadlineDate) : null,
+                pickupDate: pickupDate ? Timestamp.fromDate(pickupDate) : null,
                 pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
                 isPrepaymentRequired: isPrepaymentRequired,
                 allowedTiers: isSecretProductEnabled ? secretTiers : ALL_LOYALTY_TIERS.concat(['주의 요망']),
                 preOrderTiers: isPreOrderEnabled ? preOrderTiers : [],
             };
+            
             if (mode === 'newProduct') {
                 const productData: Omit<Product, 'id'|'createdAt'|'salesHistory'|'imageUrls'|'isArchived'> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '', encoreCount: 0, encoreRequesterIds: [], };
                 await addProductWithFirstRound(productData, salesRoundData as any, newImageFiles, creationDate);
@@ -485,8 +544,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                 const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = { groupName: groupName.trim(), description: description.trim(), storageType: selectedStorageType, category: categories.find(c => c.id === selectedMainCategory)?.name || '' };
                 const finalImageUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
                 const newFiles = imagePreviews.map((p) => p.startsWith('blob:') ? newImageFiles.find(f => URL.createObjectURL(f) === p) : null).filter(Boolean) as File[];
+                
+                // ✅ [개선 제안] 아래 두 개의 업데이트 함수는 하나의 트랜잭션으로 묶어 처리하는 것이 더 안전합니다.
+                // 만약 첫 번째 함수 성공 후 두 번째 함수가 실패하면 데이터가 일치하지 않는 상태가 될 수 있습니다.
+                // 예: await updateProductAndRoundInTransaction(productId, roundId, productDataToUpdate, salesRoundData, ...);
                 await updateProductCoreInfo(productId, productDataToUpdate, newFiles, finalImageUrls, initialImageUrls);
                 await updateSalesRound(productId, roundId, salesRoundData as any);
+                
                 toast.success(isDraft ? "수정 내용이 임시저장되었습니다." : "상품 정보가 성공적으로 수정되었습니다.");
             }
             navigate('/admin/products');

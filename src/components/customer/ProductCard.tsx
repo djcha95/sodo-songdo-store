@@ -8,7 +8,7 @@ import { Flame, Minus, Plus, ChevronRight, Calendar, Check, ShieldX, ShoppingCar
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
-import { useLaunch } from '@/context/LaunchContext'; // ✅ [추가] useLaunch import
+import { useLaunch } from '@/context/LaunchContext';
 import toast from 'react-hot-toast';
 import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/types'; 
 import useLongPress from '@/hooks/useLongPress';
@@ -87,7 +87,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { addToCart } = useCart();
   const { isSuspendedUser, userDocument } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
-  const { isPreLaunch, launchDate } = useLaunch(); // ✅ [추가] useLaunch 사용
+  const { isPreLaunch, launchDate } = useLaunch();
   const [quantity, setQuantity] = useState(1);
   const [isJustAdded, setIsJustAdded] = useState(false);
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -142,7 +142,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const handleAddToCart = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
 
-    // ✅ [추가] 사전 런칭 모드일 경우 기능 차단
     if (isPreLaunch) {
       toast( `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️' });
       return;
@@ -186,7 +185,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const handleAddToWaitlist = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
 
-    // ✅ [추가] 사전 런칭 모드일 경우 기능 차단
     if (isPreLaunch) {
       toast( `🛍️ 대기 신청은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️' });
       return;
@@ -230,6 +228,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     });
   }, [userDocument, product.id, requestEncore, hasRequestedEncore]);
 
+  // ✅ [수정] 이미지 URL을 안전하게 가져오기 위한 로직
+  const imageUrl = useMemo(() => {
+    // 1. product.imageUrls 배열에서 유효한(빈 문자열이 아닌) 첫 번째 URL을 찾습니다.
+    const firstValidUrl = product.imageUrls?.find(url => typeof url === 'string' && url.trim() !== '');
+    
+    // 2. 유효한 URL이 있으면 최적화하고, 없으면 플레이스홀더를 사용합니다.
+    return getOptimizedImageUrl(
+      firstValidUrl || 'https://via.placeholder.com/200x200.png?text=No+Image',
+      '200x200'
+    );
+  }, [product.imageUrls]);
+
   if (!cardData) return null;
 
   const { pickupDateFormatted, storageType } = cardData;
@@ -245,7 +255,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const storageInfo = getStorageTypeInfo(storageType);
   
   const renderActionControls = () => {
-    // ✅ [추가] 사전 런칭 모드일 경우, 다른 모든 상태보다 우선하여 런칭 안내 버튼 표시
     if (isPreLaunch) {
         return <button className="options-btn" onClick={handleCardClick}><Calendar size={16} /> {dayjs(launchDate).format('M월 D일')} 오픈!</button>;
     }
@@ -291,7 +300,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   const TopBadge = () => {
-    if (isPreLaunch) return null; // ✅ 사전 런칭 모드에서는 뱃지 숨김
+    if (isPreLaunch) return null;
     if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
 
     const { isMultiOption, singleOptionVg, displayRound } = cardData;
@@ -324,7 +333,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       <div className="product-card-final" onClick={handleCardClick}>
         <TopBadge />
         <div className="card-image-container">
-          <img src={getOptimizedImageUrl(product.imageUrls?.[0] || 'https://via.placeholder.com/200x200.png?text=No+Image', '200x200')} alt={product.groupName} loading="lazy" />
+          {/* ✅ [수정] 안전하게 가져온 이미지 URL을 src에 바인딩 */}
+          <img src={imageUrl} alt={product.groupName} loading="lazy" />
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>

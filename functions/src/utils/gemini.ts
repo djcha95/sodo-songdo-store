@@ -18,26 +18,32 @@ export async function analyzeProductTextWithAI(text: string, categories: string[
 
   // ✅ [최종 개선] 상세 설명을 꾸며주는 기능을 추가하여 프롬프트를 최종 업그레이드합니다.
   const prompt = `
-    You are an intelligent assistant and expert copywriter for a group-buying platform.
+    You are an intelligent assistant and expert copywriter for a Korean group-buying platform.
     Your task is to extract key product information from a given Korean text and return it as a structured JSON object.
 
-    ### IMPORTANT RULES:
-    1.  **Date Context**: Today is August 5, 2025. If a date in the text does not specify a year (e.g., "8월 9일"), you MUST assume it refers to the closest future date, which would be in 2025.
-    2.  **Date Formats**: You must be able to parse various date formats like "26.07.01" or "250805" (YYMMDD).
+    ### ❗ SUPER IMPORTANT RULES:
+    1.  **Date Context**: Today is August 9, 2025. If a date in the text does not specify a year (e.g., "8월 15일"), you MUST assume it refers to the closest future date, which would be in 2025.
+    2.  **Date Formats**: You must be able to parse various date formats like "26.07.01" or "250815" (YYMMDD).
     3.  **Category Classification**: From the provided list of valid categories, you MUST choose the single most relevant category.
     4.  **groupName Simplification**: The 'groupName' field MUST be concise. Remove store prefixes like "소도몰X", "소도몰×", or "[소도몰]".
-    5.  **items.name Simplification**: The 'name' field inside the 'items' array MUST contain only the unit information (e.g., "1팩", "1개 (300g)"). DO NOT repeat the main product name.
-    6.  **cleanedDescription Beautification**: The 'cleanedDescription' field requires special attention. Rewrite the promotional text to be more engaging for customers. Add relevant emojis (like ✨, 🔥, 🍜, 👍), use concise and impactful language, improve line breaks for readability, and use Markdown for emphasis (e.g., "**bold text**"). The output should be a single string containing the beautified text.
-    7.  **JSON Output**: The final output must be ONLY a valid JSON object, without any surrounding text or markdown backticks.
+    5.  **items.name Simplification**: The 'name' field inside the 'items' array MUST contain ONLY the essential unit information (e.g., "1팩", "1개 (300g)", "1인분"). DO NOT repeat the main product name.
+    6.  **✨ cleanedDescription Beautification (COPYWRITER MODE)**: The 'cleanedDescription' field is your masterpiece. Rewrite the promotional text to be more engaging and beautiful for customers.
+        - Add relevant and appealing emojis (like ✨, 🔥, 🍜, 👍, 🎉).
+        - Use concise and impactful language.
+        - Improve line breaks (use \\n) for mobile readability.
+        - Use Markdown for emphasis (e.g., "**강조할 텍스트**").
+        - The output MUST be a single JSON-compatible string.
+    7.  **Grouped Products**: If the text describes multiple distinct products (e.g., different flavors), create a separate object for each within the "variantGroups" array.
+    8.  **JSON Output**: The final output must be ONLY a valid JSON object, without any surrounding text or markdown backticks.
 
     ### Fields to Extract:
     - "productType": "single" or "group".
     - "storageType": Must be one of "ROOM", "COLD", "FROZEN". Default is "ROOM".
     - "categoryName": The single most relevant category from the provided list.
     - "groupName": The concise main product name (Rule #4).
-    - "cleanedDescription": The beautified, engaging promotional text (Rule #6).
+    - "cleanedDescription": The beautified, engaging promotional text created in your copywriter mode (Rule #6).
     - "variantGroups": An array of objects.
-        - "groupName": Sub-group name.
+        - "groupName": Sub-group name (e.g., a specific flavor). For single products, this should be same as the main groupName.
         - "totalPhysicalStock": Numerical stock quantity. Null if not found.
         - "expirationDate": Expiration date in "YYYY-MM-DD" format.
         - "pickupDate": Pickup start date in "YYYY-MM-DD" format.
@@ -82,14 +88,17 @@ export async function analyzeProductTextWithAI(text: string, categories: string[
     const response = await result.response;
     const responseText = response.text();
 
+    // AI 응답에서 JSON만 정확히 추출하는 정규식 강화
     const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```|({[\s\S]*})/);
     if (!jsonMatch) {
-      throw new Error("AI response did not contain valid JSON.");
+        console.error("AI 응답에 유효한 JSON이 포함되어 있지 않습니다. 응답:", responseText);
+        throw new Error("AI가 유효한 JSON 형식을 반환하지 않았습니다.");
     }
     
     const jsonString = jsonMatch[1] || jsonMatch[2];
     if (!jsonString) {
-        throw new Error("Could not extract JSON string from the response.");
+        console.error("AI 응답에서 JSON 문자열을 추출할 수 없습니다. 응답:", responseText);
+        throw new Error("AI 응답에서 JSON 데이터를 추출하지 못했습니다.");
     }
     
     return JSON.parse(jsonString);
