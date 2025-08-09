@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+// ✅ [수정] db import 경로를 다른 파일과 일관되게 수정하여 모듈 로딩 오류 해결
+import { db } from '@/firebase/firebaseConfig'; 
 import { 
     Crown, Gem, Sparkles, ShieldAlert, ShieldX, 
     Search, ArrowUpDown, Database, ChevronsLeft, ChevronsRight
@@ -187,10 +188,8 @@ const UserListPage = () => {
                                 <th className="col-role" onClick={() => handleSort('role')}><div className="sortable-header">권한 <ArrowUpDown size={12}/></div></th>
                                 <th className="col-points" onClick={() => handleSort('points')}><div className="sortable-header">신뢰도 P <ArrowUpDown size={12}/></div></th>
                                 <th className="col-noshow" onClick={() => handleSort('noShowCount')}><div className="sortable-header">노쇼 <ArrowUpDown size={12}/></div></th>
-                                {/* ✨ [수정] 상태(isSuspended) 기준으로 정렬 기능 추가 */}
                                 <th className="col-status" onClick={() => handleSort('isSuspended')}><div className="sortable-header">상태 <ArrowUpDown size={12}/></div></th>
                                 <th className="col-created" onClick={() => handleSort('createdAt')}><div className="sortable-header">가입일 <ArrowUpDown size={12}/></div></th>
-                                {/* ✨ [수정] '관리' 헤더 중앙 정렬을 위해 div 추가 */}
                                 <th className="col-actions cell-center"><div className="header-content-centered">관리</div></th>
                             </tr>
                         </thead>
@@ -210,7 +209,6 @@ const UserListPage = () => {
                                     <td><span className={`role-badge ${currentRoleInfo.className}`}>{currentRoleInfo.label}</span></td>
                                     <td className="cell-right">{(user.points || 0).toLocaleString()} P</td>
                                     <td className={`cell-center ${user.noShowCount && user.noShowCount > 0 ? 'text-danger' : ''}`}>{user.noShowCount || 0}</td>
-                                    {/* ✨ [수정] 모든 사용자의 상태(정상/이용제한)를 표시 */}
                                     <td className="cell-center">
                                         {user.isSuspended ? (
                                             <span className="status-badge restricted">이용 제한</span>

@@ -27,6 +27,7 @@ import 'swiper/css';
 import 'swiper/css/pagination';
 import 'swiper/css/navigation';
 
+import ReactMarkdown from 'react-markdown'; // ✅ 1. 라이브러리 import
 import './ProductDetailPage.css';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
@@ -145,11 +146,57 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound }> = React.mem
     const pickupDate = safeToDate(round.pickupDate);
     const isMultiGroup = round.variantGroups.length > 1;
     return (
-        <><h1 className="product-name">{product.groupName}</h1><p className="product-description" dangerouslySetInnerHTML={{ __html: product.description?.replace(/\n/g, '<br />') || '' }} /><div className="product-key-info" data-tutorial-id="detail-key-info"><div className="info-row"><div className="info-label"><Tag size={16} />판매 회차</div><div className="info-value"><span className="round-name-badge">{round.roundName}</span></div></div><div className="info-row"><div className="info-label"><Calendar size={16} />픽업일</div><div className="info-value">{pickupDate ? formatDateWithDay(pickupDate) : '미정'}</div></div><div className="info-row"><div className="info-label">{storageIcons[product.storageType]}보관 방법</div><div className={`info-value storage-type-${product.storageType}`}>{storageLabels[product.storageType]}</div></div>
-        {(() => { const tierCount = round.allowedTiers?.length ?? 0; if (tierCount > 0 && tierCount < 4) { return (<div className="info-row"><div className="info-label"><Lock size={16} />참여 등급</div><div className="info-value"><span className="tier-badge-group">{(round.allowedTiers as LoyaltyTier[]).join(' / ')}</span></div></div>); } return null; })()}
-        <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}><div className="info-label"><PackageCheck size={16} />잔여 수량</div><div className="info-value"><div className="stock-list">{round.variantGroups.map(vg => { const totalStock = vg.totalPhysicalStock; const reserved = (vg as VariantGroup).reservedCount || 0; const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved); const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절'; const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText; return (<div key={vg.id} className="stock-list-item">{displayText}</div>); })}</div></div></div></div></>
+        <>
+            <h1 className="product-name">{product.groupName}</h1>
+            {/* ✅ 2. 기존 p 태그를 ReactMarkdown 컴포넌트로 교체 */}
+            <div className="markdown-content">
+              <ReactMarkdown>{product.description || ''}</ReactMarkdown>
+            </div>
+            <div className="product-key-info" data-tutorial-id="detail-key-info">
+                <div className="info-row">
+                    <div className="info-label"><Tag size={16} />판매 회차</div>
+                    <div className="info-value"><span className="round-name-badge">{round.roundName}</span></div>
+                </div>
+                <div className="info-row">
+                    <div className="info-label"><Calendar size={16} />픽업일</div>
+                    <div className="info-value">{pickupDate ? formatDateWithDay(pickupDate) : '미정'}</div>
+                </div>
+                <div className="info-row">
+                    <div className="info-label">{storageIcons[product.storageType]}보관 방법</div>
+                    <div className={`info-value storage-type-${product.storageType}`}>{storageLabels[product.storageType]}</div>
+                </div>
+                {(() => {
+                    const tierCount = round.allowedTiers?.length ?? 0;
+                    if (tierCount > 0 && tierCount < 4) {
+                        return (
+                            <div className="info-row">
+                                <div className="info-label"><Lock size={16} />참여 등급</div>
+                                <div className="info-value"><span className="tier-badge-group">{(round.allowedTiers as LoyaltyTier[]).join(' / ')}</span></div>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
+                <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}>
+                    <div className="info-label"><PackageCheck size={16} />잔여 수량</div>
+                    <div className="info-value">
+                        <div className="stock-list">
+                            {round.variantGroups.map(vg => {
+                                const totalStock = vg.totalPhysicalStock;
+                                const reserved = (vg as VariantGroup).reservedCount || 0;
+                                const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
+                                const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
+                                const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText;
+                                return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
     );
 });
+
 const OptionSelector: React.FC<{ round: SalesRound; selectedVariantGroup: VariantGroup | null; onVariantGroupChange: (vg: VariantGroup) => void; }> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange }) => { if (!round.variantGroups || round.variantGroups.length <= 1) return null; return (<div className="select-wrapper" data-tutorial-id="detail-options"><select className="price-select" value={selectedVariantGroup?.id || ''} onChange={(e) => { const selectedId = e.target.value; const newVg = round.variantGroups.find(vg => vg.id === selectedId); if (newVg) onVariantGroupChange(newVg); }}><option value="" disabled>옵션을 선택해주세요.</option>{round.variantGroups.map(vg => (<option key={vg.id} value={vg.id}>{vg.groupName} - {vg.items[0]?.price.toLocaleString()}원</option>))}</select></div>); });
 
 const QuantityInput: React.FC<{ quantity: number; setQuantity: (fn: (q: number) => number) => void; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => { const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]); const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]); const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 }); const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 }); return (<div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls"><button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1}><Minus /></button><span className="quantity-display-fixed">{quantity}</span><button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}><Plus /></button></div>); });
@@ -273,7 +320,6 @@ const ProductDetailPage: React.FC = () => {
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
     
-    // ✅ [수정] 비어있거나 유효하지 않은 URL을 미리 걸러내는 로직 추가
     const originalImageUrls = useMemo(() => {
         return product?.imageUrls?.filter(url => typeof url === 'string' && url.trim() !== '') || [];
     }, [product?.imageUrls]);
@@ -297,6 +343,7 @@ const ProductDetailPage: React.FC = () => {
         setIsLightboxOpen(false);
     }, []);
 
+
     const actionState = useMemo<ProductActionState>(() => {
         if (!displayRound) return 'LOADING';
         return determineActionState(displayRound, userDocument, selectedVariantGroup);
@@ -304,12 +351,18 @@ const ProductDetailPage: React.FC = () => {
 
     const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (isPreLaunch) {
+            // ✅ [수정] 토스트 알림 메시지에 줄바꿈과 안내 문구 추가
             toast(
-                `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 
-                { icon: '🗓️', position: "top-center" }
+                `상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!\n 그 전까지는 카카오톡으로 예약주세요!`, 
+                { 
+                    icon: '🗓️', 
+                    position: "top-center",
+                    duration: 4000 // 메시지를 충분히 읽을 수 있도록 시간 연장
+                }
             );
             return;
         }
+
 
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
 

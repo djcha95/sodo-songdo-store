@@ -10,11 +10,11 @@ import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { AnimatePresence } from 'framer-motion';
 import { Search, X, Users, SearchSlash, BellRing } from 'lucide-react';
-// import { getFunctions, httpsCallable } from 'firebase/functions';
+// import { getFunctions, httpsCallable } from 'firebase/functions'; // 현재 코드에서 사용되지 않음
 import './QuickCheckPage.css';
 
 // ====================================================================
-// ✅ [추가] 알림톡 테스트용 컴포넌트
+// 알림톡 테스트용 컴포넌트
 // ====================================================================
 const AlimtalkTestSender: React.FC = () => {
     const [recipientPhone, setRecipientPhone] = useState('');
@@ -32,20 +32,20 @@ const AlimtalkTestSender: React.FC = () => {
       // ✅ [핵심 수정] httpsCallable 대신 fetch API를 사용
       try {
         // 🚨 중요: 아래 URL의 'sso-db' 부분은 본인의 Firebase 프로젝트 ID로 변경해야 할 수 있습니다.
-        // 에러 메시지에 나온 URL을 그대로 사용합니다.
+        // Cloud Functions 로그에 표시되는 URL을 사용하세요.
         const response = await fetch('https://us-central1-sso-db.cloudfunctions.net/test-testSendAlimtalk', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ recipientPhone, templateCode }),
+          body: JSON.stringify({ data: { recipientPhone, templateCode } }), // Functions v2는 data 객체로 래핑해야 함
         });
 
         const result = await response.json();
 
         if (!response.ok) {
           // 서버에서 보낸 에러 메시지를 사용
-          throw new Error(result.error || '알 수 없는 서버 오류');
+          throw new Error(result.error?.message || '알 수 없는 서버 오류');
         }
 
         toast.success(`[${templateCode}] 발송 요청 성공!`, { id: toastId });
@@ -132,7 +132,7 @@ const QuickCheckPage: React.FC = () => {
         const filteredUsers = allUsers.filter(user => {
             const term = trimmedSearchTerm.toLowerCase();
             const nameMatch = user.displayName?.toLowerCase().includes(term);
-            const phoneMatch = user.phone && user.phone.includes(trimmedSearchTerm);
+            const phoneMatch = user.phoneLast4 && user.phoneLast4.endsWith(trimmedSearchTerm);
             return nameMatch || phoneMatch;
         });
         
@@ -183,7 +183,8 @@ const QuickCheckPage: React.FC = () => {
                 
                 const freshAllUsers = await getAllUsersForQuickCheck();
                 setAllUsers(freshAllUsers);
-                const freshUser = freshAllUsers.find(u => u.uid === focusedUser.uid);
+                // ✅ [수정] 'u' 파라미터에 명시적으로 타입 지정
+                const freshUser = freshAllUsers.find((u: UserDocument) => u.uid === focusedUser.uid);
                 if (freshUser) setFocusedUser(freshUser);
 
             } catch (error) {
@@ -250,6 +251,7 @@ const QuickCheckPage: React.FC = () => {
             <AnimatePresence mode="wait">
                 {isLoading && <SodomallLoader message="사용자 목록을 불러오는 중..." />}
                 
+                {/* ✅ [수정] `onActionComplete` 대신 `onActionSuccess` 사용을 유지 */}
                 {!isLoading && focusedUser && (
                     <CustomerFocusView 
                         user={focusedUser}
@@ -286,7 +288,7 @@ const QuickCheckPage: React.FC = () => {
                 )}
             </AnimatePresence>
             
-            {/* ✅ [추가] 페이지 최하단에 테스트 컴포넌트 렌더링 */}
+            {/* 페이지 최하단에 테스트 컴포넌트 렌더링 */}
             <AlimtalkTestSender />
         </div>
     );
