@@ -18,7 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, Inbox, Zap, Info, Bolt, Trophy
+  PackageX, Hourglass, CreditCard, Inbox, Info, Bolt, 
 } from 'lucide-react';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
