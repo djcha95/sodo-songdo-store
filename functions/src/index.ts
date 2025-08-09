@@ -2,77 +2,35 @@
 
 // =================================================================
 // 1. Callable Functions (클라이언트 호출 가능 함수)
-// React 앱과 같은 클라이언트에서 직접 호출하여 사용하는 함수들입니다.
-// 주로 실시간 데이터 요청, 민감한 데이터 처리 등에 사용됩니다.
 // =================================================================
-
-// AI 상품 정보 분석, 상품 관련 비즈니스 로직을 처리합니다.
 export * from "./callable/products.js";
-
-// 클라이언트의 주문 관련 로직(실시간 재고 확인 등)을 처리합니다.
 export * from "./callable/orders.js";
-
-// 친구 초대 및 추천인 코드 관련 로직을 처리합니다.
 export * from "./callable/referrals.js";
-
-// 관리자가 재고를 추가하고, 이에 따라 대기자를 예약으로 자동 전환하는 로직을 처리합니다.
 export * from "./callable/stock.js";
-
-// 사용자가 대기 명단에 등록하거나, 대기 순번을 올리는 로직을 처리합니다.
 export * from "./callable/waitlist.js";
-
-// 사용자가 달성한 미션에 대한 보상을 요청하고 지급하는 로직을 처리합니다.
 export * from "./callable/missions.js";
-
-// 사용자 검색 등 사용자 관련 callable 함수
 export * from "./callable/users.js";
-
-// ✅ 1. 새로 추가한 테스트 함수 import
-import { testSendAlimtalk } from './callable/testAlimtalk.js';
 
 // =================================================================
 // 2. HTTP Functions (HTTP 요청 함수)
-// 외부 서비스 연동 등 URL을 통해 HTTP 요청을 받아 처리하는 함수들입니다.
 // =================================================================
-
-// 카카오 소셜 로그인 토큰 검증 등 인증 관련 HTTP 엔드포인트를 제공합니다.
 export * from "./http/auth.js";
+// ✅ [수정] 충돌을 해결하기 위해, testSendAlimtalk 함수를 여기서 한번만 직접 export 합니다.
+export { testSendAlimtalk } from './callable/testAlimtalk.js';
 
+// ✅ [추가] 선입금 안내 즉시 실행 테스트 함수를 등록합니다.
+export * from "./http/testNotifications.js"; 
 
 // =================================================================
 // 3. Scheduled Functions (스케줄링 함수)
-// 정해진 시간에 주기적으로 실행되어 자동화된 작업을 수행하는 함수들입니다.
 // =================================================================
-
-// 픽업 안내, 선입금 안내 등 지능형 알림톡을 정해진 시간에 발송합니다.
-export * from "./scheduled/notifications.js"; 
-
-// 획득한 지 1년이 지난 포인트를 매일 자정 자동으로 소멸시킵니다.
+export * from "./scheduled/notifications.js";
 export * from "./scheduled/points.js";
 
 // =================================================================
 // 4. Firestore Trigger Functions (데이터베이스 트리거 함수)
-// Firestore 데이터베이스에 변경(생성, 수정, 삭제)이 발생했을 때 자동으로 실행되는 함수들입니다.
 // =================================================================
-
-// 주문 생성/변경 시 재고 수량을 업데이트하고, 주문 상태 변경 시 사용자 등급/포인트를 업데이트합니다.
 export * from "./triggers/orders.js";
-
-// 특정 조건 달성 시(예: 친구 초대) 포인트를 지급하는 트리거를 관리합니다.
 export * from "./triggers/points.js";
-
-// 상품 정보 변경과 관련된 자동화 로직을 처리합니다. (현재는 orders 트리거가 주로 사용)
 export * from "./triggers/products.js";
-
-// 신규 회원 가입 시 환영 보너스를 지급하는 등의 사용자 관련 자동화 로직을 처리합니다.
 export * from "./triggers/users.js";
-
-
-// =================================================================
-// 5. Test Functions (테스트용 함수)
-// ✅ 2. 가져온 함수를 'test' 라는 그룹으로 묶어서 export
-// 이렇게 해야 클라이언트에서 'test-testSendAlimtalk' 이름으로 호출 가능
-// =================================================================
-export const test = {
-    testSendAlimtalk,
-};

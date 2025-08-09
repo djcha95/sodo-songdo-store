@@ -101,7 +101,6 @@ function calculateUserUpdateFromOrder(
   return { updateData, tierChange };
 }
 
-
 interface ProductWithHistory {
   salesHistory: {
     roundId: string;
@@ -128,54 +127,55 @@ export const onOrderCreated = onDocumentCreated(
     const order = snapshot.data() as Order;
     const orderId = event.params.orderId;
 
+    // --- 1. 재고 수량 업데이트 로직 ---
     if (order.status !== "CANCELED") {
-        const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
-        for (const item of order.items) {
-            const currentChanges = changesByProduct.get(item.productId) || [];
-            currentChanges.push({
-                roundId: item.roundId,
-                variantGroupId: item.variantGroupId,
-                delta: item.quantity,
-            });
-            changesByProduct.set(item.productId, currentChanges);
-        }
+      const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
+      for (const item of order.items) {
+          const currentChanges = changesByProduct.get(item.productId) || [];
+          currentChanges.push({
+              roundId: item.roundId,
+              variantGroupId: item.variantGroupId,
+              delta: item.quantity,
+          });
+          changesByProduct.set(item.productId, currentChanges);
+      }
 
-        try {
-            await db.runTransaction(async (transaction: Transaction) => {
-                for (const [productId, changes] of changesByProduct.entries()) {
-                    const productRef = db.collection("products").doc(productId);
-                    const productDoc = await transaction.get(productRef);
-                    if (!productDoc.exists) {
-                        logger.error(`Product ${productId} not found during order creation.`);
-                        continue;
-                    }
-                    const productData = productDoc.data() as ProductWithHistory;
-                    const newSalesHistory = productData?.salesHistory?.map((round: any) => {
-                        const relevantChanges = changes.filter(c => c.roundId === round.roundId);
-                        if (relevantChanges.length > 0) {
-                            const newVariantGroups = round.variantGroups.map((vg: any) => {
-                                const change = relevantChanges.find(c => c.variantGroupId === vg.id);
-                                if (change) {
-                                    const currentReserved = vg.reservedCount || 0;
-                                    vg.reservedCount = currentReserved + change.delta;
-                                }
-                                return vg;
-                            });
-                            return { ...round, variantGroups: newVariantGroups };
-                        }
-                        return round;
-                    }) || [];
-                    transaction.update(productRef, { salesHistory: newSalesHistory });
-                }
-            });
-            logger.info(`Successfully updated reservedCount for order ${orderId}`);
-        } catch (error) {
-            logger.error(`Transaction failed for order ${orderId} creation:`, error);
-            return;
-        }
+      try {
+          await db.runTransaction(async (transaction: Transaction) => {
+              for (const [productId, changes] of changesByProduct.entries()) {
+                  const productRef = db.collection("products").doc(productId);
+                  const productDoc = await transaction.get(productRef);
+                  if (!productDoc.exists) {
+                      logger.error(`Product ${productId} not found during order creation.`);
+                      continue;
+                  }
+                  const productData = productDoc.data() as any;
+                  const newSalesHistory = productData?.salesHistory?.map((round: any) => {
+                      const relevantChanges = changes.filter(c => c.roundId === round.roundId);
+                      if (relevantChanges.length > 0) {
+                          const newVariantGroups = round.variantGroups.map((vg: any) => {
+                              const change = relevantChanges.find(c => c.variantGroupId === vg.id);
+                              if (change) {
+                                  const currentReserved = vg.reservedCount || 0;
+                                  vg.reservedCount = currentReserved + change.delta;
+                              }
+                              return vg;
+                          });
+                          return { ...round, variantGroups: newVariantGroups };
+                      }
+                      return round;
+                  }) || [];
+                  transaction.update(productRef, { salesHistory: newSalesHistory });
+              }
+          });
+          logger.info(`Successfully updated reservedCount for order ${orderId}`);
+      } catch (error) {
+          logger.error(`Transaction failed for order ${orderId} creation:`, error);
+      }
     }
 
-    logger.info(`신규 주문(${orderId}) 생성. 즉시 픽업 알림이 필요한지 확인합니다.`);
+    // --- 2. 알림톡 발송 로직 ---
+    logger.info(`신규 주문(${orderId}) 생성. 알림톡 발송 로직을 시작합니다.`);
     try {
         const normalizeToDate = (value: unknown): Date | null => {
             if (!value) return null;
@@ -186,7 +186,7 @@ export const onOrderCreated = onDocumentCreated(
 
         const pickupStartDate = normalizeToDate(order.pickupDate);
         if (!pickupStartDate) {
-            logger.error(`주문(${orderId})의 픽업 시작일이 유효하지 않아 즉시 픽업 알림을 건너킵니다.`);
+            logger.error(`주문(${orderId})의 픽업 시작일이 유효하지 않아 알림톡을 건너뜁니다.`);
             return;
         }
 
@@ -194,39 +194,38 @@ export const onOrderCreated = onDocumentCreated(
         const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
         const todayStart = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
         const pickupStartDateOnly = new Date(pickupStartDate.getFullYear(), pickupStartDate.getMonth(), pickupStartDate.getDate());
+        
+        const userDoc = await db.collection("users").doc(order.userId).get();
+        if (!userDoc.exists) {
+            logger.error(`주문(${orderId})에 대한 사용자(${order.userId})를 찾을 수 없습니다.`);
+            return;
+        }
+        const userData = userDoc.data() as UserDocument;
+        if (!userData?.phone || !userData.displayName) {
+            logger.warn(`사용자(${order.userId})의 전화번호 또는 이름 정보가 없어 알림을 보내지 못했습니다.`);
+            return;
+        }
+
+        const productList = order.items
+          .map(item => `・${item.productName || '주문 상품'} ${item.quantity}개`)
+          .join('\n');
+        
+        let recipientPhone = (userData.phone || '').replace(/\D/g, '');
+        if (recipientPhone.startsWith('8210')) {
+          recipientPhone = '0' + recipientPhone.slice(2);
+        }
 
         if (pickupStartDateOnly <= todayStart) {
-            const userDoc = await db.collection("users").doc(order.userId).get();
-            if (!userDoc.exists) {
-                logger.error(`주문(${orderId})에 대한 사용자(${order.userId})를 찾을 수 없습니다.`);
-                return;
-            }
-            const userData = userDoc.data() as UserDocument;
-            if (!userData?.phone || !userData.displayName) {
-                logger.warn(`사용자(${order.userId})의 전화번호 또는 이름 정보가 없어 알림을 보내지 못했습니다.`);
-                return;
-            }
-
             const templateCode = "ORD_CONFIRM_NOW";
-            const productList = order.items
-              .map(item => `${item.productName || '주문 상품'} ${item.quantity}개`)
-              .join('\n');
-
             const templateVariables: { [key: string]: string } = {
                 고객명: userData.displayName,
                 상품목록: productList,
             };
-
-            let recipientPhone = (userData.phone || '').replace(/\D/g, '');
-            if (recipientPhone.startsWith('8210')) {
-              recipientPhone = '0' + recipientPhone.slice(2);
-            }
-
             logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}.`);
             await sendAlimtalk(recipientPhone, templateCode, templateVariables);
             logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 성공적으로 발송했습니다.`);
         } else {
-            logger.info(`주문(${orderId})은 미래 픽업 건이므로, 스케줄링된 일괄 알림으로 처리됩니다.`);
+            logger.info(`주문(${orderId})은 미래 픽업 건이므로, 다음 날 오후 1시 스케줄링된 알림으로 처리됩니다.`);
         }
 
     } catch (alimtalkError) {
