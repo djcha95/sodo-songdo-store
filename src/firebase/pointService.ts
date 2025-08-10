@@ -209,7 +209,7 @@ export const adjustUserPoints = async (
 /**
  * @description 사용자의 포인트 적립/사용 내역을 가져옵니다.
  */
-export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
+export const getPointHistory = async (userId: string, maxCount?: number): Promise<PointLog[]> => {
   if (!userId) {
     console.error("User ID is required to get point history.");
     return [];
@@ -226,11 +226,13 @@ export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
   const userData = userDoc.data() as UserDocument;
   const history = (userData.pointHistory as PointLog[]) || [];
 
-  return history.sort((a, b) => {
+  const sorted = history.sort((a, b) => {
     const aTime = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
     const bTime = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
     return bTime - aTime;
   });
+
+  return maxCount ? sorted.slice(0, maxCount) : sorted;
 };
 
 // ✅ [수정] '대기 순번 상승권' 사용을 위해 Cloud Function을 호출하던 함수를 삭제했습니다.

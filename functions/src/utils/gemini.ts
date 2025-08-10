@@ -1,13 +1,20 @@
 // functions/src/utils/gemini.ts
-import * as functions from "firebase-functions";
+import { HttpsError } from "firebase-functions/v2/https";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export async function analyzeProductTextWithAI(text: string, categories: string[]): Promise<object> {
+/**
+ * 주어진 한국어 상품 텍스트에서 핵심 정보를 추출해 구조화 JSON으로 반환합니다.
+ * @param text 원문 텍스트(카톡 공구글 등)
+ * @param categories 카테고리 힌트 목록(예: ["식품","생활","주방"])
+ */
+export async function analyzeProductTextWithAI(
+  text: string,
+  categories: string[]
+): Promise<object> {
   const geminiApiKey = process.env.GEMINI_API_KEY;
-
   if (!geminiApiKey) {
     console.error("Gemini API key is not available in environment variables.");
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "failed-precondition",
       "AI 서비스 설정이 서버에 올바르게 구성되지 않았습니다. 관리자에게 문의해주세요."
     );
@@ -16,98 +23,93 @@ export async function analyzeProductTextWithAI(text: string, categories: string[
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
-  // ✅ [최종 개선] 상세 설명을 꾸며주는 기능을 추가하여 프롬프트를 최종 업그레이드합니다.
+  // 프롬프트(요약): 한국어 판매글에서 핵심 필드만 JSON으로 추출
   const prompt = `
-    You are an intelligent assistant and expert copywriter for a Korean group-buying platform.
-    Your task is to extract key product information from a given Korean text and return it as a structured JSON object.
+You are an assistant for a Korean group-buying platform.
+Extract key product info from the Korean text and return ONLY a JSON object.
+No explanations, no markdown.
 
-    ### ❗ SUPER IMPORTANT RULES:
-    1.  **Date Context**: Today is August 9, 2025. If a date in the text does not specify a year (e.g., "8월 15일"), you MUST assume it refers to the closest future date, which would be in 2025.
-    2.  **Date Formats**: You must be able to parse various date formats like "26.07.01" or "250815" (YYMMDD).
-    3.  **Category Classification**: From the provided list of valid categories, you MUST choose the single most relevant category.
-    4.  **groupName Simplification**: The 'groupName' field MUST be concise. Remove store prefixes like "소도몰X", "소도몰×", or "[소도몰]".
-    5.  **items.name Simplification**: The 'name' field inside the 'items' array MUST contain ONLY the essential unit information (e.g., "1팩", "1개 (300g)", "1인분"). DO NOT repeat the main product name.
-    6.  **✨ cleanedDescription Beautification (COPYWRITER MODE)**: The 'cleanedDescription' field is your masterpiece. Rewrite the promotional text to be more engaging and beautiful for customers.
-        - Add relevant and appealing emojis (like ✨, 🔥, 🍜, 👍, 🎉).
-        - Use concise and impactful language.
-        - Improve line breaks (use \\n) for mobile readability.
-        - Use Markdown for emphasis (e.g., "**강조할 텍스트**").
-        - The output MUST be a single JSON-compatible string.
-    7.  **Grouped Products**: If the text describes multiple distinct products (e.g., different flavors), create a separate object for each within the "variantGroups" array.
-    8.  **JSON Output**: The final output must be ONLY a valid JSON object, without any surrounding text or markdown backticks.
+Required JSON shape (all fields in Korean keys):
+{
+  "상품명": string,                // 없으면 가능한 추정명
+  "옵션": string[] | [],           // 없으면 []
+  "가격": number | null,           // 숫자만, 원 단위
+  "용량/구성": string | null,
+  "입고일": string | null,         // "YYYY-MM-DD" 또는 "M/D (요일)" 원문 보존
+  "유통기한": string | null,       // 가능한 원문 보존
+  "한정수량": string | null,       // "15개", "32세트" 등 원문 보존
+  "카테고리": string | null,       // ${categories.join(", ")} 중 하나로 추정 가능하면 지정
+  "핵심효용": string[],            // 2~5개 핵심 포인트
+  "주의사항": string[]             // 있으면 수집, 없으면 []
+}
 
-    ### Fields to Extract:
-    - "productType": "single" or "group".
-    - "storageType": Must be one of "ROOM", "COLD", "FROZEN". Default is "ROOM".
-    - "categoryName": The single most relevant category from the provided list.
-    - "groupName": The concise main product name (Rule #4).
-    - "cleanedDescription": The beautified, engaging promotional text created in your copywriter mode (Rule #6).
-    - "variantGroups": An array of objects.
-        - "groupName": Sub-group name (e.g., a specific flavor). For single products, this should be same as the main groupName.
-        - "totalPhysicalStock": Numerical stock quantity. Null if not found.
-        - "expirationDate": Expiration date in "YYYY-MM-DD" format.
-        - "pickupDate": Pickup start date in "YYYY-MM-DD" format.
-        - "items": An array of item objects.
-            - "name": The simplified unit name (Rule #5).
-            - "price": Numerical price.
-    
-    ### Example:
-    - **Given Categories**: ["간식/과자", "수산/정육", "간편식/밀키트", "생활용품"]
-    - **Input Text**: "<소도몰X교동면가 3종> 맛보신 분들은 또 다시 찾죠. 불맛나는 진한 짬뽕, 짜장면, 화룡점정으로 탕수육까지! 푸짐한 한 상으로 우리집을 중식당으로! 짬뽕은 1인분에 4,450원꼴! 짜장면 1인분에 3,950원꼴!"
-    - **Correct JSON Output**:
-      {
-        "productType": "group",
-        "storageType": "FROZEN",
-        "categoryName": "간편식/밀키트",
-        "groupName": "교동면가 3종",
-        "cleanedDescription": "맛보신 분들은 또 다시 찾죠! 🔥\\n\\n불맛나는 진한 **짬뽕**, **짜장면**,\\n화룡점정으로 **탕수육**까지!\\n\\n푸짐한 한 상으로\\n우리집을 중식당으로 변신! ✨\\n\\n🍜 짬뽕 1인분 4,450원!\\n🍜 짜장면 1인분 3,950원!",
-        "variantGroups": [{
-          "groupName": "교동면가 3종",
-          "totalPhysicalStock": null,
-          "expirationDate": null,
-          "pickupDate": null,
-          "items": [
-            { "name": "짬뽕 1인분", "price": 4450 },
-            { "name": "짜장면 1인분", "price": 3950 }
-          ]
-        }]
-      }
-    
-    ---
+Rules:
+- 가격은 숫자만(예: "6,900원" -> 6900)
+- 날짜·수량 등은 원문 형식 최대 보존
+- 정보가 없으면 null 또는 빈 배열
+- 반드시 유효한 JSON만 출력
 
-    ### TASK:
-    - **Valid Categories**: [${categories.join(", ")}]
-    - **Text to Analyze**:
-    """
-    ${text}
-    """
-  `;
+--- 원문 시작 ---
+${text}
+--- 원문 끝 ---
+`.trim();
 
   try {
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const responseText = response.text();
+    const responseText = response.text() ?? "";
 
-    // AI 응답에서 JSON만 정확히 추출하는 정규식 강화
-    const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```|({[\s\S]*})/);
+    // JSON 블록 추출(```json ... ``` 또는 첫 번째 {...})
+    const jsonMatch =
+      responseText.match(/```json\s*([\s\S]*?)\s*```/) ||
+      responseText.match(/({[\s\S]*})/);
+
     if (!jsonMatch) {
-        console.error("AI 응답에 유효한 JSON이 포함되어 있지 않습니다. 응답:", responseText);
-        throw new Error("AI가 유효한 JSON 형식을 반환하지 않았습니다.");
+      console.error("AI 응답에 유효한 JSON이 포함되어 있지 않습니다. 응답:", responseText);
+      throw new HttpsError(
+        "internal",
+        "AI 응답에서 JSON 데이터를 찾지 못했습니다. 잠시 후 다시 시도해주세요."
+      );
     }
-    
-    const jsonString = jsonMatch[1] || jsonMatch[2];
+
+    // 캡처 그룹 선택
+    const raw = (jsonMatch[1] ?? jsonMatch[0]).trim();
+
+    // 가끔 들어오는 BOM/제어문자 제거
+    const jsonString = raw
+      .replace(/^\uFEFF/, "")
+      .replace(/^[^\{\[]+/, "") // JSON 앞의 노이즈 제거
+      .replace(/[^}\]]+$/, ""); // JSON 뒤의 노이즈 제거
+
     if (!jsonString) {
-        console.error("AI 응답에서 JSON 문자열을 추출할 수 없습니다. 응답:", responseText);
-        throw new Error("AI 응답에서 JSON 데이터를 추출하지 못했습니다.");
+      console.error("AI 응답에서 JSON 문자열을 추출할 수 없습니다. 응답:", responseText);
+      throw new HttpsError(
+        "internal",
+        "AI 응답에서 JSON 데이터를 추출하지 못했습니다."
+      );
     }
-    
-    return JSON.parse(jsonString);
+
+    // 파싱 및 최소 유효성 체크
+    const parsed = JSON.parse(jsonString);
+
+    // 가격 숫자형 보정(문자 들어오면 숫자만 추출)
+    if (parsed && typeof parsed["가격"] !== "number" && parsed["가격"] != null) {
+      const n = String(parsed["가격"]).replace(/[^\d]/g, "");
+      parsed["가격"] = n ? Number(n) : null;
+    }
+
+    // 배열 필드 보정
+    if (!Array.isArray(parsed["옵션"])) parsed["옵션"] = parsed["옵션"] ? [String(parsed["옵션"])] : [];
+    if (!Array.isArray(parsed["핵심효용"])) parsed["핵심효용"] = parsed["핵심효용"] ? [String(parsed["핵심효용"])] : [];
+    if (!Array.isArray(parsed["주의사항"])) parsed["주의사항"] = parsed["주의사항"] ? [String(parsed["주의사항"])] : [];
+
+    return parsed;
   } catch (error) {
     console.error("Error analyzing text with Gemini AI:", error);
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "internal",
       "AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-      error
+      error as Error
     );
   }
 }

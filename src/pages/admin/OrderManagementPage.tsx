@@ -15,6 +15,7 @@ import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import './OrderManagementPage.css';
+import { formatKRW } from '@/utils/number';
 
 // --- 타입 정의 ---
 interface FlattenedOrderRow {
@@ -62,7 +63,7 @@ const formatDateWithDay = (timestamp: any): string => {
   return `${month}/${day} (${dayOfWeek})`;
 };
 
-const formatCurrency = (amount: number): string => `${amount.toLocaleString('ko-KR')}원`;
+const formatCurrency = (amount: number): string => `${formatKRW(amount)}원`;
 
 // --- Status Configuration ---
 const ORDER_STATUS_CONFIG: Record<OrderStatus, { label: string; icon: React.ReactNode; className: string; sortOrder: number }> = {

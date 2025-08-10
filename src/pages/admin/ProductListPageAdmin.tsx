@@ -19,6 +19,8 @@ dayjs.extend(isBetween);
 // ✅ [추가] Firebase Cloud Functions 관련 import
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
+import { formatKRW } from '@/utils/number';
+import { reportError, reportInfo } from '@/utils/logger';
 
 // =================================================================
 // 📌 타입 정의 및 헬퍼 함수
@@ -151,11 +153,11 @@ type SortableKeys = 'roundCreatedAt' | 'pickupDate' | 'productName' | 'category'
 function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = useState<T>(() => {
     try { const storedValue = localStorage.getItem(key); return storedValue ? JSON.parse(storedValue) : defaultValue; } 
-    catch (error) { console.warn(`Error reading localStorage key “${key}”:`, error); return defaultValue; }
+    catch (error) { reportInfo('usePersistentState.readFail', `key=${key}`, { error: String(error) }); return defaultValue; }
   });
   useEffect(() => {
     try { localStorage.setItem(key, JSON.stringify(state)); } 
-    catch (error) { console.warn(`Error setting localStorage key “${key}”:`, error); }
+    catch (error) { reportInfo('usePersistentState.writeFail', `key=${key}`, { error: String(error) }); }
   }, [key, state]);
   return [state, setState];
 }
@@ -198,7 +200,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
             <td><span className={`storage-badge storage-${item.storageType}`}>{translateStorageType(item.storageType)}</span></td>
             <td><div className="product-name-cell-v2"><img src={item.productImage} alt={item.productName} className="product-thumbnail" /><div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div></div></td>
             <td><span className={`status-badge ${status.className}`} title={`Status: ${status.text}`}>{status.text}</span></td>
-            <td style={{textAlign: 'right'}}>{vg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
+            <td style={{textAlign: 'right'}}>{vg.items[0]?.price != null ? `${formatKRW(vg.items[0].price)} 원` : '–'}</td>
             <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
             <td className="quantity-cell">{`${vg.reservedQuantity} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
             <td className="quantity-cell">{vg.pickedUpQuantity}</td>
@@ -251,7 +253,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                   <td></td>
                   <td className="sub-row-name"> └ {subVg.groupName}</td>
                   <td><span className={`status-badge ${subStatus.className}`} title={`Status: ${subStatus.text}`}>{subStatus.text}</span></td>
-                  <td style={{textAlign: 'right'}}>{subVg.items[0]?.price.toLocaleString() ?? '–'} 원</td>
+                  <td style={{textAlign: 'right'}}>{subVg.items[0]?.price != null ? `${formatKRW(subVg.items[0].price)} 원` : '–'}</td>
                   <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
                   <td className="quantity-cell">{`${subVg.reservedQuantity} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
                   <td className="quantity-cell">{subVg.pickedUpQuantity}</td>
@@ -392,9 +394,9 @@ const ProductListPageAdmin: React.FC = () => {
         });
 
     } catch (error) {
-        console.error("Error fetching data:", error);
-        toast.error("데이터를 불러오는 중 오류가 발생했습니다.");
-    } finally {
+         reportError('ProductListPageAdmin.fetchData', error);
+         toast.error("데이터를 불러오는 중 오류가 발생했습니다.");
+     } finally {
         setLoading(false);
     }
   }, []);
@@ -406,7 +408,7 @@ const ProductListPageAdmin: React.FC = () => {
     (pageData.allProducts || []).forEach(p => {
         (p.salesHistory || []).forEach(r => {
             if (!r.variantGroups || r.variantGroups.length === 0) {
-                console.warn(`[데이터 오류] 옵션 그룹이 없는 판매 회차를 발견했습니다. Product ID: ${p.id}, Round ID: ${r.roundId}. 이 회차는 목록에 '데이터 오류'로 표시됩니다.`);
+                reportInfo('ProductListPageAdmin.dataAnomaly', '옵션 그룹 없음', { productId: p.id, roundId: r.roundId });
                 flatRounds.push({
                     productId: p.id,
                     productName: p.groupName,
@@ -542,9 +544,10 @@ const ProductListPageAdmin: React.FC = () => {
     const updates = Array.from(selectedItems).map(id => {
         const separatorIndex = id.indexOf('-');
         if (separatorIndex === -1) {
-            console.error("잘못된 형식의 고유 ID입니다 (판매 종료 처리 중):", id);
-            return null;
-        }
+             reportError('ProductListPageAdmin.bulkEnd.invalidId', new Error('invalid uniqueId'), { id });
+             return null;
+         }
+
         const productId = id.substring(0, separatorIndex);
         const roundId = id.substring(separatorIndex + 1);
         return { productId, roundId, newStatus: 'ended' as SalesRoundStatus };
@@ -581,9 +584,10 @@ const ProductListPageAdmin: React.FC = () => {
                     const deletions = Array.from(selectedItems).map(id => {
                         const separatorIndex = id.indexOf('-');
                         if (separatorIndex === -1) {
-                            console.error("잘못된 형식의 고유 ID입니다 (삭제 처리 중):", id);
-                            return null;
-                        }
+                            reportError('ProductListPageAdmin.bulkDelete.invalidId', new Error('invalid uniqueId'), { id });
+                             return null;
+                         }
+
                         const productId = id.substring(0, separatorIndex);
                         const roundId = id.substring(separatorIndex + 1);
                         return { productId, roundId };

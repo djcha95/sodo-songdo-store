@@ -100,7 +100,7 @@ const UserDetailPage = () => {
                     break;
                 case 'points':
                     setIsLoadingPoints(true);
-                    getPointHistory(userId, 1000).then(setPointHistory).finally(() => setIsLoadingPoints(false));
+                    getPointHistory(userId).then(setPointHistory).finally(() => setIsLoadingPoints(false));
                     break;
             }
         };
