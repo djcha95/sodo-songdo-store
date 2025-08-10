@@ -7,8 +7,6 @@ import { useTutorial } from '@/context/TutorialContext';
 import { orderHistoryTourSteps } from '@/components/customer/AppTour';
 import { cancelOrder } from '@/firebase/orderService';
 import { getUserWaitlist, cancelWaitlistEntry } from '@/firebase/productService';
-// ✅ [수정] 'applyWaitlistPriorityTicket' import를 삭제했습니다.
-// import { applyWaitlistPriorityTicket } from '@/firebase/pointService';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import useLongPress from '@/hooks/useLongPress';
@@ -26,6 +24,53 @@ import { showToast, showPromiseToast } from '@/utils/toastUtils';
 import toast from 'react-hot-toast';
 
 import './OrderHistoryPage.css';
+
+// =================================================================
+// 📌 이미지 안전 로더 (Firebase URL 최적화 금지 + 폴백 1~2회)
+// =================================================================
+const PLACEHOLDER = 'https://via.placeholder.com/200x200.png?text=No+Image';
+
+const isFirebaseStorage = (url?: string) => {
+  if (!url) return false;
+  try { return new URL(url).hostname.includes('firebasestorage.googleapis.com'); }
+  catch { return false; }
+};
+
+type ThumbSize = '200x200' | '1080x1080';
+
+const SafeThumb: React.FC<{
+  src?: string; alt: string; size?: ThumbSize; eager?: boolean; className?: string;
+}> = ({ src, alt, size = '200x200', eager = false, className }) => {
+
+  const original = (src && src.trim()) ? src : PLACEHOLDER;
+  const initial = React.useMemo(() => {
+    if (isFirebaseStorage(original)) return original;
+    return getOptimizedImageUrl(original, size) || original;
+  }, [original, size]);
+
+  const [imageSrc, setImageSrc] = useState(initial);
+
+  useEffect(() => {
+    if (isFirebaseStorage(original)) setImageSrc(original);
+    else setImageSrc(getOptimizedImageUrl(original, size) || original);
+  }, [original, size]);
+
+  const onError = useCallback(() => {
+    if (imageSrc !== original) setImageSrc(original);
+    else if (imageSrc !== PLACEHOLDER) setImageSrc(PLACEHOLDER);
+  }, [imageSrc, original]);
+
+  return (
+    <img
+      src={imageSrc}
+      alt={alt}
+      className={className}
+      loading={eager ? 'eager' : 'lazy'}
+      fetchpriority={eager ? 'high' : 'auto'}
+      onError={onError}
+    />
+  );
+};
 
 // =================================================================
 // 📌 타입 정의 및 헬퍼 함수
@@ -46,34 +91,34 @@ interface AggregatedItem {
 }
 
 const safeToDate = (date: any): Date | null => {
-    if (!date) return null;
-    if (date instanceof Date) return date;
-    if (typeof date.toDate === 'function') return date.toDate();
-    if (typeof date === 'object' && (date.seconds !== undefined || date._seconds !== undefined)) {
-      const seconds = date.seconds ?? date._seconds;
-      const nanoseconds = date.nanoseconds ?? date._nanoseconds ?? 0;
-      return new Timestamp(seconds, nanoseconds).toDate();
-    }
-    if (typeof date === 'string') {
-      const parsedDate = new Date(date);
-      if (!isNaN(parsedDate.getTime())) return parsedDate;
-    }
-    return null;
+  if (!date) return null;
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof date === 'object' && (date.seconds !== undefined || date._seconds !== undefined)) {
+    const seconds = date.seconds ?? date._seconds;
+    const nanoseconds = date.nanoseconds ?? date._nanoseconds ?? 0;
+    return new Timestamp(seconds, nanoseconds).toDate();
+  }
+  if (typeof date === 'string') {
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) return parsedDate;
+  }
+  return null;
 };
 
 const formatSimpleDate = (date: Date): string => {
-    const year = date.getFullYear().toString();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const week = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayOfWeek = week[(date.getDay())];
-    return `${year}년 ${month}월 ${day}일 (${dayOfWeek})`;
+  const year = date.getFullYear().toString();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const week = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = week[(date.getDay())];
+  return `${year}년 ${month}월 ${day}일 (${dayOfWeek})`;
 };
 
 const formatPickupDateShort = (date: Date): string => {
-    const week = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayOfWeek = week[(date.getDay())];
-    return `${date.getMonth() + 1}/${date.getDate()}(${dayOfWeek})`;
+  const week = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = week[(date.getDay())];
+  return `${date.getMonth() + 1}/${date.getDate()}(${dayOfWeek})`;
 };
 
 // =================================================================
@@ -253,7 +298,9 @@ const AggregatedItemCard: React.FC<{
   return (
     <motion.div className={`order-card-v3 ${cancellable ? 'cancellable' : ''}`} layoutId={item.stableId} key={item.id} {...finalHandlers} whileTap={{ scale: 0.97 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
       <div className="card-v3-body">
-        <div className="item-image-wrapper"><img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" /></div>
+        <div className="item-image-wrapper">
+          <SafeThumb src={item.imageUrl} alt={item.productName} className="item-image" />
+        </div>
         <div className="item-aggregated-info">
           <div className="info-top-row"><span className="product-name-top">{item.variantGroupName}</span><span className={`status-badge ${statusClass}`}><StatusIcon size={14} /> {statusText}</span></div>
           <div className="info-bottom-row"><span className="item-options-quantity"><span className="item-option-name">{item.itemName}</span><span className="item-quantity">({item.totalQuantity}개)</span></span>{displayDateText && <span className="date-info-badge">{displayDateText}</span>}</div>
@@ -263,39 +310,40 @@ const AggregatedItemCard: React.FC<{
   );
 });
 
-
-// ✅ [수정] WaitlistItemCard에서 '순서 올리기' 관련 props와 로직을 모두 제거했습니다.
+// ✅ WaitlistItemCard
 const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: WaitlistInfo) => void; }> = React.memo(({ item, onCancel }) => {
-    const navigate = useNavigate();
-    const longPressActionInProgress = useRef(false);
+  const navigate = useNavigate();
+  const longPressActionInProgress = useRef(false);
 
-    const handleLongPress = () => {
-        if (longPressActionInProgress.current) return;
-        longPressActionInProgress.current = true;
-        onCancel(item);
-    };
+  const handleLongPress = () => {
+    if (longPressActionInProgress.current) return;
+    longPressActionInProgress.current = true;
+    onCancel(item);
+  };
 
-    const handlePressEnd = () => { longPressActionInProgress.current = false; };
-    const handlers = useLongPress(handleLongPress, () => navigate(`/product/${item.productId}`), { initialDelay: 1500 });
-    const finalHandlers = { ...handlers, onMouseUp: () => { handlers.onMouseUp(); handlePressEnd(); }, onMouseLeave: () => { handlers.onMouseLeave(); handlePressEnd(); }, onTouchEnd: () => { handlers.onTouchEnd(); handlePressEnd(); } };
+  const handlePressEnd = () => { longPressActionInProgress.current = false; };
+  const handlers = useLongPress(handleLongPress, () => navigate(`/product/${item.productId}`), { initialDelay: 1500 });
+  const finalHandlers = { ...handlers, onMouseUp: () => { handlers.onMouseUp(); handlePressEnd(); }, onMouseLeave: () => { handlers.onMouseLeave(); handlePressEnd(); }, onTouchEnd: () => { handlers.onTouchEnd(); handlePressEnd(); } };
 
-    return (
-        <motion.div className="waitlist-card" layout {...finalHandlers} whileTap={{ scale: 0.97 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
-          <div className="card-v3-body">
-            <div className="item-image-wrapper"><img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" /></div>
-            <div className="item-aggregated-info">
-              <div className="info-top-row">
-                <span className="product-name-top">{item.productName}</span>
-                {item.waitlistOrder && (<span className="waitlist-order-badge"><Bolt size={14} />대기 {item.waitlistOrder}번</span>)}
-              </div>
-              <div className="info-bottom-row"><span className="item-options-quantity"><span className="item-option-name">{item.itemName}</span><span className="item-quantity">({item.quantity}개)</span></span></div>
-              <div className="waitlist-actions">
-                <div className="cancel-instruction-waitlist"><Info size={14} /><span>카드를 길게 눌러 대기를 취소하세요.</span></div>
-              </div>
-            </div>
+  return (
+    <motion.div className="waitlist-card" layout {...finalHandlers} whileTap={{ scale: 0.97 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
+      <div className="card-v3-body">
+        <div className="item-image-wrapper">
+          <SafeThumb src={item.imageUrl} alt={item.productName} className="item-image" />
+        </div>
+        <div className="item-aggregated-info">
+          <div className="info-top-row">
+            <span className="product-name-top">{item.productName}</span>
+            {item.waitlistOrder && (<span className="waitlist-order-badge"><Bolt size={14} />대기 {item.waitlistOrder}번</span>)}
           </div>
-        </motion.div>
-    );
+          <div className="info-bottom-row"><span className="item-options-quantity"><span className="item-option-name">{item.itemName}</span><span className="item-quantity">({item.quantity}개)</span></span></div>
+          <div className="waitlist-actions">
+            <div className="cancel-instruction-waitlist"><Info size={14} /><span>카드를 길게 눌러 대기를 취소하세요.</span></div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
 });
 
 // =================================================================
@@ -303,161 +351,167 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
 // =================================================================
 
 const OrderHistoryPage: React.FC = () => {
-    const { user, userDocument } = useAuth();
-    const { runPageTourIfFirstTime } = useTutorial();
-    const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('orders');
-    const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
-    const [loadingWaitlist, setLoadingWaitlist] = useState(false);
-    const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-    const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
+  const { user, userDocument } = useAuth();
+  const { runPageTourIfFirstTime } = useTutorial();
+  const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('orders');
+  const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
+  const [loadingWaitlist, setLoadingWaitlist] = useState(false);
+  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
+  const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
 
-    const basePayload = useMemo(() => {
-      if (viewMode === 'pickup') {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        return { orderByField: 'pickupDate', orderDirection: 'asc', startDate: today.toISOString() };
-      }
-      return { orderByField: 'createdAt', orderDirection: 'desc' };
-    }, [viewMode]);
+  const basePayload = useMemo(() => {
+    if (viewMode === 'pickup') {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return { orderByField: 'pickupDate', orderDirection: 'asc', startDate: today.toISOString() };
+    }
+    return { orderByField: 'createdAt', orderDirection: 'desc' };
+  }, [viewMode]);
 
-    const { data: orders, setData: setOrders, loading: ordersLoading, hasMore: hasMoreOrders, loadMore: loadMoreOrders } =
-      usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'orders' || viewMode === 'pickup');
+  const { data: orders, setData: setOrders, loading: ordersLoading, hasMore: hasMoreOrders, loadMore: loadMoreOrders } =
+    usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'orders' || viewMode === 'pickup');
 
-    useEffect(() => {
-        if (userDocument) {
-            runPageTourIfFirstTime('hasSeenOrderHistoryPage', orderHistoryTourSteps);
+  useEffect(() => {
+    if (userDocument) {
+      runPageTourIfFirstTime('hasSeenOrderHistoryPage', orderHistoryTourSteps);
+    }
+  }, [userDocument, runPageTourIfFirstTime]);
+
+  useEffect(() => {
+    const fetchWaitlist = async () => {
+      if (user && viewMode === 'waitlist') {
+        setLoadingWaitlist(true);
+        try {
+          const fetchedWaitlist = await getUserWaitlist(user.uid);
+          setWaitlist(fetchedWaitlist);
+        } catch (error) {
+          toast.error("대기 목록을 불러오는 데 실패했습니다.");
+        } finally {
+          setLoadingWaitlist(false);
         }
-    }, [userDocument, runPageTourIfFirstTime]);
-
-    useEffect(() => {
-        const fetchWaitlist = async () => {
-            if (user && viewMode === 'waitlist') {
-                setLoadingWaitlist(true);
-                try {
-                    const fetchedWaitlist = await getUserWaitlist(user.uid);
-                    setWaitlist(fetchedWaitlist);
-                } catch (error) {
-                    toast.error("대기 목록을 불러오는 데 실패했습니다.");
-                } finally {
-                    setLoadingWaitlist(false);
-                }
-            }
-        };
-        fetchWaitlist();
-    }, [user, viewMode]);
-
-    const aggregatedItems = useMemo(() => {
-        const aggregated: { [key: string]: AggregatedItem } = {};
-        orders.forEach(order => {
-            const date = viewMode === 'orders' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
-            if (!date) return;
-            const dateStr = dayjs(date).format('YYYY-MM-DD');
-            (order.items || []).forEach((item: OrderItem) => {
-                const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}`;
-                const stableAnimationId = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
-                if (!aggregated[aggregationKey]) {
-                    aggregated[aggregationKey] = { id: aggregationKey, stableId: stableAnimationId, productId: item.productId, productName: item.productName, variantGroupName: item.variantGroupName, itemName: item.itemName, totalQuantity: 0, imageUrl: item.imageUrl, originalOrders: [], status: order.status, wasPrepaymentRequired: order.wasPrepaymentRequired ?? false };
-                }
-                aggregated[aggregationKey].totalQuantity += item.quantity;
-                aggregated[aggregationKey].originalOrders.push(order);
-            });
-        });
-        Object.values(aggregated).forEach(item => { item.originalOrders.sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0)); });
-        const groupedByDate: { [date: string]: AggregatedItem[] } = {};
-        Object.values(aggregated).forEach(item => {
-            const firstOrder = item.originalOrders[0];
-            if (!firstOrder) return;
-            const date = viewMode === 'orders' ? safeToDate(firstOrder.createdAt) : safeToDate(firstOrder.pickupDate);
-            if (!date) return;
-            const dateStr = dayjs(date).format('YYYY-MM-DD');
-            if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
-            groupedByDate[dateStr].push(item);
-        });
-        return groupedByDate;
-    }, [orders, viewMode]);
-
-    const handleScroll = useCallback(() => {
-      const isAtBottom = window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200;
-      if (isAtBottom && (viewMode === 'orders' || viewMode === 'pickup') && !ordersLoading && hasMoreOrders) {
-        loadMoreOrders();
       }
-    }, [viewMode, ordersLoading, hasMoreOrders, loadMoreOrders]);
-
-    useEffect(() => {
-      window.addEventListener('scroll', handleScroll);
-      return () => window.removeEventListener('scroll', handleScroll);
-    }, [handleScroll]);
-    
-    const handleCancelOrder = useCallback((orderToCancel: Order) => {
-      toast.custom((t) => (
-        <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
-          <h4 className="toast-header"><AlertCircle size={20} /><span>예약 취소</span></h4>
-          <p className="toast-message">정말 이 예약을 취소하시겠습니까?</p>
-          <div className="toast-buttons">
-            <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
-            <button className="common-button button-danger button-medium" onClick={() => {
-              toast.dismiss(t.id);
-              const promise = cancelOrder(orderToCancel);
-              showPromiseToast(promise, {
-                loading: '예약 취소 처리 중...',
-                success: () => { setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o)); return '예약이 성공적으로 취소되었습니다.'; },
-                error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
-              });
-            }}>취소하기</button>
-          </div>
-        </div>
-      ));
-    }, [setOrders]);
-
-    const handleCancelWaitlist = useCallback(async (item: WaitlistInfo) => {
-      if (!user) return;
-      const uniqueId = item.timestamp.toMillis();
-      showPromiseToast(
-        cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId),
-        {
-          loading: '대기 취소 처리 중...',
-          success: () => {
-            setWaitlist(prev => prev.filter(w => w.timestamp.toMillis() !== uniqueId));
-            return '대기 신청이 취소되었습니다.';
-          },
-          error: '대기 취소 중 오류가 발생했습니다.'
-        }
-      );
-    }, [user, setWaitlist]);
-    
-    // ✅ [수정] '순서 올리기' 관련 핸들러 함수를 삭제했습니다.
-    // const handleUsePriorityTicket = useCallback(...)
-
-    const renderOrderContent = () => {
-        const isFirstLoading = ordersLoading && orders.length === 0;
-        if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
-        if (orders.length === 0 && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
-        const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
-            const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
-            return viewMode === 'orders' ? dateB - dateA : dateA - dateB;
-        });
-        return (
-            <div className="orders-list">
-            <AnimatePresence>
-                {sortedDates.map((dateStr, index) => (
-                <motion.div key={dateStr} layout>
-                    <div className="date-header-container">
-                    <DateHeader date={new Date(dateStr)} />
-                    {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
-                        <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
-                        <Info size={14} /><span>카드를 길게 눌러 예약을 취소하세요.</span>
-                        </div>
-                    )}
-                    </div>
-                    <div className="order-cards-grid">
-                    {aggregatedItems[dateStr].map(item => (<AggregatedItemCard key={item.id} item={item} displayDateInfo={viewMode === 'orders' ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! } : { type: 'order', date: safeToDate(item.originalOrders[0]?.createdAt)! }} onCancel={handleCancelOrder} />))}
-                    </div>
-                </motion.div>
-                ))}
-            </AnimatePresence>
-            </div>
-        );
     };
-    
+    fetchWaitlist();
+  }, [user, viewMode]);
+
+  const aggregatedItems = useMemo(() => {
+    const aggregated: { [key: string]: AggregatedItem } = {};
+    orders.forEach(order => {
+      const date = viewMode === 'orders' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
+      if (!date) return;
+      const dateStr = dayjs(date).format('YYYY-MM-DD');
+      (order.items || []).forEach((item: OrderItem) => {
+        const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}`;
+        const stableAnimationId = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
+        if (!aggregated[aggregationKey]) {
+          aggregated[aggregationKey] = { id: aggregationKey, stableId: stableAnimationId, productId: item.productId, productName: item.productName, variantGroupName: item.variantGroupName, itemName: item.itemName, totalQuantity: 0, imageUrl: item.imageUrl, originalOrders: [], status: order.status, wasPrepaymentRequired: order.wasPrepaymentRequired ?? false };
+        }
+        aggregated[aggregationKey].totalQuantity += item.quantity;
+        aggregated[aggregationKey].originalOrders.push(order);
+      });
+    });
+    Object.values(aggregated).forEach(item => { item.originalOrders.sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0)); });
+    const groupedByDate: { [date: string]: AggregatedItem[] } = {};
+    Object.values(aggregated).forEach(item => {
+      const firstOrder = item.originalOrders[0];
+      if (!firstOrder) return;
+      const date = viewMode === 'orders' ? safeToDate(firstOrder.createdAt) : safeToDate(firstOrder.pickupDate);
+      if (!date) return;
+      const dateStr = dayjs(date).format('YYYY-MM-DD');
+      if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
+      groupedByDate[dateStr].push(item);
+    });
+    return groupedByDate;
+  }, [orders, viewMode]);
+
+  const handleScroll = useCallback(() => {
+    const isAtBottom = window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200;
+    if (isAtBottom && (viewMode === 'orders' || viewMode === 'pickup') && !ordersLoading && hasMoreOrders) {
+      loadMoreOrders();
+    }
+  }, [viewMode, ordersLoading, hasMoreOrders, loadMoreOrders]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+  
+  const handleCancelOrder = useCallback((orderToCancel: Order) => {
+    toast.custom((t) => (
+      <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
+        <h4 className="toast-header"><AlertCircle size={20} /><span>예약 취소</span></h4>
+        <p className="toast-message">정말 이 예약을 취소하시겠습니까?</p>
+        <div className="toast-buttons">
+          <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
+          <button className="common-button button-danger button-medium" onClick={() => {
+            toast.dismiss(t.id);
+            const promise = cancelOrder(orderToCancel);
+            showPromiseToast(promise, {
+              loading: '예약 취소 처리 중...',
+              success: () => { setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o)); return '예약이 성공적으로 취소되었습니다.'; },
+              error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
+            });
+          }}>취소하기</button>
+        </div>
+      </div>
+    ));
+  }, [setOrders]);
+
+  const handleCancelWaitlist = useCallback(async (item: WaitlistInfo) => {
+    if (!user) return;
+    const uniqueId = item.timestamp.toMillis();
+    showPromiseToast(
+      cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId),
+      {
+        loading: '대기 취소 처리 중...',
+        success: () => {
+          setWaitlist(prev => prev.filter(w => w.timestamp.toMillis() !== uniqueId));
+          return '대기 신청이 취소되었습니다.';
+        },
+        error: '대기 취소 중 오류가 발생했습니다.'
+      }
+    );
+  }, [user, setWaitlist]);
+  
+  const renderOrderContent = () => {
+    const isFirstLoading = ordersLoading && orders.length === 0;
+    if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
+    if (orders.length === 0 && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
+    const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
+      const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
+      return viewMode === 'orders' ? dateB - dateA : dateA - dateB;
+    });
+    return (
+      <div className="orders-list">
+        <AnimatePresence>
+          {sortedDates.map((dateStr, index) => (
+            <motion.div key={dateStr} layout>
+              <div className="date-header-container">
+                <DateHeader date={new Date(dateStr)} />
+                {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
+                  <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
+                    <Info size={14} /><span>카드를 길게 눌러 예약을 취소하세요.</span>
+                  </div>
+                )}
+              </div>
+              <div className="order-cards-grid">
+                {aggregatedItems[dateStr].map(item => (
+                  <AggregatedItemCard
+                    key={item.id}
+                    item={item}
+                    displayDateInfo={viewMode === 'orders'
+                      ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! }
+                      : { type: 'order', date: safeToDate(item.originalOrders[0]?.createdAt)! }}
+                    onCancel={handleCancelOrder}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    );
+  };
+  
   const renderWaitlistContent = () => {
     if (loadingWaitlist) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
     if (waitlist.length === 0 && !loadingWaitlist) { return <EmptyHistory type="waitlist" />; }
@@ -465,7 +519,6 @@ const OrderHistoryPage: React.FC = () => {
       <div className="waitlist-list">
         <AnimatePresence>
           {waitlist.map(item => (
-            // ✅ [수정] WaitlistItemCard에 전달하던 '순서 올리기' 관련 props를 제거했습니다.
             <WaitlistItemCard
               key={`${item.roundId}-${item.itemId}-${item.timestamp.toMillis()}`}
               item={item}
@@ -477,24 +530,24 @@ const OrderHistoryPage: React.FC = () => {
     );
   };
 
-    return (
-      <div className="customer-page-container">
-        <div className="order-history-page">
-          <div className="view-toggle-container" data-tutorial-id="history-view-toggle">
-            <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => setViewMode('orders')}> <ListOrdered size={18} /> 주문일순 </button>
-            <button className={`toggle-btn ${viewMode === 'pickup' ? 'active' : ''}`} onClick={() => setViewMode('pickup')}> <Truck size={18} /> 픽업일순 </button>
-            <button className={`toggle-btn ${viewMode === 'waitlist' ? 'active' : ''}`} onClick={() => setViewMode('waitlist')}> <Hourglass size={18} /> 대기목록 </button>
-          </div>
-          <AnimatePresence mode="wait">
-              <motion.div key={viewMode} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} >
-                  {viewMode === 'waitlist' ? renderWaitlistContent() : renderOrderContent()}
-              </motion.div>
-          </AnimatePresence>
-          {(viewMode === 'orders' || viewMode === 'pickup') && ordersLoading && orders.length > 0 && (<div className="loading-more-spinner"><InlineSodomallLoader /></div>)}
-          {(viewMode === 'orders' || viewMode === 'pickup') && !hasMoreOrders && orders.length > 0 && (<div className="end-of-list-message">모든 내역을 불러왔습니다.</div>)}
+  return (
+    <div className="customer-page-container">
+      <div className="order-history-page">
+        <div className="view-toggle-container" data-tutorial-id="history-view-toggle">
+          <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => setViewMode('orders')}> <ListOrdered size={18} /> 주문일순 </button>
+          <button className={`toggle-btn ${viewMode === 'pickup' ? 'active' : ''}`} onClick={() => setViewMode('pickup')}> <Truck size={18} /> 픽업일순 </button>
+          <button className={`toggle-btn ${viewMode === 'waitlist' ? 'active' : ''}`} onClick={() => setViewMode('waitlist')}> <Hourglass size={18} /> 대기목록 </button>
         </div>
+        <AnimatePresence mode="wait">
+          <motion.div key={viewMode} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} >
+            {viewMode === 'waitlist' ? renderWaitlistContent() : renderOrderContent()}
+          </motion.div>
+        </AnimatePresence>
+        {(viewMode === 'orders' || viewMode === 'pickup') && ordersLoading && orders.length > 0 && (<div className="loading-more-spinner"><InlineSodomallLoader /></div>)}
+        {(viewMode === 'orders' || viewMode === 'pickup') && !hasMoreOrders && orders.length > 0 && (<div className="end-of-list-message">모든 내역을 불러왔습니다.</div>)}
       </div>
-    );
+    </div>
+  );
 };
-  
+
 export default OrderHistoryPage;

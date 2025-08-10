@@ -81,6 +81,22 @@ interface ProductCardProps {
   product: Product;
 }
 
+// ✅ [수정] 이미지 로딩 폴백(Fallback) 로직 개선
+// 1) 안전한 플레이스홀더 상수 정의
+const PLACEHOLDER = 'https://via.placeholder.com/200x200.png?text=No+Image';
+
+// 2) 파이어베이스 스토리지 도메인 판별 함수
+const isFirebaseStorage = (url?: string) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.hostname.includes('firebasestorage.googleapis.com');
+  } catch {
+    return false;
+  }
+};
+
+
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,30 +108,37 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [isJustAdded, setIsJustAdded] = useState(false);
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ [수정] 이미지 로딩 폴백(Fallback) 로직
-  // 1. 이미지 URL을 관리할 state를 생성합니다. 초기값은 빈 문자열입니다.
-  const [imageSrc, setImageSrc] = useState('');
+  // 3) 이미지 src 상태: 초기값을 '' 대신 PLACEHOLDER 로 설정하여 초기 렌더링 오류 방지
+  const [imageSrc, setImageSrc] = useState(PLACEHOLDER);
 
-  // 2. product.imageUrls가 변경될 때마다 최적화된 이미지 URL로 state를 설정합니다.
+  // 4) product.imageUrls 변경 시 1회만 src 결정 (최적화는 조건부)
   useEffect(() => {
-    const originalUrl = product.imageUrls?.find(url => typeof url === 'string' && url.trim() !== '');
-    const optimizedUrl = getOptimizedImageUrl(
-      originalUrl || 'https://via.placeholder.com/200x200.png?text=No+Image',
-      '200x200'
-    );
-    setImageSrc(optimizedUrl);
+    const originalUrl = product.imageUrls?.find(u => typeof u === 'string' && u.trim() !== '') || PLACEHOLDER;
+
+    // Firebase Storage URL이면 토큰 유지를 위해 최적화를 시도하지 않음
+    if (isFirebaseStorage(originalUrl)) {
+      setImageSrc(originalUrl);
+      return;
+    }
+
+    // 그 외 도메인만 이미지 최적화 시도
+    const optimized = getOptimizedImageUrl(originalUrl, '200x200') || originalUrl;
+    setImageSrc(optimized);
   }, [product.imageUrls]);
 
-  // 3. 이미지 로딩 실패 시 호출될 에러 핸들러입니다.
+  // 5) onError 시 무한 루프 방지: 현재 src가 PLACEHOLDER가 아니면 1회만 폴백
   const handleImageError = useCallback(() => {
-    const originalUrl = product.imageUrls?.find(url => typeof url === 'string' && url.trim() !== '');
-    const fallbackSrc = originalUrl || 'https://via.placeholder.com/200x200.png?text=No+Image';
+    const originalUrl = product.imageUrls?.find(u => typeof u === 'string' && u.trim() !== '') || PLACEHOLDER;
     
-    // 무한 루프를 방지하기 위해, 현재 URL이 폴백 URL과 다를 경우에만 상태를 업데이트합니다.
-    if (imageSrc !== fallbackSrc) {
-      setImageSrc(fallbackSrc);
+    // 최적화 URL이 실패한 경우, 원본 URL로 교체 시도
+    if (imageSrc !== originalUrl) {
+      setImageSrc(originalUrl);
+    } 
+    // 원본 URL도 실패한 경우, 최종 플레이스홀더로 교체
+    else if (imageSrc !== PLACEHOLDER) {
+      setImageSrc(PLACEHOLDER);
     }
-  }, [product.imageUrls, imageSrc]);
+  }, [imageSrc, product.imageUrls]);
 
 
   useEffect(() => {
@@ -347,7 +370,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       <div className="product-card-final" onClick={handleCardClick}>
         <TopBadge />
         <div className="card-image-container">
-          {/* ✅ [수정] state에 바인딩된 src와 onError 핸들러를 적용합니다. */}
           <img 
             src={imageSrc} 
             alt={product.groupName} 

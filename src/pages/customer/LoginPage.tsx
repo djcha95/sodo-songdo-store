@@ -40,8 +40,7 @@ const initKakaoSDK = () =>
 
 /* ───────── API URL 계산 ───────── */
 const getApiUrl = () => {
-  // ✅ [수정] 올바른 API 경로로 수정합니다.
-  // Vercel에 배포된 서버리스 함수 이름인 'kakaoLogin'에 맞춰 경로를 지정합니다.
+  // Vercel 서버리스 함수 라우팅에 맞춘 경로
   return `/api/kakaoLogin`;
 };
 
@@ -87,7 +86,7 @@ const LoginPage: React.FC = () => {
       kakaoLogin({
         scope: "profile_nickname,account_email,name,gender,age_range,phone_number",
         throughTalk: false,
-        success: async ({ access_token }) => {
+        success: async ({ access_token }: { access_token: string }) => {
           try {
             const apiUrl = getApiUrl();
             const res = await fetch(apiUrl, {
@@ -104,7 +103,7 @@ const LoginPage: React.FC = () => {
 
             const { firebaseToken } = await res.json();
             if (!firebaseToken) {
-                throw new Error("서버로부터 Firebase 토큰을 받지 못했습니다.");
+              throw new Error("서버로부터 Firebase 토큰을 받지 못했습니다.");
             }
 
             const userCred = await signInWithCustomToken(auth, firebaseToken);
@@ -122,7 +121,8 @@ const LoginPage: React.FC = () => {
             reject(err);
           }
         },
-        fail: (err) => {
+        // ✅ TS7006 해결: err 타입 명시
+        fail: (err: unknown) => {
           console.error("Kakao login failed:", err);
           reject(new Error("카카오 인증에 실패했습니다."));
         },

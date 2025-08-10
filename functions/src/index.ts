@@ -15,11 +15,12 @@ export * from "./callable/users.js";
 // 2. HTTP Functions (HTTP 요청 함수)
 // =================================================================
 export * from "./http/auth.js";
-// ✅ [수정] 충돌을 해결하기 위해, testSendAlimtalk 함수를 여기서 한번만 직접 export 합니다.
-export { testSendAlimtalk } from './callable/testAlimtalk.js';
 
-// ✅ [추가] 선입금 안내 즉시 실행 테스트 함수를 등록합니다.
-export * from "./http/testNotifications.js"; 
+// ✅ 기존 엔드포인트 호환 유지: testAlimtalk 를 testSendAlimtalk 별칭으로도 export
+export { testAlimtalk, testAlimtalk as testSendAlimtalk } from "./callable/testAlimtalk.js";
+
+// 선입금 안내 즉시 실행 테스트 함수
+export * from "./http/testNotifications.js";
 
 // =================================================================
 // 3. Scheduled Functions (스케줄링 함수)

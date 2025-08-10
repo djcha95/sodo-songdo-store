@@ -45,12 +45,14 @@ const ProductListPage: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // --- 무한스크롤 제어 키 포인트 ---
+  const PAGE_SIZE = 10;
   const lastVisibleRef = useRef<number | null>(null);
   const hasMoreRef = useRef<boolean>(true);
-  // ✅ [수정] state 대신 ref를 사용하여 로딩 중복 호출을 안정적으로 방지
-  const isFetchingRef = useRef<boolean>(false); 
-  const PAGE_SIZE = 10;
-  
+  const isFetchingRef = useRef<boolean>(false);
+  const fetchCooldownRef = useRef<number>(0);
+  const FETCH_COOLDOWN = 800; // ms
+
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
   
@@ -63,7 +65,6 @@ const ProductListPage: React.FC = () => {
   }, [userDocument, startTour]);
 
   const fetchData = useCallback(async (isInitial = false) => {
-    // ✅ [수정] isFetchingRef를 사용하여 중복 실행 방지
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
@@ -80,31 +81,50 @@ const ProductListPage: React.FC = () => {
       setLoadingMore(true);
     }
 
+    const prevCursor = lastVisibleRef.current;
+
     try {
       if (isInitial) {
         const activeBanners = await getActiveBanners();
         setBanners(activeBanners);
       }
-      const result: HttpsCallableResult<any> = await getProductsWithStockCallable({ pageSize: PAGE_SIZE, lastVisible: lastVisibleRef.current });
-      const { products: newProducts, lastVisible: newLastVisible } = result.data as { products: ProductForList[], lastVisible: number | null };
-      
-      setProducts(prevProducts => {
-        const productsMap = new Map(prevProducts.map(p => [p.id, p]));
-        newProducts.forEach(p => productsMap.set(p.id, p));
-        return isInitial ? newProducts : Array.from(productsMap.values());
+
+      const result: HttpsCallableResult<any> = await getProductsWithStockCallable({
+        pageSize: PAGE_SIZE,
+        lastVisible: lastVisibleRef.current
       });
 
+      const { products: newProducts, lastVisible: newLastVisible } = result.data as {
+        products: ProductForList[],
+        lastVisible: number | null
+      };
+
+      // 중복 제거(기존 유지 + 신규 merge)
+      setProducts(prev => {
+        const map = new Map(prev.map(p => [p.id, p]));
+        (newProducts || []).forEach(p => map.set(p.id, p));
+        return isInitial ? (newProducts || []) : Array.from(map.values());
+      });
+
+      // 커서/hasMore 갱신 — 진행 없음 감지
       lastVisibleRef.current = newLastVisible;
-      if (!newLastVisible || newProducts.length < PAGE_SIZE) {
-        hasMoreRef.current = false;
-      }
+      const noProgress =
+        newLastVisible === null ||
+        newLastVisible === prevCursor ||
+        (newProducts?.length ?? 0) === 0 ||
+        (newProducts?.length ?? 0) < PAGE_SIZE;
+
+      hasMoreRef.current = !noProgress;
     } catch (err: any) {
-      setError("상품을 불러오는 중 오류가 발생했습니다.");
-      showToast('error', err.message || "데이터 로딩 중 문제가 발생했습니다.");
+      setError('상품을 불러오는 중 오류가 발생했습니다.');
+      showToast('error', err?.message || '데이터 로딩 중 문제가 발생했습니다.');
+      // 에러 시 더 이상 루프 돌지 않도록 잠시 차단
+      hasMoreRef.current = false;
     } finally {
       if (isInitial) setLoading(false);
       setLoadingMore(false);
-      isFetchingRef.current = false; // ✅ [수정] 작업 완료 후 플래그 해제
+      isFetchingRef.current = false;
+      fetchCooldownRef.current = Date.now();
     }
   }, [getProductsWithStockCallable]);
 
@@ -113,13 +133,18 @@ const ProductListPage: React.FC = () => {
 
   useEffect(() => { fetchData(true); }, [fetchData]);
 
-  // ✅ [수정] useEffect의 중복 호출 방지 로직은 fetchData 내부로 이전하여 단순화
+  // 무한스크롤 트리거
   useEffect(() => {
-    if (isLoadMoreVisible && !loading && !loadingMore && hasMoreRef.current && !isTourRunning) {
-      fetchData(false);
-    }
+    if (!isLoadMoreVisible) return;
+    if (loading || loadingMore || isTourRunning) return;
+    if (!hasMoreRef.current || isFetchingRef.current) return;
+
+    const now = Date.now();
+    if (now - fetchCooldownRef.current < FETCH_COOLDOWN) return;
+
+    fetchData(false);
   }, [isLoadMoreVisible, loading, loadingMore, isTourRunning, fetchData]);
-  
+
   const { primarySaleProducts, secondarySaleProducts, pastProductsByDate, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const userTier = userDocument?.loyaltyTier;
@@ -135,7 +160,6 @@ const ProductListPage: React.FC = () => {
       if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) return;
       
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
-      
       if (!primaryEndDate) return;
 
       let currentPhase: 'primary' | 'secondary' | 'past';
@@ -148,15 +172,15 @@ const ProductListPage: React.FC = () => {
       }
       
       if (round.status === 'scheduled' && round.publishAt) {
-          const publishAtDate = safeToDate(round.publishAt);
-          if (publishAtDate && now.isBefore(publishAtDate)) return;
+        const publishAtDate = safeToDate(round.publishAt);
+        if (publishAtDate && now.isBefore(publishAtDate)) return;
       }
       
       const productWithState: ProductWithUIState = { 
-          ...product, 
-          phase: currentPhase, 
-          deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
-          displayRound: round,
+        ...product, 
+        phase: currentPhase, 
+        deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
+        displayRound: round,
       };
       
       if (currentPhase === 'primary') {
@@ -179,11 +203,11 @@ const ProductListPage: React.FC = () => {
 
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
-        if(p.deadlines.secondaryEnd) {
-            const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
-            if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
-            pastGroups[dateKey].push(p);
-        }
+      if (p.deadlines.secondaryEnd) {
+        const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
+        if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
+        pastGroups[dateKey].push(p);
+      }
     });
 
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
@@ -193,14 +217,19 @@ const ProductListPage: React.FC = () => {
     });
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
     
-    return { primarySaleProducts: tempPrimary, secondarySaleProducts: tempSecondary, pastProductsByDate: sortedPastGroups, primarySaleEndDate: firstPrimarySaleEndDate };
+    return {
+      primarySaleProducts: tempPrimary,
+      secondarySaleProducts: tempSecondary,
+      pastProductsByDate: sortedPastGroups,
+      primarySaleEndDate: firstPrimarySaleEndDate
+    };
   }, [products, userDocument]); 
       
   useEffect(() => {
     if (!primarySaleEndDate) { setCountdown(null); return; }
     const interval = setInterval(() => {
       const diff = dayjs(primarySaleEndDate).diff(dayjs(), 'second');
-      if (diff <= 0) { setCountdown("마감!"); clearInterval(interval); return; }
+      if (diff <= 0) { setCountdown('마감!'); clearInterval(interval); return; }
       const h = String(Math.floor(diff / 3600)).padStart(2, '0');
       const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
       const s = String(diff % 60).padStart(2, '0');
@@ -216,7 +245,14 @@ const ProductListPage: React.FC = () => {
     <div className="customer-page-container">
       <div className="pull-to-refresh-indicator" style={{ height: `${pullDistance}px` }}>
         <div className="indicator-content">
-          {isRefreshing ? <RefreshCw size={24} className="refreshing-icon" /> : <><ArrowDown size={20} className="arrow-icon" style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }} /><span>{isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}</span></>}
+          {isRefreshing ? (
+            <RefreshCw size={24} className="refreshing-icon" />
+          ) : (
+            <>
+              <ArrowDown size={20} className="arrow-icon" style={{ transform: isThresholdReached ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+              <span>{isThresholdReached ? '놓아서 새로고침' : '아래로 당겨서 새로고침'}</span>
+            </>
+          )}
         </div>
       </div>
       <div className="pull-to-refresh-content" style={{ transform: `translateY(${pullDistance}px)` }}>
@@ -233,7 +269,11 @@ const ProductListPage: React.FC = () => {
           {primarySaleProducts.length > 0 ? (
             primarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)
           ) : !loading && (
-            <div className="product-list-placeholder"><PackageSearch size={48} /><p>오늘의 상품을 준비중입니다</p><span>매일 오후 1시에 새로운 상품을 기대해주세요!</span></div>
+            <div className="product-list-placeholder">
+              <PackageSearch size={48} />
+              <p>오늘의 상품을 준비중입니다</p>
+              <span>매일 오후 1시에 새로운 상품을 기대해주세요!</span>
+            </div>
           )}
         </ProductSection>
         

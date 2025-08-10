@@ -1,6 +1,12 @@
 {
   "name": "functions",
   "description": "Cloud Functions for Firebase",
+  "private": true,
+  "main": "lib/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": "20"
+  },
   "scripts": {
     "lint": "eslint --ext .js,.ts . --fix",
     "build": "tsc",
@@ -11,15 +17,11 @@
     "logs": "firebase functions:log",
     "predeploy": "npm run build"
   },
-  "engines": {
-    "node": "20"
-  },
-  "main": "lib/index.js",
-  "type": "module",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
+    "express": "^4.19.2",
     "firebase-admin": "^13.4.0",
     "firebase-functions": "^6.4.0"
   },
@@ -30,6 +32,5 @@
     "eslint": "^8.57.0",
     "eslint-plugin-import": "^2.29.1",
     "typescript": "^5.5.0"
-  },
-  "private": true
+  }
 }

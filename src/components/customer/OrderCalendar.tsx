@@ -33,6 +33,46 @@ import {
 // --- 헬퍼 함수 및 타입 ---
 type ValuePiece = Date | null;
 type PickupStatus = 'pending' | 'completed' | 'noshow' | 'cancelled';
+type ThumbSize = '200x200' | '1080x1080';
+
+const PLACEHOLDER = 'https://via.placeholder.com/200x200.png?text=No+Image';
+
+const isFirebaseStorage = (url?: string) => {
+  if (!url) return false;
+  try { return new URL(url).hostname.includes('firebasestorage.googleapis.com'); }
+  catch { return false; }
+};
+
+const SafeThumb: React.FC<{
+  src?: string; alt: string; size?: ThumbSize; className?: string; eager?: boolean;
+}> = ({ src, alt, size = '200x200', className, eager }) => {
+  const original = (src && src.trim()) ? src : PLACEHOLDER;
+  const [imageSrc, setImageSrc] = React.useState(() => {
+    if (isFirebaseStorage(original)) return original;
+    return getOptimizedImageUrl(original, size) || original;
+  });
+
+  React.useEffect(() => {
+    if (isFirebaseStorage(original)) setImageSrc(original);
+    else setImageSrc(getOptimizedImageUrl(original, size) || original);
+  }, [original, size]);
+
+  const onError = React.useCallback(() => {
+    if (imageSrc !== original) setImageSrc(original);
+    else if (imageSrc !== PLACEHOLDER) setImageSrc(PLACEHOLDER);
+  }, [imageSrc, original]);
+
+  return (
+    <img
+      src={imageSrc}
+      alt={alt}
+      className={className}
+      loading={eager ? 'eager' : 'lazy'}
+      fetchpriority={eager ? 'high' : 'auto'}
+      onError={onError}
+    />
+  );
+};
 
 interface AggregatedItem { 
   id: string; 
@@ -149,7 +189,7 @@ const CalendarItemCard: React.FC<{ item: AggregatedItem }> = React.memo(({ item 
     >
       <div className="card-v3-body">
         <div className="item-image-wrapper">
-          <img src={getOptimizedImageUrl(item.imageUrl, '200x200')} alt={item.productName} className="item-image" loading="lazy" />
+          <SafeThumb src={item.imageUrl} size="200x200" alt={item.productName} className="item-image" />
         </div>
         <div className="item-aggregated-info">
           <div className="info-top-row">

@@ -1,14 +1,13 @@
-// src/pages/admin/PickupProcessingPage.tsx
-
 import React, { useState } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { searchOrdersByPhoneNumber, updateMultipleOrderStatuses } from '../../firebase';
+// ✅ [오류 수정] Typescript가 제안한 정확한 함수명 'getOrdersByPhoneLast4'로 수정
+import { getOrdersByPhoneLast4, updateMultipleOrderStatuses } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
-import { Timestamp } from 'firebase/firestore'; // Timestamp 임포트 추가
+import { Timestamp } from 'firebase/firestore';
 import { Search, Phone, CheckCircle, XCircle, DollarSign, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// ✅ [오류 수정] 날짜 관련 오류 해결을 위한 헬퍼 함수 추가
+// 날짜 관련 오류 해결을 위한 헬퍼 함수
 const safeToDate = (date: any): Date | null => {
     if (!date) return null;
     if (date instanceof Date) return date;
@@ -63,6 +62,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
       case 'PICKED_UP': return '#e8f5e9';
       case 'CANCELED': return '#ffebee';
       case 'NO_SHOW': return '#fce4ec';
+      case 'COMPLETED': return '#dcedc8'; 
       default: return 'white';
     }
   };
@@ -74,6 +74,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
       case 'PICKED_UP': return '픽업 완료';
       case 'CANCELED': return '취소';
       case 'NO_SHOW': return '노쇼';
+      case 'COMPLETED': return '처리 완료';
       default: return '알 수 없음';
     }
   };
@@ -101,13 +102,11 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onSelect, isSelected }) =>
     >
       <div style={{ marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', color: '#333' }}>
-          {/* ✅ [오류 수정] safeToDate 사용 */}
           <span>주문일: {safeToDate(createdAt)?.toLocaleDateString() ?? '날짜 없음'}</span>
           <span style={{ fontWeight: 'bold', color: '#007bff' }}>{statusText(status)}</span>
         </div>
         <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '10px 0 5px' }}>{customerInfo.name} 님</h3>
         <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '10px' }}>
-          {/* ✅ [오류 수정] safeToDate 사용 */}
           픽업 예정일: {safeToDate(pickupDate)?.toLocaleDateString() ?? '미정'}
         </div>
         <div style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
@@ -142,7 +141,8 @@ const PickupProcessingPage: React.FC = () => {
     setSelectedOrderIds([]);
 
     try {
-      const results = await searchOrdersByPhoneNumber(phoneNumberLast4);
+      // ✅ [오류 수정] 함수명을 getOrdersByPhoneLast4로 수정
+      const results = await getOrdersByPhoneLast4(phoneNumberLast4);
       if (results.length === 0) {
         toast('검색 결과가 없습니다.', { icon: '🔍' });
       } else {
@@ -175,7 +175,8 @@ const PickupProcessingPage: React.FC = () => {
     const updatePromise = new Promise<void>(async (resolve, reject) => {
       try {
         await updateMultipleOrderStatuses(selectedOrderIds, status);
-        const results = await searchOrdersByPhoneNumber(phoneNumberLast4);
+        // ✅ [오류 수정] 함수명을 getOrdersByPhoneLast4로 수정
+        const results = await getOrdersByPhoneLast4(phoneNumberLast4);
         setSearchResults(results);
         setSelectedOrderIds([]);
         resolve();
@@ -184,9 +185,15 @@ const PickupProcessingPage: React.FC = () => {
       }
     });
 
-    const statusTextMap = { 'PICKED_UP': '픽업 완료', 'CANCELED': '취소', 'PREPAID': '결제 완료' };
+    const statusTextMap: { [key in OrderStatus]: string } = {
+      'PREPAID': '결제 완료',
+      'RESERVED': '예약',
+      'PICKED_UP': '픽업 완료',
+      'CANCELED': '취소',
+      'NO_SHOW': '노쇼',
+      'COMPLETED': '처리 완료',
+    };
     const successText = `${selectedOrderIds.length}개 주문이 '${statusTextMap[status] || status}' 처리되었습니다!`;
-
 
     toast.promise(updatePromise, {
       loading: '주문 상태 변경 중...',

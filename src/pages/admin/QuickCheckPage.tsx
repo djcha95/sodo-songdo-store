@@ -9,86 +9,8 @@ import CustomerFocusView from '@/components/admin/CustomerFocusView';
 import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { AnimatePresence } from 'framer-motion';
-import { Search, X, Users, SearchSlash, BellRing } from 'lucide-react';
+import { Search, X, Users, SearchSlash } from 'lucide-react';
 import './QuickCheckPage.css';
-
-// ====================================================================
-// 알림톡 테스트용 컴포넌트
-// ====================================================================
-const AlimtalkTestSender: React.FC = () => {
-    const [recipientPhone, setRecipientPhone] = useState('');
-    const [templateCode, setTemplateCode] = useState('ORD_CONFIRM_NOW');
-    const [isLoading, setIsLoading] = useState(false);
-  
-    const handleSendTest = async () => {
-      if (!recipientPhone) {
-        toast.error('수신자 전화번호를 입력하세요.');
-        return;
-      }
-      setIsLoading(true);
-      const toastId = toast.loading('테스트 알림톡 발송 중...');
-
-      try {
-        // ✅ [핵심 수정 1] 호출하는 함수의 리전을 'asia-northeast3'로 정확하게 수정합니다.
-        const functionUrl = 'https://asia-northeast3-sso-do.cloudfunctions.net/testSendAlimtalk';
-      
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ recipientPhone, templateCode }),
-      });
-
-        // 응답 본문이 비어있을 수 있으므로 먼저 텍스트로 읽어옵니다.
-        const text = await response.text();
-        const result = text ? JSON.parse(text) : {};
-
-        if (!response.ok) {
-          // 서버에서 보낸 에러 메시지(result.error)를 우선적으로 사용합니다.
-          throw new Error(result.error || `서버 응답 오류: ${response.status}`);
-        }
-
-        toast.success(`[${templateCode}] 발송 요청 성공!`, { id: toastId });
-        console.log('발송 성공:', result);
-
-      } catch (error: any) {
-        toast.error(`발송 실패: ${error.message}`, { id: toastId });
-        console.error('발송 실패 상세:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-  
-    return (
-      <div className="qcp-dev-tools">
-        <h3 className="qcp-dev-tools-title"><BellRing size={16} /> 알림톡 발송 테스트 도구</h3>
-        <div className="qcp-dev-tools-content">
-          <input
-            type="text"
-            value={recipientPhone}
-            onChange={(e) => setRecipientPhone(e.target.value)}
-            placeholder="수신자 전화번호 ('-' 없이 입력)"
-            className="qcp-dev-tools-input"
-          />
-          <select
-            value={templateCode}
-            onChange={(e) => setTemplateCode(e.target.value)}
-            className="qcp-dev-tools-select"
-          >
-            <option value="ORD_CONFIRM_NOW">1. 즉시 픽업 예약 확정</option>
-            <option value="ORD_CONFIRM_FUTURE">2. 미래 픽업 예약 확정</option>
-            <option value="STANDARD_PICKUP_STAR">3. 픽업 당일 알림</option>
-            <option value="PREPAYMENT_GUIDE_URG">4. 마감 임박 및 선입금 안내</option>
-          </select>
-          <button onClick={handleSendTest} disabled={isLoading} className="qcp-dev-tools-button">
-            {isLoading ? '전송중...' : '테스트 발송'}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
 
 // ====================================================================
 // 기존 QuickCheckPage 컴포넌트 (변경 없음)
@@ -289,7 +211,7 @@ const QuickCheckPage: React.FC = () => {
             </AnimatePresence>
             
             {/* 페이지 최하단에 테스트 컴포넌트 렌더링 */}
-            <AlimtalkTestSender />
+            
         </div>
     );
 };
