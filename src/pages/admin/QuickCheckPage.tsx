@@ -10,8 +10,6 @@ import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { AnimatePresence } from 'framer-motion';
 import { Search, X, Users, SearchSlash } from 'lucide-react';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import './QuickCheckPage.css';
 
 const QuickCheckPage: React.FC = () => {
@@ -134,23 +132,6 @@ const QuickCheckPage: React.FC = () => {
 
   const showNoResults = hasSearched && !isLoading && !focusedUser && disambiguation.length === 0;
 
-  // =========================
-  // 🍪 랜덤 지급 실행
-  // =========================
-  const handleGrantSnackPack = async () => {
-    try {
-      const functions = getFunctions(getApp(), 'asia-northeast3');
-      const fn = httpsCallable(functions, 'grantSnackPackToAllUsers');
-      const toastId = toast.loading('간식 꾸러미 지급 처리 중…');
-      const res: any = await fn({});
-      toast.success(`생성: ${res?.data?.createdCount ?? 0}명 / 스킵: ${res?.data?.skippedCount ?? 0}명`, { id: toastId });
-      console.log('grantSnackPack result:', res?.data);
-    } catch (err: any) {
-      toast.error(err?.message || '실행 실패');
-      console.error(err);
-    }
-  };
-
   return (
     <div className="quick-check-page">
       <header className="qcp-header">
@@ -226,15 +207,6 @@ const QuickCheckPage: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
-
-      {/* 관리자 전용 실행 버튼 */}
-      {!isLoading && (
-        <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-          <button onClick={handleGrantSnackPack} className="common-button button-primary">
-            🍪 랜덤 간식 지급 실행
-          </button>
-        </div>
-      )}
     </div>
   );
 };

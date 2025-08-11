@@ -40,8 +40,10 @@ const calculateServerSideMissionStatus = async (
     const monthlyOrders = ordersSnapshot.docs.map(doc => doc.data() as Order);
 
     if (missionId === 'no-show-free') {
-      const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
-      return noShowCount === 0 && monthlyOrders.length > 0;
+        const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
+        // ✅ [수정] 현재 날짜가 해당 월의 마지막 날짜를 지났는지 확인하는 조건을 추가합니다.
+        const isMonthOver = now > endOfMonth;
+        return isMonthOver && noShowCount === 0 && monthlyOrders.length > 0;
     }
     if (missionId === 'monthly-pickup') {
       const pickupTarget = 5;
@@ -50,8 +52,6 @@ const calculateServerSideMissionStatus = async (
     }
   }
 
-  // ✅ [수정] 'signup-bonus' 미션은 별도 조건 없이 항상 '완료'로 간주하여,
-  // 기존 사용자가 보상을 받을 수 있도록 허용합니다.
   if (missionId === 'signup-bonus') {
     return true; 
   }

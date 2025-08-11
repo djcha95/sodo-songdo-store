@@ -275,20 +275,17 @@ const missions: Mission[] = [
         description: `가입만 해도 ${MISSION_REWARDS['signup-bonus']?.points || ''}P 즉시 지급!`,
         icon: <Gift size={22} />,
         displayOrder: 1,
-        // ✅ [수정] '첫 방문 환영' 미션의 로직 변경
         calculateProgress: (userDoc, _orders, _activeMonth) => {
             const missionReward = MISSION_REWARDS['signup-bonus'];
-            // 보상 정책이 없으면 안전하게 미완료 처리
             if (!missionReward) {
                 return { progress: 0, label: '미션 정보 없음', isCompleted: false, uniquePeriodId: `signup-bonus-${userDoc?.uid}`};
             }
-            // 이미 보상을 받았는지 여부만 확인
             const hasClaimed = userDoc?.pointHistory?.some(log => log.reason === missionReward.reason) ?? false;
             
             return {
-                progress: 100, // 항상 진행률은 100%
-                label: hasClaimed ? '획득 완료' : '바로 받기 가능!', // 상태 라벨
-                isCompleted: true, // 모든 사용자에 대해 항상 '완료' 상태로 간주
+                progress: 100,
+                label: hasClaimed ? '획득 완료' : '바로 받기 가능!',
+                isCompleted: true,
                 uniquePeriodId: `signup-bonus-${userDoc?.uid}`
             };
         },
@@ -365,11 +362,31 @@ const missions: Mission[] = [
                 return pickupDate && isSameMonth(pickupDate, activeMonth);
             });
             const noShowCount = monthlyOrders.filter(o => getOrderStatusDisplay(o).type === 'noshow').length;
-            const isCompleted = noShowCount === 0 && monthlyOrders.length > 0;
+            
+            const isConditionMetSoFar = noShowCount === 0 && monthlyOrders.length > 0;
+    
+            // ✅ [수정] 월이 실제로 지났는지 확인하여 보상 버튼 표시 여부를 결정
+            const now = new Date();
+            const isCurrentMonth = isSameMonth(now, activeMonth);
+            const endOfActiveMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 0);
+            const isMonthOver = now > endOfActiveMonth;
+            
+            // 월이 끝났고, 조건을 충족했을 때만 '완료' 처리
+            const isCompleted = isConditionMetSoFar && isMonthOver;
+    
+            let label = `${noShowCount}회 발생`;
+            if (isConditionMetSoFar) {
+                // 현재 진행중인 달이면 격려 메시지, 지난 달이면 달성 메시지 표시
+                label = isCurrentMonth ? '현재까지 노쇼 없음!' : '달성!';
+            }
+            if (isCompleted) {
+                label = '달성 완료!';
+            }
+    
             return {
-                progress: isCompleted ? 100 : 0,
-                label: isCompleted ? '달성!' : `${noShowCount}회 발생`,
-                isCompleted,
+                progress: isConditionMetSoFar ? 100 : 0,
+                label: label,
+                isCompleted: isCompleted, // '보상 받기' 버튼 표시 여부를 제어
                 uniquePeriodId: `no-show-free-${monthId}`
             };
         },
@@ -422,7 +439,6 @@ const MissionsSection: React.FC<{ userDocument: UserDocument | null; orders: Ord
                                     transition={{ duration: 0.8, ease: "easeOut" }}
                                 />
                             </div>
-                            {/* ✅ [수정] 'isClaimed'가 아닌 isCompleted로 버튼 표시 여부 결정 */}
                             {mission.isCompleted && !mission.isClaimed && (
                                <div className="mission-reward-section">
                                   <button 

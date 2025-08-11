@@ -232,7 +232,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [currentImageUrls, setCurrentImageUrls] = useState<string[]>([]);
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  // ★ 누락되어 TS가 터졌던 상태 추가
   const [previewUrlToFile, setPreviewUrlToFile] = useState<Map<string, File>>(new Map());
 
   const [roundName, setRoundName] = useState('1차 판매');
@@ -565,12 +564,26 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     }
   };
 
-  // AI 파싱
+  // ✅ [수정] AI 파싱 함수 수정
   const handleAIParse = async () => {
-    if (!description.trim()) { toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.'); return; }
+    if (!description.trim()) { 
+      toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.'); 
+      return; 
+    }
     setIsParsingWithAI(true);
-    const parseProductText = httpsCallable<{ text: string }, AIParsedData>(functions, 'parseProductText');
-    const promise = parseProductText({ text: description });
+    
+    // 1. 올바른 Cloud Function 이름('analyzeProductTextWithAI')으로 변경합니다.
+    const analyzeProductText = httpsCallable<
+      { text: string; categories: string[] }, // 2. 입력 타입에 categories 추가
+      AIParsedData
+    >(functions, 'analyzeProductTextWithAI');
+    
+    // 3. 현재 카테고리 목록을 AI에 전달할 수 있도록 이름만 추출합니다.
+    const categoryNames = categories.map(c => c.name);
+
+    // 4. Cloud Function을 호출할 때 텍스트와 함께 카테고리 이름 목록을 전달합니다.
+    const promise = analyzeProductText({ text: description, categories: categoryNames });
+
     toast.promise(promise, {
       loading: 'AI가 상품 정보를 분석하고 있습니다...',
       success: (result: HttpsCallableResult<AIParsedData>) => {
@@ -579,11 +592,19 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         if (data.cleanedDescription) setDescription(data.cleanedDescription);
         if (data.storageType) setSelectedStorageType(data.storageType);
         if (data.productType) setProductType(data.productType);
+        
+        // AI가 추천한 카테고리 이름을 기반으로 ID를 찾아 설정합니다.
         if (data.categoryName && categories.length > 0) {
           const foundCategory = categories.find(c => c.name === data.categoryName);
-          if (foundCategory) setSelectedMainCategory(foundCategory.id);
-          else toast.error(`AI가 '${data.categoryName}' 카테고리를 추천했지만, 목록에 없어 선택할 수 없습니다.`);
+          if (foundCategory) {
+            setSelectedMainCategory(foundCategory.id);
+            toast.success(`'${foundCategory.name}' 카테고리가 자동으로 선택되었습니다.`);
+          } else {
+            // 이젠 이 오류가 거의 발생하지 않아야 합니다.
+            toast.error(`AI가 추천한 '${data.categoryName}' 카테고리를 찾을 수 없습니다.`);
+          }
         }
+        
         const firstVg = data.variantGroups?.[0];
         if (firstVg?.pickupDate) setPickupDate(parseDateStringToDate(firstVg.pickupDate));
 
@@ -620,7 +641,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         setIsParsingWithAI(false);
         return 'AI 분석 완료! 자동으로 입력된 내용을 확인해주세요.';
       },
-      error: (err: any) => { setIsParsingWithAI(false); return err.message || 'AI 분석 중 알 수 없는 오류가 발생했습니다.'; }
+      error: (err: any) => { 
+        setIsParsingWithAI(false); 
+        // Firebase 에러 메시지를 좀 더 사용자 친화적으로 표시합니다.
+        reportError('ProductForm.handleAIParse', err);
+        const message = err.message || 'AI 분석 중 알 수 없는 오류가 발생했습니다.';
+        return message.includes("failed-precondition") 
+          ? "AI 서비스 설정에 문제가 있습니다. 관리자에게 문의하세요."
+          : message;
+      }
     });
   };
 
@@ -1008,7 +1037,6 @@ const settingsSummary = useMemo(() => {
 
               <div className="form-group">
                 <label>발행일 (오후 2시 공개)</label>
-                {/* [수정] value와 onChange를 creationDate에서 publishDate 상태로 변경했습니다. */}
                 <input 
                   type="date" 
                   value={toYmd(publishDate)} 

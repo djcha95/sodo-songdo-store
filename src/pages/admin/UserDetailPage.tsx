@@ -478,7 +478,8 @@ const OrderTable: React.FC<{ title: string; orders: Order[] }> = ({ title, order
                                 <td>{(order.createdAt as Timestamp)?.toDate().toLocaleDateString('ko-KR')}</td>
                                 <td>{order.items.map(item => item.productName).join(', ')}</td>
                                 <td>{order.items.reduce((acc, item) => acc + item.quantity, 0)}</td>
-                                <td>{order.totalPrice.toLocaleString()}원</td>
+                                {/* ✅ [수정] order.totalPrice가 undefined일 경우를 대비하여 기본값 0 설정 */}
+                                <td>{(order.totalPrice || 0).toLocaleString()}원</td>
                                 <td>{(order.pickupDate as Timestamp)?.toDate().toLocaleDateString('ko-KR')}</td>
                                 <td><span className={`status-badge-inline ${orderStatusInfo[order.status]?.className || ''}`}>{orderStatusInfo[order.status]?.label || order.status}</span></td>
                             </tr>

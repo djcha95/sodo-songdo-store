@@ -79,7 +79,8 @@ const ActionableOrderTable: React.FC<{
                                     <tr key={order.id} className={`status-row-${order.status}`}>
                                         <td>{format((order.createdAt as Timestamp).toDate(), 'M/d(eee)', { locale: ko })}</td>
                                         <td>{order.items.map(item => `${item.productName} (${item.quantity}개)`).join(', ')}</td>
-                                        <td>{order.totalPrice.toLocaleString()}원</td>
+                                        {/* ✅ [수정] order.totalPrice가 undefined일 경우를 대비하여 기본값 0 설정 */}
+                                        <td>{(order.totalPrice || 0).toLocaleString()}원</td>
                                         <td className="status-cell">
                                             <div className="status-cell-content">
                                                 {isFinalState ? (

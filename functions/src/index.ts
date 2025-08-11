@@ -11,9 +11,6 @@ export * from "./callable/waitlist.js";
 export * from "./callable/missions.js";
 export * from "./callable/users.js";
 
-// ✅ 추가된 함수를 다른 함수들과 동일한 형식으로 export 합니다.
-export * from "./grantSnackPackToAll.js";
-
 
 // =================================================================
 // 2. HTTP Functions (HTTP 요청 함수)
@@ -45,3 +42,6 @@ export * from "./triggers/users.js";
 
 // ✅ [추가] 일회용 설정 함수를 export 목록에 추가합니다.
 export * from "./setup.js";
+
+// ✅ [추가] 사용자 phoneLast4 필드 채우기 스크립트
+export * from "./backfillUsers.js"; 
