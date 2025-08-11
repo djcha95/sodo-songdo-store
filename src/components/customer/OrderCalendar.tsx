@@ -35,7 +35,7 @@ type ValuePiece = Date | null;
 type PickupStatus = 'pending' | 'completed' | 'noshow' | 'cancelled';
 type ThumbSize = '200x200' | '1080x1080';
 
-const PLACEHOLDER = 'https://via.placeholder.com/200x200.png?text=No+Image';
+const PLACEHOLDER = 'https://placeholder.com/200x200.png?text=No+Image';
 
 const isFirebaseStorage = (url?: string) => {
   if (!url) return false;

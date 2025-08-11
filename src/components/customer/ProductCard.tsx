@@ -83,7 +83,7 @@ interface ProductCardProps {
 
 // ✅ [수정] 이미지 로딩 폴백(Fallback) 로직 개선
 // 1) 안전한 플레이스홀더 상수 정의
-const PLACEHOLDER = 'https://via.placeholder.com/200x200.png?text=No+Image';
+const PLACEHOLDER = 'https://placeholder.com/200x200.png?text=No+Image';
 
 // 2) 파이어베이스 스토리지 도메인 판별 함수
 const isFirebaseStorage = (url?: string) => {

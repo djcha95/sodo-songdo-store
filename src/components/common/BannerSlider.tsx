@@ -10,7 +10,7 @@ interface BannerSliderProps {
   className?: string;
 }
 
-const PLACEHOLDER = 'https://via.placeholder.com/1200x400.png?text=Banner';
+const PLACEHOLDER = 'https://placeholder.com/1200x400.png?text=Banner';
 
 const isFirebaseStorage = (url?: string) => {
   if (!url) return false;
