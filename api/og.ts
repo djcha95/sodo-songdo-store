@@ -5,14 +5,17 @@ import path from 'path';
 import fs from 'fs';
 
 // --- Firebase Admin SDK 초기화 ---
-const serviceAccount = JSON.parse(
-  process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string
-);
-
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(serviceAccount),
-  });
+try {
+  const serviceAccount = JSON.parse(
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string
+  );
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert(serviceAccount),
+    });
+  }
+} catch (e) {
+  console.error('Firebase Admin SDK 초기화 실패:', e);
 }
 const db = getFirestore();
 
@@ -23,52 +26,70 @@ const DEFAULT_DESCRIPTION = '소비자도 도매가로! 송도 주민을 위한 
 const DEFAULT_IMAGE = `${BASE_URL}/sodomall_wel.png`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('[OG Handler] 함수 시작, 요청 URL:', req.url);
+
   try {
     const url = new URL(req.url!, `https://${req.headers.host}`);
     const pathname = url.pathname;
+    console.log('[OG Handler] Pathname:', pathname);
 
     let ogTitle = DEFAULT_TITLE;
     let ogDescription = DEFAULT_DESCRIPTION;
     let ogImage = DEFAULT_IMAGE;
     let ogUrl = BASE_URL + pathname;
 
-    // 상품 페이지 경로인지 확인 (예: /product/AOl5GUXz1gj3aKz9QWct)
     const productPathMatch = pathname.match(/^\/product\/([a-zA-Z0-9]+)/);
 
     if (productPathMatch && productPathMatch[1]) {
       const productId = productPathMatch[1];
+      console.log(`[OG Handler] 상품 페이지 감지, ID: ${productId}`);
       try {
         const productDoc = await db.collection('products').doc(productId).get();
         if (productDoc.exists) {
           const productData = productDoc.data();
           if (productData) {
+            console.log('[OG Handler] Firebase에서 상품 데이터 찾음:', productData.groupName);
             ogTitle = `${productData.groupName} - 소도몰` || DEFAULT_TITLE;
             ogDescription = productData.description?.replace(/<br\s*\/?>/gi, ' ').substring(0, 100) + '...' || DEFAULT_DESCRIPTION;
             ogImage = productData.imageUrls?.[0] || DEFAULT_IMAGE;
             ogUrl = BASE_URL + pathname;
           }
+        } else {
+            console.log(`[OG Handler] Firebase에 상품 ID(${productId})가 존재하지 않음`);
         }
       } catch (error) {
-        console.error(`[OG Tag] Firebase에서 상품(${productId}) 정보 가져오기 실패:`, error);
+        console.error(`[OG Handler] Firebase 오류 (${productId}):`, error);
       }
+    } else {
+        console.log('[OG Handler] 상품 페이지가 아님. 기본 OG 정보 사용.');
     }
     
-    // 빌드된 index.html 파일을 읽어옵니다.
-    const htmlFilePath = path.join(process.cwd(), '.vercel/output/static/index.html');
-    let html = fs.readFileSync(htmlFilePath, 'utf-8');
+    // --- 경로 수정 및 디버깅 ---
+    let html: string;
+    try {
+      // ✅ 경로를 Vite 표준 빌드 폴더인 'dist'로 변경
+      const htmlFilePath = path.join(process.cwd(), 'dist', 'index.html');
+      console.log('[OG Handler] index.html 파일 경로:', htmlFilePath);
+      html = fs.readFileSync(htmlFilePath, 'utf-8');
+      console.log('[OG Handler] index.html 파일 읽기 성공.');
+    } catch (e) {
+      console.error('[OG Handler] index.html 파일 읽기 실패!', e);
+      // 파일을 못 읽으면 더 진행할 수 없으므로 에러 응답
+      return res.status(500).send('<h1>Error: Cannot read index.html</h1>');
+    }
 
-    // 플레이스홀더를 실제 값으로 교체합니다.
+    console.log('[OG Handler] OG 태그 교체 시작...');
     html = html.replace(/__OG_TITLE__/g, ogTitle);
     html = html.replace(/__OG_DESCRIPTION__/g, ogDescription);
     html = html.replace(/__OG_IMAGE__/g, ogImage);
     html = html.replace(/__OG_URL__/g, ogUrl);
+    console.log('[OG Handler] OG 태그 교체 완료. HTML 응답 전송.');
 
-    // 수정된 HTML을 응답으로 보냅니다.
     res.setHeader('Content-Type', 'text/html');
     return res.status(200).send(html);
 
   } catch (error) {
-    console.error('[OG Tag] 전체 핸들러 오류:', error);
-    return res.status(500).send('<h1>서버에서 오류가 발생했습니다.</h1>');
+    console.error('[OG Handler] 핸들러 전체에서 심각한 오류 발생:', error);
+    return res.status(500).send('<h1>Server Error</h1>');
   }
 }
