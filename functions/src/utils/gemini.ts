@@ -20,9 +20,6 @@ interface AIParsedData {
 
 // --- Helpers added for formatting & validation ---
 
-/**
- * Date 객체를 'YYYY-MM-DD' 형식의 문자열로 변환합니다.
- */
 const toYMD = (d: Date): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -30,78 +27,60 @@ const toYMD = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
-/**
- * 날짜 문자열(YYYY-MM-DD)을 받아, 만약 과거 날짜라면 현재보다 미래가 될 때까지 연도를 +1하여 보정합니다.
- * '08-15'와 같이 연도가 없는 형식도 처리합니다.
- * @param ymd - 'YYYY-MM-DD' 형식의 날짜 문자열 또는 null
- * @returns 보정된 미래의 'YYYY-MM-DD' 형식의 날짜 문자열 또는 null
- */
 const ensureFutureYMD = (ymd: string | null): string | null => {
   if (!ymd) return null;
   let d = new Date(ymd);
-  if (isNaN(d.getTime())) return null; // 유효하지 않은 날짜 형식은 null 반환
+  if (isNaN(d.getTime())) return null;
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // 비교를 위해 오늘 날짜의 시작 시간으로 설정
+  today.setHours(0, 0, 0, 0); 
 
-  // 날짜가 오늘이거나 과거일 경우, 미래가 될 때까지 연도를 1씩 증가시킵니다.
   while (d <= today) {
     d = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate());
   }
   return toYMD(d);
 };
 
-/**
- * 주어진 텍스트 내용과 카테고리 목록을 기반으로 가장 적합한 카테고리를 지능적으로 선택합니다.
- * @param categories - 선택 가능한 카테고리 이름 배열
- * @param text - 상품명, 설명 등 판단의 근거가 될 텍스트
- * @returns 목록에서 선택된 최적의 카테고리 이름 또는 null
- */
 const pickCategorySmart = (categories: string[], text: string): string | null => {
   if (!categories || categories.length === 0) return null;
   const lowerText = text.toLowerCase();
+  
   const rules: Array<[RegExp, string[]]> = [
-    [/초콜릿|과자|스낵|나쵸|캔디|디저트|케이크|빵|쿠키/, ['디저트', '간식', '과자', '베이커리', '식품']],
-    [/고기|소고기|돼지|순대|햄|소시지|육류/, ['정육', '식품', '가공식품']],
-    [/김치|젓갈|반찬|밑반찬/, ['반찬', '식품']],
-    [/세제|세정|세척|청소|제거제|탈취|방향/, ['생활용품', '청소용품']],
-    [/뷰티|화장품|스킨|크림|미스트/, ['뷰티', '헬스/뷰티']],
-    [/비타민|영양제|건강|루테인|징코|바나바|프로바이오틱스|오메가/, ['건강식품', '헬스/뷰티']],
-    [/아동|키즈|완구|장난감/, ['키즈', '생활잡화']],
-    [/주방|냄비|프라이팬|칼|보관|밀폐|조리/, ['주방용품', '생활용품']],
-    [/음료|주스|차|커피|티백|탄산/, ['음료', '식품']],
-    [/냉동|만두|치즈|아이스크림/, ['냉동식품', '식품']],
+    [/사료|강아지|고양이|펫푸드|캣타워|배변패드/, ['반려동물']],
+    [/스낵|과자|초콜릿|쿠키|젤리|사탕|파이|디저트/, ['간식/과자']],
+    [/라면|즉석밥|컵반|죽|스프|카레|짜장|냉동|만두|밀키트|간편식/, ['간편식/밀키트']],
+    [/비타민|영양제|홍삼|프로틴|콜라겐|건강즙|건강식품/, ['건강식품']],
+    [/크림|세럼|에센스|토너|로션|마스크팩|선크림|클렌징|화장품/, ['뷰티/스킨케어']],
+    [/샴푸|린스|트리트먼트|바디워시|로션|치약|칫솔|구강/, ['헤어/바디/구강']],
+    [/세제|섬유유연제|방향제|탈취제|휴지|물티슈|청소용품|생활용품/, ['생활용품/리빙']],
+    [/생선|고등어|갈치|오징어|새우|해산물|소고기|돼지고기|닭고기|정육/, ['수산/정육']],
+    [/쌀|현미|잡곡|보리|콩|견과|아몬드|호두/, ['잡곡/견과/쌀']],
+    [/냄비|프라이팬|칼|도마|식기|그릇|컵|조리도구|주방용품/, ['주방용품']],
+    [/음료|주스|차|커피|탄산수|우유|두유/, ['음료']],
+    [/소금|설탕|간장|된장|고추장|식초|식용유|오일|소스|양념/, ['양념/오일']],
+    [/의류|옷|신발|가방|모자|양말|패션/, ['패션']],
+    [/에어프라이어|청소기|드라이기|선풍기|가습기|가전/, ['가전제품']],
   ];
 
   for (const [regex, preferred] of rules) {
     if (regex.test(lowerText)) {
-      for (const pref of preferred) {
-        const found = categories.find(c => c.includes(pref));
-        if (found) return found;
-      }
+      const found = categories.find(c => c === preferred[0]);
+      if (found) return found;
     }
   }
 
-  const genericOrder = ['식품', '생활용품', '주방', '디저트', '건강', '뷰티'];
-  for (const g of genericOrder) {
-    const found = categories.find(c => c.includes(g));
-    if (found) return found;
-  }
+  if (lowerText.includes('식품') || lowerText.includes('먹는')) return categories.find(c => c === '간편식/밀키트') || categories[0];
+  if (lowerText.includes('생활')) return categories.find(c => c === '생활용품/리빙') || categories[0];
 
-  return categories[0]; // 모든 규칙에 맞지 않으면 첫 번째 카테고리 반환
+  return categories[0];
 };
 
-/**
- * AI가 생성한 설명 텍스트를 다듬습니다. 불필요한 백틱을 제거하고, CTA 문구가 없으면 추가합니다.
- * @param desc - AI가 생성한 cleanedDescription
- * @param groupName - 상품명 (참고용)
- * @returns 다듬어진 설명 문자열 또는 null
- */
+// ✅ 이 함수가 인자 2개를 받는 것이 올바른 형태입니다.
 const beautifyDescriptionIfNeeded = (desc: string | null, groupName: string | null): string | null => {
   if (!desc || !desc.trim()) return null;
   let d = desc.replace(/```/g, '').trim();
-  if (!/예약/.test(d)) {
-    d += '\n\n지금 예약주세요!';
+  if (!/예약/.test(d) && !/주문/.test(d) && !/구매/.test(d)) {
+    d += '\n\n망설이면 품절! 지금 바로 주문하세요! 🚀';
   }
   return d;
 };
@@ -113,30 +92,25 @@ export async function analyzeProductTextWithAI(
 ): Promise<AIParsedData> {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   if (!geminiApiKey) {
-    console.error("Gemini API key is not available in environment variables.");
-    throw new HttpsError(
-      "failed-precondition",
-      "AI 서비스 설정이 서버에 올바르게 구성되지 않았습니다. 관리자에게 문의해주세요."
-    );
+    throw new HttpsError("failed-precondition", "AI 서비스 설정이 서버에 올바르게 구성되지 않았습니다.");
   }
 
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
-  const now = new Date();
-  const today = toYMD(now);
+  const today = toYMD(new Date());
 
   const prompt = `
-You are an assistant for a Korean group-buying e-commerce admin tool.
-Extract structured product data AND also rewrite the marketing copy.
+You are a super cheerful and witty marketing copywriter for a Korean group-buying e-commerce platform.
+Your task is to extract structured product data and write an irresistible sales description.
 
-OUTPUT: one raw JSON object ONLY (no code fences, no prose). It must conform exactly to the schema below.
+OUTPUT: ONE raw JSON object ONLY (no markdown fences, no prose). It must conform exactly to the schema below.
 
 Schema:
 {
   "productType": "'single' or 'group'",
   "storageType": "'ROOM' | 'FROZEN' | 'COLD'",
-  "categoryName": "string (MUST be chosen from this list: [${categories.join(", ")}])",
+  "categoryName": "string (MUST be one of these: [${categories.join(", ")}])",
   "groupName": "string | null",
   "cleanedDescription": "string | null",
   "variantGroups": [
@@ -151,29 +125,23 @@ Schema:
 }
 
 IMPORTANT INSTRUCTIONS:
-1) cleanedDescription (카카오톡용 포맷)
-   - Write a SHORT, lively KakaoTalk-friendly sales blurb (5~8 lines).
-   - Use **bold** for core benefits or key phrases and add 2~4 relevant emojis.
-   - Keep sentences brief on separate lines. Avoid headers, lists, tables, links, or code fences.
-   - Finish with a clear CTA like: "지금 예약주세요!" (last line).
+
+1) cleanedDescription (Sales Copy with a Vibe ✨)
+   - Style: Write in a **very lively, fresh, and delightful** tone! Make it pop!
+   - Formatting: Use **short sentences**. Each sentence or phrase **MUST** be on a new line.
+   - Emphasis: Be generous with markdown bolding. Use **bold** on all keywords, benefits, and appealing phrases. Make it feel dynamic and exciting!
+   - Emojis: Sprinkle in 3-5 relevant and cute emojis (e.g., ✨, 💖, 🎉, 🚀, 👍,😋) to amplify the cheerful vibe.
+   - CTA: End with a clear and compelling call to action like "망설이면 품절! 지금 바로 주문하세요! 🚀".
+
 2) Category selection
-   - Choose ONE best category from this list: [${categories.join(", ")}].
-   - If ambiguous, pick the most plausible. NEVER return null unless the list is empty.
-3) Storage type
-   - Infer from words like '냉장', '냉동', '실온'. Default to 'ROOM' if unsure.
-4) Product type
-   - If multiple distinct options (flavors/sizes) exist, use 'group', else 'single'.
-5) variantGroups / items
-   - If 'single', return ONE group and set its groupName same as the main groupName.
-   - Extract prices as pure numbers (e.g., "6,900원" -> 6900). If missing, set 0.
-   - Parse expirationDate (유통기한) to YYYY-MM-DD if present, else null.
-   - Parse pickupDate from 입고일/픽업일.
-6) 픽업일(입고일) 규칙 — MUST be in the FUTURE (Asia/Seoul)
-   - Today is ${today}.
-   - If the source gives a date without year (e.g., 8/15, 08-15), resolve it to the next future occurrence relative to today.
-   - If a full date is in the past, roll it forward by adding years until the date is in the future.
-7) Null policy
-   - If you truly cannot infer a value, use null (or [] for arrays).
+   - You MUST choose ONE category from this exact list: [${categories.join(", ")}].
+   - Analyze the text carefully. Never return null or a category not on the list.
+
+3.  Storage type: Infer from '냉장', '냉동', '실온'. Default to 'ROOM'.
+4.  Product type: If multiple distinct options (flavors/sizes) exist, use 'group', else 'single'.
+5.  variantGroups / items: Extract prices as pure numbers. Parse expirationDate and pickupDate.
+6.  Pickup Date Rule (매우 중요): Today is ${today}. Resolve all pickup dates to be in the future. If a year is missing (e.g., 8/15), find the next future occurrence. If a date is in the past, add years until it is in the future.
+7.  Nulls: Use null for genuinely missing values, but be aggressive in parsing what's there.
 
 --- Original Text Start ---
 ${text}
@@ -190,16 +158,13 @@ ${text}
 
     if (jsonStart === -1 || jsonEnd === -1) {
       console.error("AI response does not contain a valid JSON object. Response:", responseText);
-      throw new HttpsError(
-          "internal",
-          "AI 응답에서 유효한 JSON 객체를 찾을 수 없습니다."
-      );
+      throw new HttpsError("internal", "AI 응답에서 유효한 JSON 객체를 찾을 수 없습니다.");
     }
 
     const jsonString = responseText.substring(jsonStart, jsonEnd + 1);
     const parsed = JSON.parse(jsonString) as AIParsedData;
 
-    // Normalize arrays
+    // Data normalization and post-processing
     if (!parsed.variantGroups || !Array.isArray(parsed.variantGroups)) {
       parsed.variantGroups = [];
     }
@@ -207,7 +172,6 @@ ${text}
       if (!vg.items || !Array.isArray(vg.items)) {
         vg.items = [];
       } else {
-        // Coerce price to number if it came as string
         vg.items = vg.items.map(it => ({
           ...it,
           price: typeof it.price === 'string' ? Number(String(it.price).replace(/[^0-9]/g, '')) : (it.price ?? 0)
@@ -215,30 +179,25 @@ ${text}
       }
     });
 
-    // --- Post-processing and data validation ---
     try {
-      const textBlob = text || '';
+      const textBlob = (parsed.groupName || '') + ' ' + (parsed.cleanedDescription || '') + ' ' + (text || '');
       
-      // Enforce future pickup dates
-      if (parsed.variantGroups && Array.isArray(parsed.variantGroups)) {
+      if (parsed.variantGroups) {
         parsed.variantGroups = parsed.variantGroups.map(vg => ({
           ...vg,
           pickupDate: ensureFutureYMD(vg.pickupDate)
         }));
       }
       
-      // Fallback for category if AI fails or returns an invalid one
-      const contextForCategory = (parsed.groupName || '') + ' ' + (parsed.cleanedDescription || '') + ' ' + textBlob;
-      if ((!parsed.categoryName || !categories.includes(parsed.categoryName)) && categories && categories.length > 0) {
-        parsed.categoryName = pickCategorySmart(categories, contextForCategory);
+      if ((!parsed.categoryName || !categories.includes(parsed.categoryName)) && categories?.length > 0) {
+        parsed.categoryName = pickCategorySmart(categories, textBlob);
       }
       
-      // Beautify description
+      // ✅ 이 함수는 여기서 인자 2개로 호출하는 것이 맞습니다.
       parsed.cleanedDescription = beautifyDescriptionIfNeeded(parsed.cleanedDescription, parsed.groupName);
 
     } catch (e) {
       console.warn('Post-processing of AI data failed:', (e as Error).message);
-      // Continue with potentially un-polished data
     }
 
     return parsed;

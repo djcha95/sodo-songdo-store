@@ -1,12 +1,14 @@
 {
   "rewrites": [
+    
     {
       "source": "/api/(.*)",
       "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     },
+   
     {
-      "source": "/:path*",
-      "destination": "/index.html"
+      "source": "/((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/).*)",
+      "destination": "/api/og"
     }
   ]
 }
