@@ -1,28 +1,15 @@
 {
   "version": 2,
-  "routes": [
+  "rewrites": [
+    { "source": "/api/og", "destination": "/api/og" },
+    { "source": "/api/:path((?!og$).*)", "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/:path" },
     {
-      "src": "^/api/og$",
-      "dest": "/api/og"
-    },
-    {
-      "src": "^/api/(?!og$)(.*)",
-      "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
-    },
-    {
-      "src": "^/product/([A-Za-z0-9_-]+)$",
+      "source": "/product/:id",
       "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i)(kakaotalk|kakaostory|facebookexternalhit|facebot|naver|naverbot|yeti)"
-        }
+        { "type": "header", "key": "user-agent", "value": "(?i)(kakaotalk|kakaostory|facebookexternalhit|facebot|naver|naverbot|yeti)" }
       ],
-      "dest": "/api/og?id=$1"
+      "destination": "/api/og?id=:id"
     },
-    {
-      "src": "^/((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/|api/).*)",
-      "dest": "/index.html"
-    }
+    { "source": "/:path((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/|api/).*)", "destination": "/index.html" }
   ]
 }
