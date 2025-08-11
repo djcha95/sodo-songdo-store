@@ -434,3 +434,55 @@
   background-color: #1d4ed8;
   border-color: #1d4ed8;
 }
+
+/* ✅ [추가] 이벤트 태그와 상태 배지를 정렬하기 위한 스타일 */
+.status-and-event-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0; /* 내용이 길어져도 줄어들지 않도록 설정 */
+}
+
+/* ✅ [추가] 이벤트 태그 스타일 */
+.event-badge {
+  background-color: #6a3dff; /* 시그니처 보라색 */
+  color: white;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ✅ [수정] 카드 상단 정보 행의 정렬 방식을 수정 */
+.info-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 8px; /* 이름과 배지 사이의 최소 간격 */
+}
+
+/* ✅ [수정] 상품 이름이 너무 길 경우 잘리도록 설정 */
+.product-name-top {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1; /* 남은 공간을 차지하도록 설정 */
+}
+
+/* ... (기존 CSS 코드) ... */
+
+/* ✅ [추가] 이벤트 상품 카드 스타일 */
+.order-card-v3.event-item {
+  cursor: default; /* 커서를 기본 모양으로 변경 */
+}
+
+.order-card-v3.event-item:hover {
+  transform: none; /* 마우스를 올려도 움직이지 않음 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); /* 기본 그림자 유지 */
+}
+

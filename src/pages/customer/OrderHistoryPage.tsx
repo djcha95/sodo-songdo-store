@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, Inbox, Info, Bolt, 
+  PackageX, Hourglass, CreditCard, Inbox, Info, Bolt,
 } from 'lucide-react';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
@@ -26,51 +26,70 @@ import toast from 'react-hot-toast';
 import './OrderHistoryPage.css';
 
 // =================================================================
-// 📌 이미지 안전 로더 (Firebase URL 최적화 금지 + 폴백 1~2회)
+// 📌 이미지 안전 로더 (수정됨)
 // =================================================================
-const PLACEHOLDER = 'https://via.placeholder.com/200x200.png?text=No+Image';
 
-const isFirebaseStorage = (url?: string) => {
-  if (!url) return false;
-  try { return new URL(url).hostname.includes('firebasestorage.googleapis.com'); }
-  catch { return false; }
-};
+const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
+const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
 
 type ThumbSize = '200x200' | '1080x1080';
 
+// ✅ fetchPriority 경고 수정 및 오류 처리 로직 강화
 const SafeThumb: React.FC<{
   src?: string; alt: string; size?: ThumbSize; eager?: boolean; className?: string;
 }> = ({ src, alt, size = '200x200', eager = false, className }) => {
 
-  const original = (src && src.trim()) ? src : PLACEHOLDER;
-  const initial = React.useMemo(() => {
-    if (isFirebaseStorage(original)) return original;
-    return getOptimizedImageUrl(original, size) || original;
+  const original = useMemo(() => (src && src.trim()) ? src : PLACEHOLDER, [src]);
+
+  const optimized = useMemo(() => {
+    if (original === PLACEHOLDER) return PLACEHOLDER;
+    return getOptimizedImageUrl(original, size);
   }, [original, size]);
 
-  const [imageSrc, setImageSrc] = useState(initial);
+  const [imageSrc, setImageSrc] = useState(optimized);
+  const [errorState, setErrorState] = useState<'none' | 'optimized-failed' | 'original-failed'>('none');
 
   useEffect(() => {
-    if (isFirebaseStorage(original)) setImageSrc(original);
-    else setImageSrc(getOptimizedImageUrl(original, size) || original);
-  }, [original, size]);
+    const newOptimized = getOptimizedImageUrl(original, size);
+    setImageSrc(newOptimized);
+    setErrorState('none'); // src prop이 변경되면 에러 상태 초기화
+  }, [original, size]); // 의존성 배열에 original과 size만 유지
 
-  const onError = useCallback(() => {
-    if (imageSrc !== original) setImageSrc(original);
-    else if (imageSrc !== PLACEHOLDER) setImageSrc(PLACEHOLDER);
-  }, [imageSrc, original]);
+  const handleError = useCallback(() => {
+    if (errorState === 'original-failed') {
+      // 최종 대체 이미지 로딩도 실패하면 더 이상 아무것도 하지 않음 (무한 루프 방지)
+      return;
+    }
+
+    if (errorState === 'none') {
+      // 1단계: 최적화 이미지 로딩 실패
+      console.error(`[SafeThumb ERROR] Optimized image failed to load: ${optimized}`);
+      console.log(`[SafeThumb FALLBACK-1] Trying original URL: ${original}`);
+      setErrorState('optimized-failed');
+      setImageSrc(original);
+    } else if (errorState === 'optimized-failed') {
+      // 2단계: 원본 이미지 로딩도 실패
+      console.error(`[SafeThumb ERROR] Original image also failed: ${original}`);
+      console.log(`[SafeThumb FALLBACK-2] Displaying placeholder.`);
+      setErrorState('original-failed');
+      setImageSrc(PLACEHOLDER);
+    }
+  }, [errorState, optimized, original]);
 
   return (
     <img
       src={imageSrc}
       alt={alt}
-      className={className}
+      // ✅ [수정] 에러 상태에 따라 클래스 추가
+      className={`${className} ${errorState !== 'none' ? 'image-error-fallback' : ''}`}
       loading={eager ? 'eager' : 'lazy'}
-      fetchpriority={eager ? 'high' : 'auto'}
-      onError={onError}
+      // ✅ [수정] React 경고 해결: fetchpriority -> fetchPriority
+      fetchPriority={eager ? 'high' : 'auto'}
+      onError={handleError}
     />
   );
 };
+
 
 // =================================================================
 // 📌 타입 정의 및 헬퍼 함수
@@ -250,21 +269,54 @@ const AggregatedItemCard: React.FC<{
     }
   }, [item.status, item.wasPrepaymentRequired]);
 
-  const { cancellable, orderToCancel, cancelDisabledReason } = useMemo(() => {
-    const latestOrder = item.originalOrders[0];
-    if (!latestOrder) {
-      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null };
-    }
-    const isCancellableStatus = latestOrder.status === 'RESERVED' || latestOrder.status === 'PREPAID';
-    if (!isCancellableStatus) {
-      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null };
-    }
-    const deadline = safeToDate(latestOrder.items[0]?.deadlineDate);
-    if (deadline && new Date() > deadline) {
-      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '마감일이 지나 취소할 수 없습니다.' };
-    }
-    return { cancellable: true, orderToCancel: latestOrder, cancelDisabledReason: null };
-  }, [item.originalOrders]);
+  const { cancellable, orderToCancel, cancelDisabledReason, isEvent } = useMemo(() => {
+  const latestOrder = item.originalOrders[0];
+  if (!latestOrder) {
+    return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null, isEvent: false };
+  }
+  const oi = latestOrder.items?.[0];
+  const isEventLike =
+    (latestOrder as any)?.eventId ||
+    (oi as any)?.eventId ||
+    (oi as any)?.roundId?.startsWith?.('welcome-') ||
+    (oi as any)?.roundName?.includes?.('이벤트') ||
+    item.productName?.includes?.('랜덤간식') ||
+    (typeof (oi as any)?.unitPrice === 'number' && (oi as any)?.unitPrice === 0);
+
+  if (isEventLike) {
+    return {
+      cancellable: false,
+      orderToCancel: undefined,
+      cancelDisabledReason: '이벤트 상품은 취소할 수 없습니다.',
+      isEvent: true
+    };
+  }
+
+  const isCancellableStatus =
+    latestOrder.status === 'RESERVED' || latestOrder.status === 'PREPAID';
+  if (!isCancellableStatus) {
+    return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null, isEvent: false };
+  }
+
+  const deadline = safeToDate(latestOrder.items?.[0]?.deadlineDate);
+  if (deadline && new Date() > deadline) {
+    return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '마감일이 지나 취소할 수 없습니다.', isEvent: false };
+  }
+
+  return { cancellable: true, orderToCancel: latestOrder, cancelDisabledReason: null, isEvent: false };
+}, [item.originalOrders, item.productName]);
+
+
+
+  const topText = useMemo(
+    () => isEvent ? item.productName : item.variantGroupName,
+    [isEvent, item.productName, item.variantGroupName]
+  );
+
+  const bottomText = useMemo(
+    () => isEvent ? item.originalOrders[0]?.items[0]?.roundName : item.itemName,
+    [isEvent, item.originalOrders, item.itemName]
+  );
 
   const handleLongPress = () => {
     if (longPressActionInProgress.current) return;
@@ -286,7 +338,13 @@ const AggregatedItemCard: React.FC<{
   };
 
   const handlePressEnd = () => { longPressActionInProgress.current = false; };
-  const handlers = useLongPress(handleLongPress, () => { navigate(`/product/${item.productId}`); }, { initialDelay: 1500 });
+
+  const handleCardClick = () => {
+    if (isEvent) return;
+    navigate(`/product/${item.productId}`);
+  };
+
+  const handlers = useLongPress(handleLongPress, handleCardClick, { initialDelay: 1500 });
   const finalHandlers = { ...handlers, onMouseUp: () => { handlers.onMouseUp(); handlePressEnd(); }, onMouseLeave: () => { handlers.onMouseLeave(); handlePressEnd(); }, onTouchEnd: () => { handlers.onTouchEnd(); handlePressEnd(); } };
 
   let displayDateText = '';
@@ -296,21 +354,45 @@ const AggregatedItemCard: React.FC<{
   }
 
   return (
-    <motion.div className={`order-card-v3 ${cancellable ? 'cancellable' : ''}`} layoutId={item.stableId} key={item.id} {...finalHandlers} whileTap={{ scale: 0.97 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
+    <motion.div
+      className={`order-card-v3 ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''}`}
+      layoutId={item.stableId}
+      key={item.id}
+      {...finalHandlers}
+      whileTap={isEvent ? {} : { scale: 0.97 }}
+      transition={{ duration: 0.2, ease: "easeInOut" }}
+    >
       <div className="card-v3-body">
         <div className="item-image-wrapper">
-          <SafeThumb src={item.imageUrl} alt={item.productName} className="item-image" />
+          <SafeThumb
+            src={item.imageUrl || (isEvent ? DEFAULT_EVENT_IMAGE : undefined)}
+            alt={item.productName}
+            className="item-image"
+          />
         </div>
         <div className="item-aggregated-info">
-          <div className="info-top-row"><span className="product-name-top">{item.variantGroupName}</span><span className={`status-badge ${statusClass}`}><StatusIcon size={14} /> {statusText}</span></div>
-          <div className="info-bottom-row"><span className="item-options-quantity"><span className="item-option-name">{item.itemName}</span><span className="item-quantity">({item.totalQuantity}개)</span></span>{displayDateText && <span className="date-info-badge">{displayDateText}</span>}</div>
+          <div className="info-top-row">
+            <span className="product-name-top">{topText}</span>
+            <div className="status-and-event-wrapper">
+              {isEvent && <span className="event-badge">이벤트</span>}
+              <span className={`status-badge ${statusClass}`}>
+                <StatusIcon size={14} /> {statusText}
+              </span>
+            </div>
+          </div>
+          <div className="info-bottom-row">
+            <span className="item-options-quantity">
+              <span className="item-option-name">{bottomText}</span>
+              <span className="item-quantity">({item.totalQuantity}개)</span>
+            </span>
+            {displayDateText && <span className="date-info-badge">{displayDateText}</span>}
+          </div>
         </div>
       </div>
     </motion.div>
   );
 });
 
-// ✅ WaitlistItemCard
 const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: WaitlistInfo) => void; }> = React.memo(({ item, onCancel }) => {
   const navigate = useNavigate();
   const longPressActionInProgress = useRef(false);
@@ -329,14 +411,23 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
     <motion.div className="waitlist-card" layout {...finalHandlers} whileTap={{ scale: 0.97 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
       <div className="card-v3-body">
         <div className="item-image-wrapper">
-          <SafeThumb src={item.imageUrl} alt={item.productName} className="item-image" />
+          <SafeThumb
+            src={item.imageUrl || PLACEHOLDER}
+            alt={item.productName}
+            className="item-image"
+          />
         </div>
         <div className="item-aggregated-info">
           <div className="info-top-row">
             <span className="product-name-top">{item.productName}</span>
             {item.waitlistOrder && (<span className="waitlist-order-badge"><Bolt size={14} />대기 {item.waitlistOrder}번</span>)}
           </div>
-          <div className="info-bottom-row"><span className="item-options-quantity"><span className="item-option-name">{item.itemName}</span><span className="item-quantity">({item.quantity}개)</span></span></div>
+          <div className="info-bottom-row">
+            <span className="item-options-quantity">
+              <span className="item-option-name">{item.itemName}</span>
+              <span className="item-quantity">({item.quantity}개)</span>
+            </span>
+          </div>
           <div className="waitlist-actions">
             <div className="cancel-instruction-waitlist"><Info size={14} /><span>카드를 길게 눌러 대기를 취소하세요.</span></div>
           </div>
@@ -400,16 +491,30 @@ const OrderHistoryPage: React.FC = () => {
       if (!date) return;
       const dateStr = dayjs(date).format('YYYY-MM-DD');
       (order.items || []).forEach((item: OrderItem) => {
-        const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}`;
+        const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}-${(order as any).eventId ?? ''}`;
         const stableAnimationId = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
         if (!aggregated[aggregationKey]) {
-          aggregated[aggregationKey] = { id: aggregationKey, stableId: stableAnimationId, productId: item.productId, productName: item.productName, variantGroupName: item.variantGroupName, itemName: item.itemName, totalQuantity: 0, imageUrl: item.imageUrl, originalOrders: [], status: order.status, wasPrepaymentRequired: order.wasPrepaymentRequired ?? false };
+          aggregated[aggregationKey] = {
+            id: aggregationKey,
+            stableId: stableAnimationId,
+            productId: item.productId,
+            productName: item.productName,
+            variantGroupName: item.variantGroupName,
+            itemName: item.itemName,
+            totalQuantity: 0,
+            imageUrl: item.imageUrl,
+            originalOrders: [],
+            status: order.status,
+            wasPrepaymentRequired: order.wasPrepaymentRequired ?? false
+          };
         }
         aggregated[aggregationKey].totalQuantity += item.quantity;
         aggregated[aggregationKey].originalOrders.push(order);
       });
     });
-    Object.values(aggregated).forEach(item => { item.originalOrders.sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0)); });
+    Object.values(aggregated).forEach(item => {
+      item.originalOrders.sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0));
+    });
     const groupedByDate: { [date: string]: AggregatedItem[] } = {};
     Object.values(aggregated).forEach(item => {
       const firstOrder = item.originalOrders[0];
@@ -434,7 +539,7 @@ const OrderHistoryPage: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
-  
+
   const handleCancelOrder = useCallback((orderToCancel: Order) => {
     toast.custom((t) => (
       <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
@@ -471,7 +576,7 @@ const OrderHistoryPage: React.FC = () => {
       }
     );
   }, [user, setWaitlist]);
-  
+
   const renderOrderContent = () => {
     const isFirstLoading = ordersLoading && orders.length === 0;
     if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
@@ -511,7 +616,7 @@ const OrderHistoryPage: React.FC = () => {
       </div>
     );
   };
-  
+
   const renderWaitlistContent = () => {
     if (loadingWaitlist) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
     if (waitlist.length === 0 && !loadingWaitlist) { return <EmptyHistory type="waitlist" />; }

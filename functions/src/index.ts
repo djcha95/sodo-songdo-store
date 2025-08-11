@@ -11,6 +11,10 @@ export * from "./callable/waitlist.js";
 export * from "./callable/missions.js";
 export * from "./callable/users.js";
 
+// ✅ 추가된 함수를 다른 함수들과 동일한 형식으로 export 합니다.
+export * from "./grantSnackPack.js";
+
+
 // =================================================================
 // 2. HTTP Functions (HTTP 요청 함수)
 // =================================================================
@@ -35,3 +39,9 @@ export * from "./triggers/orders.js";
 export * from "./triggers/points.js";
 export * from "./triggers/products.js";
 export * from "./triggers/users.js";
+
+// ❌ 아래 라인은 위에서 처리했으므로 삭제하거나, 위 방식으로 변경합니다.
+// export { grantSnackPackToEligibleUsers } from './grantSnackPack';
+
+// ✅ [추가] 일회용 설정 함수를 export 목록에 추가합니다.
+export * from "./setup.js";

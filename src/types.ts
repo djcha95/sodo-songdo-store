@@ -1,15 +1,11 @@
-// src/types.ts
-
+// ✅ 프론트엔드용 import (src/types.ts 에서 사용)
 import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
-// ✅ UserTutorialProgress 타입을 import 해야 아래에서 사용할 수 있습니다.
-// 이 파일이 없다면, 생성하거나 UserTutorialProgress 타입을 이 파일에 직접 정의해야 합니다.
-// =================================================================
-// 📌 [수정] 신뢰도 포인트 시스템 최종 기획 반영
-// =================================================================
-// 1. LoyaltyTier를 기획서의 등급명으로 최종 수정
-// 2. UserDocument에 isRestricted -> isSuspended로 명칭 변경 및 등급 필드 추가
-// 3. Notification의 isRead -> read로 필드명 변경 (다른 파일들과의 통일성)
-// =================================================================
+
+/*
+// ✅ 백엔드용 import (functions/src/types.ts 에서 사용)
+import type { Timestamp, FieldValue } from "firebase-admin/firestore";
+import type { DocumentData } from "firebase/firestore"; // DocumentData는 클라이언트 SDK에서 가져오는 것이 유용할 때가 있습니다.
+*/
 
 
 // =================================================================
@@ -20,10 +16,8 @@ export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
 export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
-
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
-// ✅ [수정] 기획서의 등급 체계를 정확히 반영
 export type LoyaltyTier =
   | '공구의 신'
   | '공구왕'
@@ -31,15 +25,6 @@ export type LoyaltyTier =
   | '공구새싹'
   | '주의 요망'
   | '참여 제한';
-
-export interface PointLog {
-  id?: string;
-  amount: number;
-  reason: string;
-  createdAt: Timestamp | FieldValue;
-  orderId?: string;
-  expiresAt?: Timestamp | null; // null을 허용하여 포인트 차감 내역과 구분
-}
 
 export type NotificationType =
   | 'POINTS_EARNED'
@@ -52,35 +37,42 @@ export type NotificationType =
   | 'ORDER_PICKED_UP'
   | 'NO_SHOW_WARNING'
   | 'PARTICIPATION_RESTRICTED'
-  // ✅ [추가] 등급 변경 알림 타입을 추가합니다.
   | 'TIER_UP'
   | 'TIER_DOWN'
+  | 'ENCORE_AVAILABLE'
   | 'success'
   | 'error';
+
+// =================================================================
+// 📌 공통 문서 구조 (Interfaces)
+// =================================================================
+
+export interface PointLog {
+  id?: string;
+  amount: number;
+  reason: string;
+  createdAt: Timestamp | FieldValue;
+  orderId?: string;
+  expiresAt?: Timestamp | null;
+  isExpired?: boolean;
+}
 
 export interface Notification {
   id: string;
   message: string;
-  read: boolean; // ✅ [수정] isRead -> read
+  read: boolean;
   timestamp: Timestamp;
   link?: string;
   type: NotificationType;
 }
 
-// ✅ [추가] 튜토리얼 진행 상태 타입을 중앙에서 관리합니다.
-export interface UserTutorialProgress {
-    hasCompletedMain?: boolean;
-    hasSeenCartPage?: boolean;
-    hasSeenProductDetailPage?: boolean;
-    hasSeenCalendarPage?: boolean;
-    hasSeenCustomerCenterPage?: boolean;
-    hasSeenMyPage?: boolean;
-    hasSeenOrderHistoryPage?: boolean;
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  order: number;
+  subCategories?: Category[];
 }
-
-// =================================================================
-// 📌 상품 및 판매 관련 타입
-// =================================================================
 
 export interface ProductItem {
   id: string;
@@ -93,11 +85,12 @@ export interface ProductItem {
 }
 
 export interface VariantGroup {
-  id:string;
+  id: string;
   groupName: string;
   items: ProductItem[];
   totalPhysicalStock: number | null;
   stockUnitType: string;
+  reservedCount?: number;
 }
 
 export interface WaitlistEntry {
@@ -107,12 +100,12 @@ export interface WaitlistEntry {
   variantGroupId: string;
   itemId: string;
   isPrioritized?: boolean;
-  prioritizedAt?: Timestamp | null; // ✅ 이 줄을 추가해주세요.
+  prioritizedAt?: Timestamp | null;
 }
 
 export interface SalesRound {
   roundId: string;
-  roundName:string;
+  roundName: string;
   status: SalesRoundStatus;
   variantGroups: VariantGroup[];
   publishAt: Timestamp;
@@ -124,7 +117,8 @@ export interface SalesRound {
   waitlist?: WaitlistEntry[];
   waitlistCount?: number;
   isPrepaymentRequired?: boolean;
-  allowedTiers?: LoyaltyTier[]; // ✅ 통합된 참여 조건 필드
+  allowedTiers?: LoyaltyTier[];
+  preOrderTiers?: LoyaltyTier[];
 }
 
 export interface Product {
@@ -144,14 +138,8 @@ export interface Product {
   subCategory?: string;
   updatedAt?: Timestamp;
   tags?: string[];
-  // ✅ [수정] Cloud Function이 계산한 예약 수량을 저장할 필드 추가
   reservedQuantities?: { [key: string]: number };
 }
-
-
-// =================================================================
-// 🛒 장바구니 및 주문 관련 타입
-// =================================================================
 
 export interface CartItem {
   id: string;
@@ -171,7 +159,7 @@ export interface CartItem {
   status: 'RESERVATION' | 'WAITLIST';
   deadlineDate: Timestamp | Date;
   stockDeductionAmount: number;
-  isPrepaymentRequired?: boolean; // ✅ [추가] 장바구니 상품의 선입금 필수 여부
+  isPrepaymentRequired?: boolean;
 }
 
 export interface OrderItem extends Omit<CartItem, 'status'> {
@@ -202,9 +190,60 @@ export interface Order {
   notes?: string;
   isBookmarked?: boolean;
   canceledAt?: Timestamp;
-  wasPrepaymentRequired?: boolean; // ✅ [추가] 주문 생성 시 선입금이 필요했는지 여부 기록
-  splitFrom?: string; // ✨ [신규] 주문 분할 시 원본 주문 ID를 추적하기 위한 필드
+  wasPrepaymentRequired?: boolean;
+  splitFrom?: string;
+  eventId?: string;
 }
+
+// ⭐️ [수정됨] UserTutorialProgress 타입을 최신 버전으로 통일했습니다.
+export interface UserTutorialProgress {
+    hasCompletedMain?: boolean;
+    hasSeenProductDetailPage?: boolean;
+    hasSeenCartPage?: boolean;
+    hasSeenOrderHistoryPage?: boolean;
+    hasSeenCustomerCenterPage?: boolean;
+    hasSeenMyPage?: boolean;
+    hasSeenCalendarPage?: boolean;
+}
+
+export interface UserDocument {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  phone: string | null;
+  phoneLast4?: string;
+  photoURL?: string | null;
+  role: 'master' | 'admin' | 'customer';
+  encoreRequestedProductIds?: string[];
+  createdAt?: Timestamp | FieldValue;
+  points: number;
+  pointHistory?: PointLog[];
+  loyaltyTier: LoyaltyTier;
+  pickupCount: number;
+  noShowCount: number;
+  lastLoginDate: string;
+  consecutiveLoginDays?: number;
+  isSuspended?: boolean;
+  gender?: 'male' | 'female' | null;
+  ageRange?: string | null;
+  totalOrders?: number;
+  pickedUpOrders?: number;
+  pickupRate?: number;
+  totalPriceSum?: number;
+  referralCode?: string;
+  referredBy?: string | null;
+  nickname?: string;
+  nicknameChanged?: boolean;
+  manualTier?: LoyaltyTier | null;
+  hasCompletedTutorial?: boolean;
+  tutorialProgress?: UserTutorialProgress;
+  completedMissions?: { [key: string]: boolean };
+}
+
+
+// =================================================================
+// 📌 프론트엔드 전용 타입 (Client-Side Only)
+// =================================================================
 
 export interface AggregatedOrderGroup {
   groupKey: string;
@@ -222,42 +261,6 @@ export interface AggregatedOrderGroup {
   }[];
 }
 
-// =================================================================
-// ⚙️ 기타 애플리케이션 타입
-// =================================================================
-export interface UserDocument {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  phone: string | null;
-  phoneLast4?: string; // ✅ 이 줄을 추가해주세요.
-  photoURL?: string | null;
-  role: 'master' | 'admin' | 'customer';
-  encoreRequestedProductIds?: string[];
-  createdAt?: Timestamp | FieldValue;
-  points: number;
-  pointHistory?: PointLog[];
-  loyaltyTier: LoyaltyTier;
-  pickupCount: number;
-  noShowCount: number;
-  totalOrders?: number;
-  pickupRate?: number;
-  lastLoginDate: string;
-  consecutiveLoginDays?: number;
-  isSuspended?: boolean;
-  gender?: 'male' | 'female' | null;
-  ageRange?: string | null;
-  referralCode?: string;
-  referredBy?: string | null;
-  nickname?: string;
-  nicknameChanged?: boolean;
-  manualTier?: LoyaltyTier | null;
-  hasCompletedTutorial?: boolean;
-  tutorialProgress?: UserTutorialProgress;
-  // ✅ 이 줄을 추가하여 'completedMissions' 속성 누락 오류를 해결합니다.
-  completedMissions?: { [key: string]: boolean };
-}
-
 export interface Banner {
   id:string;
   imageUrl: string;
@@ -267,13 +270,6 @@ export interface Banner {
   isActive: boolean;
   productId?: string;
   title?: string;
-}
-
-export interface Category {
-  id: string;
-  name: string;
-  order: number;
-  subCategories?: Category[];
 }
 
 export interface GuideItem {
@@ -304,8 +300,43 @@ export interface StoreInfo {
   longitude?: number;
 }
 
+export interface WaitlistInfo {
+  productId: string;
+  productName: string;
+  roundId: string;
+  roundName: string;
+  variantGroupId: string;
+  itemId: string;
+  itemName: string;
+  imageUrl: string;
+  quantity: number;
+  timestamp: Timestamp;
+  isPrioritized?: boolean;
+  waitlistOrder?: number;
+  prioritizedAt?: Timestamp | null;
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  phone?: string;
+  isAdmin?: boolean;
+  points?: number;
+  loyaltyTier?: string;
+  createdAt: Timestamp;
+  lastLogin: Timestamp;
+  encoreRequestedProductIds?: string[];
+}
+
+export interface PaginatedProductsResponse {
+  products: Product[];
+  lastVisible: DocumentData | null;
+}
+
 // =================================================================
-// 📊 대시보드 관련 타입
+// 📌 대시보드 관련 타입 (Dashboard - Client-Side)
 // =================================================================
 export interface TodayStockItem {
     id: string;
@@ -336,6 +367,7 @@ export interface TodayOngoingProductSummary {
     name: string;
     deadlineDate: Timestamp;
     pickupDate: Timestamp;
+    pickupDeadlineDate?: Timestamp | null;
     variantGroupsSummary: {
         variantGroupId: string;
         variantGroupName: string;
@@ -351,40 +383,29 @@ export interface TodayOngoingProductSummary {
     totalReservedQuantity: number;
 }
 
-export interface WaitlistInfo {
-  productId: string;
-  productName: string;
-  roundId: string;
-  roundName: string;
-  variantGroupId: string;
-  itemId: string;
-  itemName: string;
-  imageUrl: string;
-  quantity: number;
-  timestamp: Timestamp;
-  isPrioritized?: boolean;
-  waitlistOrder?: number;
-  prioritizedAt?: Timestamp | null; // ✅ 이 줄을 추가해주세요.
-}
-
-export interface UserProfile {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
-  phone?: string;
-  isAdmin?: boolean;
-  points?: number;
-  loyaltyTier?: string;
-  createdAt: Timestamp;
-  lastLogin: Timestamp;
-  encoreRequestedProductIds?: string[];
-}
 
 // =================================================================
-// 🚀 페이지네이션 관련 타입
+// 📌 백엔드 전용 타입 (Server-Side Only)
 // =================================================================
-export interface PaginatedProductsResponse {
-  products: Product[];
-  lastVisible: DocumentData | null;
+
+export interface NhnAlimtalkResponse {
+  header: {
+    resultCode: number;
+    resultMessage: string;
+    isSuccessful: boolean;
+  };
+  body?: {
+    data: {
+      requestId: string;
+      requestDate: string;
+      senderGroupingKey: string;
+      messages: {
+        messageId: string;
+        recipientSeq: number;
+        recipientNo: string;
+        resultCode: string;
+        resultMessage: string;
+      }[];
+    };
+  };
 }

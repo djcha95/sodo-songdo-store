@@ -1,24 +1,50 @@
-// functions/src/types.ts
+// ✅ 프론트엔드용 import (src/types.ts 에서 사용)
+//import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
 
-// ✅ 서버 환경에 맞는 'firebase-admin/firestore'에서 타입을 가져옵니다.
+// 백엔드용 import (functions/src/types.ts 에서 사용)
 import type { Timestamp, FieldValue } from "firebase-admin/firestore";
+import type { DocumentData } from "firebase/firestore"; // DocumentData는 클라이언트 SDK에서 가져오는 것이 유용할 때가 있습니다.
+
+
 
 // =================================================================
 // 📌 공통 사용 타입 별칭 (Type Aliases)
 // =================================================================
 
-export type StorageType = "ROOM" | "COLD" | "FROZEN";
-export type SalesRoundStatus = "draft" | "scheduled" | "selling" | "sold_out" | "ended";
-export type OrderStatus = "RESERVED" | "PREPAID" | "PICKED_UP" | "CANCELED" | "COMPLETED" | "NO_SHOW";
-export type SpecialLabel = "수량 한정" | "이벤트 특가" | "신상품";
+export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
+export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
+export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
+export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
+export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
 export type LoyaltyTier =
-  | "공구의 신"
-  | "공구왕"
-  | "공구요정"
-  | "공구새싹"
-  | "주의 요망"
-  | "참여 제한";
+  | '공구의 신'
+  | '공구왕'
+  | '공구요정'
+  | '공구새싹'
+  | '주의 요망'
+  | '참여 제한';
+
+export type NotificationType =
+  | 'POINTS_EARNED'
+  | 'POINTS_USED'
+  | 'WAITLIST_CONFIRMED'
+  | 'PICKUP_REMINDER'
+  | 'PICKUP_TODAY'
+  | 'GENERAL_INFO'
+  | 'PAYMENT_CONFIRMED'
+  | 'ORDER_PICKED_UP'
+  | 'NO_SHOW_WARNING'
+  | 'PARTICIPATION_RESTRICTED'
+  | 'TIER_UP'
+  | 'TIER_DOWN'
+  | 'ENCORE_AVAILABLE'
+  | 'success'
+  | 'error';
+
+// =================================================================
+// 📌 공통 문서 구조 (Interfaces)
+// =================================================================
 
 export interface PointLog {
   id?: string;
@@ -27,26 +53,8 @@ export interface PointLog {
   createdAt: Timestamp | FieldValue;
   orderId?: string;
   expiresAt?: Timestamp | null;
-  isExpired?: boolean; // ✅ isExpired 필드를 포함하여 동기화
+  isExpired?: boolean;
 }
-
-// ✅ [동기화] 프론트엔드와 백엔드의 모든 알림 타입을 통합합니다.
-export type NotificationType =
-  | "POINTS_EARNED"
-  | "WAITLIST_CONFIRMED"
-  | "PICKUP_REMINDER"
-  | "PICKUP_TODAY"
-  | "GENERAL_INFO"
-  | "PAYMENT_CONFIRMED"
-  | "ORDER_PICKED_UP"
-  | "NO_SHOW_WARNING"
-  | "PARTICIPATION_RESTRICTED"
-  | "TIER_UP"
-  | "TIER_DOWN"
-  | "ENCORE_AVAILABLE" // ✅ 이 줄을 추가해주세요.
-  | "success"
-  | "error";
-
 
 export interface Notification {
   id: string;
@@ -61,13 +69,9 @@ export interface Category {
   id: string;
   name: string;
   description?: string;
-  order?: number;
+  order: number;
+  subCategories?: Category[];
 }
-
-
-// =================================================================
-// 📌 상품 및 판매 관련 타입
-// =================================================================
 
 export interface ProductItem {
   id: string;
@@ -80,7 +84,7 @@ export interface ProductItem {
 }
 
 export interface VariantGroup {
-  id:string;
+  id: string;
   groupName: string;
   items: ProductItem[];
   totalPhysicalStock: number | null;
@@ -94,12 +98,13 @@ export interface WaitlistEntry {
   timestamp: Timestamp;
   variantGroupId: string;
   itemId: string;
+  isPrioritized?: boolean;
+  prioritizedAt?: Timestamp | null;
 }
-
 
 export interface SalesRound {
   roundId: string;
-  roundName:string;
+  roundName: string;
   status: SalesRoundStatus;
   variantGroups: VariantGroup[];
   publishAt: Timestamp;
@@ -112,7 +117,7 @@ export interface SalesRound {
   waitlistCount?: number;
   isPrepaymentRequired?: boolean;
   allowedTiers?: LoyaltyTier[];
-  preOrderTiers?: LoyaltyTier[]; // ✅ preOrderTiers 필드를 포함하여 동기화
+  preOrderTiers?: LoyaltyTier[];
 }
 
 export interface Product {
@@ -135,11 +140,6 @@ export interface Product {
   reservedQuantities?: { [key: string]: number };
 }
 
-
-// =================================================================
-// 🛒 장바구니 및 주문 관련 타입
-// =================================================================
-
 export interface CartItem {
   id: string;
   productId: string;
@@ -155,13 +155,13 @@ export interface CartItem {
   unitPrice: number;
   stock: number | null;
   pickupDate: Timestamp | Date;
-  status: "RESERVATION" | "WAITLIST";
+  status: 'RESERVATION' | 'WAITLIST';
   deadlineDate: Timestamp | Date;
   stockDeductionAmount: number;
   isPrepaymentRequired?: boolean;
 }
 
-export interface OrderItem extends Omit<CartItem, "status"> {
+export interface OrderItem extends Omit<CartItem, 'status'> {
   arrivalDate: Timestamp | Date | null;
   pickupDeadlineDate?: Timestamp | Date | null;
   expirationDate?: Timestamp | Date | null;
@@ -191,29 +191,28 @@ export interface Order {
   canceledAt?: Timestamp;
   wasPrepaymentRequired?: boolean;
   splitFrom?: string;
+  eventId?: string;
 }
 
-// =================================================================
-// ⚙️ 기타 애플리케이션 타입
-// =================================================================
-
-// ✅ [동기화] 프론트엔드의 UserTutorialProgress 타입을 직접 여기에 정의합니다.
-// (별도 파일 import로 인한 복잡성 제거)
+// ⭐️ [수정됨] UserTutorialProgress 타입을 최신 버전으로 통일했습니다.
 export interface UserTutorialProgress {
-  hasCompletedMain?: boolean;
-  hasSeenProductDetailPage?: boolean;
-  hasSeenCartPage?: boolean;
-  hasSeenOrderHistoryPage?: boolean;
+    hasCompletedMain?: boolean;
+    hasSeenProductDetailPage?: boolean;
+    hasSeenCartPage?: boolean;
+    hasSeenOrderHistoryPage?: boolean;
+    hasSeenCustomerCenterPage?: boolean;
+    hasSeenMyPage?: boolean;
+    hasSeenCalendarPage?: boolean;
 }
 
-// ✅ [동기화] 프론트엔드와 백엔드의 UserDocument를 완벽하게 일치시킵니다.
 export interface UserDocument {
   uid: string;
   email: string | null;
   displayName: string | null;
   phone: string | null;
+  phoneLast4?: string;
   photoURL?: string | null;
-  role: "master" | "admin" | "customer";
+  role: 'master' | 'admin' | 'customer';
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
   points: number;
@@ -224,7 +223,7 @@ export interface UserDocument {
   lastLoginDate: string;
   consecutiveLoginDays?: number;
   isSuspended?: boolean;
-  gender?: "male" | "female" | null;
+  gender?: 'male' | 'female' | null;
   ageRange?: string | null;
   totalOrders?: number;
   pickedUpOrders?: number;
@@ -240,6 +239,66 @@ export interface UserDocument {
   completedMissions?: { [key: string]: boolean };
 }
 
+
+// =================================================================
+// 📌 프론트엔드 전용 타입 (Client-Side Only)
+// =================================================================
+
+export interface AggregatedOrderGroup {
+  groupKey: string;
+  customerInfo: Order['customerInfo'];
+  item: OrderItem;
+  totalQuantity: number;
+  totalPrice: number;
+  status: OrderStatus;
+  pickupDate: Timestamp | Date;
+  pickupDeadlineDate?: Timestamp | Date | null;
+  originalOrders: {
+    orderId: string;
+    quantity: number;
+    status: OrderStatus;
+  }[];
+}
+
+export interface Banner {
+  id:string;
+  imageUrl: string;
+  linkTo?: string;
+  order: number;
+  createdAt: Timestamp;
+  isActive: boolean;
+  productId?: string;
+  title?: string;
+}
+
+export interface GuideItem {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface StoreInfo {
+  name: string;
+  businessNumber: string;
+  representative: string;
+  address: string;
+  phoneNumber: string;
+  email: string;
+  operatingHours: string[];
+  description: string;
+  kakaotalkChannelId?: string;
+  usageGuide?: GuideItem[];
+  faq?: FaqItem[];
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface WaitlistInfo {
   productId: string;
   productName: string;
@@ -252,11 +311,80 @@ export interface WaitlistInfo {
   quantity: number;
   timestamp: Timestamp;
   isPrioritized?: boolean;
+  waitlistOrder?: number;
+  prioritizedAt?: Timestamp | null;
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  phone?: string;
+  isAdmin?: boolean;
+  points?: number;
+  loyaltyTier?: string;
+  createdAt: Timestamp;
+  lastLogin: Timestamp;
+  encoreRequestedProductIds?: string[];
+}
+
+export interface PaginatedProductsResponse {
+  products: Product[];
+  lastVisible: DocumentData | null;
+}
+
+// =================================================================
+// 📌 대시보드 관련 타입 (Dashboard - Client-Side)
+// =================================================================
+export interface TodayStockItem {
+    id: string;
+    variantGroupId: string;
+    name: string;
+    quantity: number | null;
+    unitType: string;
+}
+export interface TodayOrderItem {
+    id:string;
+    customerName: string;
+    productName: string;
+    quantity: number;
+    status: string;
+}
+export interface TodayPickupItem {
+    id: string;
+    name: string;
+    pickupDeadlineDate: Timestamp;
+    optionsSummary: {
+        variantGroupName: string;
+        unit: string;
+        currentStock: number;
+    }[];
+}
+export interface TodayOngoingProductSummary {
+    id:string;
+    name: string;
+    deadlineDate: Timestamp;
+    pickupDate: Timestamp;
+    pickupDeadlineDate?: Timestamp | null;
+    variantGroupsSummary: {
+        variantGroupId: string;
+        variantGroupName: string;
+        totalPhysicalStock: number | null;
+        stockUnitType: string;
+        itemsSummary: {
+            itemId: string;
+            itemName: string;
+            currentStock: number;
+            stockDeductionAmount: number;
+        }[];
+    }[];
+    totalReservedQuantity: number;
 }
 
 
 // =================================================================
-// 🔔 NHN Cloud API 관련 타입
+// 📌 백엔드 전용 타입 (Server-Side Only)
 // =================================================================
 
 export interface NhnAlimtalkResponse {
