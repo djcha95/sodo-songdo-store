@@ -1,14 +1,28 @@
 {
+  "version": 2,
   "rewrites": [
-    
+    {
+      "source": "/api/og",
+      "destination": "/api/og"
+    },
     {
       "source": "/api/(.*)",
       "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     },
-   
     {
-      "source": "/((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/).*)",
-      "destination": "/api/og"
+      "source": "/product/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i)(kakaotalk|kakaostory|facebookexternalhit|facebot|naver|naverbot|yeti)"
+        }
+      ],
+      "destination": "/api/og?id=:id"
+    },
+    {
+      "source": "/((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/|api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
