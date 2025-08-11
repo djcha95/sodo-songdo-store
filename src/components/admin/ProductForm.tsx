@@ -1008,23 +1008,44 @@ const settingsSummary = useMemo(() => {
 
               <div className="form-group">
                 <label>발행일 (오후 2시 공개)</label>
-                <input type="date" value={toYmd(creationDate)} onChange={e => setCreationDate(fromYmd(e.target.value) ?? new Date())} required />
+                {/* [수정] value와 onChange를 creationDate에서 publishDate 상태로 변경했습니다. */}
+                <input 
+                  type="date" 
+                  value={toYmd(publishDate)} 
+                  onChange={e => setPublishDate(fromYmd(e.target.value) ?? new Date())} 
+                  required 
+                />
                 {mode !== 'editRound' && <p className="input-description">선택한 날짜 오후 2시에 공개됩니다.</p>}
               </div>
 
               <div className="form-group">
                 <label>공동구매 마감일 *</label>
-                <input type="datetime-local" value={toDateTimeLocal(deadlineDate)} onChange={e => setDeadlineDate(e.target.value ? new Date(e.target.value) : null)} required />
+                <input 
+                  type="datetime-local" 
+                  value={toDateTimeLocal(deadlineDate)} 
+                  onChange={e => setDeadlineDate(e.target.value ? new Date(e.target.value) : null)} 
+                  required 
+                />
               </div>
 
               <div className="form-group">
                 <label>픽업 시작일 *</label>
-                <input type="date" value={toYmd(pickupDate)} onChange={e => setPickupDate(fromYmd(e.target.value))} required />
+                <input 
+                  type="date" 
+                  value={toYmd(pickupDate)} 
+                  onChange={e => setPickupDate(fromYmd(e.target.value))} 
+                  required 
+                />
               </div>
 
               <div className="form-group">
                 <label>픽업 마감일 *</label>
-                <input type="date" value={toYmd(pickupDeadlineDate)} onChange={e => setPickupDeadlineDate(fromYmd(e.target.value))} required />
+                <input 
+                  type="date" 
+                  value={toYmd(pickupDeadlineDate)} 
+                  onChange={e => setPickupDeadlineDate(fromYmd(e.target.value))} 
+                  required 
+                />
               </div>
 
               <div className="settings-summary-card">

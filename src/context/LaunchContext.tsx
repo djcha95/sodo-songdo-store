@@ -4,7 +4,7 @@ import React, { createContext, useContext, ReactNode } from 'react';
 
 // isPreLaunch: true이면 사전 런칭(둘러보기) 모드, false이면 정식 런칭 모드
 const LAUNCH_CONFIG = {
-  isPreLaunch: true, 
+  isPreLaunch: false, 
   launchDate: '2025-08-11',
 };
 
