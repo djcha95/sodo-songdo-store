@@ -1,13 +1,13 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import path from 'path';
-import fs from 'fs';
+// --- CommonJS 방식으로 모듈 불러오기 ---
+const { initializeApp, getApps, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const path = require('path');
+const fs = require('fs');
 
 // --- Firebase Admin SDK 초기화 ---
 try {
   const serviceAccount = JSON.parse(
-    process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY
   );
   if (!getApps().length) {
     initializeApp({
@@ -25,11 +25,12 @@ const DEFAULT_TITLE = '소도몰 - 초특가 공동구매마켓';
 const DEFAULT_DESCRIPTION = '소비자도 도매가로! 송도 주민을 위한 특별한 공동구매';
 const DEFAULT_IMAGE = `${BASE_URL}/sodomall_wel.png`;
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+// --- 'export default' 대신 'module.exports' 사용 ---
+module.exports = async (req, res) => {
   console.log('[OG Handler] 함수 시작, 요청 URL:', req.url);
 
   try {
-    const url = new URL(req.url!, `https://${req.headers.host}`);
+    const url = new URL(req.url, `https://${req.headers.host}`);
     const pathname = url.pathname;
     console.log('[OG Handler] Pathname:', pathname);
 
@@ -64,17 +65,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('[OG Handler] 상품 페이지가 아님. 기본 OG 정보 사용.');
     }
     
-    // --- 경로 수정 및 디버깅 ---
-    let html: string;
+    let html;
     try {
-      // ✅ 경로를 Vite 표준 빌드 폴더인 'dist'로 변경
       const htmlFilePath = path.join(process.cwd(), 'dist', 'index.html');
       console.log('[OG Handler] index.html 파일 경로:', htmlFilePath);
       html = fs.readFileSync(htmlFilePath, 'utf-8');
       console.log('[OG Handler] index.html 파일 읽기 성공.');
     } catch (e) {
       console.error('[OG Handler] index.html 파일 읽기 실패!', e);
-      // 파일을 못 읽으면 더 진행할 수 없으므로 에러 응답
       return res.status(500).send('<h1>Error: Cannot read index.html</h1>');
     }
 
@@ -92,4 +90,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('[OG Handler] 핸들러 전체에서 심각한 오류 발생:', error);
     return res.status(500).send('<h1>Server Error</h1>');
   }
-}
+};
