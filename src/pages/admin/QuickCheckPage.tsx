@@ -140,7 +140,7 @@ const QuickCheckPage: React.FC = () => {
   const handleGrantSnackPack = async () => {
     try {
       const functions = getFunctions(getApp(), 'asia-northeast3');
-      const fn = httpsCallable(functions, 'grantSnackPackToEligibleUsers');
+      const fn = httpsCallable(functions, 'grantSnackPackToAllUsers');
       const toastId = toast.loading('간식 꾸러미 지급 처리 중…');
       const res: any = await fn({});
       toast.success(`생성: ${res?.data?.createdCount ?? 0}명 / 스킵: ${res?.data?.skippedCount ?? 0}명`, { id: toastId });

@@ -81,11 +81,8 @@ interface ProductCardProps {
   product: Product;
 }
 
-// ✅ [수정] 이미지 로딩 폴백(Fallback) 로직 개선
-// 1) 안전한 플레이스홀더 상수 정의
 const PLACEHOLDER = 'https://placeholder.com/200x200.png?text=No+Image';
 
-// 2) 파이어베이스 스토리지 도메인 판별 함수
 const isFirebaseStorage = (url?: string) => {
   if (!url) return false;
   try {
@@ -108,33 +105,26 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [isJustAdded, setIsJustAdded] = useState(false);
   const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 3) 이미지 src 상태: 초기값을 '' 대신 PLACEHOLDER 로 설정하여 초기 렌더링 오류 방지
   const [imageSrc, setImageSrc] = useState(PLACEHOLDER);
 
-  // 4) product.imageUrls 변경 시 1회만 src 결정 (최적화는 조건부)
   useEffect(() => {
     const originalUrl = product.imageUrls?.find(u => typeof u === 'string' && u.trim() !== '') || PLACEHOLDER;
 
-    // Firebase Storage URL이면 토큰 유지를 위해 최적화를 시도하지 않음
     if (isFirebaseStorage(originalUrl)) {
       setImageSrc(originalUrl);
       return;
     }
 
-    // 그 외 도메인만 이미지 최적화 시도
     const optimized = getOptimizedImageUrl(originalUrl, '200x200') || originalUrl;
     setImageSrc(optimized);
   }, [product.imageUrls]);
 
-  // 5) onError 시 무한 루프 방지: 현재 src가 PLACEHOLDER가 아니면 1회만 폴백
   const handleImageError = useCallback(() => {
     const originalUrl = product.imageUrls?.find(u => typeof u === 'string' && u.trim() !== '') || PLACEHOLDER;
     
-    // 최적화 URL이 실패한 경우, 원본 URL로 교체 시도
     if (imageSrc !== originalUrl) {
       setImageSrc(originalUrl);
     } 
-    // 원본 URL도 실패한 경우, 최종 플레이스홀더로 교체
     else if (imageSrc !== PLACEHOLDER) {
       setImageSrc(PLACEHOLDER);
     }
@@ -169,8 +159,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg } = cardData;
     
+    // ✅ 중앙 로직 `determineActionState`를 호출하여 일관된 상태를 보장받습니다.
     const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
     
+    // '구매 가능' 상태이지만 옵션이 여러 개인 경우, '옵션 선택 필요'로 상태를 구체화합니다.
     if (state === 'PURCHASABLE' && isMultiOption) {
       return 'REQUIRE_OPTION';
     }
@@ -203,6 +195,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
 
+    // ✅ 장바구니에 담기 전, 실시간 남은 재고를 다시 한 번 확인합니다.
     const reserved = singleOptionVg?.reservedCount || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -302,6 +295,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     switch (actionState) {
       case 'PURCHASABLE':
+        // ✅ 남은 재고 계산: (총 재고 - 예약 수량)을 기준으로 UI에 표시될 최대 수량을 결정합니다.
         const reserved = cardData.singleOptionVg?.reservedCount || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -350,6 +344,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       const totalStock = singleOptionVg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
+        // ✅ 한정수량 표시: (총 재고 - 예약 수량)으로 남은 개수를 계산하여 표시합니다.
         const reserved = singleOptionVg.reservedCount || 0;
         const remaining = (totalStock || 0) - reserved;
         stockText = `${remaining}개 남음!`;

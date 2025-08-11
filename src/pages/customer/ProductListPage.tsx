@@ -19,7 +19,8 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { getDisplayRound, getDeadlines, safeToDate } from '@/utils/productUtils';
+// ✅ [수정] 새로 추가한 정렬 함수를 import 합니다.
+import { getDisplayRound, getDeadlines, safeToDate, sortProductsForDisplay } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './ProductListPage.css';
 import '@/styles/common.css';
@@ -99,14 +100,12 @@ const ProductListPage: React.FC = () => {
         lastVisible: number | null
       };
 
-      // 중복 제거(기존 유지 + 신규 merge)
       setProducts(prev => {
         const map = new Map(prev.map(p => [p.id, p]));
         (newProducts || []).forEach(p => map.set(p.id, p));
         return isInitial ? (newProducts || []) : Array.from(map.values());
       });
 
-      // 커서/hasMore 갱신 — 진행 없음 감지
       lastVisibleRef.current = newLastVisible;
       const noProgress =
         newLastVisible === null ||
@@ -118,7 +117,6 @@ const ProductListPage: React.FC = () => {
     } catch (err: any) {
       setError('상품을 불러오는 중 오류가 발생했습니다.');
       showToast('error', err?.message || '데이터 로딩 중 문제가 발생했습니다.');
-      // 에러 시 더 이상 루프 돌지 않도록 잠시 차단
       hasMoreRef.current = false;
     } finally {
       if (isInitial) setLoading(false);
@@ -133,7 +131,6 @@ const ProductListPage: React.FC = () => {
 
   useEffect(() => { fetchData(true); }, [fetchData]);
 
-  // 무한스크롤 트리거
   useEffect(() => {
     if (!isLoadMoreVisible) return;
     if (loading || loadingMore || isTourRunning) return;
@@ -218,8 +215,9 @@ const ProductListPage: React.FC = () => {
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
     
     return {
-      primarySaleProducts: tempPrimary,
-      secondarySaleProducts: tempSecondary,
+      // ✅ [수정] 요청하신 정렬 로직을 적용하여 최종 상품 목록을 반환합니다.
+      primarySaleProducts: tempPrimary.sort(sortProductsForDisplay),
+      secondarySaleProducts: tempSecondary.sort(sortProductsForDisplay),
       pastProductsByDate: sortedPastGroups,
       primarySaleEndDate: firstPrimarySaleEndDate
     };

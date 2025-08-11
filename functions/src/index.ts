@@ -12,7 +12,7 @@ export * from "./callable/missions.js";
 export * from "./callable/users.js";
 
 // ✅ 추가된 함수를 다른 함수들과 동일한 형식으로 export 합니다.
-export * from "./grantSnackPack.js";
+export * from "./grantSnackPackToAll.js";
 
 
 // =================================================================

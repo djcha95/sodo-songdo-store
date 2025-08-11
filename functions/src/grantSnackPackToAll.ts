@@ -1,7 +1,7 @@
-// functions/src/grantSnackPack.ts
+// functions/src/grantSnackPackToAll.ts
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import type { Product } from './types.js';
+import type { Product, UserDocument } from './types.js'; // UserDocument 타입 추가
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -9,10 +9,11 @@ if (admin.apps.length === 0) {
 
 const db = admin.firestore();
 
+// [수정] 이벤트 상품 ID와 이벤트 ID를 상수로 명확하게 정의합니다.
 const EVENT_PRODUCT_ID = 'GIFT_WELCOME_SNACK'; 
-const EVENT_ID = '2025-snack-pack';
+const UNIVERSAL_SNACK_EVENT_ID = 'welcome-snack-2025-all'; // 새로운 통합 이벤트 ID
 
-export const grantSnackPackToEligibleUsers = onCall(
+export const grantSnackPackToAllUsers = onCall(
   { region: 'asia-northeast3', timeoutSeconds: 540, memory: '1GiB' },
   async (req) => {
     
@@ -33,43 +34,27 @@ export const grantSnackPackToEligibleUsers = onCall(
         throw new HttpsError('internal', '이벤트 상품의 판매 정보(salesHistory)가 올바르지 않습니다.');
     }
 
-
     const usersRef = db.collection('users');
     const snap = await usersRef.get();
 
     const bulk = db.bulkWriter();
     let createdCount = 0;
     let skippedCount = 0;
-    const CUTOFF_DATE = new Date('2025-09-30T23:59:59+09:00');
 
-    // ✅ [수정] 알림톡 방지를 위해 픽업일을 어제 날짜로 강제 설정합니다.
+    // [핵심] 알림톡 방지를 위해 픽업일을 과거 날짜(어제)로 강제 설정합니다.
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
     for (const doc of snap.docs) {
-      const u = doc.data() || {};
+      const u = doc.data() as UserDocument;
       const userId = doc.id;
 
-      let createdAt: Date | null = null;
-      const rawCreatedAt = u.createdAt || u.signupDate;
-      try {
-        if (!rawCreatedAt) createdAt = null;
-        else if (rawCreatedAt.toDate) createdAt = rawCreatedAt.toDate();
-        else if (typeof rawCreatedAt === 'string') createdAt = new Date(rawCreatedAt);
-        else if (rawCreatedAt._seconds) createdAt = new admin.firestore.Timestamp(rawCreatedAt._seconds, rawCreatedAt._nanoseconds || 0).toDate();
-        else if (rawCreatedAt.seconds) createdAt = new admin.firestore.Timestamp(rawCreatedAt.seconds, rawCreatedAt.nanoseconds || 0).toDate();
-      } catch {
-        createdAt = null;
-      }
+      // [제거] 가입일(CUTOFF_DATE) 기준 필터링 로직을 완전히 제거하여 모든 사용자를 대상으로 합니다.
       
-      if (!createdAt || createdAt.getTime() > CUTOFF_DATE.getTime()) {
-        skippedCount++;
-        continue;
-      }
-      
+      // [수정] 중복 지급 방지 체크: 새로운 통합 이벤트 ID로 검사합니다.
       const already = await db.collection('orders')
         .where('userId', '==', userId)
-        .where('eventId', '==', EVENT_ID)
+        .where('eventId', '==', UNIVERSAL_SNACK_EVENT_ID)
         .limit(1)
         .get();
 
@@ -84,12 +69,13 @@ export const grantSnackPackToEligibleUsers = onCall(
         userId: userId,
         status: 'RESERVED',
         wasPrepaymentRequired: false,
-        eventId: EVENT_ID,
+        eventId: UNIVERSAL_SNACK_EVENT_ID, // [수정] 새로운 통합 이벤트 ID 사용
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        // ✅ [수정] 상품 정보의 픽업일 대신, 위에서 계산한 '어제' 날짜를 사용합니다.
+        // [핵심] 상품 정보의 픽업일 대신, 위에서 계산한 '어제' 날짜를 사용하여 알림톡을 방지합니다.
         pickupDate: admin.firestore.Timestamp.fromDate(yesterday),
-        pickupDeadlineDate: eventRound.pickupDeadlineDate || null,
-        deadlineText: '소진시까지',
+        // [수정] deadlineDate는 상품 정보를 따르되, deadlineText를 통일합니다.
+        pickupDeadlineDate: eventRound.pickupDeadlineDate || null, 
+        deadlineText: "이벤트 증정 (소진 시까지)", // 문구 명확화
         cancelLocked: true,
         items: [
           {
@@ -111,7 +97,7 @@ export const grantSnackPackToEligibleUsers = onCall(
         customerInfo: {
           name: u.displayName || '이벤트 고객',
           phone: u.phone || '',
-          phoneLast4: u.phoneLast4 || '',
+          phoneLast4: u.phoneLast4 || (u.phone ? u.phone.slice(-4) : ''),
         },
       };
 
@@ -120,6 +106,7 @@ export const grantSnackPackToEligibleUsers = onCall(
     }
 
     await bulk.close();
+    console.log(`[Snack Grant All] Process finished. Created: ${createdCount}, Skipped: ${skippedCount}`);
     return { createdCount, skippedCount };
   }
 );

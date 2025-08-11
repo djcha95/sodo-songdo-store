@@ -18,8 +18,8 @@ import { analyzeProductTextWithAI } from "../utils/gemini.js";
 
 /** --------------------------------
  * 1) AI 파싱: parseProductText
- *  - v2 HttpsError 사용
- *  - secrets: GEMINI_API_KEY
+ * - v2 HttpsError 사용
+ * - secrets: GEMINI_API_KEY
  * --------------------------------- */
 export const parseProductText = onCall(
   {
@@ -28,8 +28,6 @@ export const parseProductText = onCall(
     memory: "512MiB",
     timeoutSeconds: 60,
     secrets: ["GEMINI_API_KEY"],
-    // 필요한 경우 App Check 강제
-    // enforceAppCheck: true,
   },
   async (request) => {
     try {
@@ -54,9 +52,9 @@ export const parseProductText = onCall(
 
 /** --------------------------------
  * 2) 재고/예약 합산 포함 상품 조회: getProductsWithStock
- *   - 페이지네이션: pageSize, lastVisibleTimestamp(ms)
- *   - isArchived=false 정렬 createdAt desc
- *   - reserved 수량 합산(간단 로직)
+ * - 페이지네이션: pageSize, lastVisibleTimestamp(ms)
+ * - isArchived=false 정렬 createdAt desc
+ * - reserved 수량 합산
  * --------------------------------- */
 export const getProductsWithStock = onCall(
   {
@@ -64,7 +62,6 @@ export const getProductsWithStock = onCall(
     cors: allowedOrigins,
     memory: "512MiB",
     timeoutSeconds: 60,
-    // 프론트 접근 특성상 App Check를 열어둔 상태라면 false, 보호가 필요하면 true로
     enforceAppCheck: false,
   },
   async (request) => {
@@ -86,18 +83,17 @@ export const getProductsWithStock = onCall(
         query = query.startAfter(Timestamp.fromMillis(lastVisibleTimestamp));
       }
 
-      const productsSnapshot = await query.get(); // QuerySnapshot<DocumentData>
+      const productsSnapshot = await query.get();
       const products = productsSnapshot.docs.map((doc) => ({
         ...(doc.data() as Product),
         id: doc.id,
       })) as (Product & { id: string })[];
 
-      // 예약/결제(또는 필요한 상태) 합산 — 여기서는 간단 합산 예시
+      // ✅ [수정] 재고를 점유하는 올바른 주문 상태('RESERVED', 'PREPAID')로 수정합니다.
+      // 이렇게 해야 취소되거나 완료된 주문을 제외하고, 현재 예약된 수량만 정확히 집계할 수 있습니다.
       const ordersSnap = await db
         .collection("orders")
-        .where("status", "in", ["PAID", "CONFIRMED"])
-        .where("isCanceled", "==", false)
-        .limit(2000) // 페이지 기준으로 적절히 제한
+        .where("status", "in", ["RESERVED", "PREPAID"])
         .get();
 
       // key: `${productId}-${roundId}-${variantGroupId}` => quantity sum
@@ -105,36 +101,46 @@ export const getProductsWithStock = onCall(
 
       ordersSnap.docs.forEach((od) => {
         const order = od.data() as Order;
-        const items: OrderItem[] = (order.items || []) as any;
+        // items 필드가 배열이 아닐 경우를 대비한 방어 코드
+        const items: OrderItem[] = Array.isArray(order.items) ? order.items : [];
         items.forEach((it) => {
-          const key = `${it.productId || ""}-${it.roundId || ""}-${it.variantGroupId || ""}`;
+          // it.productId 등이 없을 경우를 대비
+          if (!it.productId || !it.roundId || !it.variantGroupId) return;
+          
+          const key = `${it.productId}-${it.roundId}-${it.variantGroupId}`;
           const qty = Number(it.quantity || 0);
+          
           if (!qty) return;
           reservedMap.set(key, (reservedMap.get(key) || 0) + qty);
         });
       });
 
       const productsWithReservedData = products.map((product) => {
-        const newSalesHistory: SalesRound[] = (product.salesHistory || []).map((round) => {
-          const newVariantGroups: VariantGroup[] = (round.variantGroups || []).map((vg) => {
+        if (!Array.isArray(product.salesHistory)) {
+          return product;
+        }
+        const newSalesHistory: SalesRound[] = product.salesHistory.map((round) => {
+          if (!Array.isArray(round.variantGroups)) {
+            return round;
+          }
+          const newVariantGroups: VariantGroup[] = round.variantGroups.map((vg) => {
             const key = `${product.id}-${round.roundId}-${vg.id}`;
             return {
               ...vg,
-              // 필요 시 각 item별 reservedCount 확장 가능
               reservedCount: reservedMap.get(key) || 0,
-            } as VariantGroup;
+            };
           });
 
           return {
             ...round,
             variantGroups: newVariantGroups,
-          } as SalesRound;
+          };
         });
 
         return {
           ...product,
           salesHistory: newSalesHistory,
-        } as Product;
+        };
       });
 
       const lastVisible =
@@ -156,7 +162,7 @@ export const getProductsWithStock = onCall(
 
 /** --------------------------------
  * 3) 페이지네이션용 단순 목록: getProductsPage
- *  - 프론트에서 간단 목록만 필요할 때
+ * - 프론트에서 간단 목록만 필요할 때
  * --------------------------------- */
 export const getProductsPage = onCall(
   {
@@ -204,10 +210,10 @@ export const getProductsPage = onCall(
 
 /** --------------------------------
  * 4) 앵콜 요청: requestEncore
- *  - 사용자가 특정 상품에 앵콜을 요청하면
- *  - product.encoreCount 증가
- *  - product.encoreRequesterIds 에 userId 추가(중복 방지)
- *  - user.encoreRequestedProductIds 에 productId 추가(중복 방지)
+ * - 사용자가 특정 상품에 앵콜을 요청하면
+ * - product.encoreCount 증가
+ * - product.encoreRequesterIds 에 userId 추가(중복 방지)
+ * - user.encoreRequestedProductIds 에 productId 추가(중복 방지)
  * --------------------------------- */
 export const requestEncore = onCall(
   {
