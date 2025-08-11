@@ -23,6 +23,9 @@ export { testAlimtalk, testAlimtalk as testSendAlimtalk } from "./callable/testA
 // 선입금 안내 즉시 실행 테스트 함수
 export * from "./http/testNotifications.js";
 
+// ✅ SSR (상품 상세 페이지 미리보기 메타 태그 제공)
+export { ssr } from "./ssr.js"; // ← 새로 추가한 ssr.ts 빌드 후 js로 export
+
 // =================================================================
 // 3. Scheduled Functions (스케줄링 함수)
 // =================================================================
@@ -44,4 +47,4 @@ export * from "./triggers/users.js";
 export * from "./setup.js";
 
 // ✅ [추가] 사용자 phoneLast4 필드 채우기 스크립트
-export * from "./backfillUsers.js"; 
+export * from "./backfillUsers.js";

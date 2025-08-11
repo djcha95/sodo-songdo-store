@@ -1,0 +1,1 @@
+import{V as s}from"./index-BMz7zIRN.js";const a=(e,r,o=3e3)=>{switch(e){case"success":s.success(r,{duration:o});break;case"error":s.error(r,{duration:o});break;case"info":s(r,{duration:o,icon:"ℹ️"});break;case"loading":s.loading(r);break;default:s(r,{duration:o});break}},t=(e,r)=>s.promise(e,r,{success:{duration:3e3},error:{duration:4e3}});export{t as a,a as s};

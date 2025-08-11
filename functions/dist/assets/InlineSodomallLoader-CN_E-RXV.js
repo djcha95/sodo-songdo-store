@@ -1,0 +1,1 @@
+import{j as e}from"./index-BMz7zIRN.js";const a=({message:s="콘텐츠 로딩 중..."})=>e.jsxs("div",{className:"inline-loader-wrapper",children:[e.jsxs("div",{className:"inline-loader-text",children:[e.jsx("span",{children:"소"}),e.jsx("span",{children:"도"}),e.jsx("span",{children:"몰"})]}),e.jsx("p",{className:"inline-loader-message",children:s})]});export{a as I};
