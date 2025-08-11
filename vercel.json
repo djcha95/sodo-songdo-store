@@ -1,16 +1,16 @@
 {
   "version": 2,
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/og",
-      "destination": "/api/og"
+      "src": "^/api/og$",
+      "dest": "/api/og"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
+      "src": "^/api/(?!og$)(.*)",
+      "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     },
     {
-      "source": "/product/:id",
+      "src": "^/product/([A-Za-z0-9_-]+)$",
       "has": [
         {
           "type": "header",
@@ -18,11 +18,11 @@
           "value": "(?i)(kakaotalk|kakaostory|facebookexternalhit|facebot|naver|naverbot|yeti)"
         }
       ],
-      "destination": "/api/og?id=:id"
+      "dest": "/api/og?id=$1"
     },
     {
-      "source": "/((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/|api/).*)",
-      "destination": "/index.html"
+      "src": "^/((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/|api/).*)",
+      "dest": "/index.html"
     }
   ]
 }
