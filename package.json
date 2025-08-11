@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node -e \"console.log('BUILD_API_PREFIX=' + (process.env.VITE_FIREBASE_API_KEY||'').slice(0,6))\" && vite build",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "test": "vitest",
@@ -67,9 +67,3 @@
     "vitest": "^3.2.4"
   }
 }
-{
-  "scripts": {
-    "build": "node -e \"console.log('BUILD_API_PREFIX=' + (process.env.VITE_FIREBASE_API_KEY||'').slice(0,6))\" && vite build"
-  }
-}
-
