@@ -38,7 +38,6 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=600');
     res.status(200).send(html);
   } catch {
-    // 혹시라도 예외가 나도 200으로 기본 OG 반환
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.status(200).send('<!doctype html><title>소도몰</title>');
   }

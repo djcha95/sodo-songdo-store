@@ -1,15 +1,32 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/api/og", "destination": "/api/og" },
-    { "source": "/api/:path((?!og$).*)", "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/:path" },
+  "routes": [
     {
-      "source": "/product/:id",
-      "has": [
-        { "type": "header", "key": "user-agent", "value": "(?i)(kakaotalk|kakaostory|facebookexternalhit|facebot|naver|naverbot|yeti)" }
-      ],
-      "destination": "/api/og?id=:id"
+      "src": "^/api/og$",
+      "dest": "/api/og"
     },
-    { "source": "/:path((?!assets/|sodomall-logo.png|sodomall_wel.png|_vercel/|favicon.ico|@vite|src/|api/).*)", "destination": "/index.html" }
+    {
+      "src": "^/api/(?!og$)(.*)",
+      "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
+    },
+    {
+      "src": "^/product/([A-Za-z0-9_-]+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(KAKAOTALK|KakaoTalk|facebookexternalhit|Facebot|naver|NaverBot|Yeti).*"
+        }
+      ],
+      "dest": "/api/og?id=$1"
+    },
+    {
+      "src": "^/product/.*",
+      "dest": "/index.html"
+    },
+    {
+      "src": "^(?!/api/).*$",
+      "dest": "/index.html"
+    }
   ]
 }
