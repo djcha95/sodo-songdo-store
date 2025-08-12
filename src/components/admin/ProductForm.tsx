@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
+import axios from 'axios';
 import {
   addProductWithFirstRound,
   addNewSalesRound,
@@ -11,11 +12,10 @@ import {
   getProductById,
   updateSalesRound,
   updateProductCoreInfo,
-  functions
+  functions,
+  getReservedQuantitiesMap // [추가] 예약 수량 조회를 위해 import
 } from '@/firebase';
-import { httpsCallable } from 'firebase/functions';
-import type { HttpsCallableResult } from 'firebase/functions';
-
+import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import type {
   Category,
   StorageType,
@@ -237,6 +237,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [roundName, setRoundName] = useState('1차 판매');
   const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]);
 
+  // [추가] 수정 모드에서 로드 시점의 예약 수량을 저장하기 위한 state
+  const [initialReservedMap, setInitialReservedMap] = useState<Map<string, number>>(new Map());
+
   const [publishDate, setPublishDate] = useState<Date>(() => new Date(new Date().setHours(14, 0, 0, 0)));
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [pickupDate, setPickupDate] = useState<Date | null>(null);
@@ -283,7 +286,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
       if (!productId) return;
       setIsLoading(true);
       try {
-        const product = await getProductById(productId);
+        // [수정] 수정 모드일 때 예약 수량 정보를 함께 가져옵니다.
+        const [product, reservedMapData] = await Promise.all([
+            getProductById(productId),
+            mode === 'editRound' ? getReservedQuantitiesMap() : Promise.resolve(new Map<string, number>())
+        ]);
+        
+        if (mode === 'editRound') {
+            setInitialReservedMap(reservedMapData);
+        }
+
         if (!product) { toast.error('상품을 찾을 수 없습니다.'); navigate('/admin/products'); return; }
         setGroupName(product.groupName);
         setDescription(product.description);
@@ -315,19 +327,33 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
 
-          // ✅ [수정] Firestore의 기존 ID를 그대로 사용하도록 로직 변경
           const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
+            
+            // [수정] 수정 모드일 때, '총 재고'가 아닌 '남은 재고'를 계산하여 표시합니다.
+            let displayStock: number | '' = vg.totalPhysicalStock ?? '';
+            if (mode === 'editRound' && roundId) {
+                const key = `${product.id}-${roundId}-${vg.id}`;
+                const reservedCount = reservedMapData.get(key) || 0;
+                const configuredStock = vg.totalPhysicalStock ?? -1;
+                
+                if (configuredStock === -1) {
+                    displayStock = ''; // UI에서 무제한을 의미
+                } else {
+                    // 남은 재고가 음수가 되지 않도록 보정
+                    displayStock = Math.max(0, configuredStock - reservedCount);
+                }
+            }
+
             return {
-              id: vg.id, // 기존 ID 유지
+              id: vg.id,
               groupName: vg.groupName,
-              totalPhysicalStock: vg.totalPhysicalStock ?? '',
+              totalPhysicalStock: displayStock, // [수정] 계산된 값으로 설정
               stockUnitType: vg.stockUnitType,
               expirationDate,
               expirationDateInput: expirationDate ? toYmd(expirationDate) : '',
-
               items: (vg.items || []).map((item: ProductItem) => ({
-                id: item.id, // 기존 ID 유지
+                id: item.id,
                 name: item.name,
                 price: item.price,
                 limitQuantity: item.limitQuantity ?? '',
@@ -497,7 +523,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     ) : vg));
   }, []);
 
-  // 파일 선택 처리 (이미지 추가)
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const files = Array.from(e.target.files).filter(file => {
@@ -525,7 +550,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     e.target.value = '';
   }, [previewUrlToFile]);
 
-  // 이미지 삭제 처리
   const removeImage = useCallback((indexToRemove: number) => {
     const urlToRemove = imagePreviews[indexToRemove];
     if (!urlToRemove) return;
@@ -545,7 +569,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     setImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove));
   }, [imagePreviews, previewUrlToFile]);
 
-  // 드래그 정렬
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const { source, destination } = result;
@@ -554,7 +577,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     reorderedPreviews.splice(destination.index, 0, movedPreview);
     setImagePreviews(reorderedPreviews);
 
-    // 기존 URL 재정렬은 editRound에서만
     if (mode === 'editRound') {
       const reorderedUrls = Array.from(currentImageUrls);
       const [movedUrl] = reorderedUrls.splice(source.index, 1);
@@ -564,95 +586,100 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
       }
     }
   };
+const applyParsed = (data: any) => {
+  if (!data || typeof data !== 'object') {
+    throw new Error('AI 응답 포맷이 올바르지 않습니다.');
+  }
 
-  // ✅ [수정] AI 파싱 함수 수정
-  const handleAIParse = async () => {
-    if (!description.trim()) { 
-      toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.'); 
-      return; 
+  if (data.groupName) setGroupName(String(data.groupName));
+  if (data.cleanedDescription) setDescription(String(data.cleanedDescription));
+  if (data.storageType) setSelectedStorageType(data.storageType as StorageType);
+  if (data.productType === 'single' || data.productType === 'group') {
+    setProductType(data.productType);
+  }
+
+  if (data.categoryName && Array.isArray(categories) && categories.length > 0) {
+    const found = categories.find(c => c.name === data.categoryName);
+    if (found) {
+      setSelectedMainCategory(found.id);
+      toast.success(`'${found.name}' 카테고리 자동 선택`);
+    } else {
+      toast.error(`추천 카테고리 '${data.categoryName}'를 목록에서 찾을 수 없습니다.`);
     }
-    setIsParsingWithAI(true);
-    
-    // 1. 올바른 Cloud Function 이름('analyzeProductTextWithAI')으로 변경합니다.
-    const analyzeProductText = httpsCallable<
-      { text: string; categories: string[] }, // 2. 입력 타입에 categories 추가
-      AIParsedData
-    >(functions, 'analyzeProductTextWithAI');
-    
-    // 3. 현재 카테고리 목록을 AI에 전달할 수 있도록 이름만 추출합니다.
-    const categoryNames = categories.map(c => c.name);
+  }
 
-    // 4. Cloud Function을 호출할 때 텍스트와 함께 카테고리 이름 목록을 전달합니다.
-    const promise = analyzeProductText({ text: description, categories: categoryNames });
+  const firstVg = data.variantGroups?.[0];
+  if (firstVg?.pickupDate) {
+    const d = parseDateStringToDate(firstVg.pickupDate);
+    if (d) setPickupDate(d);
+  }
 
-    toast.promise(promise, {
-      loading: 'AI가 상품 정보를 분석하고 있습니다...',
-      success: (result: HttpsCallableResult<AIParsedData>) => {
-        const data = result.data;
-        if (data.groupName) setGroupName(data.groupName);
-        if (data.cleanedDescription) setDescription(data.cleanedDescription);
-        if (data.storageType) setSelectedStorageType(data.storageType);
-        if (data.productType) setProductType(data.productType);
-        
-        // AI가 추천한 카테고리 이름을 기반으로 ID를 찾아 설정합니다.
-        if (data.categoryName && categories.length > 0) {
-          const foundCategory = categories.find(c => c.name === data.categoryName);
-          if (foundCategory) {
-            setSelectedMainCategory(foundCategory.id);
-            toast.success(`'${foundCategory.name}' 카테고리가 자동으로 선택되었습니다.`);
-          } else {
-            // 이젠 이 오류가 거의 발생하지 않아야 합니다.
-            toast.error(`AI가 추천한 '${data.categoryName}' 카테고리를 찾을 수 없습니다.`);
-          }
-        }
-        
-        const firstVg = data.variantGroups?.[0];
-        if (firstVg?.pickupDate) setPickupDate(parseDateStringToDate(firstVg.pickupDate));
-
-        if (data.variantGroups && data.variantGroups.length > 0) {
-          const newVariantGroups: VariantGroupUI[] = data.variantGroups.map(vg => {
-            const expirationDate = parseDateStringToDate(vg.expirationDate);
-            const newItems: ProductItemUI[] = (vg.items || []).map(item => ({
-              id: generateUniqueId(), name: item.name, price: item.price || '',
-              limitQuantity: '', deductionAmount: 1,
-              isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k))
-            }));
-            if (newItems.length === 0) {
-              newItems.push({ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false });
-            }
-            return {
-              id: generateUniqueId(),
-              groupName: vg.groupName || data.groupName || '',
-              totalPhysicalStock: vg.totalPhysicalStock ?? '',
-              stockUnitType: '개',
-              expirationDate,
-              expirationDateInput: expirationDate ? toYmd(expirationDate) : (vg.expirationDate || ''),
-              items: newItems
-            };
-          });
-          setVariantGroups(newVariantGroups);
-        } else {
-          setVariantGroups([{
-            id: generateUniqueId(), groupName: data.groupName || '', totalPhysicalStock: '',
-            stockUnitType: '개', expirationDate: null, expirationDateInput: '',
-            items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }]
-          }]);
-        }
-
-        setIsParsingWithAI(false);
-        return 'AI 분석 완료! 자동으로 입력된 내용을 확인해주세요.';
-      },
-      error: (err: any) => { 
-        setIsParsingWithAI(false); 
-        // Firebase 에러 메시지를 좀 더 사용자 친화적으로 표시합니다.
-        reportError('ProductForm.handleAIParse', err);
-        const message = err.message || 'AI 분석 중 알 수 없는 오류가 발생했습니다.';
-        return message.includes("failed-precondition") 
-          ? "AI 서비스 설정에 문제가 있습니다. 관리자에게 문의하세요."
-          : message;
-      }
+  if (Array.isArray(data.variantGroups) && data.variantGroups.length > 0) {
+    const newVgs: VariantGroupUI[] = data.variantGroups.map((vg: any) => {
+      const exp = parseDateStringToDate(vg.expirationDate);
+      const items: ProductItemUI[] = Array.isArray(vg.items) && vg.items.length > 0
+        ? vg.items.map((it: any) => ({
+            id: generateUniqueId(),
+            name: String(it.name ?? ''),
+            price: typeof it.price === 'number' ? it.price : '',
+            limitQuantity: '',
+            deductionAmount: 1,
+            isBundleOption: bundleUnitKeywords.some(k => String(it.name ?? '').includes(k)),
+          }))
+        : [{
+            id: generateUniqueId(), name: '', price: '',
+            limitQuantity: '', deductionAmount: 1, isBundleOption: false,
+          }];
+      return {
+        id: generateUniqueId(),
+        groupName: String(vg.groupName ?? data.groupName ?? ''),
+        totalPhysicalStock: vg.totalPhysicalStock ?? '',
+        stockUnitType: '개',
+        expirationDate: exp,
+        expirationDateInput: exp ? toYmd(exp) : (vg.expirationDate || ''),
+        items,
+      };
     });
+    setVariantGroups(newVgs);
+  } else {
+    setVariantGroups([{
+      id: generateUniqueId(),
+      groupName: String(data.groupName ?? ''),
+      totalPhysicalStock: '', stockUnitType: '개',
+      expirationDate: null, expirationDateInput: '',
+      items: [{
+        id: generateUniqueId(), name: '', price: '',
+        limitQuantity: '', deductionAmount: 1, isBundleOption: false,
+      }],
+    }]);
+  }
+};
+
+const handleAIParse = async () => {
+  if (!description?.trim()) {
+    toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.');
+    return;
+  }
+  const payload = {
+    text: description,
+    categories: (categories ?? []).map(c => c.name),
   };
+
+  setIsParsingWithAI(true);
+  try {
+    const callable = httpsCallable(functions, 'parseProductText');
+    const res = await callable(payload) as HttpsCallableResult<any>;
+    const data = res.data;
+    applyParsed(data);
+    toast.success('AI 분석 완료! 자동 입력 내용을 확인해주세요.');
+  } catch (err: any) {
+    const msg = err?.message || err?.details?.message || 'AI 분석 중 오류가 발생했습니다.';
+    toast.error(msg);
+    reportError('ProductForm.handleAIParse', err);
+  } finally {
+    setIsParsingWithAI(false);
+  }
+};
 
 const settingsSummary = useMemo(() => {
    const publishDateTime = new Date(publishDate);
@@ -665,11 +692,9 @@ const settingsSummary = useMemo(() => {
    return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText };
  }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]);
 
-  // 제출
   const handleSubmit = async (isDraft: boolean = false) => {
     setIsSubmitting(true);
 
-    // 날짜 유효성
     const MIN_YEAR = 2020, MAX_YEAR = 2100;
     const isValidDateRange = (d: Date | null, fieldName: string) => {
       if (!d) return true;
@@ -702,23 +727,41 @@ const settingsSummary = useMemo(() => {
       const salesRoundData = {
         roundName: roundName.trim(),
         status,
-        variantGroups: variantGroups.map(vg => ({
-          // ✅ [수정] ID가 길면(Firestore ID) 유지, 짧으면(UI에서 추가) 새로 생성
-          id: vg.id && vg.id.length > 15 ? vg.id : generateUniqueId(),
-          groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
-          totalPhysicalStock: vg.totalPhysicalStock === '' ? null : Number(vg.totalPhysicalStock),
-          stockUnitType: vg.stockUnitType,
-          items: vg.items.map(item => ({
-             // ✅ [수정] ID가 길면(Firestore ID) 유지, 짧으면(UI에서 추가) 새로 생성
-            id: item.id && item.id.length > 15 ? item.id : generateUniqueId(),
-            name: item.name,
-            price: Number(item.price) || 0,
-            stock: -1,
-            limitQuantity: item.limitQuantity === '' ? null : Number(item.limitQuantity),
-            expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
-            stockDeductionAmount: Number(item.deductionAmount) || 1
-          }))
-        })),
+        variantGroups: variantGroups.map(vg => {
+          // [수정] 수정 모드일 때, 입력된 '남은 재고'를 기반으로 '새로운 총 재고'를 계산
+          let finalTotalPhysicalStock: number | null;
+          const newStockFromInput = vg.totalPhysicalStock;
+
+          if (mode === 'editRound' && productId && roundId) {
+            const key = `${productId}-${roundId}-${vg.id}`;
+            const initialReserved = initialReservedMap.get(key) || 0;
+            
+            if (newStockFromInput === '' || newStockFromInput < 0) { // 빈 문자열이나 음수는 무제한(-1)으로 처리
+              finalTotalPhysicalStock = -1;
+            } else {
+              finalTotalPhysicalStock = Number(newStockFromInput) + initialReserved;
+            }
+          } else {
+             // 새 상품/새 회차 모드에서는 입력값을 그대로 사용
+            finalTotalPhysicalStock = newStockFromInput === '' ? null : Number(newStockFromInput);
+          }
+        
+          return {
+            id: vg.id && vg.id.length > 15 ? vg.id : generateUniqueId(),
+            groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
+            totalPhysicalStock: finalTotalPhysicalStock, // [수정] 계산된 값으로 설정
+            stockUnitType: vg.stockUnitType,
+            items: vg.items.map(item => ({
+              id: item.id && item.id.length > 15 ? item.id : generateUniqueId(),
+              name: item.name,
+              price: Number(item.price) || 0,
+              stock: -1,
+              limitQuantity: item.limitQuantity === '' ? null : Number(item.limitQuantity),
+              expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
+              stockDeductionAmount: Number(item.deductionAmount) || 1
+            }))
+          };
+        }),
         publishAt: Timestamp.fromDate(finalPublishDate),
         deadlineDate: deadlineDate ? Timestamp.fromDate(deadlineDate) : null,
         pickupDate: pickupDate ? Timestamp.fromDate(pickupDate) : null,
@@ -749,7 +792,6 @@ const settingsSummary = useMemo(() => {
           category: categories.find(c => c.id === selectedMainCategory)?.name || ''
         };
 
-        // editRound에서 새 파일 수집/기존 URL 유지
         const finalImageUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
         const newFiles = imagePreviews
           .filter(p => p.startsWith('blob:'))
@@ -767,7 +809,6 @@ const settingsSummary = useMemo(() => {
     } finally { setIsSubmitting(false); }
   };
 
-  // 언마운트 시 blob URL 해제
   useEffect(() => {
     return () => {
       imagePreviews.forEach(p => { if (p.startsWith('blob:')) URL.revokeObjectURL(p); });
@@ -947,7 +988,7 @@ const settingsSummary = useMemo(() => {
               <p className="section-subtitle">현재 회차에만 적용되는 옵션, 가격, 재고 등을 설정합니다.</p>
               <div className="form-group"><label>회차명</label><input type="text" value={roundName} onChange={e => setRoundName(e.target.value)} required /></div>
 
-              {variantGroups.map(vg => (
+             {variantGroups.map(vg => (
                 <div className="variant-group-card" key={vg.id}>
                   <div className="variant-group-header">
                     <div className="form-group full-width">
@@ -955,15 +996,33 @@ const settingsSummary = useMemo(() => {
                       <input type="text" value={vg.groupName} onChange={e => handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? '예: 얼큰소고기맛' : '상품명과 동일하게'} required />
                     </div>
                     <div className="form-group">
-                      <label><Tippy content="판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다."><span>총 재고</span></Tippy></label>
+                      {/* [수정] 수정 모드일 때 레이블을 '남은 재고'로 변경하여 혼동 방지 */}
+                      <label>
+                        <Tippy content={mode === 'editRound' ? "현재 남은 재고 수량입니다. 여기에 추가할 수량을 더해서 입력하면 됩니다." : "판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다."}>
+                          <span>{mode === 'editRound' ? '남은 재고' : '총 재고'}</span>
+                        </Tippy>
+                      </label>
                       <div className="stock-input-wrapper">
-                        <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="실물 재고" />
+                        <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="무제한" />
                         <span className="stock-unit-addon">{vg.stockUnitType || '개'}</span>
                       </div>
                     </div>
                     <div className="form-group">
                       <label>유통기한</label>
-                      <input type="text" value={vg.expirationDateInput} onChange={e => handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)} onBlur={e => handleGroupDateBlur(vg.id, e.target.value)} placeholder="YYMMDD" maxLength={8} />
+                      <input
+                        type="text"
+                        value={vg.expirationDateInput}
+                        onChange={e => handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)}
+                        onBlur={e => handleGroupDateBlur(vg.id, e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        placeholder="YYMMDD 또는 YYYY-MM-DD"
+                        maxLength={10}
+                      />
                     </div>
                     {productType === 'group' && (
                       <button type="button" onClick={() => removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? '마지막 그룹은 삭제할 수 없습니다.' : '그룹 삭제'}>

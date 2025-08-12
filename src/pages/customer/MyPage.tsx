@@ -1,4 +1,5 @@
 // src/pages/customer/MyPage.tsx (수정 완료)
+// src/pages/customer/MyPage.tsx (수정 완료)
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';

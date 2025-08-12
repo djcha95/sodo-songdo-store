@@ -17,17 +17,29 @@ import type {
 import { analyzeProductTextWithAI } from "../utils/gemini.js";
 
 /** --------------------------------
+ * (유틸) 카테고리 이름 리스트 로드
+ * --------------------------------- */
+async function getCategoryNames(): Promise<string[]> {
+  const snap = await db.collection("categories").orderBy("order", "asc").get();
+  return snap.docs
+    .map((d) => String(d.get("name") ?? "").trim())
+    .filter(Boolean);
+}
+
+/** --------------------------------
  * 1) AI 파싱: parseProductText
  * - v2 HttpsError 사용
  * - secrets: GEMINI_API_KEY
+ * - 프론트에서 categories 힌트를 못 보냈다면 서버가 Firestore에서 보완
  * --------------------------------- */
 export const parseProductText = onCall(
   {
     region: "asia-northeast3",
-    cors: allowedOrigins,
+    cors: allowedOrigins, // onCall은 CORS 크게 신경 안 써도 되지만 넣어둬도 무해
     memory: "512MiB",
     timeoutSeconds: 60,
     secrets: ["GEMINI_API_KEY"],
+    // enforceAppCheck: true, // 필요 시 활성화
   },
   async (request) => {
     try {
@@ -40,10 +52,22 @@ export const parseProductText = onCall(
         throw new HttpsError("invalid-argument", "분석할 텍스트가 비었습니다.");
       }
 
-      const result = await analyzeProductTextWithAI(text, categoriesHint);
-      return result;
-    } catch (error) {
-      logger.error("parseProductText error:", error);
+      // 프론트가 카테고리 힌트를 못 보냈다면 서버에서 보완
+      const categories =
+        categoriesHint.length > 0 ? categoriesHint : await getCategoryNames();
+
+      const result = await analyzeProductTextWithAI(text, categories);
+      // 최소 방어
+      return {
+        groupName: result?.groupName ?? "",
+        cleanedDescription: result?.cleanedDescription ?? text,
+        categoryName: result?.categoryName ?? (categories[0] ?? "기타"),
+        storageType: result?.storageType ?? "ROOM",
+        productType: result?.productType ?? "GENERAL",
+        variantGroups: Array.isArray(result?.variantGroups) ? result!.variantGroups : [],
+      };
+    } catch (error: any) {
+      logger.error("parseProductText error:", error?.message || error);
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "상품 텍스트 분석 중 오류가 발생했습니다.");
     }
@@ -89,27 +113,20 @@ export const getProductsWithStock = onCall(
         id: doc.id,
       })) as (Product & { id: string })[];
 
-      // ✅ [수정] 재고를 점유하는 올바른 주문 상태('RESERVED', 'PREPAID')로 수정합니다.
-      // 이렇게 해야 취소되거나 완료된 주문을 제외하고, 현재 예약된 수량만 정확히 집계할 수 있습니다.
+      // RESERVED / PREPAID 만 합산
       const ordersSnap = await db
         .collection("orders")
         .where("status", "in", ["RESERVED", "PREPAID"])
         .get();
 
-      // key: `${productId}-${roundId}-${variantGroupId}` => quantity sum
       const reservedMap = new Map<string, number>();
-
       ordersSnap.docs.forEach((od) => {
         const order = od.data() as Order;
-        // items 필드가 배열이 아닐 경우를 대비한 방어 코드
         const items: OrderItem[] = Array.isArray(order.items) ? order.items : [];
         items.forEach((it) => {
-          // it.productId 등이 없을 경우를 대비
           if (!it.productId || !it.roundId || !it.variantGroupId) return;
-          
           const key = `${it.productId}-${it.roundId}-${it.variantGroupId}`;
           const qty = Number(it.quantity || 0);
-          
           if (!qty) return;
           reservedMap.set(key, (reservedMap.get(key) || 0) + qty);
         });

@@ -4,7 +4,7 @@ const ABS_BASE = 'https://www.sodo-songdo.store';
 const FALLBACK_IMG = `${ABS_BASE}/sodomall-preview.png`;
 
 // 필요 시 실제 상품 API로 교체하세요 (지금은 예시 경로)
-const PRODUCT_API = (id) => `${ABS_BASE}/api/products/${encodeURIComponent(id)}`;
+const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
 
 const esc = (s) =>
   String(s || '')
