@@ -1,4 +1,4 @@
-// src/context/TutorialContext.tsx
+// src/context/TutorialContext.tsx (수정 완료)
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { Step } from 'react-joyride';
@@ -7,14 +7,15 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
 import type { UserTutorialProgress } from '@/types';
 
+// 🔥 1. 컨텍스트 타입에 tourSteps와 tourKey 추가
 interface TutorialContextType {
   isTourRunning: boolean;
   startTour: (steps: Step[], key?: string) => void;
   stopTour: () => void;
   runPageTourIfFirstTime: (pageKey: keyof UserTutorialProgress, steps: Step[]) => void;
+  tourSteps: Step[];
+  tourKey: string;
 }
-
-// ✅ [삭제] UserTutorialProgress 타입 정의를 types.ts로 이전했습니다.
 
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
 
@@ -26,8 +27,9 @@ export const useTutorial = () => {
   return context;
 };
 
+// 🔥 2. Provider의 props 타입을 표준 ReactNode로 변경
 interface TutorialProviderProps {
-  children: (steps: Step[], tourKey: string) => ReactNode;
+  children: ReactNode;
 }
 
 export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) => {
@@ -72,11 +74,20 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
     }
   }, [user, userDocument, startTour]);
 
-  const value = { isTourRunning, startTour, stopTour, runPageTourIfFirstTime };
+  // 🔥 3. Provider가 제공하는 value 객체에 tourSteps와 tourKey 포함
+  const value = { 
+    isTourRunning, 
+    startTour, 
+    stopTour, 
+    runPageTourIfFirstTime,
+    tourSteps,
+    tourKey
+  };
 
   return (
+    // 🔥 4. 자식을 함수로 호출하는 대신, 받은 그대로 렌더링
     <TutorialContext.Provider value={value}>
-      {children(tourSteps, tourKey)}
+      {children}
     </TutorialContext.Provider>
   );
 };
