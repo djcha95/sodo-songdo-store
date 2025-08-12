@@ -16,6 +16,7 @@ export * from "./callable/users.js";
 // 2. HTTP Functions (HTTP 요청 함수)
 // =================================================================
 export * from "./http/auth.js";
+export * from "./http/product.js"; // ✅ 새로 추가
 
 // ✅ 기존 엔드포인트 호환 유지: testAindex.htmllimtalk 를 testSendAlimtalk 별칭으로도 export
 export { testAlimtalk, testAlimtalk as testSendAlimtalk } from "./callable/testAlimtalk.js";
