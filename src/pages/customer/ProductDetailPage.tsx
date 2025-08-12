@@ -27,7 +27,7 @@ import 'swiper/css';
 import 'swiper/css/pagination';
 import 'swiper/css/navigation';
 
-import ReactMarkdown from 'react-markdown'; // ✅ 1. 라이브러리 import
+import ReactMarkdown from 'react-markdown';
 import './ProductDetailPage.css';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
@@ -142,13 +142,12 @@ const ProductImageSlider: React.FC<{
 ));
 
 
-const ProductInfo: React.FC<{ product: Product; round: SalesRound }> = React.memo(({ product, round }) => {
+const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState }> = React.memo(({ product, round, actionState }) => {
     const pickupDate = safeToDate(round.pickupDate);
     const isMultiGroup = round.variantGroups.length > 1;
     return (
         <>
             <h1 className="product-name">{product.groupName}</h1>
-            {/* ✅ 2. 기존 p 태그를 ReactMarkdown 컴포넌트로 교체 */}
             <div className="markdown-content">
               <ReactMarkdown>{product.description || ''}</ReactMarkdown>
             </div>
@@ -183,9 +182,20 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound }> = React.mem
                         <div className="stock-list">
                             {round.variantGroups.map(vg => {
                                 const totalStock = vg.totalPhysicalStock;
-                                const reserved = (vg as VariantGroup).reservedCount || 0;
-                                const remainingStock = totalStock === null || totalStock === -1 ? Infinity : Math.max(0, totalStock - reserved);
-                                const stockText = remainingStock === Infinity ? '무제한' : remainingStock > 0 ? `${remainingStock}개` : '품절';
+                                let stockText = '';
+
+                                if (totalStock === null || totalStock === -1) {
+                                    stockText = '무제한';
+                                } else {
+                                    const reserved = (vg as VariantGroup).reservedCount || 0;
+                                    const remainingStock = Math.max(0, totalStock - reserved);
+                                    if (remainingStock > 0) {
+                                        stockText = `${remainingStock}개`;
+                                    } else {
+                                        // 1차 공구에서 품절 시 '대기 가능', 2차에서는 '품절'
+                                        stockText = actionState === 'WAITLISTABLE' ? '대기 가능' : '품절';
+                                    }
+                                }
                                 const displayText = isMultiGroup ? `${vg.groupName}: ${stockText}` : stockText;
                                 return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
                             })}
@@ -222,9 +232,9 @@ const PurchasePanel: React.FC<{
                 const stock = selectedVariantGroup?.totalPhysicalStock; 
                 const reserved = selectedVariantGroup?.reservedCount || 0; 
                 const limit = selectedItem?.limitQuantity; 
-                const stockValue = (typeof stock === 'number') ? stock : null; 
+                const stockValue = (typeof stock === 'number' && stock !== -1) ? stock : null; 
                 const limitValue = (typeof limit === 'number') ? limit : null; 
-                const effectiveStock = (stockValue === -1 || stockValue === null) ? Infinity : stockValue - reserved; 
+                const effectiveStock = stockValue === null ? Infinity : stockValue - reserved; 
                 const effectiveLimit = limitValue === null ? Infinity : limitValue; 
                 const max = Math.floor(Math.min(effectiveStock / (selectedItem?.stockDeductionAmount || 1), effectiveLimit)); 
                 const maxQuantity = isFinite(max) ? max : null; 
@@ -238,11 +248,15 @@ const PurchasePanel: React.FC<{
                     </div>
                 ); 
             case 'WAITLISTABLE': 
+                 const waitlistMax = selectedItem?.limitQuantity ?? 99;
                 return (
-                    <button onClick={() => onCartAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button">
-                        <Hourglass size={20} />
-                        <span>대기로 장바구니 담기</span>
-                    </button>
+                    <div className="purchase-action-row">
+                      <QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} />
+                      <button onClick={() => onCartAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button">
+                          <Hourglass size={20} />
+                          <span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 대기` : '대기 신청'}</span>
+                      </button>
+                    </div>
                 );
             case 'REQUIRE_OPTION': 
                 return <button className="add-to-cart-btn-fixed" disabled><Box size={20} /><span>위에서 옵션을 선택해주세요</span></button>; 
@@ -256,6 +270,8 @@ const PurchasePanel: React.FC<{
             case 'SCHEDULED': 
                 const publishAt = safeToDate(round.publishAt); 
                 return <div className="action-notice"><Calendar size={20} /><div><p><strong>판매 예정</strong></p><span>{publishAt ? `${dayjs(publishAt).format('M월 D일 (ddd) HH:mm')}에 공개됩니다.` : ''}</span></div></div>; 
+            case 'AWAITING_STOCK':
+                return <button className="add-to-cart-btn-fixed" disabled><Hourglass size={20} /><span>재고 준비중</span></button>;
             default: 
                 return <button className="add-to-cart-btn-fixed" disabled><span>준비 중입니다</span></button>; 
         } 
@@ -351,13 +367,12 @@ const ProductDetailPage: React.FC = () => {
 
     const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (isPreLaunch) {
-            // ✅ [수정] 토스트 알림 메시지에 줄바꿈과 안내 문구 추가
             toast(
                 `상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!\n 그 전까지는 카카오톡으로 예약주세요!`, 
                 { 
                     icon: '🗓️', 
                     position: "top-center",
-                    duration: 4000 // 메시지를 충분히 읽을 수 있도록 시간 연장
+                    duration: 4000
                 }
             );
             return;
@@ -464,7 +479,7 @@ const ProductDetailPage: React.FC = () => {
                                 />
                             </div>
                             <div className="product-info-area">
-                                <ProductInfo product={product} round={displayRound} />
+                                <ProductInfo product={product} round={displayRound} actionState={actionState} />
                                 <OptionSelector 
                                     round={displayRound}
                                     selectedVariantGroup={selectedVariantGroup}

@@ -645,3 +645,58 @@ export const getProductsByIds = async (productIds: string[]): Promise<Product[]>
 
   return products;
 };
+
+// src/firebase/productService.ts 파일에 이 함수를 추가하세요.
+// 다른 import 구문들과 함께 toast도 import 해주세요.
+import toast from 'react-hot-toast';
+
+export const deleteOldProducts = async (
+  collectionPath = 'products',
+  timestampField = 'createdAt',
+) => {
+  // 기준 시간 설정 (한국 시각 2025년 8월 10일 0시 0분)
+  const cutoffDate = new Date('2025-08-10T00:00:00+09:00');
+  const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
+
+  const promise = new Promise(async (resolve, reject) => {
+    try {
+      const q = query(
+        collection(db, collectionPath),
+        where(timestampField, '<', cutoffTimestamp),
+      );
+
+      const querySnapshot = await getDocs(q);
+      const documentsToDelete: DocumentData[] = [];
+      querySnapshot.forEach((doc) => documentsToDelete.push(doc));
+
+      if (documentsToDelete.length === 0) {
+        return resolve('삭제할 오래된 상품 데이터가 없습니다.');
+      }
+
+      const batchSize = 500;
+      for (let i = 0; i < documentsToDelete.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = documentsToDelete.slice(i, i + batchSize);
+
+        chunk.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+      }
+
+      resolve(
+        `총 ${documentsToDelete.length}개의 오래된 상품 데이터를 삭제했습니다.`,
+      );
+    } catch (error) {
+      console.error('오래된 상품 정보 삭제 중 오류 발생:', error);
+      reject(error);
+    }
+  });
+
+  toast.promise(promise, {
+    loading: '오래된 상품 데이터를 삭제하는 중입니다...',
+    success: (message) => `${message}`,
+    error: '삭제 작업 중 오류가 발생했습니다.',
+  });
+};

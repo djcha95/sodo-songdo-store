@@ -4,8 +4,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp, QueryDocumentSnapshot, DocumentData } from "firebase-admin/firestore";
-// ✅ [수정] Waitlist 관련 타입을 제거하고 필요한 타입만 남깁니다.
 import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound } from "../types.js";
+import { getAuth } from "firebase-admin/auth";
 
 const productConverter = {
   toFirestore(product: Product): DocumentData { return product; },
@@ -209,9 +209,6 @@ export const submitOrder = onCall(
 );
 
 
-// =================================================================
-// ✅ [신규] 주문 취소 Callable 함수 추가
-// =================================================================
 export const cancelOrder = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
@@ -342,14 +339,12 @@ export const getUserWaitlist = onCall(
         
         try {
           const allProductsSnapshot = await db.collection('products').withConverter(productConverter).where('isArchived', '==', false).get();
-          // ✅ [수정] WaitlistInfo 타입을 찾을 수 없으므로 any로 임시 처리합니다.
-          // types.ts에 해당 타입이 정의되어 있는지 확인이 필요합니다.
           const userWaitlist: any[] = [];
     
           allProductsSnapshot.forEach(doc => {
             const product = { ...doc.data(), id: doc.id };
             (product.salesHistory || []).forEach((round: SalesRound) => {
-              (round.waitlist || []).forEach((entry: any) => { // WaitlistEntry 타입 확인 필요
+              (round.waitlist || []).forEach((entry: any) => {
                 if (entry.userId === userId) {
                   const vg = (round.variantGroups || []).find(v => v.id === entry.variantGroupId);
                   const item = (vg?.items || []).find(i => i.id === entry.itemId);
@@ -381,6 +376,73 @@ export const getUserWaitlist = onCall(
         } catch (error) {
           logger.error('Error fetching user waitlist:', error);
           throw new HttpsError('internal', 'An error occurred while fetching the waitlist.');
+        }
+    }
+);
+
+
+export const searchOrdersByCustomer = onCall(
+    { region: "asia-northeast3", cors: allowedOrigins, enforceAppCheck: true },
+    async (request) => {
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "인증된 사용자만 접근할 수 있습니다.");
+        }
+
+        const user = await getAuth().getUser(request.auth.uid);
+        if (user.customClaims?.role !== 'admin') {
+            throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+        }
+
+        const { query: searchQuery } = request.data;
+        if (!searchQuery || typeof searchQuery !== 'string' || searchQuery.trim().length < 2) {
+            throw new HttpsError("invalid-argument", "검색어는 2자 이상 입력해주세요.");
+        }
+
+        const trimmedQuery = searchQuery.trim();
+
+        try {
+            const nameSearchPromise = db.collection('orders')
+                .where('customerInfo.name', '==', trimmedQuery)
+                .orderBy('createdAt', 'desc')
+                .limit(20)
+                .withConverter(orderConverter)
+                .get();
+
+            const phoneSearchPromise = db.collection('orders')
+                .where('customerInfo.phoneLast4', '==', trimmedQuery)
+                .orderBy('createdAt', 'desc')
+                .limit(20)
+                .withConverter(orderConverter)
+                .get();
+
+            const [nameResults, phoneResults] = await Promise.all([nameSearchPromise, phoneSearchPromise]);
+
+            const combinedResults = new Map<string, Order & { id: string }>();
+
+            nameResults.forEach(doc => {
+                combinedResults.set(doc.id, { ...doc.data(), id: doc.id });
+            });
+            phoneResults.forEach(doc => {
+                combinedResults.set(doc.id, { ...doc.data(), id: doc.id });
+            });
+
+            // ✅ [수정] .sort() 내부 로직 수정
+            const orders = Array.from(combinedResults.values())
+              .sort((a, b) => {
+                  const timeA = a.createdAt;
+                  const timeB = b.createdAt;
+                  // Timestamp 타입인지 확인 후 toMillis() 호출
+                  if (timeA instanceof Timestamp && timeB instanceof Timestamp) {
+                      return timeB.toMillis() - timeA.toMillis();
+                  }
+                  return 0; // 예외 상황 처리
+              });
+
+            return { success: true, orders };
+
+        } catch (error) {
+            logger.error(`Error searching orders with query "${trimmedQuery}":`, error);
+            throw new HttpsError("internal", "주문 검색 중 오류가 발생했습니다.");
         }
     }
 );

@@ -4,7 +4,15 @@
 // 1. Callable Functions (클라이언트 호출 가능 함수)
 // =================================================================
 export * from "./callable/products.js";
-export * from "./callable/orders.js";
+export {
+  checkCartStock,
+  submitOrder,
+  cancelOrder,
+  getUserOrders,
+  getUserWaitlist,
+  searchOrdersByCustomer // ✅ 새 검색 함수 추가
+} from "./callable/orders.js";
+
 export * from "./callable/referrals.js";
 export * from "./callable/stock.js";
 export * from "./callable/waitlist.js";

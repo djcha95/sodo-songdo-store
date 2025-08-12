@@ -8,12 +8,13 @@ import {
     deleteOrder,
     updateOrderNotes,
     toggleOrderBookmark,
-    updateMultipleOrderStatuses // ✅ [수정] updateOrderStatusAndLoyalty -> updateMultipleOrderStatuses
+    updateMultipleOrderStatuses
 } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
 import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
-import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight } from 'lucide-react';
+// --- 수정: ClipboardCopy 아이콘 추가 ---
+import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight, ClipboardCopy } from 'lucide-react';
 import './OrderManagementPage.css';
 import { formatKRW } from '@/utils/number';
 
@@ -37,7 +38,7 @@ interface FlattenedOrderRow {
     uniqueRowKey: string;
 }
 
-// --- Helper Functions ---
+// --- Helper Functions (기존과 동일) ---
 const formatPhoneLast4 = (phone?: string | null): string => {
     if (!phone || phone.length < 4) return '-';
     return phone.slice(-4);
@@ -65,7 +66,7 @@ const formatDateWithDay = (timestamp: any): string => {
 
 const formatCurrency = (amount: number): string => `${formatKRW(amount)}원`;
 
-// --- Status Configuration ---
+// --- Status Configuration (기존과 동일) ---
 const ORDER_STATUS_CONFIG: Record<OrderStatus, { label: string; icon: React.ReactNode; className: string; sortOrder: number }> = {
     PICKED_UP: { label: '픽업 완료', icon: <PackageCheck size={14} />, className: 'status-picked-up', sortOrder: 0 },
     PREPAID: { label: '선입금', icon: <DollarSign size={14} />, className: 'status-prepaid', sortOrder: 1 },
@@ -86,7 +87,7 @@ const getDisplayStatusInfo = (order: Order) => {
     return { ...ORDER_STATUS_CONFIG[order.status], badge: null };
 };
 
-// --- Editable Notes Component ---
+// --- Editable Notes Component (기존과 동일) ---
 const EditableNote: React.FC<{ order: Order; onSave: (id: string, notes: string) => void }> = ({ order, onSave }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [note, setNote] = useState(order.notes || '');
@@ -107,6 +108,7 @@ const EditableNote: React.FC<{ order: Order; onSave: (id: string, notes: string)
     );
 };
 
+
 // --- Table Row Component ---
 interface OrderTableRowProps {
     row: FlattenedOrderRow;
@@ -118,9 +120,24 @@ interface OrderTableRowProps {
 }
 
 const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onToggleBookmark, onDeleteOrder }: OrderTableRowProps) => {
+    
+    // --- 추가: ID 복사 핸들러 ---
+    const handleCopyId = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(row.orderId);
+        toast.success('주문 ID가 복사되었습니다.');
+    };
+
     return (
         <tr key={row.uniqueRowKey} className={row.isBookmarked ? 'bookmarked-row' : ''}>
             <td className="cell-center">{index + 1}</td>
+            {/* --- 추가: 주문 ID 셀 --- */}
+            <td className="id-cell" title={row.orderId}>
+                <span>{row.orderId.substring(0, 8)}...</span>
+                <button onClick={handleCopyId} className="copy-id-button" title="ID 복사">
+                    <ClipboardCopy size={14} />
+                </button>
+            </td>
             <td>{formatTimestamp(row.createdAt)}</td>
             <td>{row.customerName}</td>
             <td className="cell-center">{formatPhoneLast4(row.customerPhone)}</td>
@@ -128,6 +145,7 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
             <td className="cell-center">{row.displayQuantity}</td>
             <td className="price-cell">{formatCurrency(row.subTotal)}</td>
             <td>{formatDateWithDay(row.pickupDate)}</td>
+
             <td>{formatTimestamp(row.pickedUpAt)}</td>
             <td>{formatTimestamp(row.prepaidAt)}</td>
             <td>
@@ -167,8 +185,7 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
     );
 });
 
-
-// --- ✅ [개선] 페이지네이션 컴포넌트 ---
+// --- PaginationControls (기존과 동일) ---
 interface PaginationControlsProps {
     currentPage: number;
     totalPages: number;
@@ -336,7 +353,6 @@ const OrderManagementPage: React.FC = () => {
         
         const toastId = toast.loading(`${order.customerInfo.name}님의 주문 처리 중...`);
         try {
-            // ✅ [수정] 옛날 함수 호출을 새 함수 호출로 변경
             await updateMultipleOrderStatuses([order.id], newStatus);
             
             toast.success('성공적으로 처리되었습니다.', { id: toastId });
@@ -451,7 +467,9 @@ const OrderManagementPage: React.FC = () => {
             flattened.sort((a, b) => {
                 let aValue: any, bValue: any;
                 const { key, direction } = sortConfig;
-                if (key === 'status') { aValue = ORDER_STATUS_CONFIG[a.status]?.sortOrder ?? 99; bValue = ORDER_STATUS_CONFIG[b.status]?.sortOrder ?? 99; }
+                // --- 수정: orderId 정렬 로직 추가 ---
+                if (key === 'orderId') { aValue = a.orderId; bValue = b.orderId; }
+                else if (key === 'status') { aValue = ORDER_STATUS_CONFIG[a.status]?.sortOrder ?? 99; bValue = ORDER_STATUS_CONFIG[b.status]?.sortOrder ?? 99; }
                 else if (key === 'customerName') { aValue = a.customerName; bValue = b.customerName; }
                 else if (['createdAt', 'pickupDate', 'pickedUpAt', 'prepaidAt'].includes(key)) { aValue = (a[key as keyof FlattenedOrderRow] as Timestamp)?.toMillis() || 0; bValue = (b[key as keyof FlattenedOrderRow] as Timestamp)?.toMillis() || 0; }
                 else { aValue = a[key as keyof FlattenedOrderRow]; bValue = b[key as keyof FlattenedOrderRow]; }
@@ -505,6 +523,13 @@ const OrderManagementPage: React.FC = () => {
                     <thead>
                         <tr>
                             <th className="cell-center" style={{ width: 'var(--table-col-번호-width)' }}>No</th>
+                            {/* --- 추가: 주문 ID 헤더 --- */}
+                            <th style={{ width: 'var(--table-col-주문ID-width)' }}>
+                                <div className="sortable-header" onClick={() => handleSort('orderId')}>
+                                    <span>주문 ID</span>
+                                    <ArrowUpDown size={12} />
+                                </div>
+                            </th>
                             <th style={{ width: 'var(--table-col-주문일시-width)' }}><div className="sortable-header" onClick={() => handleSort('createdAt')}><span>예약일시</span><ArrowUpDown size={12} /></div></th>
                             <th style={{ width: 'var(--table-col-고객명-width)' }}><div className="sortable-header" onClick={() => handleSort('customerName')}><span>고객명</span><ArrowUpDown size={12} /></div></th>
                             <th className="cell-center" style={{ width: 'var(--table-col-전화번호-width)' }}>전화번호</th>
@@ -534,7 +559,7 @@ const OrderManagementPage: React.FC = () => {
                                 />
                             ))
                         ) : (
-                            <tr><td colSpan={15} className="no-results-cell">표시할 예약이 없습니다.</td></tr>
+                            <tr><td colSpan={16} className="no-results-cell">표시할 예약이 없습니다.</td></tr>
                         )}
                     </tbody>
                 </table>

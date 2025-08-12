@@ -186,3 +186,90 @@ color: var(--text-color-secondary); /* 좀 더 부드러운 색상 */
 color: var(--primary-color); /* 강조색 사용 */
 margin-bottom: var(--spacing-md);
 }
+/* src/pages/admin/QuickCheckPage.css */
+
+/* 기존 CSS 코드 ... */
+
+/* 추가된 관리자 도구 섹션 스타일 */
+.qcp-admin-actions {
+  padding: 10px 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.qcp-delete-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #ef4444; /* 빨간색 배경 */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.qcp-delete-button:hover {
+  background-color: #dc2626; /* 호버 시 더 진한 빨간색 */
+}
+
+/* 추가된 react-hot-toast 확인 창 스타일 */
+.confirmation-toast {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+  font-size: 14px;
+}
+
+.confirmation-toast h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.confirmation-toast p {
+  margin: 0;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.confirmation-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.confirmation-buttons button {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.confirm-btn-cancel {
+  background-color: white;
+  color: #374151;
+}
+
+.confirm-btn-cancel:hover {
+  background-color: #f3f4f6;
+}
+
+.confirm-btn-delete {
+  background-color: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+
+.confirm-btn-delete:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}

@@ -19,8 +19,7 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-// ✅ [수정] 새로 추가한 정렬 함수를 import 합니다.
-import { getDisplayRound, getDeadlines, safeToDate, sortProductsForDisplay } from '@/utils/productUtils';
+import { getDisplayRound, getDeadlines, safeToDate, sortProductsForDisplay, determineActionState } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './ProductListPage.css';
 import '@/styles/common.css';
@@ -158,16 +157,21 @@ const ProductListPage: React.FC = () => {
       
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
       if (!primaryEndDate) return;
-
-      let currentPhase: 'primary' | 'secondary' | 'past';
-      if (now.isBefore(dayjs(primaryEndDate))) {
-        currentPhase = 'primary';
-      } else if (secondaryEndDate && now.isBetween(dayjs(primaryEndDate), dayjs(secondaryEndDate), null, '[]')) {
-        currentPhase = 'secondary';
-      } else {
-        currentPhase = 'past';
-      }
       
+      const actionState = determineActionState(round, userDocument);
+      
+      let finalPhase: 'primary' | 'secondary' | 'past';
+
+      if (actionState === 'PURCHASABLE' || actionState === 'WAITLISTABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'AWAITING_STOCK') {
+          if (now.isBefore(primaryEndDate)) {
+              finalPhase = 'primary';
+          } else {
+              finalPhase = 'secondary';
+          }
+      } else {
+          finalPhase = 'past';
+      }
+
       if (round.status === 'scheduled' && round.publishAt) {
         const publishAtDate = safeToDate(round.publishAt);
         if (publishAtDate && now.isBefore(publishAtDate)) return;
@@ -175,47 +179,46 @@ const ProductListPage: React.FC = () => {
       
       const productWithState: ProductWithUIState = { 
         ...product, 
-        phase: currentPhase, 
+        phase: finalPhase,
         deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
         displayRound: round,
       };
       
-      if (currentPhase === 'primary') {
-        tempPrimary.push(productWithState);
-      } else if (currentPhase === 'secondary') {
-        const isSoldOut = round.variantGroups.every(vg => {
-          const totalStock = vg.totalPhysicalStock;
-          if (totalStock === null || totalStock === -1) return false;
-          if (totalStock === 0) return true;
-          const reserved = (vg as VariantGroup & { reservedCount?: number }).reservedCount || 0;
-          return totalStock - reserved <= 0;
-        });
-        if (!isSoldOut) tempSecondary.push(productWithState);
-      } else {
-        if (secondaryEndDate && now.diff(dayjs(secondaryEndDate), 'day') <= 7) {
-          tempPast.push(productWithState);
-        }
+      if (finalPhase === 'primary') {
+          tempPrimary.push(productWithState);
+      } else if (finalPhase === 'secondary') {
+          tempSecondary.push(productWithState);
+      } else { // 'past'
+          // ✅ [수정] 업로드 날짜(publishAt)가 오늘로부터 5일 이내인 상품만 '마감 공구'에 포함
+          const publishAtDate = safeToDate(round.publishAt);
+          if (publishAtDate && now.diff(dayjs(publishAtDate), 'day') <= 5) {
+              tempPast.push(productWithState);
+          }
       }
     });
 
+    // ✅ [수정] '마감 공구'를 업로드 날짜(publishAt) 기준으로 그룹핑
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
-      if (p.deadlines.secondaryEnd) {
-        const dateKey = dayjs(p.deadlines.secondaryEnd).format('YYYY-MM-DD');
+      const publishAtDate = safeToDate(p.displayRound.publishAt);
+      if (publishAtDate) {
+        const dateKey = dayjs(publishAtDate).format('YYYY-MM-DD');
         if (!pastGroups[dateKey]) pastGroups[dateKey] = [];
         pastGroups[dateKey].push(p);
       }
     });
 
+    // ✅ [수정] 업로드 날짜 기준 내림차순 정렬 (최신순)
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key:string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
-      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.displayRound.roundName || '').localeCompare(b.displayRound.roundName || ''));
+      // 그룹 내에서는 이름순으로 정렬
+      sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.groupName || '').localeCompare(b.groupName || ''));
     });
+
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
     
     return {
-      // ✅ [수정] 요청하신 정렬 로직을 적용하여 최종 상품 목록을 반환합니다.
       primarySaleProducts: tempPrimary.sort(sortProductsForDisplay),
       secondarySaleProducts: tempSecondary.sort(sortProductsForDisplay),
       pastProductsByDate: sortedPastGroups,
@@ -278,7 +281,7 @@ const ProductListPage: React.FC = () => {
         {secondarySaleProducts.length > 0 && (
           <ProductSection 
             key="secondary-section"
-            title={<>⏰ 마감임박! 추가공구</>}
+            title={<>⏰ 픽업임박! 추가공구</>}
             tutorialId="secondary-sale-section"
           >
             {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)}
@@ -290,7 +293,8 @@ const ProductListPage: React.FC = () => {
             const productsForDate = pastProductsByDate[date];
             if (!productsForDate || productsForDate.length === 0) return null;
             return (
-              <ProductSection key={date} title={<>{dayjs(date).format('M월 D일 (dddd)')} 마감 공구</>}>
+              // ✅ [수정] 마감 공구 섹션 제목 형식을 변경
+              <ProductSection key={date} title={<>{dayjs(date).format('M월 D일')} 마감공구</>}>
                 {productsForDate.map(p => <ProductCard key={p.id} product={p} />)}
               </ProductSection>
             );

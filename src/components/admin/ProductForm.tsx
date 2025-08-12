@@ -315,10 +315,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
 
+          // ✅ [수정] Firestore의 기존 ID를 그대로 사용하도록 로직 변경
           const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
-            const expirationDate = convertToDate(vg.items[0]?.expirationDate);
+            const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
             return {
-              id: generateUniqueId(),
+              id: vg.id, // 기존 ID 유지
               groupName: vg.groupName,
               totalPhysicalStock: vg.totalPhysicalStock ?? '',
               stockUnitType: vg.stockUnitType,
@@ -326,7 +327,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
               expirationDateInput: expirationDate ? toYmd(expirationDate) : '',
 
               items: (vg.items || []).map((item: ProductItem) => ({
-                id: generateUniqueId(),
+                id: item.id, // 기존 ID 유지
                 name: item.name,
                 price: item.price,
                 limitQuantity: item.limitQuantity ?? '',
@@ -702,12 +703,14 @@ const settingsSummary = useMemo(() => {
         roundName: roundName.trim(),
         status,
         variantGroups: variantGroups.map(vg => ({
-          id: (mode === 'editRound' && vg.id.length < 15) ? vg.id : generateUniqueId(),
+          // ✅ [수정] ID가 길면(Firestore ID) 유지, 짧으면(UI에서 추가) 새로 생성
+          id: vg.id && vg.id.length > 15 ? vg.id : generateUniqueId(),
           groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
           totalPhysicalStock: vg.totalPhysicalStock === '' ? null : Number(vg.totalPhysicalStock),
           stockUnitType: vg.stockUnitType,
           items: vg.items.map(item => ({
-            id: (mode === 'editRound' && item.id.length < 15) ? item.id : generateUniqueId(),
+             // ✅ [수정] ID가 길면(Firestore ID) 유지, 짧으면(UI에서 추가) 새로 생성
+            id: item.id && item.id.length > 15 ? item.id : generateUniqueId(),
             name: item.name,
             price: Number(item.price) || 0,
             stock: -1,

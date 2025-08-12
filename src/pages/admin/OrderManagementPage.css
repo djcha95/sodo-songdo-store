@@ -505,3 +505,65 @@
         justify-content: center;
     }
 }
+
+/* src/pages/admin/OrderManagementPage.css */
+
+/* --- 기존 CSS 코드 맨 아래에 이어서 추가 --- */
+
+/* 주문 ID 컬럼 너비 변수 추가 (다른 변수들과 함께) */
+.order-management-container {
+  /* ... 다른 변수들 ... */
+  --table-col-주문ID-width: 140px; 
+}
+
+
+/* ID 셀 스타일 */
+.id-cell {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  position: relative;
+  padding-right: 30px; /* 복사 버튼을 위한 공간 확보 */
+}
+
+/* ID 복사 버튼 스타일 */
+.copy-id-button {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0; /* 평소에는 숨김 */
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+/* 행에 마우스를 올렸을 때 복사 버튼 표시 */
+tr:hover .copy-id-button {
+  opacity: 1;
+}
+
+.copy-id-button:hover {
+  background-color: #e5e7eb;
+  color: #1f2937;
+}
+
+/* colSpan 값 수정 */
+.no-results-cell {
+    /* 기존 colSpan이 15였다면 16으로 수정 */
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+}
+
+/* 테이블 헤더의 colSpan도 16으로 수정해야 합니다 (이 부분은 tsx 파일에서 수정됨) */

@@ -159,10 +159,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg } = cardData;
     
-    // ✅ 중앙 로직 `determineActionState`를 호출하여 일관된 상태를 보장받습니다.
     const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
     
-    // '구매 가능' 상태이지만 옵션이 여러 개인 경우, '옵션 선택 필요'로 상태를 구체화합니다.
     if (state === 'PURCHASABLE' && isMultiOption) {
       return 'REQUIRE_OPTION';
     }
@@ -195,7 +193,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
 
-    // ✅ 장바구니에 담기 전, 실시간 남은 재고를 다시 한 번 확인합니다.
     const reserved = singleOptionVg?.reservedCount || 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -295,7 +292,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     switch (actionState) {
       case 'PURCHASABLE':
-        // ✅ 남은 재고 계산: (총 재고 - 예약 수량)을 기준으로 UI에 표시될 최대 수량을 결정합니다.
         const reserved = cardData.singleOptionVg?.reservedCount || 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
@@ -331,6 +327,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   const TopBadge = () => {
+    // ✅ [수정] '마감'된 상품(phase가 'past'인 경우)에서는 뱃지를 표시하지 않음
+    if (product.phase === 'past') return null;
+    
     if (isPreLaunch) return null;
     if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
 
@@ -344,10 +343,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       const totalStock = singleOptionVg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
-        // ✅ 한정수량 표시: (총 재고 - 예약 수량)으로 남은 개수를 계산하여 표시합니다.
         const reserved = singleOptionVg.reservedCount || 0;
         const remaining = (totalStock || 0) - reserved;
-        stockText = `${remaining}개 남음!`;
+        if (remaining > 0) {
+            stockText = `${remaining}개 남음!`;
+        } else {
+            return null; 
+        }
       }
     }
     
@@ -372,6 +374,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             onError={handleImageError} 
           />
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
+          {actionState === 'WAITLISTABLE' && <div className="card-overlay-badge">대기 가능</div>}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>
           )}

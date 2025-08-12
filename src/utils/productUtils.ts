@@ -59,19 +59,21 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: Date | nu
   
   if (publishAt) {
     let deadlineDate = dayjs(publishAt);
-    const publishDay = deadlineDate.day(); 
+    const publishDay = deadlineDate.day(); // Sunday=0, Monday=1, ..., Friday=5, Saturday=6
 
-    if (publishDay === 6) { 
-      deadlineDate = deadlineDate.add(2, 'day'); 
-    } else if (publishDay === 0) { 
-      deadlineDate = deadlineDate.add(1, 'day'); 
-    } else { 
+    // ✅ [수정] 금요일(5) 또는 토요일(6)에 게시되면 마감일은 다음 주 월요일 13시
+    if (publishDay === 5) { // Friday -> Monday
+      deadlineDate = deadlineDate.add(3, 'day'); 
+    } else if (publishDay === 6) { // Saturday -> Monday
+      deadlineDate = deadlineDate.add(2, 'day');
+    } else { // 그 외 요일은 다음날
       deadlineDate = deadlineDate.add(1, 'day'); 
     }
     
     primaryEnd = deadlineDate.hour(13).minute(0).second(0).millisecond(0).toDate();
 
   } else {
+    // publishAt이 없는 레거시 데이터용 폴백
     primaryEnd = safeToDate(round.deadlineDate);
   }
   
@@ -120,16 +122,18 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
   return sortedHistory[0] || null;
 };
 
-
+// ✅ [수정] 전체 로직을 요청하신 규칙에 맞게 재작성했습니다.
 export const determineActionState = (round: SalesRound, userDocument: UserDocument | null, selectedVg?: VariantGroup | null): ProductActionState => {
+  // 0. 등급 확인
   const userTier = userDocument?.loyaltyTier;
   const allowedTiers = round.allowedTiers || [];
   if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier as LoyaltyTier))) {
     return 'INELIGIBLE';
   }
 
+  // 1. 시간 및 상태 확인
   const now = dayjs();
-  const { primaryEnd: primaryDeadline, secondaryEnd: finalSaleDeadline } = getDeadlines(round);
+  const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
   if (round.status === 'scheduled') {
       const publishAtDate = safeToDate(round.publishAt);
@@ -137,79 +141,82 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
         return 'SCHEDULED';
       }
   }
-
-  const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items.length || 0) > 1;
   
-  if (primaryDeadline && now.isBefore(primaryDeadline)) {
-    if (hasMultipleOptions && !selectedVg) {
+  // 2. 옵션 선택 필요 여부 확인
+  const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items.length || 0) > 1;
+  const isOptionSelected = !!selectedVg;
+  
+  // =========================================================
+  // 3. 1차 공구 기간 로직 ( ~ primaryEnd)
+  // =========================================================
+  if (primaryEnd && now.isBefore(primaryEnd)) {
+    if (hasMultipleOptions && !isOptionSelected) {
       return 'REQUIRE_OPTION';
     }
     
+    // 1차 공구에서는 한정수량 품절 시 '대기' 상태가 됨
     let isSoldOut = false;
-    if (selectedVg) { 
-      const totalStock = selectedVg.totalPhysicalStock; 
-      if (totalStock !== null && totalStock !== -1) {
-        const reserved = selectedVg.reservedCount || 0;
+    const vg = selectedVg || round.variantGroups[0];
+    if (vg) {
+      const totalStock = vg.totalPhysicalStock;
+      if (totalStock !== null && totalStock !== -1) { // 한정 수량일 경우에만 품절 체크
+        const reserved = vg.reservedCount || 0;
         if (totalStock - reserved <= 0) {
-            isSoldOut = true;
+          isSoldOut = true;
         }
       }
     }
     return isSoldOut ? 'WAITLISTABLE' : 'PURCHASABLE';
   }
 
-  if (finalSaleDeadline && primaryDeadline && now.isBetween(primaryDeadline, finalSaleDeadline, null, '[]')) {
-    if (hasMultipleOptions && !selectedVg) {
-        return 'REQUIRE_OPTION';
+  // =========================================================
+  // 4. 2차 공구 기간 로직 (primaryEnd ~ secondaryEnd)
+  // =========================================================
+  if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]')) {
+    if (hasMultipleOptions && !isOptionSelected) {
+      return 'REQUIRE_OPTION';
     }
+    
+    // 2차 공구에서는 모든 제품이 한정수량으로 취급됨.
+    const vg = selectedVg || round.variantGroups[0];
+    const totalStock = vg?.totalPhysicalStock;
 
-    const isLimitedStock = selectedVg ? (selectedVg.totalPhysicalStock !== null && selectedVg.totalPhysicalStock !== -1) : false;
-    if (!isLimitedStock) {
+    // 2차인데 무제한 재고로 잘못 설정된 경우, '재고 준비중'으로 표시.
+    if (totalStock === null || totalStock === -1) {
       return 'AWAITING_STOCK'; 
     }
-
-    let isSoldOut = false;
-    if (selectedVg) {
-      const reserved = selectedVg.reservedCount || 0; 
-      const totalStock = selectedVg.totalPhysicalStock || 0;
-      if (totalStock - reserved <= 0) {
-        isSoldOut = true;
-      }
-    }
-    return isSoldOut ? 'WAITLISTABLE' : 'PURCHASABLE';
+    
+    // 2차에서는 품절 시 '대기' 없이 바로 마감 (앵콜 요청 가능 상태로)
+    const reserved = vg.reservedCount || 0; 
+    const isSoldOut = (totalStock || 0) - reserved <= 0;
+    
+    return isSoldOut ? 'ENCORE_REQUESTABLE' : 'PURCHASABLE';
   }
 
-  if (round.status === 'ended' || round.status === 'sold_out') {
+  // =========================================================
+  // 5. 모든 판매 기간이 종료된 경우
+  // =========================================================
+  if (round.status === 'ended' || round.status === 'sold_out' || (secondaryEnd && now.isAfter(secondaryEnd)) || (primaryEnd && !secondaryEnd && now.isAfter(primaryEnd))) {
       return 'ENCORE_REQUESTABLE';
   }
 
+  // 위 모든 경우에 해당하지 않는 기본 마감 상태
   return 'ENDED';
 };
 
-/**
- * ✅ [추가] 상품 목록을 주어진 정렬 규칙에 따라 정렬하는 함수
- * 1. 한정 수량 상품 우선
- * 2. 남은 수량이 적은 순
- * 3. 가격이 높은 순
- * @param a Product
- * @param b Product
- * @returns number
- */
+
 export const sortProductsForDisplay = (a: { displayRound: SalesRound }, b: { displayRound: SalesRound }): number => {
     const roundA = a.displayRound;
     const roundB = b.displayRound;
 
-    // 옵션이 여러 개인 경우, 첫 번째 옵션을 기준으로 정렬합니다.
     const vgA = roundA.variantGroups?.[0];
     const vgB = roundB.variantGroups?.[0];
     const itemA = vgA?.items?.[0];
     const itemB = vgB?.items?.[0];
 
-    // 데이터가 불완전할 경우를 대비한 방어 코드
     if (!vgA || !itemA) return 1;
     if (!vgB || !itemB) return -1;
 
-    // --- 정렬에 필요한 지표 계산 ---
     const isLimitedA = vgA.totalPhysicalStock !== null && vgA.totalPhysicalStock !== -1;
     const remainingStockA = isLimitedA ? (vgA.totalPhysicalStock || 0) - (vgA.reservedCount || 0) : Infinity;
     const priceA = itemA.price;
@@ -218,22 +225,18 @@ export const sortProductsForDisplay = (a: { displayRound: SalesRound }, b: { dis
     const remainingStockB = isLimitedB ? (vgB.totalPhysicalStock || 0) - (vgB.reservedCount || 0) : Infinity;
     const priceB = itemB.price;
 
-    // --- 1. 한정 수량 상품을 우선으로 정렬 ---
-    if (isLimitedA && !isLimitedB) return -1; // A(한정)가 B(무제한)보다 앞으로
-    if (!isLimitedA && isLimitedB) return 1;  // B(한정)가 A(무제한)보다 앞으로
+    if (isLimitedA && !isLimitedB) return -1;
+    if (!isLimitedA && isLimitedB) return 1;
 
-    // --- 2. (둘 다 한정 수량일 경우) 남은 재고가 적은 순으로 정렬 (오름차순) ---
     if (isLimitedA && isLimitedB) {
         if (remainingStockA !== remainingStockB) {
             return remainingStockA - remainingStockB;
         }
     }
 
-    // --- 3. (재고가 같거나 둘 다 무제한일 경우) 가격이 높은 순으로 정렬 (내림차순) ---
     if (priceA !== priceB) {
         return priceB - priceA;
     }
 
-    // 모든 조건이 같을 경우 기존 순서 유지
     return 0;
 };
