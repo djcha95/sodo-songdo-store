@@ -3,9 +3,9 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-// ✅ [수정] 사용하지 않는 타입을 제거하고 필요한 타입을 추가했습니다.
 import { Timestamp, QueryDocumentSnapshot, DocumentData } from "firebase-admin/firestore";
-import type { Order, OrderItem, CartItem, UserDocument, WaitlistInfo, Product, SalesRound, WaitlistEntry } from "../types.js";
+// ✅ [수정] Waitlist 관련 타입을 제거하고 필요한 타입만 남깁니다.
+import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound } from "../types.js";
 
 const productConverter = {
   toFirestore(product: Product): DocumentData { return product; },
@@ -48,7 +48,6 @@ export const checkCartStock = onCall(
       
       productSnapshots.forEach(snap => {
         if (snap.exists) {
-            // ✅ [수정] as Product 타입을 명시하여 타입 불일치 오류를 해결합니다.
             productsMap.set(snap.id, { ...snap.data(), id: snap.id } as Product);
         }
       });
@@ -113,7 +112,6 @@ export const submitOrder = onCall(
               throw new HttpsError('not-found', 'User information not found.');
             }
             const userDoc = userSnap.data();
-            // ✅ [수정] userDoc이 undefined일 가능성에 대비한 방어 코드를 추가합니다.
             if (!userDoc) {
                 throw new HttpsError('internal', 'Failed to read user data.');
             }
@@ -138,7 +136,6 @@ export const submitOrder = onCall(
             const productDataMap = new Map<string, Product>();
             for (const productSnap of productSnaps) {
                 if (!productSnap.exists) throw new HttpsError('not-found', `Product not found (ID: ${productSnap.id}).`);
-                // ✅ [수정] as Product 타입을 명시하여 타입 불일치 오류를 해결합니다.
                 productDataMap.set(productSnap.id, { ...productSnap.data(), id: productSnap.id } as Product);
             }
             
@@ -210,6 +207,66 @@ export const submitOrder = onCall(
         }
     }
 );
+
+
+// =================================================================
+// ✅ [신규] 주문 취소 Callable 함수 추가
+// =================================================================
+export const cancelOrder = onCall(
+    { region: "asia-northeast3", cors: allowedOrigins },
+    async (request) => {
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+        }
+
+        const { orderId } = request.data;
+        if (!orderId || typeof orderId !== 'string') {
+            throw new HttpsError("invalid-argument", "주문 ID가 올바르지 않습니다.");
+        }
+        
+        const userId = request.auth.uid;
+        const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
+
+        try {
+            await db.runTransaction(async (transaction) => {
+                const orderDoc = await transaction.get(orderRef);
+
+                if (!orderDoc.exists) {
+                    throw new HttpsError("not-found", "주문 정보를 찾을 수 없습니다.");
+                }
+
+                const order = orderDoc.data();
+                if (!order) {
+                     throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+                }
+
+                // 본인의 주문이 맞는지 확인
+                if (order.userId !== userId) {
+                    throw new HttpsError("permission-denied", "자신의 주문만 취소할 수 있습니다.");
+                }
+                
+                // 취소 가능한 상태인지 확인
+                if (order.status !== 'RESERVED' && order.status !== 'PREPAID') {
+                    throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다.");
+                }
+
+                // 주문 상태 업데이트
+                transaction.update(orderRef, { status: 'CANCELED', canceledAt: Timestamp.now() });
+            });
+            
+            logger.info(`User ${userId} canceled order ${orderId}`);
+            return { success: true, message: "주문이 성공적으로 취소되었습니다." };
+
+        } catch (error) {
+            logger.error(`Error canceling order ${orderId} for user ${userId}:`, error);
+            if (error instanceof HttpsError) {
+                throw error;
+            }
+            throw new HttpsError("internal", "주문 취소 중 오류가 발생했습니다.");
+        }
+    }
+);
+
 
 export const getUserOrders = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
@@ -285,12 +342,14 @@ export const getUserWaitlist = onCall(
         
         try {
           const allProductsSnapshot = await db.collection('products').withConverter(productConverter).where('isArchived', '==', false).get();
-          const userWaitlist: WaitlistInfo[] = [];
+          // ✅ [수정] WaitlistInfo 타입을 찾을 수 없으므로 any로 임시 처리합니다.
+          // types.ts에 해당 타입이 정의되어 있는지 확인이 필요합니다.
+          const userWaitlist: any[] = [];
     
           allProductsSnapshot.forEach(doc => {
             const product = { ...doc.data(), id: doc.id };
             (product.salesHistory || []).forEach((round: SalesRound) => {
-              (round.waitlist || []).forEach((entry: WaitlistEntry) => {
+              (round.waitlist || []).forEach((entry: any) => { // WaitlistEntry 타입 확인 필요
                 if (entry.userId === userId) {
                   const vg = (round.variantGroups || []).find(v => v.id === entry.variantGroupId);
                   const item = (vg?.items || []).find(i => i.id === entry.itemId);

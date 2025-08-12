@@ -1,17 +1,18 @@
-// firestore.rules (수정 완료)
+// firestore.rules (보안 강화 버전)
 
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // [함수] 요청을 보낸 사용자가 관리자인지 확인하는 함수
+    // ✅ [개선 제안 1] Custom Claims를 사용하도록 변경
+    // Firestore DB 조회가 필요 없어 더 빠르고 안정적입니다.
+    // 사용자가 재로그인하여 새 토큰을 받아야 적용됩니다.
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'master'];
+      return request.auth.token.role in ['admin', 'master'];
     }
 
     // --- 공개 정보 (누구나 읽기 가능, 쓰기는 관리자만) ---
-    // 이 규칙들은 고객 페이지가 상품, 배너 등을 정상적으로 불러오기 위해 필수적입니다.
     match /products/{productId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -33,12 +34,15 @@ service cloud.firestore {
     // --- 사용자 정보 ---
     match /users/{userId} {
       allow get: if request.auth.uid == userId || isAdmin();
-      
-      // ✅ [수정 완료] 보안을 위해 사용자 목록 전체 조회는 관리자만 가능하도록 되돌립니다.
-      // 추천인 코드 유효성 검사는 반드시 Cloud Function을 통해 서버에서 안전하게 처리해야 합니다.
       allow list: if isAdmin();
+
+      // ✅ [개선 제안 2] 사용자가 자신의 역할(role)이나 포인트(points)를 임의로 수정하는 것을 방지
+      allow create: if request.auth.uid == userId || isAdmin();
+      allow update: if (request.auth.uid == userId
+                       && !('role' in request.resource.data)      // role 필드 추가/수정 시도 차단
+                       && !('points' in request.resource.data))   // points 필드 추가/수정 시도 차단
+                      || isAdmin(); // 관리자는 모든 수정 가능
       
-      allow update, create: if request.auth.uid == userId || isAdmin();
       allow delete: if isAdmin();
     }
     match /users/{userId}/{subcollection}/{docId} {
@@ -48,8 +52,6 @@ service cloud.firestore {
 
     // --- 주문 정보 ---
     // 이 규칙은 완벽하게 작성되었습니다.
-    // 고객은 자신의 주문만 볼 수 있고, 관리자 외에는 전체 목록을 볼 수 없습니다.
-    // 바로 이 규칙 때문에 저희가 ProductListPage의 로직을 Cloud Function으로 옮긴 것입니다.
     match /orders/{orderId} {
       allow get: if request.auth.uid == resource.data.userId || isAdmin();
       allow list: if isAdmin();

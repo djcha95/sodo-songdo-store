@@ -17,15 +17,13 @@ export * from "./callable/users.js";
 // =================================================================
 export * from "./http/auth.js";
 
-// ✅ 기존 엔드포인트 호환 유지: testAlimtalk 를 testSendAlimtalk 별칭으로도 export
+// ✅ 기존 엔드포인트 호환 유지: testAindex.htmllimtalk 를 testSendAlimtalk 별칭으로도 export
 export { testAlimtalk, testAlimtalk as testSendAlimtalk } from "./callable/testAlimtalk.js";
 
 // 선입금 안내 즉시 실행 테스트 함수
 export * from "./http/testNotifications.js";
 
 // ✅ SSR (상품 상세 페이지 미리보기 메타 태그 제공)
-export { ssr } from "./ssr.js"; // ← 새로 추가한 ssr.ts 빌드 후 js로 export
-
 // =================================================================
 // 3. Scheduled Functions (스케줄링 함수)
 // =================================================================

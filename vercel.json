@@ -2,6 +2,7 @@
   "version": 2,
   "routes": [
     { "src": "^/api/og$", "dest": "/api/og" },
+    { "src": "^/api/img$", "dest": "/api/img" },            
     { "src": "^/api/(?!og$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
 
     { "src": "^/assets/(.*)$", "dest": "/assets/$1" },

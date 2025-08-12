@@ -1,6 +1,8 @@
 // src/firebase/orderService.ts
 
-// ✅ [수정] 사용하지 않는 서비스(pointService, notificationService)와 일부 타입 import를 제거합니다.
+// ✅ [수정] Cloud Functions 사용을 위한 import 추가
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from './firebaseConfig';
 import {
   collection,
@@ -58,24 +60,25 @@ export const submitOrder = async (
 
 
 /**
- * @description ✅ [수정] 사용자의 예약을 취소합니다. 마감 후 패널티 포인트 부과 로직을 제거합니다.
- * 이 로직은 서버의 onUpdate 트리거가 'CANCELED' 상태를 감지하여 처리하는 것이 더 안전합니다.
+ * @description ✅ [수정] 사용자의 예약을 취소합니다.
+ * 클라이언트에서 직접 Firestore 문서를 수정하는 대신, 보안을 위해 Callable Cloud Function을 호출합니다.
  */
 export const cancelOrder = async (order: Order): Promise<void> => {
-  const orderRef = doc(db, 'orders', order.id);
-
-  await runTransaction(db, async (transaction) => {
-    const orderDoc = await transaction.get(orderRef);
-    if (!orderDoc.exists()) throw new Error("주문 정보를 찾을 수 없습니다.");
-    const currentOrder = orderDoc.data() as Order;
-
-    if (currentOrder.status !== 'RESERVED' && currentOrder.status !== 'PREPAID') {
-      throw new Error("예약 또는 결제 완료 상태의 주문만 취소할 수 있습니다.");
-    }
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const cancelOrderCallable = httpsCallable(functions, 'cancelOrder');
     
-    // 오직 주문 상태와 취소 시각만 기록하고, 포인트 관련 로직은 모두 제거합니다.
-    transaction.update(orderRef, { status: 'CANCELED', canceledAt: serverTimestamp() });
-  });
+    // Cloud Function에 orderId만 전달하여 취소를 요청합니다.
+    await cancelOrderCallable({ orderId: order.id });
+  
+  } catch (error: any) {
+    console.error("Callable function 'cancelOrder' failed:", error);
+    // Firebase HttpsError의 경우, 사용자에게 친화적인 메시지를 전달합니다.
+    if (error.code && error.message) {
+      throw new Error(error.message);
+    }
+    throw new Error('주문 취소 중 예상치 못한 오류가 발생했습니다.');
+  }
 };
 
 
