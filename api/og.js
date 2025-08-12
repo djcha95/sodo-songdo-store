@@ -3,27 +3,34 @@
 const ABS_BASE = 'https://www.sodo-songdo.store';
 const FALLBACK_IMG = `${ABS_BASE}/sodomall-preview.png`;
 
-// 간단 텍스트 fetch (실패 시 null)
-const fetchText = async (url) => {
+// 너희 상품 단건 조회 API (Vercel ↔ Firebase 프록시 경유)
+// 실제로 존재하는 엔드포인트에 맞게 필요하면 쿼리 키만 바꿔주세요.
+// 예: /api/product?id=...  또는 /api/products?id=... /api/products/:id 등
+const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
+
+// fetch helpers
+const fetchJson = async (url) => {
   try {
     const r = await fetch(url, { method: 'GET' });
     if (!r.ok) return null;
-    return await r.text();
-  } catch {
-    return null;
-  }
+    return await r.json();
+  } catch { return null; }
 };
 
-// HTML escape
-const esc = (s) =>
-  String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/"/g, '&quot;');
+const esc = (s) => String(s || '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
-// OG HTML 렌더
-const renderOgHtml = ({ url, title, description, image, siteName = '소도몰', type = 'product' }) => {
-  return `<!doctype html>
+const stripHtml = (html) => String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+const truncate = (s, n) => (s || '').length <= n ? (s || '') : (s || '').slice(0, n - 1) + '…';
+
+const toAbsHttps = (u) => {
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  const path = u.startsWith('/') ? u : `/${u}`;
+  return `${ABS_BASE}${path}`;
+};
+
+const renderOgHtml = ({ url, title, description, image, siteName = '소도몰', type = 'product' }) => `<!doctype html>
 <html lang="ko"><head>
 <meta charset="utf-8" />
 <title>${esc(title)}</title>
@@ -46,10 +53,8 @@ const renderOgHtml = ({ url, title, description, image, siteName = '소도몰', 
 <meta name="twitter:description" content="${esc(description)}" />
 <meta name="twitter:image" content="${esc(image)}" />
 </head><body>미리보기 전용</body></html>`;
-};
 
 export default async function handler(req, res) {
-  // 캐시: 카톡/페북이 캐시하므로 우리도 적절히 캐시 부여
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=600');
 
@@ -62,26 +67,33 @@ export default async function handler(req, res) {
     let description = '소도몰에서 특별한 상품을 만나보세요!';
     let image = FALLBACK_IMG;
 
-    // 정적 매핑에서 대표 이미지 찾기 (없으면 기본 이미지)
+    // 1) 백엔드 상품 API에서 자동 조회
     if (id) {
-      const mappingJson = await fetchText(`${ABS_BASE}/og-map.json`);
-      if (mappingJson) {
-        try {
-          const map = JSON.parse(mappingJson);
-          const candidate = map[id];
-          if (typeof candidate === 'string' && /^https?:\/\//i.test(candidate)) {
-            image = candidate;
-          }
-        } catch {
-          // JSON 파싱 실패 시 무시하고 폴백 유지
+      const data = await fetchJson(PRODUCT_API(id));
+      if (data) {
+        // 너희 API 응답에서 필드명만 맞춰주면 됩니다.
+        // (가능한 후보들을 모두 시도)
+        const apiTitle = data.title || data.groupName || data.name;
+        const apiDesc  = data.description || data.summary || data.caption || '';
+        let   apiImage = data.mainImage ||
+                         (Array.isArray(data.imageUrls) ? data.imageUrls[0] : '') ||
+                         data.thumbnail;
+
+        if (apiTitle) title = `${apiTitle} - 소도몰`;
+        if (apiDesc)  description = truncate(stripHtml(apiDesc), 120);
+
+        if (apiImage) {
+          // 상대경로면 절대경로로 보정
+          apiImage = toAbsHttps(apiImage);
+          image = apiImage;
         }
       }
     }
 
+    // 2) 최종 렌더 (항상 200)
     const html = renderOgHtml({ url, title, description, image, siteName: '소도몰', type: 'product' });
     res.status(200).send(html);
   } catch {
-    // 어떤 에러가 나도 500 대신 기본 OG 반환
     const html = renderOgHtml({
       url: ABS_BASE,
       title: '소도몰',
