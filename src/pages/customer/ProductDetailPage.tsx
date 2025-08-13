@@ -10,11 +10,11 @@ import { useTutorial } from '@/context/TutorialContext';
 import { useLaunch } from '@/context/LaunchContext';
 import { detailPageTourSteps } from '@/components/customer/AppTour';
 
-import { getProductById, functions, db } from '@/firebase';
-import { getDocs, collection, query, where, Timestamp } from 'firebase/firestore';
+import { functions } from '@/firebase'; 
+import { Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
-import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, Order, OrderItem } from '@/types';
+import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRound as OriginalSalesRound } from '@/types';
 import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
@@ -53,10 +53,11 @@ const formatExpirationDate = (date: Date | Timestamp | null | undefined): string
 
 const storageLabels: Record<StorageType, string> = { ROOM: '상온', COLD: '냉장', FROZEN: '냉동' };
 const storageIcons: Record<StorageType, React.ReactNode> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} /> };
+
 const normalizeProduct = (product: Product): Product => {
     if ((!product.salesHistory || product.salesHistory.length === 0) && (product as any).price) {
         const legacyProduct = product as any;
-        const legacyRound: SalesRound = {
+        const legacyRound: OriginalSalesRound = {
             roundId: 'legacy-round-01', roundName: '이전 판매', status: legacyProduct.status || 'ended',
             variantGroups: [{
                 id: 'legacy-vg-01', groupName: product.groupName, totalPhysicalStock: legacyProduct.stock, stockUnitType: '개',
@@ -64,6 +65,7 @@ const normalizeProduct = (product: Product): Product => {
                     id: 'legacy-item-01', name: product.groupName, price: legacyProduct.price, stock: legacyProduct.stock,
                     limitQuantity: legacyProduct.limitQuantity || null, expirationDate: toTimestamp(legacyProduct.expirationDate), stockDeductionAmount: 1,
                 }],
+                reservedCount: legacyProduct.reservedCount || 0,
             }],
             createdAt: toTimestamp(legacyProduct.createdAt)!, publishAt: toTimestamp(legacyProduct.createdAt)!,
             deadlineDate: toTimestamp(legacyProduct.deadlineDate)!, pickupDate: toTimestamp(legacyProduct.pickupDate)!,
@@ -146,7 +148,7 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                                 if (totalStock === null || totalStock === -1) {
                                     stockElement = <span className="unlimited-stock">수량 제한 없음</span>;
                                 } else {
-                                    const reserved = (vg as VariantGroup).reservedCount || 0;
+                                    const reserved = vg.reservedCount || 0;
                                     const remainingStock = Math.max(0, totalStock - reserved);
                                     
                                     if (remainingStock > 0) {
@@ -215,7 +217,6 @@ const ProductDetailPage: React.FC = () => {
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [reservedQuantities, setReservedQuantities] = useState<Map<string, number>>(new Map());
     const [selectedVariantGroup, setSelectedVariantGroup] = useState<VariantGroup | null>(null);
     const [selectedItem, setSelectedItem] = useState<ProductItem | null>(null);
     const [quantity, setQuantity] = useState(1);
@@ -224,6 +225,7 @@ const ProductDetailPage: React.FC = () => {
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
 
+    const getProductByIdWithStock = useMemo(() => httpsCallable(functions, 'getProductByIdWithStock'), []);
     const requestEncoreCallable = useMemo(() => httpsCallable(functions, 'requestEncore'), []);
 
     const handleClose = useCallback(() => {
@@ -234,7 +236,6 @@ const ProductDetailPage: React.FC = () => {
         }
     }, [navigate, location.key]);
 
-    // ✅ [수정] 데이터 로딩 로직 개선
     useEffect(() => {
       if (!productId) {
         setError("잘못된 상품 ID입니다.");
@@ -242,79 +243,48 @@ const ProductDetailPage: React.FC = () => {
         return;
       }
 
-      const fetchProductAndReservations = async () => {
+      const fetchProduct = async () => {
+        setLoading(true);
         try {
-          // 1. 상품 정보 로딩
-          const productData = await getProductById(productId);
+          const result = await getProductByIdWithStock({ productId });
+          const productData = (result.data as any)?.product as Product | null;
+          
           if (!productData) {
             setError("상품을 찾을 수 없습니다.");
             return;
           }
+          
           const normalized = normalizeProduct(productData);
           setProduct(normalized);
 
-          // 2. 로그인 여부와 관계없이 모든 고객에게 정확한 재고를 보여주기 위해 예약 수량 조회
-          // ⚠️ 주의: 이 방식은 모든 주문 정보를 클라이언트로 가져오므로 데이터 양이 많아지면 성능 저하 및 비용 증가의 원인이 될 수 있습니다.
-          // 또한, Firestore 보안 규칙에서 `orders` 컬렉션에 대한 읽기 권한을 허용해야 합니다.
-          // 장기적으로는 이 로직을 Cloud Function으로 옮겨 서버에서 처리하는 것이 좋습니다.
-          const newReservedMap = new Map<string, number>();
-          try {
-            const ordersCollectionRef = collection(db, 'orders');
-            const q = query(ordersCollectionRef, where('status', 'in', ['RESERVED', 'PREPAID']));
-            const reservationSnapshot = await getDocs(q);
-
-            reservationSnapshot.forEach(doc => {
-              const order = doc.data() as Order;
-              (order.items || []).forEach((item: OrderItem) => {
-                if (item.productId === productId) {
-                  const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-                  const currentCount = newReservedMap.get(key) || 0;
-                  newReservedMap.set(key, currentCount + item.quantity);
-                }
-              });
-            });
-          } catch (e) {
-            console.warn('예약 수량 조회 실패. 재고가 정확하지 않을 수 있습니다.', e);
-            // 이 조회는 실패하더라도 페이지 로딩은 계속 진행합니다.
-          }
-          setReservedQuantities(newReservedMap);
-
-          // 3. 로그인한 사용자에게만 개인화 정보(앵콜, 튜토리얼) 제공
           if (userDocument) {
             const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
             setIsEncoreRequested(alreadyRequested);
             runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error("상품 상세 정보 로딩 실패:", e);
-          setError("상품 정보를 불러오는 데 실패했습니다.");
+          setError(e.message || "상품 정보를 불러오는 데 실패했습니다.");
         } finally {
           setLoading(false);
         }
       };
 
-      fetchProductAndReservations();
-    }, [productId, userDocument, runPageTourIfFirstTime]);
+      fetchProduct();
+    }, [productId, userDocument, getProductByIdWithStock, runPageTourIfFirstTime]);
 
 
-    const enrichedDisplayRound = useMemo(() => {
+    const displayRound = useMemo(() => {
         if (!product) return null;
-        const round = getDisplayRound(product) as SalesRound | null;
-        if (!round) return null;
-        const enrichedVariantGroups = round.variantGroups.map(vg => {
-            const key = `${product.id}-${round.roundId}-${vg.id}`;
-            const reservedCount = reservedQuantities.get(key) || 0;
-            return { ...vg, reservedCount };
-        });
-        return { ...round, variantGroups: enrichedVariantGroups };
-    }, [product, reservedQuantities]);
+        return getDisplayRound(product) as SalesRound | null;
+    }, [product]);
 
     const expirationDateInfo = useMemo<ExpirationDateInfo>(() => {
-        if (!enrichedDisplayRound || enrichedDisplayRound.variantGroups.length === 0) {
+        if (!displayRound || displayRound.variantGroups.length === 0) {
             return { type: 'none' };
         }
 
-        const allDates = enrichedDisplayRound.variantGroups.map(vg => {
+        const allDates = displayRound.variantGroups.map(vg => {
             const date = vg.items?.[0]?.expirationDate;
             return date ? safeToDate(date)?.getTime() : null;
         }).filter((d): d is number => d !== null);
@@ -326,7 +296,7 @@ const ProductDetailPage: React.FC = () => {
         if (uniqueDates.length === 1) {
             return { type: 'single', date: formatExpirationDate(new Date(uniqueDates[0]!)) };
         } else {
-            const dateDetails = enrichedDisplayRound.variantGroups
+            const dateDetails = displayRound.variantGroups
                 .map(vg => ({
                     groupName: vg.groupName,
                     date: formatExpirationDate(vg.items?.[0]?.expirationDate),
@@ -334,7 +304,7 @@ const ProductDetailPage: React.FC = () => {
                 .filter(item => item.date);
             return { type: 'multiple', details: dateDetails };
         }
-    }, [enrichedDisplayRound]);
+    }, [displayRound]);
 
     const originalImageUrls = useMemo(() => {
         return product?.imageUrls?.filter(url => typeof url === 'string' && url.trim() !== '') || [];
@@ -342,32 +312,32 @@ const ProductDetailPage: React.FC = () => {
 
 
     useEffect(() => {
-        if (enrichedDisplayRound?.variantGroups?.[0]) {
+        if (displayRound?.variantGroups?.[0]) {
             if(!selectedVariantGroup) {
-                const firstVg = enrichedDisplayRound.variantGroups[0];
+                const firstVg = displayRound.variantGroups[0];
                 setSelectedVariantGroup(firstVg);
                 if (firstVg.items?.[0]) setSelectedItem(firstVg.items[0]);
             }
         }
-    }, [enrichedDisplayRound, selectedVariantGroup]);
+    }, [displayRound, selectedVariantGroup]);
 
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
     const actionState = useMemo<ProductActionState>(() => {
-        if (!enrichedDisplayRound) return 'LOADING';
-        return determineActionState(enrichedDisplayRound, userDocument, selectedVariantGroup);
-    }, [enrichedDisplayRound, userDocument, selectedVariantGroup]);
+        if (!displayRound) return 'LOADING';
+        return determineActionState(displayRound, userDocument, selectedVariantGroup);
+    }, [displayRound, userDocument, selectedVariantGroup]);
 
     const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (isPreLaunch) { toast(`상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!\n 그 전까지는 카카오톡으로 예약주세요!`, { icon: '🗓️', position: "top-center", duration: 4000 }); return; }
-        if (!product || !enrichedDisplayRound || !selectedVariantGroup || !selectedItem) return;
-        const cartItem: CartItem = { id: `${product.id}-${enrichedDisplayRound.roundId}-${selectedVariantGroup.id}-${selectedItem.id}`, productId: product.id, productName: product.groupName, roundId: enrichedDisplayRound.roundId, roundName: enrichedDisplayRound.roundName, variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName, itemId: selectedItem.id, itemName: selectedItem.name, quantity, unitPrice: selectedItem.price, stock: selectedItem.stock, imageUrl: product.imageUrls?.[0] || '', status: status, stockDeductionAmount: selectedItem.stockDeductionAmount, deadlineDate: enrichedDisplayRound.deadlineDate, pickupDate: enrichedDisplayRound.pickupDate, isPrepaymentRequired: enrichedDisplayRound.isPrepaymentRequired || false };
+        if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
+        const cartItem: CartItem = { id: `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}-${selectedItem.id}`, productId: product.id, productName: product.groupName, roundId: displayRound.roundId, roundName: displayRound.roundName, variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName, itemId: selectedItem.id, itemName: selectedItem.name, quantity, unitPrice: selectedItem.price, stock: selectedItem.stock, imageUrl: product.imageUrls?.[0] || '', status: status, stockDeductionAmount: selectedItem.stockDeductionAmount, deadlineDate: displayRound.deadlineDate, pickupDate: displayRound.pickupDate, isPrepaymentRequired: displayRound.isPrepaymentRequired || false };
         addToCart(cartItem);
         if (status === 'RESERVATION') toast.success(`${quantity}개를 담았어요!`);
         else toast.success(`대기 상품으로 ${quantity}개를 담았어요.`);
         handleClose();
-     }, [isPreLaunch, launchDate, product, enrichedDisplayRound, selectedVariantGroup, selectedItem, quantity, addToCart, handleClose]);
+     }, [isPreLaunch, launchDate, product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, handleClose]);
 
     const handleEncore = useCallback(async () => {
         if (isEncoreLoading || isEncoreRequested) return;
@@ -384,7 +354,7 @@ const ProductDetailPage: React.FC = () => {
     }, [productId, userDocument, isEncoreRequested, isEncoreLoading, requestEncoreCallable]);
 
     if (loading) return ( <> <Helmet><title>상품 정보 로딩 중... | 소도몰</title></Helmet><ProductDetailSkeleton /> </>);
-    if (error || !product || !enrichedDisplayRound) return ( <> <Helmet><title>오류 | 소도몰</title><meta property="og:title" content="상품을 찾을 수 없습니다" /></Helmet><div className="product-detail-modal-overlay" onClick={handleClose}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div></> );
+    if (error || !product || !displayRound) return ( <> <Helmet><title>오류 | 소도몰</title><meta property="og:title" content="상품을 찾을 수 없습니다" /></Helmet><div className="product-detail-modal-overlay" onClick={handleClose}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div></> );
 
     const ogTitle = `${product.groupName} - 소도몰`;
     const ogDescription = product.description?.replace(/<br\s*\/?>/gi, ' ').substring(0, 100) + '...' || '소도몰에서 특별한 상품을 만나보세요!';
@@ -401,12 +371,12 @@ const ProductDetailPage: React.FC = () => {
                         <div className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"><ProductImageSlider images={originalImageUrls} productName={product.groupName} onImageClick={handleOpenLightbox} /></div>
                             <div className="product-info-area">
-                                <ProductInfo product={product} round={enrichedDisplayRound} actionState={actionState} expirationDateInfo={expirationDateInfo} />
-                                <OptionSelector round={enrichedDisplayRound} selectedVariantGroup={selectedVariantGroup} onVariantGroupChange={(vg) => { setSelectedVariantGroup(vg); setSelectedItem(vg.items[0] || null); setQuantity(1); toast.success(`'${vg.groupName}' 옵션을 선택했어요.`); }} />
+                                <ProductInfo product={product} round={displayRound} actionState={actionState} expirationDateInfo={expirationDateInfo} />
+                                <OptionSelector round={displayRound} selectedVariantGroup={selectedVariantGroup} onVariantGroupChange={(vg) => { setSelectedVariantGroup(vg); setSelectedItem(vg.items[0] || null); setQuantity(1); toast.success(`'${vg.groupName}' 옵션을 선택했어요.`); }} />
                             </div>
                         </div>
                     </div>
-                    <div className="product-purchase-footer" data-tutorial-id="detail-purchase-panel"><PurchasePanel actionState={actionState} round={enrichedDisplayRound} selectedVariantGroup={selectedVariantGroup} selectedItem={selectedItem} quantity={quantity} setQuantity={setQuantity} onCartAction={handleCartAction} onEncore={handleEncore} isEncoreRequested={isEncoreRequested} isEncoreLoading={isEncoreLoading}/></div>
+                    <div className="product-purchase-footer" data-tutorial-id="detail-purchase-panel"><PurchasePanel actionState={actionState} round={displayRound} selectedVariantGroup={selectedVariantGroup} selectedItem={selectedItem} quantity={quantity} setQuantity={setQuantity} onCartAction={handleCartAction} onEncore={handleEncore} isEncoreRequested={isEncoreRequested} isEncoreLoading={isEncoreLoading}/></div>
                 </div>
             </div>
             <Lightbox isOpen={isLightboxOpen} onClose={handleCloseLightbox} images={originalImageUrls} startIndex={lightboxStartIndex} />

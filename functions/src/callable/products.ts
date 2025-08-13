@@ -1,6 +1,6 @@
 // functions/src/callable/products.ts
 // Cloud Functions (v2) — Products related callables
-// v1.1 - 해시태그 반환 로직 추가
+// v1.2 - 단일 상품 재고 조회 함수 추가
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -29,9 +29,6 @@ async function getCategoryNames(): Promise<string[]> {
 
 /** --------------------------------
  * 1) AI 파싱: parseProductText
- * - v2 HttpsError 사용
- * - secrets: GEMINI_API_KEY
- * - 프론트에서 categories 힌트를 못 보냈다면 서버가 Firestore에서 보완
  * --------------------------------- */
 export const parseProductText = onCall(
   {
@@ -40,7 +37,6 @@ export const parseProductText = onCall(
     memory: "512MiB",
     timeoutSeconds: 60,
     secrets: ["GEMINI_API_KEY"],
-    // enforceAppCheck: true, // 필요 시 활성화
   },
   async (request) => {
     try {
@@ -53,13 +49,11 @@ export const parseProductText = onCall(
         throw new HttpsError("invalid-argument", "분석할 텍스트가 비었습니다.");
       }
 
-      // 프론트가 카테고리 힌트를 못 보냈다면 서버에서 보완
       const categories =
         categoriesHint.length > 0 ? categoriesHint : await getCategoryNames();
 
       const result = await analyzeProductTextWithAI(text, categories);
       
-      // 최소 방어
       return {
         groupName: result?.groupName ?? "",
         cleanedDescription: result?.cleanedDescription ?? text,
@@ -67,7 +61,6 @@ export const parseProductText = onCall(
         storageType: result?.storageType ?? "ROOM",
         productType: result?.productType ?? "GENERAL",
         variantGroups: Array.isArray(result?.variantGroups) ? result!.variantGroups : [],
-        // ✅ [수정] 누락되었던 hashtags 필드를 추가하여 프론트엔드로 전달
         hashtags: Array.isArray(result?.hashtags) ? result.hashtags : [],
       };
     } catch (error: any) {
@@ -79,10 +72,7 @@ export const parseProductText = onCall(
 );
 
 /** --------------------------------
- * 2) 재고/예약 합산 포함 상품 조회: getProductsWithStock
- * - 페이지네이션: pageSize, lastVisibleTimestamp(ms)
- * - isArchived=false 정렬 createdAt desc
- * - reserved 수량 합산
+ * 2) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock
  * --------------------------------- */
 export const getProductsWithStock = onCall(
   {
@@ -117,7 +107,6 @@ export const getProductsWithStock = onCall(
         id: doc.id,
       })) as (Product & { id: string })[];
 
-      // RESERVED / PREPAID 만 합산
       const ordersSnap = await db
         .collection("orders")
         .where("status", "in", ["RESERVED", "PREPAID"])
@@ -182,8 +171,82 @@ export const getProductsWithStock = onCall(
 );
 
 /** --------------------------------
+ * ✅ [신규 추가] ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock
+ * - productId를 받아 단일 상품의 상세 정보와
+ * - 실시간 예약 수량이 합산된 데이터를 반환합니다.
+ * --------------------------------- */
+export const getProductByIdWithStock = onCall(
+  {
+    region: "asia-northeast3",
+    cors: allowedOrigins,
+    memory: "512MiB",
+    timeoutSeconds: 30,
+    enforceAppCheck: false, 
+  },
+  async (request) => {
+    try {
+      const productId = request.data?.productId as string | undefined;
+      if (!productId) {
+        throw new HttpsError("invalid-argument", "상품 ID가 제공되지 않았습니다.");
+      }
+
+      const productRef = db.collection("products").doc(productId);
+      const productSnap = await productRef.get();
+
+      if (!productSnap.exists) {
+        throw new HttpsError("not-found", "해당 ID의 상품을 찾을 수 없습니다.");
+      }
+
+      const product = { ...(productSnap.data() as Product), id: productSnap.id };
+
+      // RESERVED / PREPAID 상태의 모든 주문을 가져와 예약 수량을 계산합니다.
+      const ordersSnap = await db
+        .collection("orders")
+        .where("status", "in", ["RESERVED", "PREPAID"])
+        .get();
+
+      const reservedMap = new Map<string, number>();
+      ordersSnap.docs.forEach((doc) => {
+        const order = doc.data() as Order;
+        (order.items || []).forEach((item) => {
+          // 현재 조회 중인 상품과 관련된 항목만 계산에 포함합니다.
+          if (item.productId === productId) {
+            const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+            reservedMap.set(key, (reservedMap.get(key) || 0) + item.quantity);
+          }
+        });
+      });
+
+      // 조회된 상품 데이터에 계산된 예약 수량을 추가(enrich)합니다.
+      if (Array.isArray(product.salesHistory)) {
+        product.salesHistory = product.salesHistory.map((round) => {
+          if (!Array.isArray(round.variantGroups)) return round;
+          
+          round.variantGroups = round.variantGroups.map((vg) => {
+            const key = `${product.id}-${round.roundId}-${vg.id}`;
+            return {
+              ...vg,
+              reservedCount: reservedMap.get(key) || 0,
+            };
+          });
+          return round;
+        });
+      }
+
+      // 재고 정보가 포함된 최종 상품 데이터를 반환합니다.
+      return { product };
+
+    } catch (error) {
+      logger.error("getProductByIdWithStock error:", error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "상품 정보를 불러오는 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+
+/** --------------------------------
  * 3) 페이지네이션용 단순 목록: getProductsPage
- * - 프론트에서 간단 목록만 필요할 때
  * --------------------------------- */
 export const getProductsPage = onCall(
   {
@@ -231,10 +294,6 @@ export const getProductsPage = onCall(
 
 /** --------------------------------
  * 4) 앵콜 요청: requestEncore
- * - 사용자가 특정 상품에 앵콜을 요청하면
- * - product.encoreCount 증가
- * - product.encoreRequesterIds 에 userId 추가(중복 방지)
- * - user.encoreRequestedProductIds 에 productId 추가(중복 방지)
  * --------------------------------- */
 export const requestEncore = onCall(
   {
@@ -277,13 +336,11 @@ export const requestEncore = onCall(
           throw new HttpsError("already-exists", "이미 앵콜을 요청하셨습니다.");
         }
 
-        // product 업데이트
         tx.update(productRef, {
           encoreCount: admin.firestore.FieldValue.increment(1),
           encoreRequesterIds: admin.firestore.FieldValue.arrayUnion(userId),
         });
 
-        // user 업데이트
         tx.update(userRef, {
           encoreRequestedProductIds: admin.firestore.FieldValue.arrayUnion(productId),
         });

@@ -132,10 +132,11 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
     return 'ENCORE_REQUESTABLE';
   }
 
-  // 2. 재고 상태를 시간보다 먼저 확인
+  // ✅ [핵심 수정] 2. 재고 상태를 시간보다 먼저 확인 (Admin 페이지 로직과 일치)
+  // 모든 옵션의 재고가 0 이하이면, 판매 기간과 상관없이 '매진'으로 우선 처리합니다.
   const isAllVariantsSoldOut = round.variantGroups.length > 0 && round.variantGroups.every(vg => {
       const totalStock = vg.totalPhysicalStock;
-      if (totalStock === null || totalStock === -1) {
+      if (totalStock === null || totalStock === -1) { // 무제한 재고는 매진이 아님
           return false;
       }
       const reserved = vg.reservedCount || 0;
@@ -145,8 +146,8 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   if (isAllVariantsSoldOut) {
       const now = dayjs();
       const { primaryEnd } = getDeadlines(round);
+      // 단, 1차 공구 기간에는 '대기' 상태를 허용
       if (primaryEnd && now.isBefore(primaryEnd)) {
-          // 요청사항: 1차 공구 기간에는 모든 옵션 매진 시 '대기' 상태 허용
           return 'WAITLISTABLE';
       }
       // 1차 공구 기간이 끝났으면 '앵콜 요청' (완전 마감)
@@ -167,39 +168,35 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   const hasMultipleOptions = round.variantGroups.length > 1;
   const isOptionSelected = !!selectedVg;
 
-  // 4. 1차 공구 기간 로직 (업로드 ~ 다음날 13시)
+  // 4. 1차 공구 기간 로직
   if (primaryEnd && now.isBefore(primaryEnd)) {
     if (hasMultipleOptions && !isOptionSelected) return 'REQUIRE_OPTION';
     
     const vg = selectedVg || round.variantGroups[0];
     if (vg) {
       const totalStock = vg.totalPhysicalStock;
-      // 요청사항: 무제한 재고 상품은 계속 예약 가능
       if (totalStock === null || totalStock === -1) return 'PURCHASABLE';
       
       const reserved = vg.reservedCount || 0;
       const isSoldOut = totalStock - reserved <= 0;
-      
-      // 요청사항: 한정수량 품절 시 '대기'로 전환하여 계속 예약 받음
+      // 여기서의 isSoldOut은 개별 옵션에 대한 것
       return isSoldOut ? 'WAITLISTABLE' : 'PURCHASABLE';
     }
     return 'ENDED';
   }
 
-  // 5. 2차 공구 기간 로직 (1차 공구 마감 후 ~ 픽업일 13시)
+  // 5. 2차 공구 기간 로직
   if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]')) {
     if (hasMultipleOptions && !isOptionSelected) return 'REQUIRE_OPTION';
     
     const vg = selectedVg || round.variantGroups[0];
     const totalStock = vg?.totalPhysicalStock;
 
-    // ✅ [핵심] 요청사항: 1차 때 '무제한'이었던 상품은 2차에서 '재고 준비중'으로 표시
     if (totalStock === null || totalStock === -1) return 'AWAITING_STOCK'; 
     
     const reserved = vg.reservedCount || 0; 
     const isSoldOut = (totalStock || 0) - reserved <= 0;
     
-    // 요청사항: 2차 공구에서 매진되면 '대기' 없이 바로 마감 ('앵콜 요청' 상태로 전환)
     return isSoldOut ? 'ENCORE_REQUESTABLE' : 'PURCHASABLE';
   }
 

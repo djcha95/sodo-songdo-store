@@ -156,29 +156,28 @@ const ProductListPage: React.FC = () => {
       if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) return;
       
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
-      if (!primaryEndDate) return;
       
       const actionState = determineActionState(round, userDocument);
       
+      // 화면에 표시할 수 있는 상태 그룹
+      const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION', 'AWAITING_STOCK', 'ENCORE_REQUESTABLE'].includes(actionState);
+      
+      if (!isDisplayableState) return;
+
       let finalPhase: 'primary' | 'secondary' | 'past';
 
-      // ✅ [핵심] 요청사항: 'AWAITING_STOCK' 상태인 상품을 2차 공구(secondary)로 분류합니다.
-      if (actionState === 'PURCHASABLE' || actionState === 'WAITLISTABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'AWAITING_STOCK') {
-          if (now.isBefore(primaryEndDate)) {
-              finalPhase = 'primary';
-          } else {
-              // 1차 공구 기간이 지났으므로 2차 공구로 분류
-              finalPhase = 'secondary';
-          }
-      } else {
+      // '앵콜 요청 가능'은 '마감' 상태이므로 항상 past로 분류
+      if (actionState === 'ENCORE_REQUESTABLE') {
           finalPhase = 'past';
+      } 
+      // 그 외 활성 상태들은 시간으로 1차/2차 구분
+      else if (primaryEndDate && now.isBefore(primaryEndDate)) {
+          finalPhase = 'primary';
+      } 
+      else {
+          finalPhase = 'secondary';
       }
 
-      if (round.status === 'scheduled' && round.publishAt) {
-        const publishAtDate = safeToDate(round.publishAt);
-        if (publishAtDate && now.isBefore(publishAtDate)) return;
-      }
-      
       const productWithState: ProductWithUIState = { 
         ...product, 
         phase: finalPhase,
@@ -192,6 +191,7 @@ const ProductListPage: React.FC = () => {
           tempSecondary.push(productWithState);
       } else { // 'past'
           const publishAtDate = safeToDate(round.publishAt);
+          // 최근 5일 이내에 게시된 마감 상품만 표시
           if (publishAtDate && now.diff(dayjs(publishAtDate), 'day') <= 5) {
               tempPast.push(productWithState);
           }
