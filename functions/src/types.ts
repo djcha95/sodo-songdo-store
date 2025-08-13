@@ -137,6 +137,7 @@ export interface Product {
   subCategory?: string;
   updatedAt?: Timestamp;
   tags?: string[];
+  hashtags?: string[]; // ✅ 이 줄을 추가해주세요.
   reservedQuantities?: { [key: string]: number };
 }
 

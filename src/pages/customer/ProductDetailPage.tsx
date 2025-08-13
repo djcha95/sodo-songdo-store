@@ -89,6 +89,16 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     return (
         <>
             <h1 className="product-name">{product.groupName}</h1>
+            
+            {/* ✅ Hashtag Display */}
+            {product.hashtags && product.hashtags.length > 0 && (
+                <div className="product-hashtags">
+                    {product.hashtags.map(tag => (
+                        <span key={tag} className="hashtag">{tag}</span>
+                    ))}
+                </div>
+            )}
+
             <div className="markdown-content">
               <ReactMarkdown>{product.description || ''}</ReactMarkdown>
             </div>
@@ -146,7 +156,7 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                                     const remainingStock = Math.max(0, totalStock - reserved);
                                     
                                     if (remainingStock > 0) {
-                                        if (remainingStock <= 10) { stockElement = <span className="low-stock"><Flame size={14} /> {remainingStock}개 남음! (서두르세요!)</span>;
+                                        if (remainingStock <= 10) { stockElement = <span className="low-stock"><Flame size={14} /> {remainingStock}개 남음! <Flame size={14} /></span>;
                                         } else { stockElement = <span className="limited-stock">{remainingStock}개 남음</span>; }
                                     } else {
                                         stockElement = <span className="sold-out">{actionState === 'WAITLISTABLE' ? '대기 가능' : '품절'}</span>;

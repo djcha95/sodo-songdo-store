@@ -78,6 +78,7 @@ Schema:
   "categoryName": "string (MUST be one of these: [${safeCategories.join(", ")}])",
   "groupName": "string | null",
   "cleanedDescription": "string | null",
+  "hashtags": "string[] (CRITICAL: You MUST generate 2 to 4 short, trendy, Korean hashtags. e.g., [\\"#인생맛집\\", \\"#캠핑요리\\"]. Do NOT return null or an empty array.)",
   "variantGroups": [
     {
       "groupName": "string | null",
@@ -99,23 +100,29 @@ IMPORTANT INSTRUCTIONS:
         c. **Final CTA**: A single, energetic line to encourage purchase. (e.g., \`🚀 고민은 배송만 늦출 뿐! 지금 바로 맛보세요!\`)
     - **Formatting**: Use Markdown \`**bold**\`, emojis (✨, 💖, 🎉), and sufficient line breaks (\`\\n\`) for readability.
 
-2) Category selection
+2) Hashtag Generation (MANDATORY REQUIREMENT!)
+    - You MUST generate between 2 and 4 relevant hashtags based on the product description.
+    - This is not an optional task. The 'hashtags' field must be populated.
+    - Hashtags must be in Korean and start with '#'.
+    - Make them short, catchy, and something a user would actually search for.
+
+3) Category selection
     - You MUST choose ONE category from this exact list: [${safeCategories.join(", ")}].
     - Analyze the text carefully. Never return null or a category not on the list.
 
-3) Storage type: Infer from '냉장', '냉동', '실온'. Default to 'ROOM'.
+4) Storage type: Infer from '냉장', '냉동', '실온'. Default to 'ROOM'.
 
-4. Naming Rules:
+5. Naming Rules:
     - **Product Type**: If multiple distinct options (flavors/sizes) exist, use 'group', else 'single'.
     - **Clean Names**: When extracting 'groupName' and 'variantGroups.groupName', **ALWAYS remove** store names like "소도몰" and any special characters like "X" or "x". The name should be clean and represent only the product itself.
 
-5) variantGroups / items:
+6) variantGroups / items:
     - Extract prices as pure numbers. Parse expirationDate and pickupDate.
     - **Item Name Rule (CRITICAL)**: The 'name' for each item MUST be a single unit. For example: "1개", "1팩", "1마리", "1곽". **NEVER** include weights or extra details in parentheses like "1개 (500g)". Just the single unit.
 
-6) Pickup Date Rule (매우 중요): Today is ${today}. Resolve all pickup dates to be in the future. If a year is missing (e.g., 8/15), find the next future occurrence. If a date is in the past, add years until it is in the future.
+7) Pickup Date Rule (매우 중요): Today is ${today}. Resolve all pickup dates to be in the future. If a year is missing (e.g., 8/15), find the next future occurrence. If a date is in the past, add years until it is in the future.
 
-7) Nulls: Use null for genuinely missing values, but be aggressive in parsing what's there.
+8) Nulls: Use null for genuinely missing values, but be aggressive in parsing what's there. The 'hashtags' field is an exception and must not be null.
 
 원문:
 ${text}

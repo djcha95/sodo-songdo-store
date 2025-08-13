@@ -29,7 +29,7 @@ import type {
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot
+  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
@@ -62,7 +62,7 @@ interface ProductItemUI {
 }
 interface VariantGroupUI {
   id: string; groupName: string; totalPhysicalStock: number | '';
-  stockUnitType: string; expirationDate: Date | null; expirationDateInput: string;
+  stockUnitType: string; expirationDate: Date | null; // expirationDateInput 속성 제거
   items: ProductItemUI[];
 }
 
@@ -72,6 +72,7 @@ interface AIParsedData {
   categoryName: string | null;
   groupName: string | null;
   cleanedDescription: string | null;
+  hashtags?: string[];
   variantGroups: {
     groupName: string | null;
     totalPhysicalStock: number | null;
@@ -83,27 +84,54 @@ interface AIParsedData {
 
 // --- 헬퍼 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
+
+/**
+ * ✅ [수정] 날짜 문자열 파싱 함수 안정성 강화
+ * - YYMMDD, YYYYMMDD 등 숫자 형식 입력을 YYYY-MM-DD 형식으로 안정적으로 변환합니다.
+ */
 const parseDateStringToDate = (dateString: string | null | undefined): Date | null => {
   if (!dateString) return null;
-  let date = new Date(dateString);
-  if (!isNaN(date.getTime()) && date.getFullYear() > 1970) return date;
 
-  const cleaned = dateString.replace(/[^0-9]/g, '');
+  // 1. 표준 ISO 형식 (YYYY-MM-DD)을 먼저 시도합니다.
+  let date = new Date(dateString);
+  if (!isNaN(date.getTime()) && date.getFullYear() > 1970) {
+    return date;
+  }
+
+  // 2. 다양한 숫자 형식(YYMMDD, YYYYMMDD 등)을 시도합니다.
+  const cleaned = String(dateString).replace(/[^0-9]/g, '');
   let year: number, month: number, day: number;
-  if (cleaned.length === 6) {
-    year = parseInt('20' + cleaned.substring(0, 2), 10);
+
+  if (cleaned.length === 8) { // YYYYMMDD 형식
+    year = parseInt(cleaned.substring(0, 4), 10);
+    month = parseInt(cleaned.substring(4, 6), 10) - 1; // 월은 0부터 시작
+    day = parseInt(cleaned.substring(6, 8), 10);
+  } else if (cleaned.length === 6) { // YYMMDD 형식
+    const tempYear = parseInt(cleaned.substring(0, 2), 10);
+    // 2000년대 년도로 변환 (앱의 사용 시나리오상 안전한 가정)
+    year = 2000 + tempYear;
     month = parseInt(cleaned.substring(2, 4), 10) - 1;
     day = parseInt(cleaned.substring(4, 6), 10);
-  } else if (cleaned.length === 8) {
-    year = parseInt(cleaned.substring(0, 4), 10);
-    month = parseInt(cleaned.substring(4, 6), 10) - 1;
-    day = parseInt(cleaned.substring(6, 8), 10);
-  } else return null;
+  } else {
+    return null; // 지원하지 않는 숫자 형식
+  }
 
-  date = new Date(year, month, day);
-  if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) return date;
+  // 파싱된 날짜 구성 요소의 유효성 검사
+  if (month < 0 || month > 11 || day < 1 || day > 31) {
+    return null;
+  }
+  
+  const finalDate = new Date(year, month, day);
+
+  // Date 생성자가 월/일을 자동으로 조정하는 경우를 대비해 최종 유효성 검사
+  // (예: 2월 30일 -> 3월 1~2일로 바뀌는 것 방지)
+  if (finalDate.getFullYear() === year && finalDate.getMonth() === month && finalDate.getDate() === day) {
+    return finalDate;
+  }
+
   return null;
 };
+
 const convertToDate = (dateSource: any): Date | null => {
   if (!dateSource) return null;
   if (dateSource instanceof Date) return dateSource;
@@ -224,6 +252,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [categories, setCategories] = useState<Category[]>([]);
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [hashtagInput, setHashtagInput] = useState('');
   const [selectedMainCategory, setSelectedMainCategory] = useState('');
   const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
   const [creationDate, setCreationDate] = useState<Date>(new Date());
@@ -299,6 +329,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         if (!product) { toast.error('상품을 찾을 수 없습니다.'); navigate('/admin/products'); return; }
         setGroupName(product.groupName);
         setDescription(product.description);
+        setHashtags(product.hashtags || []);
         setSelectedStorageType(product.storageType);
         if (product.createdAt) setCreationDate(convertToDate(product.createdAt) || new Date());
         const mainCat = (await getCategories()).find(c => c.name === product.category);
@@ -350,8 +381,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
               groupName: vg.groupName,
               totalPhysicalStock: displayStock, // [수정] 계산된 값으로 설정
               stockUnitType: vg.stockUnitType,
-              expirationDate,
-              expirationDateInput: expirationDate ? toYmd(expirationDate) : '',
+              expirationDate, // ✅ 이 줄을 추가해주세요.
               items: (vg.items || []).map((item: ProductItem) => ({
                 id: item.id,
                 name: item.name,
@@ -390,7 +420,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     if (mode === 'newProduct' && variantGroups.length === 0) {
       setVariantGroups([{
         id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개',
-        expirationDate: null, expirationDateInput: '',
+        expirationDate: null,
         items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }]
       }]);
     }
@@ -458,24 +488,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const handleVariantGroupChange = useCallback((id: string, field: keyof Omit<VariantGroupUI, 'items'>, value: any) => {
     setVariantGroups(prev => prev.map(vg => (vg.id === id ? { ...vg, [field]: value } : vg)));
   }, []);
-
-  const handleGroupDateBlur = useCallback((id: string, dateStr: string) => {
-    if (!dateStr.trim()) {
-      handleVariantGroupChange(id, 'expirationDate', null);
-      handleVariantGroupChange(id, 'expirationDateInput', '');
-      return;
-    }
-    const parsedDate = parseDateStringToDate(dateStr);
-    if (parsedDate) {
-      handleVariantGroupChange(id, 'expirationDate', parsedDate);
-      handleVariantGroupChange(id, 'expirationDateInput', toYmd(parsedDate));
-
-    } else {
-      toast.error('유효하지 않은 날짜 형식입니다. (예: 250809 또는 2025-08-09)');
-      handleVariantGroupChange(id, 'expirationDate', null);
-      handleVariantGroupChange(id, 'expirationDateInput', dateStr);
-    }
-  }, [handleVariantGroupChange]);
 
   const addNewVariantGroup = useCallback(() => {
     setVariantGroups(prev => [...prev, {
@@ -586,6 +598,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
       }
     }
   };
+
+const handleHashtagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const newTag = hashtagInput.trim().replace(/#/g, '');
+      if (newTag && hashtags.length < 4 && !hashtags.includes(`#${newTag}`)) {
+        setHashtags([...hashtags, `#${newTag}`]);
+      }
+      setHashtagInput('');
+    }
+};
+
+const removeHashtag = (tagToRemove: string) => {
+    setHashtags(hashtags.filter(tag => tag !== tagToRemove));
+};
+
 const applyParsed = (data: any) => {
   if (!data || typeof data !== 'object') {
     throw new Error('AI 응답 포맷이 올바르지 않습니다.');
@@ -593,6 +621,9 @@ const applyParsed = (data: any) => {
 
   if (data.groupName) setGroupName(String(data.groupName));
   if (data.cleanedDescription) setDescription(String(data.cleanedDescription));
+  if (Array.isArray(data.hashtags)) {
+    setHashtags(data.hashtags.slice(0, 4).map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`));
+  }
   if (data.storageType) setSelectedStorageType(data.storageType as StorageType);
   if (data.productType === 'single' || data.productType === 'group') {
     setProductType(data.productType);
@@ -646,7 +677,7 @@ const applyParsed = (data: any) => {
       id: generateUniqueId(),
       groupName: String(data.groupName ?? ''),
       totalPhysicalStock: '', stockUnitType: '개',
-      expirationDate: null, expirationDateInput: '',
+      expirationDate: null, 
       items: [{
         id: generateUniqueId(), name: '', price: '',
         limitQuantity: '', deductionAmount: 1, isBundleOption: false,
@@ -747,12 +778,14 @@ const settingsSummary = useMemo(() => {
           }
         
           return {
-            id: vg.id && vg.id.length > 15 ? vg.id : generateUniqueId(),
+            // ✅ [수정] ID 보존 로직 강화: ID가 존재하면 길이에 상관없이 무조건 유지
+            id: vg.id || generateUniqueId(),
             groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
             totalPhysicalStock: finalTotalPhysicalStock, // [수정] 계산된 값으로 설정
             stockUnitType: vg.stockUnitType,
             items: vg.items.map(item => ({
-              id: item.id && item.id.length > 15 ? item.id : generateUniqueId(),
+              // ✅ [수정] ID 보존 로직 강화: ID가 존재하면 길이에 상관없이 무조건 유지
+              id: item.id || generateUniqueId(),
               name: item.name,
               price: Number(item.price) || 0,
               stock: -1,
@@ -772,22 +805,24 @@ const settingsSummary = useMemo(() => {
       };
 
       if (mode === 'newProduct') {
-        const productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'> = {
+        const productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'> & { hashtags?: string[] } = {
           groupName: groupName.trim(),
           description: description.trim(),
+          hashtags: hashtags,
           storageType: selectedStorageType,
           category: categories.find(c => c.id === selectedMainCategory)?.name || '',
           encoreCount: 0, encoreRequesterIds: []
         };
-        await addProductWithFirstRound(productData, salesRoundData as any, newImageFiles, creationDate);
+        await addProductWithFirstRound(productData as any, salesRoundData as any, newImageFiles, creationDate);
         toast.success(isDraft ? '상품이 임시저장되었습니다.' : '신규 상품이 성공적으로 등록되었습니다.');
       } else if (mode === 'newRound' && productId) {
         await addNewSalesRound(productId, salesRoundData as any);
         toast.success(isDraft ? '새 회차가 임시저장되었습니다.' : '새로운 판매 회차가 추가되었습니다.');
       } else if (mode === 'editRound' && productId && roundId) {
-        const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = {
+        const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> & { hashtags?: string[] } = {
           groupName: groupName.trim(),
           description: description.trim(),
+          hashtags: hashtags,
           storageType: selectedStorageType,
           category: categories.find(c => c.id === selectedMainCategory)?.name || ''
         };
@@ -798,6 +833,8 @@ const settingsSummary = useMemo(() => {
           .map(p => previewUrlToFile.get(p))
           .filter((f): f is File => !!f);
 
+        // 아래 두 함수는 기존 상품/회차 정보를 업데이트합니다.
+        // ID 보존 로직이 수정되어 이제 ID가 안전하게 유지됩니다.
         await updateProductCoreInfo(productId, productDataToUpdate, newFiles, finalImageUrls, initialImageUrls);
         await updateSalesRound(productId, roundId, salesRoundData as any);
 
@@ -913,6 +950,32 @@ const settingsSummary = useMemo(() => {
               </div>
 
               <div className="form-group">
+                <label>해시태그 (최대 4개)</label>
+                <div className="hashtag-input-container">
+                  <div className="hashtag-display-area">
+                    {hashtags.map((tag) => (
+                      <div key={tag} className="hashtag-pill">
+                        {tag}
+                        <button type="button" onClick={() => removeHashtag(tag)}><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  {hashtags.length < 4 && (
+                    <input
+                      type="text"
+                      className="hashtag-input"
+                      value={hashtagInput}
+                      onChange={(e) => setHashtagInput(e.target.value)}
+                      onKeyDown={handleHashtagKeyDown}
+                      placeholder="태그 입력 후 Enter..."
+                      disabled={mode !== 'editRound' && mode !== 'newProduct'}
+                    />
+                  )}
+                </div>
+                <p className="input-description">상품을 잘 나타내는 검색용 태그를 추가해보세요.</p>
+              </div>
+
+              <div className="form-group">
                 <label>카테고리/보관타입</label>
                 <div className="category-select-wrapper">
                   <select value={selectedMainCategory} onChange={e => setSelectedMainCategory(e.target.value)} disabled={mode !== 'editRound' && mode !== 'newProduct'}>
@@ -1008,22 +1071,13 @@ const settingsSummary = useMemo(() => {
                       </div>
                     </div>
                     <div className="form-group">
-                      <label>유통기한</label>
-                      <input
-                        type="text"
-                        value={vg.expirationDateInput}
-                        onChange={e => handleVariantGroupChange(vg.id, 'expirationDateInput', e.target.value)}
-                        onBlur={e => handleGroupDateBlur(vg.id, e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            (e.target as HTMLInputElement).blur();
-                          }
-                        }}
-                        placeholder="YYMMDD 또는 YYYY-MM-DD"
-                        maxLength={10}
-                      />
-                    </div>
+<label>유통기한</label>
+<input
+  type="date"
+  className="date-input-native" // 필요한 경우 CSS 스타일링을 위한 클래스
+  value={toYmd(vg.expirationDate)}
+  onChange={e => handleVariantGroupChange(vg.id, 'expirationDate', fromYmd(e.target.value))}
+/>                    </div>
                     {productType === 'group' && (
                       <button type="button" onClick={() => removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? '마지막 그룹은 삭제할 수 없습니다.' : '그룹 삭제'}>
                         <Trash2 size={16} />

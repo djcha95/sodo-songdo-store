@@ -61,21 +61,29 @@ export const submitOrder = async (
 
 /**
  * @description ✅ [수정] 사용자의 예약을 취소합니다.
- * 클라이언트에서 직접 Firestore 문서를 수정하는 대신, 보안을 위해 Callable Cloud Function을 호출합니다.
+ * 보안을 위해 Callable Cloud Function을 호출하며, '노쇼 처리' 여부를 함께 전달합니다.
  */
-export const cancelOrder = async (order: Order): Promise<void> => {
+export const cancelOrder = async (
+  order: Order,
+  options: { treatAsNoShow: boolean } = { treatAsNoShow: false }
+): Promise<void> => {
   try {
     const functions = getFunctions(getApp(), 'asia-northeast3');
+    // ✅ [수정] 백엔드 폴더 구조 변경에 따라 함수 이름 수정
     const cancelOrderCallable = httpsCallable(functions, 'cancelOrder');
     
-    // Cloud Function에 orderId만 전달하여 취소를 요청합니다.
-    await cancelOrderCallable({ orderId: order.id });
+    // ✅ [수정] Cloud Function에 orderId와 함께 treatAsNoShow 플래그를 전달
+    await cancelOrderCallable({ 
+      orderId: order.id, 
+      treatAsNoShow: options.treatAsNoShow 
+    });
   
   } catch (error: any) {
     console.error("Callable function 'cancelOrder' failed:", error);
-    // Firebase HttpsError의 경우, 사용자에게 친화적인 메시지를 전달합니다.
     if (error.code && error.message) {
-      throw new Error(error.message);
+      // Firebase HttpsError의 경우, 서버에서 보낸 메시지를 그대로 사용자에게 보여줍니다.
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
     }
     throw new Error('주문 취소 중 예상치 못한 오류가 발생했습니다.');
   }

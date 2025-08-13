@@ -11,7 +11,7 @@ import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Timestamp } from 'firebase/firestore';
-import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
+import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -90,6 +90,20 @@ const CartItemCard: React.FC<{
       if (!date) return '픽업일 정보 없음';
       return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
     }
+
+    // ✅ [추가] 1차 마감일 포맷팅 함수
+    const formatDeadlineDate = (dateValue: any) => {
+      const date = safeToDate(dateValue);
+      if (!date || item.status !== 'RESERVATION') return null;
+      // 마감일이 이미 지났는지 확인
+      const isPast = new Date() > date;
+      return {
+        text: `1차 마감: ${format(date, 'M/d(EEE) HH:mm', { locale: ko })}`,
+        isPast: isPast,
+      };
+    }
+
+    const deadlineInfo = formatDeadlineDate(item.deadlineDate);
   
     return (
       <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${!isEligible ? 'ineligible' : ''}`} onClick={() => onSelect(item.id)}>
@@ -114,6 +128,12 @@ const CartItemCard: React.FC<{
                   <span className="item-option-name">선택: {item.itemName}</span>
               </div>
               <div className="item-pickup-info"><CalendarDays size={14} /><span>{formatPickupDate(item.pickupDate)}</span></div>
+              {/* ✅ [추가] 1차 마감일 정보 표시 */}
+              {deadlineInfo && (
+                <div className={`item-deadline-info ${deadlineInfo.isPast ? 'past' : ''}`}>
+                    <Clock size={14} /><span>{deadlineInfo.text}</span>
+                </div>
+              )}
           </div>
           <div className="item-footer">
               {item.status === 'WAITLIST' ? (
@@ -153,7 +173,6 @@ const CartPage: React.FC = () => {
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
   const [ineligibleItemIds, setIneligibleItemIds] = useState<Set<string>>(new Set());
   
-  // ✅ [수정] useMemo를 사용하여 함수 참조를 고정
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   
   const checkCartStockCallable = useMemo(() => httpsCallable<any, any>(functions, 'checkCartStock'), [functions]);
@@ -230,9 +249,8 @@ const CartPage: React.FC = () => {
   const reservationItemIds = useMemo(() => reservationItems.map(item => item.id).join(','), [reservationItems]);
 
   useEffect(() => {
-    // reservationItems 배열 자체가 아니라, 해당 배열의 내용이 변경되었을 때만 동기화하도록 `reservationItemIds`를 사용
     syncCartWithServerStock(reservationItems);
-  }, [reservationItemIds, syncCartWithServerStock]); // syncCartWithServerStock은 이제 안정적인 의존성입니다.
+  }, [reservationItemIds, syncCartWithServerStock]); 
 
 
   const handleItemSelect = useCallback((itemKey: string, type: 'reservation' | 'waitlist') => {
@@ -278,7 +296,6 @@ const CartPage: React.FC = () => {
     }
     if (isProcessingOrder || (eligibleReservationItems.length === 0 && waitlistItems.length === 0)) return;
 
-    // 최종 제출 직전에 한 번 더 재고를 확인합니다.
     const isStockSufficient = await syncCartWithServerStock(eligibleReservationItems);
     if (!isStockSufficient) return;
 
@@ -395,6 +412,7 @@ const CartPage: React.FC = () => {
     });
   };
 
+  // ✅ [수정] 1차/2차 공구 정책에 따른 경고 메시지 로직 수정
   const showOrderConfirmation = () => {
     if (isPreLaunch) {
       toast(
@@ -404,8 +422,14 @@ const CartPage: React.FC = () => {
       return;
     }
     
+    const now = new Date();
+    // 장바구니에 담긴 상품 중 하나라도 1차 마감일이 지난(2차 예약) 상품이 있는지 확인
+    const isAnyItemInPhase2 = eligibleReservationItems.some(item => {
+        const deadline = safeToDate(item.deadlineDate);
+        return deadline && now > deadline;
+    });
+
     const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
-    const isLimitedItemInCart = eligibleReservationItems.some(item => item.stock !== null && item.stock !== -1);
     const needsPrepayment = isWarningUser || doesCartRequirePrepayment;
     const title = needsPrepayment ? '선입금 안내' : '요청 확정';
     
@@ -414,11 +438,18 @@ const CartPage: React.FC = () => {
     else if(eligibleReservationItems.length > 0) message = '예약 상품에 대한 주문을 확정하시겠습니까?';
     else message = '대기 상품에 대한 신청을 확정하시겠습니까?';
     
-    let finalWarning = "예약 확정 후 1차 마감일 이후 취소 시 패널티가 부과될 수 있습니다.";
-    if (isLimitedItemInCart) {
+    let finalWarning = "";
+    const isLimitedItemInCart = eligibleReservationItems.some(item => item.stock !== null && item.stock !== -1);
+    
+    // 2차 예약 상품이 있을 경우, 최우선으로 노쇼 페널티 경고를 표시
+    if (isAnyItemInPhase2) {
+        finalWarning = "지금은 2차 예약 기간입니다. 확정 후 취소는 가능하지만, 약속 불이행(노쇼) 시 페널티가 부과될 수 있습니다.";
+    } else if (isLimitedItemInCart) {
         finalWarning = "한정 수량 상품은 선입금 및 1:1 채팅 확인 후에만 최종 확정됩니다. 단순 예약은 재고를 확보하지 않습니다.";
     } else if (needsPrepayment) {
-        finalWarning = "선택하신 상품은 예약 후 선입금이 필요합니다.";
+        finalWarning = "선택하신 상품은 예약 후 선입금이 필요합니다. '주의 요망' 등급의 경우 선입금이 필수입니다.";
+    } else {
+        finalWarning = "예약 확정 후 1차 마감일 이후 취소 시 페널티가 부과될 수 있습니다.";
     }
 
     toast((t) => (

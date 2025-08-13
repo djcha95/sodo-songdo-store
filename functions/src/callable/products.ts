@@ -1,5 +1,6 @@
 // functions/src/callable/products.ts
 // Cloud Functions (v2) — Products related callables
+// v1.1 - 해시태그 반환 로직 추가
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -35,7 +36,7 @@ async function getCategoryNames(): Promise<string[]> {
 export const parseProductText = onCall(
   {
     region: "asia-northeast3",
-    cors: allowedOrigins, // onCall은 CORS 크게 신경 안 써도 되지만 넣어둬도 무해
+    cors: allowedOrigins,
     memory: "512MiB",
     timeoutSeconds: 60,
     secrets: ["GEMINI_API_KEY"],
@@ -57,6 +58,7 @@ export const parseProductText = onCall(
         categoriesHint.length > 0 ? categoriesHint : await getCategoryNames();
 
       const result = await analyzeProductTextWithAI(text, categories);
+      
       // 최소 방어
       return {
         groupName: result?.groupName ?? "",
@@ -65,6 +67,8 @@ export const parseProductText = onCall(
         storageType: result?.storageType ?? "ROOM",
         productType: result?.productType ?? "GENERAL",
         variantGroups: Array.isArray(result?.variantGroups) ? result!.variantGroups : [],
+        // ✅ [수정] 누락되었던 hashtags 필드를 추가하여 프론트엔드로 전달
+        hashtags: Array.isArray(result?.hashtags) ? result.hashtags : [],
       };
     } catch (error: any) {
       logger.error("parseProductText error:", error?.message || error);

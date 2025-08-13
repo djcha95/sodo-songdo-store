@@ -3,9 +3,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, QueryDocumentSnapshot, DocumentData } from "firebase-admin/firestore";
-import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound } from "../types.js";
+// ✅ [수정] FieldValue 추가 및 타입 import 경로 확인
+import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
+import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog } from "../types.js";
 import { getAuth } from "firebase-admin/auth";
+// ✅ [수정] helpers.ts에서 포인트 정책과 등급 계산 함수를 가져옵니다.
+import { POINT_POLICIES, calculateTier } from "../utils/helpers.js";
 
 const productConverter = {
   toFirestore(product: Product): DocumentData { return product; },
@@ -208,7 +211,7 @@ export const submitOrder = onCall(
     }
 );
 
-
+// ✅✅✅ [수정됨] cancelOrder 함수 로직 전체 수정 ✅✅✅
 export const cancelOrder = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
@@ -216,42 +219,89 @@ export const cancelOrder = onCall(
             throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
         }
 
-        const { orderId } = request.data;
+        const { orderId, treatAsNoShow = false } = request.data;
         if (!orderId || typeof orderId !== 'string') {
             throw new HttpsError("invalid-argument", "주문 ID가 올바르지 않습니다.");
         }
         
         const userId = request.auth.uid;
         const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
+        const userRef = db.collection('users').withConverter(userConverter).doc(userId);
 
         try {
             await db.runTransaction(async (transaction) => {
                 const orderDoc = await transaction.get(orderRef);
+                const userDoc = await transaction.get(userRef);
 
                 if (!orderDoc.exists) {
                     throw new HttpsError("not-found", "주문 정보를 찾을 수 없습니다.");
                 }
-
-                const order = orderDoc.data();
-                if (!order) {
-                     throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+                if (!userDoc.exists) {
+                    throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
                 }
 
-                // 본인의 주문이 맞는지 확인
+                const order = orderDoc.data();
+                const userData = userDoc.data();
+                if (!order || !userData) {
+                     throw new HttpsError("internal", "주문 또는 사용자 데이터를 읽는 데 실패했습니다.");
+                }
+
                 if (order.userId !== userId) {
                     throw new HttpsError("permission-denied", "자신의 주문만 취소할 수 있습니다.");
                 }
                 
-                // 취소 가능한 상태인지 확인
                 if (order.status !== 'RESERVED' && order.status !== 'PREPAID') {
                     throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다.");
                 }
+                
+                // 1. 주문 상태 업데이트
+                transaction.update(orderRef, { 
+                    status: 'CANCELED', 
+                    canceledAt: Timestamp.now(),
+                    // ✅ 노쇼 처리 시 사유를 명확히 기록
+                    notes: treatAsNoShow ? "[페널티] 2차 공구 기간 내 취소" : order.notes,
+                });
+                
+                // 2. '노쇼로 처리' 옵션이 true일 경우 페널티 적용
+                if (treatAsNoShow) {
+                    const noShowPenalty = POINT_POLICIES.NO_SHOW;
+                    
+                    const oldTier = userData.loyaltyTier || '공구새싹';
+                    const currentPoints = userData.points || 0;
+                    const currentNoShowCount = userData.noShowCount || 0;
+                    const currentPickupCount = userData.pickupCount || 0;
 
-                // 주문 상태 업데이트
-                transaction.update(orderRef, { status: 'CANCELED', canceledAt: Timestamp.now() });
+                    const newPoints = currentPoints + noShowPenalty.points;
+                    const newNoShowCount = currentNoShowCount + 1;
+
+                    // 노쇼 카운트가 변경되었으므로 신뢰 등급을 다시 계산
+                    const newTier = calculateTier(currentPickupCount, newNoShowCount);
+
+                    const penaltyLog: Omit<PointLog, "id"> = {
+                        amount: noShowPenalty.points,
+                        reason: "2차 공구 기간 예약 취소 (노쇼 처리)", // 사유를 더 명확하게
+                        createdAt: Timestamp.now(),
+                        orderId: orderId,
+                        expiresAt: null, // 페널티는 소멸되지 않음
+                    };
+                    
+                    const userUpdateData = {
+                        points: newPoints,
+                        noShowCount: newNoShowCount,
+                        loyaltyTier: newTier,
+                        pointHistory: FieldValue.arrayUnion(penaltyLog),
+                    };
+                    
+                    transaction.update(userRef, userUpdateData);
+                    
+                    if (oldTier !== newTier) {
+                        logger.info(`User ${userId} tier changed from ${oldTier} to ${newTier} due to no-show penalty cancellation.`);
+                        // TODO: 등급 변동 알림 생성 로직 추가
+                    }
+                }
             });
             
-            logger.info(`User ${userId} canceled order ${orderId}`);
+            logger.info(`User ${userId} canceled order ${orderId}. Penalty applied: ${treatAsNoShow}`);
             return { success: true, message: "주문이 성공적으로 취소되었습니다." };
 
         } catch (error) {

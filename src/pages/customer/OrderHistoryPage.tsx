@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { orderHistoryTourSteps } from '@/components/customer/AppTour';
+// ✅ [수정] 수정된 orderService에서 cancelOrder를 가져옵니다.
 import { cancelOrder } from '@/firebase/orderService';
 import { getUserWaitlist, cancelWaitlistEntry } from '@/firebase/productService';
 import { getApp } from 'firebase/app';
@@ -26,7 +27,7 @@ import toast from 'react-hot-toast';
 import './OrderHistoryPage.css';
 
 // =================================================================
-// 📌 이미지 안전 로더 (수정됨)
+// 📌 이미지 안전 로더 (수정 없음)
 // =================================================================
 
 const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
@@ -34,7 +35,6 @@ const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
 
 type ThumbSize = '200x200' | '1080x1080';
 
-// ✅ fetchPriority 경고 수정 및 오류 처리 로직 강화
 const SafeThumb: React.FC<{
   src?: string; alt: string; size?: ThumbSize; eager?: boolean; className?: string;
 }> = ({ src, alt, size = '200x200', eager = false, className }) => {
@@ -52,23 +52,20 @@ const SafeThumb: React.FC<{
   useEffect(() => {
     const newOptimized = getOptimizedImageUrl(original, size);
     setImageSrc(newOptimized);
-    setErrorState('none'); // src prop이 변경되면 에러 상태 초기화
-  }, [original, size]); // 의존성 배열에 original과 size만 유지
+    setErrorState('none');
+  }, [original, size]);
 
   const handleError = useCallback(() => {
     if (errorState === 'original-failed') {
-      // 최종 대체 이미지 로딩도 실패하면 더 이상 아무것도 하지 않음 (무한 루프 방지)
       return;
     }
 
     if (errorState === 'none') {
-      // 1단계: 최적화 이미지 로딩 실패
       console.error(`[SafeThumb ERROR] Optimized image failed to load: ${optimized}`);
       console.log(`[SafeThumb FALLBACK-1] Trying original URL: ${original}`);
       setErrorState('optimized-failed');
       setImageSrc(original);
     } else if (errorState === 'optimized-failed') {
-      // 2단계: 원본 이미지 로딩도 실패
       console.error(`[SafeThumb ERROR] Original image also failed: ${original}`);
       console.log(`[SafeThumb FALLBACK-2] Displaying placeholder.`);
       setErrorState('original-failed');
@@ -80,10 +77,8 @@ const SafeThumb: React.FC<{
     <img
       src={imageSrc}
       alt={alt}
-      // ✅ [수정] 에러 상태에 따라 클래스 추가
       className={`${className} ${errorState !== 'none' ? 'image-error-fallback' : ''}`}
       loading={eager ? 'eager' : 'lazy'}
-      // ✅ [수정] React 경고 해결: fetchpriority -> fetchPriority
       fetchPriority={eager ? 'high' : 'auto'}
       onError={handleError}
     />
@@ -92,7 +87,7 @@ const SafeThumb: React.FC<{
 
 
 // =================================================================
-// 📌 타입 정의 및 헬퍼 함수
+// 📌 타입 정의 및 헬퍼 함수 (수정 없음)
 // =================================================================
 
 interface AggregatedItem {
@@ -141,7 +136,7 @@ const formatPickupDateShort = (date: Date): string => {
 };
 
 // =================================================================
-// 📌 커스텀 훅
+// 📌 커스텀 훅 (수정 없음)
 // =================================================================
 const DATA_PER_PAGE = 10;
 
@@ -251,7 +246,8 @@ const EmptyHistory: React.FC<{ type?: 'order' | 'waitlist' | 'pickup' }> = React
 const AggregatedItemCard: React.FC<{
   item: AggregatedItem;
   displayDateInfo?: { type: 'pickup' | 'order'; date: Date };
-  onCancel?: (order: Order) => void;
+  // ✅ [수정] onCancel 콜백의 두 번째 인자로 페널티 적용 여부(boolean)를 전달
+  onCancel?: (order: Order, isPenaltyPeriod: boolean) => void;
 }> = React.memo(({ item, displayDateInfo, onCancel }) => {
   const navigate = useNavigate();
   const longPressActionInProgress = useRef(false);
@@ -269,43 +265,58 @@ const AggregatedItemCard: React.FC<{
     }
   }, [item.status, item.wasPrepaymentRequired]);
 
-  const { cancellable, orderToCancel, cancelDisabledReason, isEvent } = useMemo(() => {
-  const latestOrder = item.originalOrders[0];
-  if (!latestOrder) {
-    return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null, isEvent: false };
-  }
-  const oi = latestOrder.items?.[0];
-  const isEventLike =
-    (latestOrder as any)?.eventId ||
-    (oi as any)?.eventId ||
-    (oi as any)?.roundId?.startsWith?.('welcome-') ||
-    (oi as any)?.roundName?.includes?.('이벤트') ||
-    item.productName?.includes?.('랜덤간식') ||
-    (typeof (oi as any)?.unitPrice === 'number' && (oi as any)?.unitPrice === 0);
+  // ✅ [수정] 2차 공구 기간(페널티 부과 기간)인지 판단하는 로직 추가 및 고도화
+  const { cancellable, orderToCancel, cancelDisabledReason, isEvent, isPenaltyPeriod } = useMemo(() => {
+    const latestOrder = item.originalOrders[0];
+    if (!latestOrder) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '주문 정보를 찾을 수 없습니다.', isEvent: false, isPenaltyPeriod: false };
+    }
+    const oi = latestOrder.items?.[0];
+    const isEventLike =
+      (latestOrder as any)?.eventId ||
+      (oi as any)?.eventId ||
+      (oi as any)?.roundId?.startsWith?.('welcome-') ||
+      (oi as any)?.roundName?.includes?.('이벤트') ||
+      item.productName?.includes?.('랜덤간식') ||
+      (typeof (oi as any)?.unitPrice === 'number' && (oi as any)?.unitPrice === 0);
 
-  if (isEventLike) {
-    return {
-      cancellable: false,
-      orderToCancel: undefined,
-      cancelDisabledReason: '이벤트 상품은 취소할 수 없습니다.',
-      isEvent: true
-    };
-  }
+    if (isEventLike) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '이벤트 상품은 취소할 수 없습니다.', isEvent: true, isPenaltyPeriod: false };
+    }
+    
+    const isCancellableStatus = latestOrder.status === 'RESERVED' || latestOrder.status === 'PREPAID';
+    if (!isCancellableStatus) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null, isEvent: false, isPenaltyPeriod: false };
+    }
 
-  const isCancellableStatus =
-    latestOrder.status === 'RESERVED' || latestOrder.status === 'PREPAID';
-  if (!isCancellableStatus) {
-    return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: null, isEvent: false };
-  }
+    const createdAt = safeToDate(latestOrder.createdAt);
+    const pickupDate = safeToDate(latestOrder.pickupDate);
+    if (!createdAt || !pickupDate) {
+        return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '주문 또는 픽업일 정보를 확인할 수 없습니다.', isEvent: false, isPenaltyPeriod: false };
+    }
 
-  const deadline = safeToDate(latestOrder.items?.[0]?.deadlineDate);
-  if (deadline && new Date() > deadline) {
-    return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '마감일이 지나 취소할 수 없습니다.', isEvent: false };
-  }
+    // 1차 공구 마감 시간 계산 (주문생성일(업로드일) 다음날 오후 1시)
+    const firstPeriodDeadline = dayjs(createdAt);
+    const deadlineDay = firstPeriodDeadline.day() === 6 // 토요일 주문은
+      ? firstPeriodDeadline.add(2, 'day') // 월요일로
+      : firstPeriodDeadline.add(1, 'day'); // 아니면 다음날로
+    const finalFirstPeriodDeadline = deadlineDay.hour(13).minute(0).second(0).millisecond(0).toDate();
 
-  return { cancellable: true, orderToCancel: latestOrder, cancelDisabledReason: null, isEvent: false };
-}, [item.originalOrders, item.productName]);
+    // 2차 공구 마감 시간 (최종 취소 가능 시간) 계산 (픽업일 오후 1시)
+    const finalCancelDeadline = dayjs(pickupDate).hour(13).minute(0).second(0).millisecond(0).toDate();
+    
+    const now = new Date();
 
+    // 최종 취소 가능 시간이 지났으면 취소 불가
+    if (now > finalCancelDeadline) {
+      return { cancellable: false, orderToCancel: undefined, cancelDisabledReason: '픽업일 마감 시간이 지나 취소할 수 없습니다.', isEvent: false, isPenaltyPeriod: false };
+    }
+    
+    // 현재 시간이 1차 공구 마감 시간을 지났는지 (페널티 부과 기간인지) 확인
+    const isPenalty = now > finalFirstPeriodDeadline;
+
+    return { cancellable: true, orderToCancel: latestOrder, cancelDisabledReason: null, isEvent: false, isPenaltyPeriod: isPenalty };
+  }, [item.originalOrders, item.productName]);
 
 
   const topText = useMemo(
@@ -322,7 +333,8 @@ const AggregatedItemCard: React.FC<{
     if (longPressActionInProgress.current) return;
     longPressActionInProgress.current = true;
     if (cancellable && orderToCancel && onCancel) {
-      onCancel(orderToCancel);
+      // ✅ [수정] isPenaltyPeriod 값을 onCancel 콜백으로 전달
+      onCancel(orderToCancel, isPenaltyPeriod);
     }
     else if (cancelDisabledReason) {
       toast.custom((t) => (
@@ -539,20 +551,31 @@ const OrderHistoryPage: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
+  
+  // ✅ [수정] handleCancelOrder 함수 시그니처 및 내부 로직 변경
+  const handleCancelOrder = useCallback((orderToCancel: Order, isPenalty: boolean) => {
+    const title = isPenalty ? "🚨 페널티 취소" : "예약 취소";
+    const message = isPenalty 
+      ? "2차 공구 기간입니다. 지금 취소하면 '노쇼'로 처리되어 페널티가 부과됩니다. 정말 취소하시겠습니까?" 
+      : "정말 이 예약을 취소하시겠습니까?";
 
-  const handleCancelOrder = useCallback((orderToCancel: Order) => {
     toast.custom((t) => (
       <div className={`confirmation-toast ${t.visible ? 'animate-enter' : ''}`}>
-        <h4 className="toast-header"><AlertCircle size={20} /><span>예약 취소</span></h4>
-        <p className="toast-message">정말 이 예약을 취소하시겠습니까?</p>
+        <h4 className="toast-header"><AlertCircle size={20} /><span>{title}</span></h4>
+        <p className="toast-message">{message}</p>
         <div className="toast-buttons">
           <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
           <button className="common-button button-danger button-medium" onClick={() => {
             toast.dismiss(t.id);
-            const promise = cancelOrder(orderToCancel);
+            // ✅ [수정] cancelOrder 호출 시 isPenalty 값을 treatAsNoShow 옵션으로 전달
+            const promise = cancelOrder(orderToCancel, { treatAsNoShow: isPenalty });
             showPromiseToast(promise, {
               loading: '예약 취소 처리 중...',
-              success: () => { setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o)); return '예약이 성공적으로 취소되었습니다.'; },
+              success: () => { 
+                // UI 즉시 업데이트
+                setOrders(prev => prev.map(o => o.id === orderToCancel.id ? { ...o, status: 'CANCELED' } : o)); 
+                return '예약이 성공적으로 취소되었습니다.'; 
+              },
               error: (err: any) => err?.message || '취소 중 오류가 발생했습니다.',
             });
           }}>취소하기</button>
