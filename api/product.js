@@ -1,6 +1,7 @@
 // /api/product.js  (ESM, Node 18+ on Vercel)
-// 목적: Cloud Functions의 productApi 내부 경로(/product, /v1/product, /) 중
-//       어느 것인지 몰라도 차례로 시도해서 처음 2xx 응답을 그대로 프록시.
+//
+// 목적: Cloud Functions 의 productApi 내부 경로가 /product, /v1/product, / 중 무엇이든
+//       차례대로 시도하여 첫 성공 응답을 그대로 프록시한다.
 
 const CF_BASE = 'https://asia-northeast3-sso-do.cloudfunctions.net/productApi';
 
@@ -15,7 +16,7 @@ export default async function handler(req, res) {
     const candidates = [
       `${CF_BASE}/product?id=${encodeURIComponent(id)}`,
       `${CF_BASE}/v1/product?id=${encodeURIComponent(id)}`,
-      `${CF_BASE}?id=${encodeURIComponent(id)}` // 루트에서 처리하는 경우
+      `${CF_BASE}?id=${encodeURIComponent(id)}`,
     ];
 
     let lastErr = null;

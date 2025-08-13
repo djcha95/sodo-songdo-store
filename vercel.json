@@ -3,15 +3,21 @@
   "routes": [
     { "src": "^/api/og$", "dest": "/api/og" },
     { "src": "^/api/img$", "dest": "/api/img" },
+    { "src": "^/api/product$", "dest": "/api/product" },  
 
-    { "src": "^/api/product$", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/productApi/product" },
+    { "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
 
-    { "src": "^/api/(?!og$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
+    { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
+    { "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|woff2?)$", "dest": "/$1.$2" },
 
     {
       "src": "^/product/([A-Za-z0-9_-]+)$",
       "has": [
-        { "type": "header", "key": "user-agent", "value": ".*(KAKAOTALK|KakaoTalk|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|naver|NaverBot|Yeti).*" }
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(KAKAOTALK|KakaoTalk|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|naver|NaverBot|Yeti).*"
+        }
       ],
       "dest": "/api/og?id=$1"
     },
