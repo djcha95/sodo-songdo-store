@@ -131,12 +131,11 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   if (round.status === 'ended' || round.status === 'sold_out') {
     return 'ENCORE_REQUESTABLE';
   }
-
-  // ✅ [핵심 수정] 2. 재고 상태를 시간보다 먼저 확인 (Admin 페이지 로직과 일치)
-  // 모든 옵션의 재고가 0 이하이면, 판매 기간과 상관없이 '매진'으로 우선 처리합니다.
+  
+  // 2. 재고 상태를 시간보다 먼저 확인
   const isAllVariantsSoldOut = round.variantGroups.length > 0 && round.variantGroups.every(vg => {
       const totalStock = vg.totalPhysicalStock;
-      if (totalStock === null || totalStock === -1) { // 무제한 재고는 매진이 아님
+      if (totalStock === null || totalStock === -1) {
           return false;
       }
       const reserved = vg.reservedCount || 0;
@@ -146,11 +145,9 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   if (isAllVariantsSoldOut) {
       const now = dayjs();
       const { primaryEnd } = getDeadlines(round);
-      // 단, 1차 공구 기간에는 '대기' 상태를 허용
       if (primaryEnd && now.isBefore(primaryEnd)) {
           return 'WAITLISTABLE';
       }
-      // 1차 공구 기간이 끝났으면 '앵콜 요청' (완전 마감)
       return 'ENCORE_REQUESTABLE';
   }
   
@@ -168,35 +165,42 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   const hasMultipleOptions = round.variantGroups.length > 1;
   const isOptionSelected = !!selectedVg;
 
-  // 4. 1차 공구 기간 로직
+  // 4. 1차 공구 기간 로직 (업로드 ~ 다음날 13시)
   if (primaryEnd && now.isBefore(primaryEnd)) {
     if (hasMultipleOptions && !isOptionSelected) return 'REQUIRE_OPTION';
     
     const vg = selectedVg || round.variantGroups[0];
     if (vg) {
       const totalStock = vg.totalPhysicalStock;
+      const reserved = vg.reservedCount || 0;
+      
+      // 무제한 재고는 항상 구매 가능
       if (totalStock === null || totalStock === -1) return 'PURCHASABLE';
       
-      const reserved = vg.reservedCount || 0;
+      // 한정 재고는 품절 시 '대기 가능'으로 전환
       const isSoldOut = totalStock - reserved <= 0;
-      // 여기서의 isSoldOut은 개별 옵션에 대한 것
       return isSoldOut ? 'WAITLISTABLE' : 'PURCHASABLE';
     }
-    return 'ENDED';
+    return 'ENDED'; // 옵션 정보가 없는 비정상적인 경우
   }
 
-  // 5. 2차 공구 기간 로직
+  // 5. 2차 공구 기간 로직 (1차 마감 후 ~ 픽업일 13시)
   if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]')) {
     if (hasMultipleOptions && !isOptionSelected) return 'REQUIRE_OPTION';
     
     const vg = selectedVg || round.variantGroups[0];
-    const totalStock = vg?.totalPhysicalStock;
+    if (!vg) return 'ENDED'; // 옵션 정보가 없는 경우
 
-    if (totalStock === null || totalStock === -1) return 'AWAITING_STOCK'; 
-    
+    const totalStock = vg.totalPhysicalStock;
     const reserved = vg.reservedCount || 0; 
-    const isSoldOut = (totalStock || 0) - reserved <= 0;
     
+    // [수정] 2차 공구에서는 무제한 재고(null, -1)는 판매 불가로 간주하고 '마감' 처리
+    if (totalStock === null || totalStock === -1) {
+        return 'ENCORE_REQUESTABLE';
+    }
+    
+    // [수정] 한정 재고의 경우, 남은 재고가 0 이하면 '마감' 처리. '대기' 없음.
+    const isSoldOut = totalStock - reserved <= 0;
     return isSoldOut ? 'ENCORE_REQUESTABLE' : 'PURCHASABLE';
   }
 

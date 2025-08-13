@@ -88,18 +88,19 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     return (
         <>
             <h1 className="product-name">{product.groupName}</h1>
-            
-            {product.hashtags && product.hashtags.length > 0 && (
-                <div className="product-hashtags">
-                    {product.hashtags.map(tag => (
-                        <span key={tag} className="hashtag">{tag}</span>
-                    ))}
-                </div>
-            )}
 
             <div className="markdown-content">
               <ReactMarkdown>{product.description || ''}</ReactMarkdown>
             </div>
+
+            {product.hashtags && product.hashtags.length > 0 && (
+                <div className="product-hashtags">
+                    {product.hashtags.map(tag => (
+                        <span key={tag} className="hashtag">{`#${tag.replace(/#/g, '')}`}</span>
+                    ))}
+                </div>
+            )}
+            
             <div className="product-key-info" data-tutorial-id="detail-key-info">
                 {expirationDateInfo.type === 'single' && (
                     <div className="info-row">

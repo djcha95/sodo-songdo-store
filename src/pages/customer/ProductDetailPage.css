@@ -114,60 +114,84 @@
   line-height: 1.3;
 }
 
-/* 마크다운 상세 설명 스타일 */
+/* ✅ [수정] 해시태그 스타일 */
+.product-hashtags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.2rem; /* 설명과의 간격 */
+}
+
+.hashtag {
+  background-color: #f3f4f6;
+  color: #4b5563;
+  padding: 0.3rem 0.6rem;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+
+/* ✅ [수정] 마크다운 상세 설명 스타일 (통합 및 개선) */
 .markdown-content {
-  font-size: 1.05rem; 
-  line-height: 1.8; 
+  font-size: 1.0rem; 
+  line-height: 1.3; /* 행간을 조금 더 조밀하게 조정 */
   white-space: pre-wrap;
   word-break: keep-all;
   text-align: center; 
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 0.8rem; /* 상품명과의 간격 축소 */
+  padding: 0 0px;
   color: #333; 
 }
+
+/* h2 태그가 너무 크다는 요청에 따라 스타일을 눈에 띄지 않게 변경 */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
-  margin-top: 1.5rem;
-  margin-bottom: 0.8rem;
+  font-size: 1.0em; /* 일반 텍스트보다 약간 크게 */
+  font-weight: 0;
   line-height: 1.4;
-  font-weight: 700;
-  text-align: left;
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid #eee;
+  text-align: center;
+  border-bottom: none; /* 밑줄 제거 */
 }
-.markdown-content h1 { font-size: 1.4em; }
-.markdown-content h2 { font-size: 1.2em; }
-.markdown-content h3 { font-size: 1.1em; }
-.markdown-content p {
-  margin: 0 0 1rem 0;
-}
+
+
 .markdown-content ul,
 .markdown-content ol {
-  margin: 0 0 1rem 0;
-  padding-left: 1.5rem;
-  text-align: left;
+  margin: 0rem auto;
+  padding-left: 0rem;
+  display: inline-block; /* 목록이 중앙정렬 div 내에서 자연스럽게 보이도록 */
+  text-align: center;      /* 목록 안의 텍스트는 다시 왼쪽 정렬 */
 }
+
 .markdown-content li {
   margin-bottom: 0.5rem;
 }
+
 .markdown-content blockquote {
-  margin: 1rem 0;
-  padding: 0.5rem 1rem;
-  border-left: 4px solid #eee;
+  margin: 1rem auto;
+  padding: 0.0rem 0rem;
+  border-left: 0px solid #eee;
   color: #666;
   background-color: #f8f9fa;
+  text-align: left;
+  display: inline-block;
 }
+
 .markdown-content hr {
   height: 1px;
   background-color: #eee;
   border: 0;
   margin: 2rem 0;
 }
+
 .markdown-content strong {
   color: #000;
   font-weight: 700;
 }
+
 .markdown-content em {
     font-style: italic;
 }
@@ -228,9 +252,9 @@
 }
 
 
-/* ✅ [추가] 옵션별 유통기한 표시 스타일 */
+/* 옵션별 유통기한 표시 스타일 */
 .expiration-info-row .info-label {
-  align-self: flex-start; /* 글자 수가 많아질 경우를 대비해 라벨을 상단에 고정 */
+  align-self: flex-start;
 }
 .expiration-list {
   text-align: right;
@@ -462,32 +486,4 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-}
-
-/* src/pages/customer/ProductDetailPage.css 파일 하단에 추가 */
-
-.markdown-content {
-  text-align: center;
-  padding: 0 16px; /* 좌우 여백을 줘서 답답해 보이지 않게 합니다. */
-}
-
-/* ReactMarkdown이 생성하는 개별 요소 스타일링
-  목록(ul)은 보통 왼쪽 정렬이 기본값이므로, 가운데 정렬된 div 안에서
-  자연스럽게 보이도록 별도 처리해줍니다.
-*/
-.markdown-content ul,
-.markdown-content ol {
-  display: inline-block; /* 목록이 내용만큼만 너비를 갖게 함 */
-  text-align: left;      /* 목록 안의 텍스트는 다시 왼쪽 정렬 */
-  margin-top: 1em;
-  margin-bottom: 1em;
-}
-
-.markdown-content h2 {
-  font-size: 1.5rem; /* 헤드라인 폰트 크기 조정 */
-  margin-bottom: 0.75em;
-}
-
-.markdown-content p {
-  margin-bottom: 0.5em;
 }

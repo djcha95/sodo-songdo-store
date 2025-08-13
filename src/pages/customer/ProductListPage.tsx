@@ -45,13 +45,12 @@ const ProductListPage: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- 무한스크롤 제어 키 포인트 ---
   const PAGE_SIZE = 10;
   const lastVisibleRef = useRef<number | null>(null);
   const hasMoreRef = useRef<boolean>(true);
   const isFetchingRef = useRef<boolean>(false);
   const fetchCooldownRef = useRef<number>(0);
-  const FETCH_COOLDOWN = 800; // ms
+  const FETCH_COOLDOWN = 800;
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
@@ -157,44 +156,40 @@ const ProductListPage: React.FC = () => {
       
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
       
-      const actionState = determineActionState(round, userDocument);
+      const actionState = determineActionState(round as SalesRound, userDocument);
       
-      // 화면에 표시할 수 있는 상태 그룹
       const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION', 'AWAITING_STOCK', 'ENCORE_REQUESTABLE'].includes(actionState);
       
       if (!isDisplayableState) return;
 
       let finalPhase: 'primary' | 'secondary' | 'past';
 
-      // '앵콜 요청 가능'은 '마감' 상태이므로 항상 past로 분류
       if (actionState === 'ENCORE_REQUESTABLE') {
           finalPhase = 'past';
       } 
-      // 그 외 활성 상태들은 시간으로 1차/2차 구분
       else if (primaryEndDate && now.isBefore(primaryEndDate)) {
           finalPhase = 'primary';
       } 
-      else {
+      else if (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '[]')) {
           finalPhase = 'secondary';
+      }
+      else {
+          finalPhase = 'past';
       }
 
       const productWithState: ProductWithUIState = { 
         ...product, 
         phase: finalPhase,
         deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
-        displayRound: round,
+        displayRound: round as SalesRound,
       };
       
       if (finalPhase === 'primary') {
           tempPrimary.push(productWithState);
       } else if (finalPhase === 'secondary') {
           tempSecondary.push(productWithState);
-      } else { // 'past'
-          const publishAtDate = safeToDate(round.publishAt);
-          // 최근 5일 이내에 게시된 마감 상품만 표시
-          if (publishAtDate && now.diff(dayjs(publishAtDate), 'day') <= 5) {
-              tempPast.push(productWithState);
-          }
+      } else {
+          tempPast.push(productWithState);
       }
     });
 
@@ -217,8 +212,20 @@ const ProductListPage: React.FC = () => {
     const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
     
     return {
-      primarySaleProducts: tempPrimary.sort(sortProductsForDisplay),
-      secondarySaleProducts: tempSecondary.sort(sortProductsForDisplay),
+      primarySaleProducts: tempPrimary.sort(sortProductsForDisplay as any),
+      // [수정] 2차 공구 상품을 '픽업일' 기준으로 정렬합니다.
+      secondarySaleProducts: tempSecondary.sort((a, b) => {
+        const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() ?? Infinity;
+        const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() ?? Infinity;
+
+        // 픽업일이 다르면 날짜가 빠른 순서(오름차순)로 정렬
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+
+        // 픽업일이 같으면 기존 정렬 로직(재고, 가격 등)을 따름
+        return sortProductsForDisplay(a as any, b as any);
+      }),
       pastProductsByDate: sortedPastGroups,
       primarySaleEndDate: firstPrimarySaleEndDate
     };
@@ -266,7 +273,7 @@ const ProductListPage: React.FC = () => {
           tutorialId="primary-sale-section"
         >
           {primarySaleProducts.length > 0 ? (
-            primarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)
+            primarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} />)
           ) : !loading && (
             <div className="product-list-placeholder">
               <PackageSearch size={48} />
@@ -282,7 +289,7 @@ const ProductListPage: React.FC = () => {
             title={<>⏰ 픽업임박! 추가공구</>}
             tutorialId="secondary-sale-section"
           >
-            {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p} />)}
+            {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} />)}
           </ProductSection>
         )}
 
@@ -292,7 +299,7 @@ const ProductListPage: React.FC = () => {
             if (!productsForDate || productsForDate.length === 0) return null;
             return (
               <ProductSection key={date} title={<>{dayjs(date).format('M월 D일')} 마감공구</>}>
-                {productsForDate.map(p => <ProductCard key={p.id} product={p} />)}
+                {productsForDate.map(p => <ProductCard key={p.id} product={p as any} />)}
               </ProductSection>
             );
           })}

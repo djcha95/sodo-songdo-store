@@ -1,6 +1,6 @@
 // functions/src/callable/products.ts
 // Cloud Functions (v2) — Products related callables
-// v1.2 - 단일 상품 재고 조회 함수 추가
+// v1.3 - 페이지네이션 로직 제거로 전체 상품 조회하도록 수정
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -78,28 +78,30 @@ export const getProductsWithStock = onCall(
   {
     region: "asia-northeast3",
     cors: allowedOrigins,
-    memory: "512MiB",
+    memory: "1GiB", // [수정] 전체 상품 조회를 위해 메모리 상향
     timeoutSeconds: 60,
     enforceAppCheck: false,
   },
   async (request) => {
     try {
-      const pageSizeRaw = request.data?.pageSize;
-      const lastVisibleTimestamp = request.data?.lastVisibleTimestamp;
-      const pageSize =
-        typeof pageSizeRaw === "number" && pageSizeRaw > 0 && pageSizeRaw <= 50
-          ? pageSizeRaw
-          : 20;
+      // [제거] 페이지네이션 관련 로직을 모두 제거합니다.
+      // const pageSizeRaw = request.data?.pageSize;
+      // const lastVisibleTimestamp = request.data?.lastVisibleTimestamp;
+      // const pageSize =
+      //   typeof pageSizeRaw === "number" && pageSizeRaw > 0 && pageSizeRaw <= 50
+      //     ? pageSizeRaw
+      //     : 20;
 
-      let query = db
+      // [수정] 모든 보관처리되지 않은 상품을 가져옵니다.
+      const query = db
         .collection("products")
         .where("isArchived", "==", false)
-        .orderBy("createdAt", "desc")
-        .limit(pageSize);
-
-      if (lastVisibleTimestamp) {
-        query = query.startAfter(Timestamp.fromMillis(lastVisibleTimestamp));
-      }
+        .orderBy("createdAt", "desc");
+      
+      // [제거] 페이지네이션 시작점 로직 제거
+      // if (lastVisibleTimestamp) {
+      //   query = query.startAfter(Timestamp.fromMillis(lastVisibleTimestamp));
+      // }
 
       const productsSnapshot = await query.get();
       const products = productsSnapshot.docs.map((doc) => ({
@@ -153,14 +155,16 @@ export const getProductsWithStock = onCall(
         };
       });
 
-      const lastVisible =
-        productsSnapshot.docs.length > 0
-          ? (productsSnapshot.docs[productsSnapshot.docs.length - 1].get("createdAt") as Timestamp | null)
-          : null;
-
+      // [제거] 페이지네이션 커서 로직 제거
+      // const lastVisible =
+      //   productsSnapshot.docs.length > 0
+      //     ? (productsSnapshot.docs[productsSnapshot.docs.length - 1].get("createdAt") as Timestamp | null)
+      //     : null;
+      
+      // [수정] lastVisible 대신 null을 반환하여 클라이언트의 무한 스크롤이 멈추도록 합니다.
       return {
         products: productsWithReservedData,
-        lastVisible: lastVisible ? lastVisible.toMillis() : null,
+        lastVisible: null, 
       };
     } catch (error) {
       logger.error("getProductsWithStock error:", error);
@@ -169,6 +173,7 @@ export const getProductsWithStock = onCall(
     }
   }
 );
+
 
 /** --------------------------------
  * ✅ [신규 추가] ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock

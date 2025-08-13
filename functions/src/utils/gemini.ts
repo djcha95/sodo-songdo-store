@@ -92,13 +92,15 @@ Schema:
 
 IMPORTANT INSTRUCTIONS:
 
-1) cleanedDescription (Short, Punchy, and Stylish! 🎯)
-    - **Overall Goal**: Make it **short and impactful**. Readers should grasp the key points in 5 seconds. Think Instagram caption, not a long blog post.
-    - **Structure**:
-        a. **Catchy Headline (H2)**: One irresistible, short line. (e.g., \`## ❄️ 입 안에서 녹는 겨울 별미, 대방어!\`)
-        b. **Key Points (2-3 Bullets)**: List only the **most crucial** selling points. Use emojis and bold text. Keep it brief.
-        c. **Final CTA**: A single, energetic line to encourage purchase. (e.g., \`🚀 고민은 배송만 늦출 뿐! 지금 바로 맛보세요!\`)
-    - **Formatting**: Use Markdown \`**bold**\`, emojis (✨, 💖, 🎉), and sufficient line breaks (\`\\n\`) for readability.
+1) cleanedDescription (Mobile-Optimized & Persuasive! ✍️)
+    - **Overall Goal**: Write a persuasive and slightly more detailed description that's easy to read on a mobile screen. It should feel friendly and informative, not just a brief ad.
+    - **No Markdown Headers**: Do NOT use Markdown headers like \`##\` or \`###\`. They appear too large on the mobile screen. Use **bold text** and emojis for all emphasis and sectioning.
+    - **Structure for Readability**:
+        a. **Engaging Intro**: Start with a warm, inviting sentence or two to grab attention.
+        b. **Key Features (Bulleted List)**: Use a bulleted list (\`* \`) to clearly present the main selling points. Elaborate slightly on each point (1-2 short sentences). Use plenty of emojis to make it visually appealing. Example: \`* 🧑‍🍳 **전문가의 손길**: 20년 경력 셰프가 직접 손질했어요! \`
+        c. **Why You'll Love It**: Add another short paragraph or a few more bullet points explaining why this product is special or how to enjoy it best.
+        d. **Friendly CTA**: End with an encouraging call-to-action that feels personal. Example: \`💖 망설이면 품절! 지금 바로 소중한 분들과 함께 즐겨보세요! \`
+    - **Formatting**: Use Markdown \`**bold**\` for emphasis, liberal use of relevant emojis (✨, 💖, 🎉, 🧑‍🍳, 🚛), and ensure good spacing with line breaks (\`\\n\`) for mobile viewing. Make it look great!
 
 2) Hashtag Generation (MANDATORY REQUIREMENT!)
     - You MUST generate between 2 and 4 relevant hashtags based on the product description.
@@ -112,7 +114,7 @@ IMPORTANT INSTRUCTIONS:
 
 4) Storage type: Infer from '냉장', '냉동', '실온'. Default to 'ROOM'.
 
-5. Naming Rules:
+5) Naming Rules:
     - **Product Type**: If multiple distinct options (flavors/sizes) exist, use 'group', else 'single'.
     - **Clean Names**: When extracting 'groupName' and 'variantGroups.groupName', **ALWAYS remove** store names like "소도몰" and any special characters like "X" or "x". The name should be clean and represent only the product itself.
 
