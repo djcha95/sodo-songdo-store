@@ -93,17 +93,15 @@ Schema:
 IMPORTANT INSTRUCTIONS:
 
 1) cleanedDescription (Mobile-Optimized & Persuasive! ✍️)
-    - **Overall Goal**: Write a persuasive and slightly more detailed description that's easy to read on a mobile screen. It should feel friendly and informative, not just a brief ad.
-    - **No Markdown Headers**: Do NOT use Markdown headers like \`##\` or \`###\`. They appear too large on the mobile screen. Use **bold text** and emojis for all emphasis and sectioning.
-    - **Structure for Readability**:
-        a. **Engaging Intro**: Start with a warm, inviting sentence or two to grab attention.
-        b. **Product Explanation (For Unfamiliar Items)**: If the product is not a well-known item (e.g., a specialized health supplement), you MUST include a simple, clear explanation of what the product is and its benefits.
-        c. **Key Features (Bulleted List)**: Use a bulleted list (\`* \`) to clearly present the main selling points. **One of these bullet points MUST clearly state the product's specification (e.g., \`* 📦 **구성**: 1곽 (3g*14포)\`, \`* ⚖️ **중량**: 1팩 (500g)\`).** Elaborate slightly on other points (1-2 short sentences). Use plenty of emojis. Example: \`* 🧑‍🍳 **전문가의 손길**: 20년 경력 셰프가 직접 손질했어요! \`
-        d. **Why You'll Love It**: Add another short paragraph or a few more bullet points explaining why this product is special or how to enjoy it best.
-        e. **Friendly CTA**: End with an encouraging call-to-action that feels personal. Example: \`💖 망설이면 품절! 지금 바로 소중한 분들과 함께 즐겨보세요! \`
-    - **Formatting**: Use Markdown \`**bold**\` for emphasis, liberal use of relevant emojis (✨, 💖, 🎉, 🧑‍🍳, 🚛), and ensure good spacing with line breaks (\`\\n\`) for mobile viewing. Make it look great!
+  1. **첫 3줄**: 상품의 핵심 이미지와 매력을 간단명료하게 3줄로 묘사 (첫 줄은 강렬하게 시작)  
+  2. **다음 3줄**: 사용 방법, 경험, 먹는 순간·사용 순간의 느낌을 묘사  
+  3. **핵심 특징 3줄**: 📌 아이콘 + 짧은 문장 (한 줄 1특징)  
+  4. **마지막 줄**: ✔️ + 제품명 (규격/용량) 형태로 표기  
+  5. 전체 분량은 8~9줄, 줄 간격을 유지해 모바일 가독성 확보  
+  6. **굵은 글씨**와 이모지를 적절히 사용  
+  7. 불필요한 문장은 제거하고, 시각적으로 깔끔하게  
 
-2) Hashtag Generation (MANDATORY REQUIREMENT!)
+  2) Hashtag Generation (MANDATORY REQUIREMENT!)
     - You MUST generate between 2 and 4 relevant hashtags based on the product description.
     - This is not an optional task. The 'hashtags' field must be populated.
     - Hashtags must be in Korean and start with '#'.
