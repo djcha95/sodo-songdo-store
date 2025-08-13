@@ -2,7 +2,10 @@
   "version": 2,
   "routes": [
     { "src": "^/api/og$", "dest": "/api/og" },
-    { "src": "^/api/img$", "dest": "/api/img" },            
+    { "src": "^/api/img$", "dest": "/api/img" },
+
+    { "src": "^/api/product$", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/productApi" },
+
     { "src": "^/api/(?!og$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
 
     { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
@@ -12,18 +15,12 @@
     {
       "src": "^/product/([A-Za-z0-9_-]+)$",
       "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(KAKAOTALK|KakaoTalk|facebookexternalhit|Facebot|naver|NaverBot|Yeti).*"
-        }
+        { "type": "header", "key": "user-agent", "value": ".*(KAKAOTALK|KakaoTalk|facebookexternalhit|Facebot|naver|NaverBot|Yeti).*" }
       ],
       "dest": "/api/og?id=$1"
     },
 
     { "src": "^/product/.*$", "dest": "/index.html" },
-
-
     { "src": "^(?!/api/).*$", "dest": "/index.html" }
   ]
 }
