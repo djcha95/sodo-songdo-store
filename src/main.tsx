@@ -2,7 +2,8 @@
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
+// ✅ useLocation을 import합니다.
+import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
 
@@ -52,6 +53,8 @@ const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 
 const Root = () => {
   const { user, loading } = useAuth();
+  // ✅ useLocation 훅을 사용하여 현재 경로 정보를 가져옵니다.
+  const location = useLocation();
 
   if (loading) {
     return <SodomallLoader />;
@@ -59,7 +62,8 @@ const Root = () => {
   
   if (!user) {
     const allowedPaths = ['/login', '/terms', '/privacy'];
-    if (!allowedPaths.includes(window.location.pathname)) {
+    // ✅ window.location.pathname 대신 location.pathname을 사용하여 안정성을 높입니다.
+    if (!allowedPaths.includes(location.pathname)) {
       return <Navigate to="/login" replace />;
     }
   }
@@ -168,7 +172,6 @@ const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       />
       <AuthProvider>
         <LaunchProvider>
-          {/* 🔥 이전의 함수 형태 `{(...)=>()}`를 제거하고 표준적인 Provider 형태로 변경 */}
           <TutorialProvider>
             <NotificationProvider>
               <CartProvider>

@@ -162,10 +162,12 @@ const ProductListPage: React.FC = () => {
       
       let finalPhase: 'primary' | 'secondary' | 'past';
 
+      // ✅ [핵심] 요청사항: 'AWAITING_STOCK' 상태인 상품을 2차 공구(secondary)로 분류합니다.
       if (actionState === 'PURCHASABLE' || actionState === 'WAITLISTABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'AWAITING_STOCK') {
           if (now.isBefore(primaryEndDate)) {
               finalPhase = 'primary';
           } else {
+              // 1차 공구 기간이 지났으므로 2차 공구로 분류
               finalPhase = 'secondary';
           }
       } else {
@@ -189,7 +191,6 @@ const ProductListPage: React.FC = () => {
       } else if (finalPhase === 'secondary') {
           tempSecondary.push(productWithState);
       } else { // 'past'
-          // ✅ [수정] 업로드 날짜(publishAt)가 오늘로부터 5일 이내인 상품만 '마감 공구'에 포함
           const publishAtDate = safeToDate(round.publishAt);
           if (publishAtDate && now.diff(dayjs(publishAtDate), 'day') <= 5) {
               tempPast.push(productWithState);
@@ -197,7 +198,6 @@ const ProductListPage: React.FC = () => {
       }
     });
 
-    // ✅ [수정] '마감 공구'를 업로드 날짜(publishAt) 기준으로 그룹핑
     const pastGroups: { [key: string]: ProductWithUIState[] } = {};
     tempPast.forEach(p => {
       const publishAtDate = safeToDate(p.displayRound.publishAt);
@@ -208,11 +208,9 @@ const ProductListPage: React.FC = () => {
       }
     });
 
-    // ✅ [수정] 업로드 날짜 기준 내림차순 정렬 (최신순)
     const sortedPastKeys = Object.keys(pastGroups).sort((a, b) => b.localeCompare(a));
     const sortedPastGroups: { [key:string]: ProductWithUIState[] } = {};
     sortedPastKeys.forEach(key => {
-      // 그룹 내에서는 이름순으로 정렬
       sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.groupName || '').localeCompare(b.groupName || ''));
     });
 
@@ -293,7 +291,6 @@ const ProductListPage: React.FC = () => {
             const productsForDate = pastProductsByDate[date];
             if (!productsForDate || productsForDate.length === 0) return null;
             return (
-              // ✅ [수정] 마감 공구 섹션 제목 형식을 변경
               <ProductSection key={date} title={<>{dayjs(date).format('M월 D일')} 마감공구</>}>
                 {productsForDate.map(p => <ProductCard key={p.id} product={p} />)}
               </ProductSection>

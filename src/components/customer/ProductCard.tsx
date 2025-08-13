@@ -316,6 +316,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         const requested = hasRequestedEncore(product.id);
         return <button className={`encore-btn ${requested ? 'requested' : ''}`} onClick={handleEncoreRequest} disabled={requested || encoreLoading}><Star size={16} /> {encoreLoading ? '처리중' : requested ? '요청완료' : '앵콜 요청'}</button>;
 
+      // ✅ [핵심] 요청사항: '재고 준비중' 상태일 때 버튼을 비활성화하고 텍스트를 표시합니다.
       case 'AWAITING_STOCK':
         return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
       case 'ENDED':
@@ -327,7 +328,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   const TopBadge = () => {
-    // ✅ [수정] '마감'된 상품(phase가 'past'인 경우)에서는 뱃지를 표시하지 않음
     if (product.phase === 'past') return null;
     
     if (isPreLaunch) return null;
@@ -373,6 +373,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             loading="lazy"
             onError={handleImageError} 
           />
+          {/* ✅ [핵심] 요청사항: '재고 준비중' 상태일 때 이미지 위에 오버레이 뱃지를 표시합니다. */}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {actionState === 'WAITLISTABLE' && <div className="card-overlay-badge">대기 가능</div>}
           {isSuspendedUser && product.phase !== 'past' && (

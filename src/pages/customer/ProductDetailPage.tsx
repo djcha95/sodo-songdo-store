@@ -1,7 +1,8 @@
 // src/pages/customer/ProductDetailPage.tsx
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+// ✅ useLocation을 추가로 import합니다.
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
 import { useAuth } from '@/context/AuthContext';
@@ -15,7 +16,6 @@ import { getDocs, collection, query, where, Timestamp } from 'firebase/firestore
 import { httpsCallable } from 'firebase/functions';
 
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, Order, OrderItem } from '@/types';
-// ✅ productUtils에서 상태 결정 함수를 가져옵니다.
 import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
@@ -46,10 +46,9 @@ const formatDateWithDay = (date: Date | Timestamp | null | undefined): string =>
   return dayjs(d).format('MM.DD(ddd)');
 };
 
-// ✅ [수정] 유통기한이 없는 경우 빈 문자열을 반환하도록 변경
 const formatExpirationDate = (date: Date | Timestamp | null | undefined): string => {
     const d = safeToDate(date);
-    if (!d) return ''; // 빈 문자열 반환
+    if (!d) return ''; 
     return dayjs(d).format('YYYY.MM.DD');
 };
 
@@ -81,7 +80,6 @@ const normalizeProduct = (product: Product): Product => {
 const Lightbox: React.FC<{ images: string[]; startIndex: number; isOpen: boolean; onClose: () => void; }> = React.memo(({ images, startIndex, isOpen, onClose }) => { if (!isOpen) return null; return (<div className="lightbox-overlay" onClick={onClose}><button className="lightbox-close-btn" onClick={onClose} aria-label="닫기"><X size={32} /></button><div className="lightbox-content" onClick={(e) => e.stopPropagation()}><Swiper modules={[Pagination, Navigation, Zoom]} initialSlide={startIndex} spaceBetween={20} slidesPerView={1} navigation pagination={{ clickable: true }} zoom={true} className="lightbox-swiper">{images.map((url, index) => (<SwiperSlide key={index}><div className="swiper-zoom-container"><OptimizedImage originalUrl={url} size="1080x1080" alt={`이미지 ${index + 1}`} /></div></SwiperSlide>))}</Swiper></div></div>); });
 const ProductImageSlider: React.FC<{ images: string[]; productName: string; onImageClick: (index: number) => void; }> = React.memo(({ images, productName, onImageClick }) => (<div className="product-swiper-container"><Swiper modules={[Pagination, Navigation]} spaceBetween={0} slidesPerView={1} navigation pagination={{ clickable: true, dynamicBullets: true }} className="product-swiper">{images.map((url, index) => (<SwiperSlide key={index} onClick={() => onImageClick(index)}><OptimizedImage originalUrl={url} size="1080x1080" alt={`${productName} 이미지 ${index + 1}`} /></SwiperSlide>))}</Swiper><div className="image-zoom-indicator"><Search size={16} /><span>클릭해서 크게 보기</span></div></div>));
 
-// ✅ [수정] ProductInfo 컴포넌트가 새로운 유통기한 정보 객체를 받도록 수정
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
 const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState; expirationDateInfo: ExpirationDateInfo; }> = React.memo(({ product, round, actionState, expirationDateInfo }) => {
     const pickupDate = safeToDate(round.pickupDate);
@@ -90,7 +88,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
         <>
             <h1 className="product-name">{product.groupName}</h1>
             
-            {/* ✅ Hashtag Display */}
             {product.hashtags && product.hashtags.length > 0 && (
                 <div className="product-hashtags">
                     {product.hashtags.map(tag => (
@@ -103,7 +100,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
               <ReactMarkdown>{product.description || ''}</ReactMarkdown>
             </div>
             <div className="product-key-info" data-tutorial-id="detail-key-info">
-                {/* ✅ [수정] 유통기한 표시 로직 */}
                 {expirationDateInfo.type === 'single' && (
                     <div className="info-row">
                         <div className="info-label"><Hourglass size={16} />유통기한</div>
@@ -124,7 +120,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                         </div>
                     </div>
                 )}
-                {/* type이 'none'이면 아무것도 렌더링되지 않음 */}
                 
                 <div className="info-row">
                     <div className="info-label"><Calendar size={16} />픽업일</div>
@@ -212,6 +207,8 @@ const ProductDetailSkeleton: React.FC = () => (<div className="product-detail-mo
 const ProductDetailPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
+    // ✅ useLocation 훅을 사용하여 location 객체를 가져옵니다.
+    const location = useLocation(); 
     const { userDocument } = useAuth();
     const { addToCart } = useCart();
     const { runPageTourIfFirstTime } = useTutorial();
@@ -230,6 +227,18 @@ const ProductDetailPage: React.FC = () => {
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
 
     const requestEncoreCallable = useMemo(() => httpsCallable(functions, 'requestEncore'), []);
+
+    // ✅ [추가] 닫기 버튼 핸들러
+    const handleClose = useCallback(() => {
+        // 현재 페이지가 기록 스택의 첫 번째 항목인지(예: 새 탭에서 열었을 때) 확인합니다.
+        // 첫 페이지일 경우, 뒤로 가기 대신 메인 상품 목록 페이지로 이동시킵니다.
+        // react-router-dom에서 히스토리 스택의 첫 항목의 location.key는 'default' 값을 가집니다.
+        if (location.key === 'default') {
+            navigate('/');
+        } else {
+            navigate(-1);
+        }
+    }, [navigate, location.key]);
 
     useEffect(() => {
         if (!productId) { setError("잘못된 상품 ID입니다."); setLoading(false); return; }
@@ -279,7 +288,6 @@ const ProductDetailPage: React.FC = () => {
         return { ...round, variantGroups: enrichedVariantGroups };
     }, [product, reservedQuantities]);
 
-    // ✅ [수정] 유통기한 정보를 계산하는 새로운 useMemo 훅
     const expirationDateInfo = useMemo<ExpirationDateInfo>(() => {
         if (!enrichedDisplayRound || enrichedDisplayRound.variantGroups.length === 0) {
             return { type: 'none' };
@@ -311,6 +319,7 @@ const ProductDetailPage: React.FC = () => {
         return product?.imageUrls?.filter(url => typeof url === 'string' && url.trim() !== '') || [];
     }, [product?.imageUrls]);
 
+
     useEffect(() => {
         if (enrichedDisplayRound?.variantGroups?.[0]) {
             if(!selectedVariantGroup) {
@@ -336,8 +345,9 @@ const ProductDetailPage: React.FC = () => {
         addToCart(cartItem);
         if (status === 'RESERVATION') toast.success(`${quantity}개를 담았어요!`);
         else toast.success(`대기 상품으로 ${quantity}개를 담았어요.`);
-        navigate(-1);
-     }, [isPreLaunch, launchDate, product, enrichedDisplayRound, selectedVariantGroup, selectedItem, quantity, addToCart, navigate]);
+        // ✅ navigate(-1) 대신 새로운 handleClose 함수 사용
+        handleClose();
+     }, [isPreLaunch, launchDate, product, enrichedDisplayRound, selectedVariantGroup, selectedItem, quantity, addToCart, handleClose]);
 
     const handleEncore = useCallback(async () => {
         if (isEncoreLoading || isEncoreRequested) return;
@@ -354,7 +364,8 @@ const ProductDetailPage: React.FC = () => {
     }, [productId, userDocument, isEncoreRequested, isEncoreLoading, requestEncoreCallable]);
 
     if (loading) return ( <> <Helmet><title>상품 정보 로딩 중... | 소도몰</title></Helmet><ProductDetailSkeleton /> </>);
-    if (error || !product || !enrichedDisplayRound) return ( <> <Helmet><title>오류 | 소도몰</title><meta property="og:title" content="상품을 찾을 수 없습니다" /></Helmet><div className="product-detail-modal-overlay" onClick={() => navigate(-1)}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div></> );
+    // ✅ 에러 발생 시 닫기 핸들러도 handleClose로 변경
+    if (error || !product || !enrichedDisplayRound) return ( <> <Helmet><title>오류 | 소도몰</title><meta property="og:title" content="상품을 찾을 수 없습니다" /></Helmet><div className="product-detail-modal-overlay" onClick={handleClose}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div></> );
 
     const ogTitle = `${product.groupName} - 소도몰`;
     const ogDescription = product.description?.replace(/<br\s*\/?>/gi, ' ').substring(0, 100) + '...' || '소도몰에서 특별한 상품을 만나보세요!';
@@ -364,14 +375,15 @@ const ProductDetailPage: React.FC = () => {
     return (
         <>
             <Helmet><title>{ogTitle}</title><meta property="og:title" content={ogTitle} /><meta property="og:description" content={ogDescription} /><meta property="og:image" content={ogImage} /><meta property="og:url" content={ogUrl} /><meta property="og:type" content="product" /></Helmet>
-            <div className="product-detail-modal-overlay" onClick={() => navigate(-1)}>
+            {/* ✅ 모달 오버레이 클릭 시 handleClose 호출 */}
+            <div className="product-detail-modal-overlay" onClick={handleClose}>
                 <div className="product-detail-modal-content" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => navigate(-1)} className="modal-close-btn-top"><X /></button>
+                    {/* ✅ 상단 닫기 버튼 클릭 시 handleClose 호출 */}
+                    <button onClick={handleClose} className="modal-close-btn-top"><X /></button>
                     <div className="modal-scroll-area">
                         <div className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"><ProductImageSlider images={originalImageUrls} productName={product.groupName} onImageClick={handleOpenLightbox} /></div>
                             <div className="product-info-area">
-                                {/* ✅ [수정] ProductInfo에 새로운 유통기한 정보 prop 전달 */}
                                 <ProductInfo product={product} round={enrichedDisplayRound} actionState={actionState} expirationDateInfo={expirationDateInfo} />
                                 <OptionSelector round={enrichedDisplayRound} selectedVariantGroup={selectedVariantGroup} onVariantGroupChange={(vg) => { setSelectedVariantGroup(vg); setSelectedItem(vg.items[0] || null); setQuantity(1); toast.success(`'${vg.groupName}' 옵션을 선택했어요.`); }} />
                             </div>
