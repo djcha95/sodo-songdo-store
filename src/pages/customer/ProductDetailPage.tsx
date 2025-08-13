@@ -240,41 +240,61 @@ const ProductDetailPage: React.FC = () => {
         }
     }, [navigate, location.key]);
 
-    useEffect(() => {
-        if (!productId) { setError("잘못된 상품 ID입니다."); setLoading(false); return; }
-        const fetchProductAndReservations = async () => {
-            try {
-                const productData = await getProductById(productId);
-                if (!productData) { setError("상품을 찾을 수 없습니다."); return; }
-                const normalized = normalizeProduct(productData);
-                setProduct(normalized);
-                const ordersCollectionRef = collection(db, 'orders');
-                const q = query(ordersCollectionRef, where('status', 'in', ['RESERVED', 'PREPAID']));
-                const reservationSnapshot = await getDocs(q);
-                const newReservedMap = new Map<string, number>();
-                reservationSnapshot.forEach(doc => {
-                    const order = doc.data() as Order;
-                    (order.items || []).forEach((item: OrderItem) => {
-                        if (item.productId === productId) {
-                            const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-                            const currentCount = newReservedMap.get(key) || 0;
-                            newReservedMap.set(key, currentCount + item.quantity);
-                        }
-                    });
-                });
-                setReservedQuantities(newReservedMap);
-                if (userDocument) {
-                    const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
-                    setIsEncoreRequested(alreadyRequested);
-                    runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
-                }
-            } catch (e) {
-                console.error("상품 상세 정보 및 예약 정보 로딩 실패:", e);
-                setError("상품 정보를 불러오는 데 실패했습니다.");
-            } finally { setLoading(false); }
-        };
-        fetchProductAndReservations();
-    }, [productId, userDocument, runPageTourIfFirstTime]);
+useEffect(() => {
+  if (!productId) { setError("잘못된 상품 ID입니다."); setLoading(false); return; }
+
+  const fetchProductAndReservations = async () => {
+    try {
+      // 1) 상품은 항상 먼저 보여주기
+      const productData = await getProductById(productId);
+      if (!productData) { setError("상품을 찾을 수 없습니다."); return; }
+      const normalized = normalizeProduct(productData);
+      setProduct(normalized);
+
+      // 2) 예약수량(orders)은 권한 있는 경우에만 시도 (게스트/손님은 스킵)
+      const newReservedMap = new Map<string, number>();
+
+      if (userDocument) {
+        try {
+          const ordersCollectionRef = collection(db, 'orders');
+          const q = query(ordersCollectionRef, where('status', 'in', ['RESERVED', 'PREPAID']));
+          const reservationSnapshot = await getDocs(q);
+
+          reservationSnapshot.forEach(doc => {
+            const order = doc.data() as Order;
+            (order.items || []).forEach((item: OrderItem) => {
+              if (item.productId === productId) {
+                const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+                const currentCount = newReservedMap.get(key) || 0;
+                newReservedMap.set(key, currentCount + item.quantity);
+              }
+            });
+          });
+        } catch (e) {
+          // ✅ 권한 없거나 실패해도 상품 페이지는 계속 표시
+          console.warn('orders 조회 실패(권한/기타): 페이지 표시 계속 진행', e);
+        }
+      }
+
+      setReservedQuantities(newReservedMap);
+
+      // 3) 그 외 개인화 로직(튜토리얼/앵콜 요청 여부)은 로그인시에만
+      if (userDocument) {
+        const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
+        setIsEncoreRequested(alreadyRequested);
+        runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
+      }
+    } catch (e) {
+      console.error("상품 상세 정보 로딩 실패:", e);
+      // ❗ 여기서는 '상품 로딩' 실패만 에러로 표시 (orders 실패는 위에서 무시)
+      setError("상품 정보를 불러오는 데 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchProductAndReservations();
+}, [productId, userDocument, runPageTourIfFirstTime]);
 
     const enrichedDisplayRound = useMemo(() => {
         if (!product) return null;
