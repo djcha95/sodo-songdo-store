@@ -1,7 +1,6 @@
 // src/pages/customer/ProductDetailPage.tsx
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
-// ✅ useLocation을 추가로 import합니다.
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
@@ -207,7 +206,6 @@ const ProductDetailSkeleton: React.FC = () => (<div className="product-detail-mo
 const ProductDetailPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
-    // ✅ useLocation 훅을 사용하여 location 객체를 가져옵니다.
     const location = useLocation(); 
     const { userDocument } = useAuth();
     const { addToCart } = useCart();
@@ -228,11 +226,7 @@ const ProductDetailPage: React.FC = () => {
 
     const requestEncoreCallable = useMemo(() => httpsCallable(functions, 'requestEncore'), []);
 
-    // ✅ [추가] 닫기 버튼 핸들러
     const handleClose = useCallback(() => {
-        // 현재 페이지가 기록 스택의 첫 번째 항목인지(예: 새 탭에서 열었을 때) 확인합니다.
-        // 첫 페이지일 경우, 뒤로 가기 대신 메인 상품 목록 페이지로 이동시킵니다.
-        // react-router-dom에서 히스토리 스택의 첫 항목의 location.key는 'default' 값을 가집니다.
         if (location.key === 'default') {
             navigate('/');
         } else {
@@ -240,61 +234,68 @@ const ProductDetailPage: React.FC = () => {
         }
     }, [navigate, location.key]);
 
-useEffect(() => {
-  if (!productId) { setError("잘못된 상품 ID입니다."); setLoading(false); return; }
+    // ✅ [수정] 데이터 로딩 로직 개선
+    useEffect(() => {
+      if (!productId) {
+        setError("잘못된 상품 ID입니다.");
+        setLoading(false);
+        return;
+      }
 
-  const fetchProductAndReservations = async () => {
-    try {
-      // 1) 상품은 항상 먼저 보여주기
-      const productData = await getProductById(productId);
-      if (!productData) { setError("상품을 찾을 수 없습니다."); return; }
-      const normalized = normalizeProduct(productData);
-      setProduct(normalized);
-
-      // 2) 예약수량(orders)은 권한 있는 경우에만 시도 (게스트/손님은 스킵)
-      const newReservedMap = new Map<string, number>();
-
-      if (userDocument) {
+      const fetchProductAndReservations = async () => {
         try {
-          const ordersCollectionRef = collection(db, 'orders');
-          const q = query(ordersCollectionRef, where('status', 'in', ['RESERVED', 'PREPAID']));
-          const reservationSnapshot = await getDocs(q);
+          // 1. 상품 정보 로딩
+          const productData = await getProductById(productId);
+          if (!productData) {
+            setError("상품을 찾을 수 없습니다.");
+            return;
+          }
+          const normalized = normalizeProduct(productData);
+          setProduct(normalized);
 
-          reservationSnapshot.forEach(doc => {
-            const order = doc.data() as Order;
-            (order.items || []).forEach((item: OrderItem) => {
-              if (item.productId === productId) {
-                const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-                const currentCount = newReservedMap.get(key) || 0;
-                newReservedMap.set(key, currentCount + item.quantity);
-              }
+          // 2. 로그인 여부와 관계없이 모든 고객에게 정확한 재고를 보여주기 위해 예약 수량 조회
+          // ⚠️ 주의: 이 방식은 모든 주문 정보를 클라이언트로 가져오므로 데이터 양이 많아지면 성능 저하 및 비용 증가의 원인이 될 수 있습니다.
+          // 또한, Firestore 보안 규칙에서 `orders` 컬렉션에 대한 읽기 권한을 허용해야 합니다.
+          // 장기적으로는 이 로직을 Cloud Function으로 옮겨 서버에서 처리하는 것이 좋습니다.
+          const newReservedMap = new Map<string, number>();
+          try {
+            const ordersCollectionRef = collection(db, 'orders');
+            const q = query(ordersCollectionRef, where('status', 'in', ['RESERVED', 'PREPAID']));
+            const reservationSnapshot = await getDocs(q);
+
+            reservationSnapshot.forEach(doc => {
+              const order = doc.data() as Order;
+              (order.items || []).forEach((item: OrderItem) => {
+                if (item.productId === productId) {
+                  const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+                  const currentCount = newReservedMap.get(key) || 0;
+                  newReservedMap.set(key, currentCount + item.quantity);
+                }
+              });
             });
-          });
+          } catch (e) {
+            console.warn('예약 수량 조회 실패. 재고가 정확하지 않을 수 있습니다.', e);
+            // 이 조회는 실패하더라도 페이지 로딩은 계속 진행합니다.
+          }
+          setReservedQuantities(newReservedMap);
+
+          // 3. 로그인한 사용자에게만 개인화 정보(앵콜, 튜토리얼) 제공
+          if (userDocument) {
+            const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
+            setIsEncoreRequested(alreadyRequested);
+            runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
+          }
         } catch (e) {
-          // ✅ 권한 없거나 실패해도 상품 페이지는 계속 표시
-          console.warn('orders 조회 실패(권한/기타): 페이지 표시 계속 진행', e);
+          console.error("상품 상세 정보 로딩 실패:", e);
+          setError("상품 정보를 불러오는 데 실패했습니다.");
+        } finally {
+          setLoading(false);
         }
-      }
+      };
 
-      setReservedQuantities(newReservedMap);
+      fetchProductAndReservations();
+    }, [productId, userDocument, runPageTourIfFirstTime]);
 
-      // 3) 그 외 개인화 로직(튜토리얼/앵콜 요청 여부)은 로그인시에만
-      if (userDocument) {
-        const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
-        setIsEncoreRequested(alreadyRequested);
-        runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
-      }
-    } catch (e) {
-      console.error("상품 상세 정보 로딩 실패:", e);
-      // ❗ 여기서는 '상품 로딩' 실패만 에러로 표시 (orders 실패는 위에서 무시)
-      setError("상품 정보를 불러오는 데 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  fetchProductAndReservations();
-}, [productId, userDocument, runPageTourIfFirstTime]);
 
     const enrichedDisplayRound = useMemo(() => {
         if (!product) return null;
@@ -365,7 +366,6 @@ useEffect(() => {
         addToCart(cartItem);
         if (status === 'RESERVATION') toast.success(`${quantity}개를 담았어요!`);
         else toast.success(`대기 상품으로 ${quantity}개를 담았어요.`);
-        // ✅ navigate(-1) 대신 새로운 handleClose 함수 사용
         handleClose();
      }, [isPreLaunch, launchDate, product, enrichedDisplayRound, selectedVariantGroup, selectedItem, quantity, addToCart, handleClose]);
 
@@ -384,7 +384,6 @@ useEffect(() => {
     }, [productId, userDocument, isEncoreRequested, isEncoreLoading, requestEncoreCallable]);
 
     if (loading) return ( <> <Helmet><title>상품 정보 로딩 중... | 소도몰</title></Helmet><ProductDetailSkeleton /> </>);
-    // ✅ 에러 발생 시 닫기 핸들러도 handleClose로 변경
     if (error || !product || !enrichedDisplayRound) return ( <> <Helmet><title>오류 | 소도몰</title><meta property="og:title" content="상품을 찾을 수 없습니다" /></Helmet><div className="product-detail-modal-overlay" onClick={handleClose}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div></> );
 
     const ogTitle = `${product.groupName} - 소도몰`;
@@ -395,10 +394,8 @@ useEffect(() => {
     return (
         <>
             <Helmet><title>{ogTitle}</title><meta property="og:title" content={ogTitle} /><meta property="og:description" content={ogDescription} /><meta property="og:image" content={ogImage} /><meta property="og:url" content={ogUrl} /><meta property="og:type" content="product" /></Helmet>
-            {/* ✅ 모달 오버레이 클릭 시 handleClose 호출 */}
             <div className="product-detail-modal-overlay" onClick={handleClose}>
                 <div className="product-detail-modal-content" onClick={(e) => e.stopPropagation()}>
-                    {/* ✅ 상단 닫기 버튼 클릭 시 handleClose 호출 */}
                     <button onClick={handleClose} className="modal-close-btn-top"><X /></button>
                     <div className="modal-scroll-area">
                         <div className="main-content-area">
