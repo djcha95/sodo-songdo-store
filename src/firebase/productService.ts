@@ -103,7 +103,7 @@ export const addNewSalesRound = async (
     createdAt: Timestamp.now(),
     waitlist: [],
     waitlistCount: 0,
-    allowedTiers: newRoundData.allowedTiers || [], 
+    allowedTiers: newRoundData.allowedTiers || [],
   };
   await updateDoc(productRef, {
     salesHistory: arrayUnion(roundToAdd)
@@ -139,12 +139,12 @@ export const updateSalesRound = async (
 export const updateProductCoreInfo = async (
   productId: string,
   productData: Partial<Omit<Product, 'id' | 'salesHistory'>>,
-  newImageFiles: File[], 
-  existingImageUrls: string[], 
-  originalAllImageUrls: string[] 
+  newImageFiles: File[],
+  existingImageUrls: string[],
+  originalAllImageUrls: string[]
 ): Promise<void> => {
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
-  let finalImageUrls = existingImageUrls; 
+  let finalImageUrls = existingImageUrls;
 
   if (newImageFiles.length > 0) {
     const newUrls = await uploadImages(newImageFiles, 'products');
@@ -238,7 +238,7 @@ export const updateMultipleVariantGroupStocks = async (
       }
     }
   }
-  
+
   for (const update of updates) {
     const productInfo = productsToUpdate.get(update.productId);
     if (!productInfo) continue;
@@ -256,7 +256,7 @@ export const updateMultipleVariantGroupStocks = async (
       }
       return round;
     });
-    productData.salesHistory = newSalesHistory; 
+    productData.salesHistory = newSalesHistory;
   }
 
   for (const { productRef, productData } of productsToUpdate.values()) {
@@ -281,7 +281,7 @@ export const updateItemStock = async (
             if (round.roundId === roundId) {
                 const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
                     if (vg.id === variantGroupId) {
-                        const newItems = vg.items.map((item: ProductItem) => 
+                        const newItems = vg.items.map((item: ProductItem) =>
                             item.id === itemId ? { ...item, stock: newStock } : item
                         );
                         return { ...vg, items: newItems };
@@ -307,9 +307,9 @@ export const checkProductAvailability = async (productId: string, roundId: strin
   if (!item) return false;
   const hasSufficientItemStock = item.stock === -1 || item.stock > 0;
   if (!hasSufficientItemStock) return false;
-  const hasSufficientGroupStock = 
-    variantGroup.totalPhysicalStock === null || 
-    variantGroup.totalPhysicalStock === -1 || 
+  const hasSufficientGroupStock =
+    variantGroup.totalPhysicalStock === null ||
+    variantGroup.totalPhysicalStock === -1 ||
     variantGroup.totalPhysicalStock >= item.stockDeductionAmount;
   return hasSufficientGroupStock;
 };
@@ -382,7 +382,7 @@ export const getLiveStockForItems = async (
 export const updateSalesRoundStatus = async (
   productId: string,
   roundId: string,
-  newStatus: SalesRound['status'] 
+  newStatus: SalesRound['status']
 ): Promise<void> => {
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   await runTransaction(db, async (transaction) => {
@@ -426,7 +426,7 @@ export const updateMultipleSalesRoundStatuses = async (
       }
       return round;
     });
-    productData.salesHistory = newSalesHistory; 
+    productData.salesHistory = newSalesHistory;
   }
   for (const { productRef, productData } of productsToUpdate.values()) {
     batch.update(productRef, { salesHistory: productData.salesHistory });
@@ -511,7 +511,7 @@ export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> =
     const product = { id: doc.id, ...doc.data() } as Product;
     (product.salesHistory || []).forEach(round => {
       if (round.waitlist && round.waitlist.length > 0) {
-        
+
         // ✅ [로직 수정] 새로운 3단계 정렬 규칙 적용
         const sortedWaitlist = [...round.waitlist].sort((a, b) => {
           // 1순위: isPrioritized가 true인 항목이 무조건 앞으로 온다.
@@ -534,7 +534,7 @@ export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> =
           if (entry.userId === userId) {
             const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
             const item = vg?.items.find(i => i.id === entry.itemId);
-            
+
             userWaitlist.push({
               productId: product.id,
               productName: product.groupName,
@@ -560,9 +560,9 @@ export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> =
 };
 
 export const cancelWaitlistEntry = async (
-  productId: string, 
-  roundId: string, 
-  userId: string, 
+  productId: string,
+  roundId: string,
+  userId: string,
   itemId: string
 ): Promise<void> => {
   const productRef = doc(db, 'products', productId);
@@ -602,7 +602,7 @@ export const getWaitlistForRound = async (productId: string, roundId: string): P
       const userDoc = await getUserDocById(entry.userId);
       const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
       const item = vg?.items.find(i => i.id === entry.itemId);
-      
+
       return {
         productId: product.id,
         productName: product.groupName,
@@ -644,59 +644,4 @@ export const getProductsByIds = async (productIds: string[]): Promise<Product[]>
   });
 
   return products;
-};
-
-// src/firebase/productService.ts 파일에 이 함수를 추가하세요.
-// 다른 import 구문들과 함께 toast도 import 해주세요.
-import toast from 'react-hot-toast';
-
-export const deleteOldProducts = async (
-  collectionPath = 'products',
-  timestampField = 'createdAt',
-) => {
-  // 기준 시간 설정 (한국 시각 2025년 8월 10일 0시 0분)
-  const cutoffDate = new Date('2025-08-10T00:00:00+09:00');
-  const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
-
-  const promise = new Promise(async (resolve, reject) => {
-    try {
-      const q = query(
-        collection(db, collectionPath),
-        where(timestampField, '<', cutoffTimestamp),
-      );
-
-      const querySnapshot = await getDocs(q);
-      const documentsToDelete: DocumentData[] = [];
-      querySnapshot.forEach((doc) => documentsToDelete.push(doc));
-
-      if (documentsToDelete.length === 0) {
-        return resolve('삭제할 오래된 상품 데이터가 없습니다.');
-      }
-
-      const batchSize = 500;
-      for (let i = 0; i < documentsToDelete.length; i += batchSize) {
-        const batch = writeBatch(db);
-        const chunk = documentsToDelete.slice(i, i + batchSize);
-
-        chunk.forEach((doc) => {
-          batch.delete(doc.ref);
-        });
-
-        await batch.commit();
-      }
-
-      resolve(
-        `총 ${documentsToDelete.length}개의 오래된 상품 데이터를 삭제했습니다.`,
-      );
-    } catch (error) {
-      console.error('오래된 상품 정보 삭제 중 오류 발생:', error);
-      reject(error);
-    }
-  });
-
-  toast.promise(promise, {
-    loading: '오래된 상품 데이터를 삭제하는 중입니다...',
-    success: (message) => `${message}`,
-    error: '삭제 작업 중 오류가 발생했습니다.',
-  });
 };

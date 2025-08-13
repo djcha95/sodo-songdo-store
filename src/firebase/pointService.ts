@@ -10,6 +10,7 @@ import {
   arrayUnion,
   deleteDoc,
   getDoc,
+  collection,
 } from 'firebase/firestore';
 import type { UserDocument, Order, OrderStatus, PointLog, LoyaltyTier } from '@/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
@@ -34,7 +35,7 @@ export const POINT_POLICIES = {
   LATE_PICKED_UP: { points: -40, reason: '지각 픽업 완료' },
   NO_SHOW: { points: -100, reason: '노쇼 (미픽업)' },
   CANCEL_PENALTY: {
-    basePoints: -20, 
+    basePoints: -20,
     rate: 0.003,
     maxRatePenalty: -100,
     reason: '예약 취소 (마감 후)'
@@ -45,12 +46,10 @@ export const POINT_POLICIES = {
   COMMUNITY_PROMOTION: { points: 200, reason: '커뮤니티 홍보 인증' },
   NEW_USER_BASE: { points: 20, reason: '신규 회원 가입' },
   REFERRAL_BONUS_NEW_USER: { points: 30, reason: '추천인 코드 입력' },
-  // ✅ [수정] '대기 순번 상승권 사용' 정책을 삭제했습니다.
-  // USE_WAITLIST_TICKET: { points: -50, reason: '대기 순번 상승권 사용'},
 } as const;
 
 /**
- * ✅ [수정됨] 미션 완료 보상 정책
+ * 미션 완료 보상 정책
  * @description 모든 미션에 대한 보상 포인트를 정의합니다.
  */
 export const MISSION_REWARDS: { [missionId: string]: { points: number; reason: string } } = {
@@ -72,9 +71,9 @@ export const calculateUserUpdateByStatus = (
   userDoc: UserDocument,
   order: Order,
   newStatus: OrderStatus
-): { 
-    updateData: Partial<UserDocument>; 
-    pointLog: Omit<PointLog, 'id'> | null;
+): {
+    updateData: Partial<UserDocument>;
+    pointLog: PointLog | null; // ✅ [수정] Omit -> PointLog
     tierChange: { from: LoyaltyTier; to: LoyaltyTier } | null;
 } | null => {
   let policy: { points: number; reason: string } | null = null;
@@ -85,11 +84,12 @@ export const calculateUserUpdateByStatus = (
 
   switch (newStatus) {
     case 'PICKED_UP':
-      const purchasePoints = Math.floor(order.totalPrice * 0.005);
-      const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0; 
+      const orderTotal = order.totalPrice || 0;
+      const purchasePoints = Math.floor(orderTotal * 0.005);
+      const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
       const totalPoints = purchasePoints + prepaidBonus;
-      
-      let reason = `구매 확정 (결제액: ₩${order.totalPrice.toLocaleString()})`;
+
+      let reason = `구매 확정 (결제액: ₩${orderTotal.toLocaleString()})`;
       if (prepaidBonus > 0) {
         reason = `선결제 ${reason}`;
       }
@@ -109,7 +109,7 @@ export const calculateUserUpdateByStatus = (
   const newPoints = (userDoc.points || 0) + (policy?.points || 0);
   const newPickupCount = (userDoc.pickupCount || 0) + pickupCountIncrement;
   const newNoShowCount = (userDoc.noShowCount || 0) + noShowCountIncrement;
-  
+
   const newTier = calculateTier(newPickupCount, newNoShowCount);
 
   let tierChange: { from: LoyaltyTier, to: LoyaltyTier } | null = null;
@@ -118,12 +118,14 @@ export const calculateUserUpdateByStatus = (
   }
 
   const now = new Date();
-  const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
+  const expirationDate = new Date(now);
+  expirationDate.setFullYear(expirationDate.getFullYear() + 1);
 
-  const pointLog: Omit<PointLog, 'id'> | null = policy ? {
+  const pointLog: PointLog | null = policy ? {
+    id: doc(collection(db, 'users')).id, // ✅ [추가] 고유 ID 생성
     amount: policy.points,
     reason: policy.reason,
-    createdAt: Timestamp.now(), 
+    createdAt: Timestamp.now(),
     orderId: order.id,
     expiresAt: policy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
   } : null;
@@ -134,7 +136,7 @@ export const calculateUserUpdateByStatus = (
     pickupCount: newPickupCount,
     noShowCount: newNoShowCount,
   };
-  
+
   if (pointLog) {
     updateData.pointHistory = arrayUnion(pointLog);
   }
@@ -148,7 +150,7 @@ export const calculateUserUpdateByStatus = (
 export const claimMissionReward = async (missionId: string, uniquePeriodId: string): Promise<{success: boolean, message: string}> => {
   const functions = getFunctions(getApp(), 'asia-northeast3');
   const claimReward = httpsCallable(functions, 'claimMissionReward');
-  
+
   try {
     const result = await claimReward({ missionId, uniquePeriodId });
     return (result.data as {success: boolean, message: string});
@@ -188,14 +190,16 @@ export const adjustUserPoints = async (
 
     const currentPoints = userDoc.data().points || 0;
     const newPoints = currentPoints + amount;
-    
-    const now = new Date();
-    const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
 
-    const newPointHistoryEntry: Omit<PointLog, 'id'> = {
+    const now = new Date();
+    const expirationDate = new Date(now);
+    expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+
+    const newPointHistoryEntry: PointLog = { // ✅ [수정] PointLog 타입으로 변경
+      id: doc(collection(db, 'users')).id, // ✅ [추가] 고유 ID 생성
       amount,
       reason: `(수동) ${reason}`,
-      createdAt: Timestamp.now(), 
+      createdAt: Timestamp.now(),
       expiresAt: amount > 0 ? Timestamp.fromDate(expirationDate) : null,
     };
 
@@ -207,9 +211,120 @@ export const adjustUserPoints = async (
 };
 
 /**
+ * @description 관리자가 포인트 내역을 직접 수정합니다.
+ */
+export const updatePointLog = async (
+  userId: string,
+  logId: string,
+  newAmount: number,
+  newReason: string
+): Promise<void> => {
+  if (!userId || !logId) {
+    throw new Error('사용자 ID와 로그 ID는 필수입니다.');
+  }
+
+  const userRef = doc(db, 'users', userId);
+
+  await runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('사용자를 찾을 수 없습니다.');
+
+    const userData = userDoc.data() as UserDocument;
+    const history = (userData.pointHistory || []) as PointLog[];
+    const logIndex = history.findIndex(log => log.id === logId);
+
+    if (logIndex === -1) throw new Error('수정할 포인트 내역을 찾을 수 없습니다.');
+
+    const oldLog = history[logIndex];
+    const pointDifference = newAmount - oldLog.amount;
+
+    const newPoints = (userData.points || 0) + pointDifference;
+
+    const updatedLog = { ...oldLog, amount: newAmount, reason: newReason };
+    const newHistory = [...history];
+    newHistory[logIndex] = updatedLog;
+
+    transaction.update(userRef, {
+      points: newPoints,
+      pointHistory: newHistory,
+    });
+  });
+};
+
+/**
+ * @description 관리자가 포인트 내역을 삭제합니다.
+ */
+export const deletePointLog = async (userId: string, logId: string): Promise<void> => {
+  if (!userId || !logId) {
+    throw new Error('사용자 ID와 로그 ID는 필수입니다.');
+  }
+
+  const userRef = doc(db, 'users', userId);
+  await runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('사용자를 찾을 수 없습니다.');
+
+    const userData = userDoc.data() as UserDocument;
+    const history = (userData.pointHistory || []) as PointLog[];
+    const logToDelete = history.find(log => log.id === logId);
+
+    if (!logToDelete) throw new Error('삭제할 포인트 내역을 찾을 수 없습니다.');
+
+    const newHistory = history.filter(log => log.id !== logId);
+    const newPoints = (userData.points || 0) - logToDelete.amount;
+
+    transaction.update(userRef, {
+      points: newPoints,
+      pointHistory: newHistory
+    });
+  });
+};
+
+/**
+ * ✅ [신규] 관리자가 여러 포인트 내역을 한 번에 삭제합니다.
+ */
+export const deleteMultiplePointLogs = async (userId: string, logIds: string[]): Promise<void> => {
+  if (!userId || logIds.length === 0) {
+    throw new Error('사용자 ID와 로그 ID 목록은 필수입니다.');
+  }
+
+  const userRef = doc(db, 'users', userId);
+  await runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('사용자를 찾을 수 없습니다.');
+
+    const userData = userDoc.data() as UserDocument;
+    const history = (userData.pointHistory || []) as PointLog[];
+    
+    let pointsToDeduct = 0;
+    const logsToDelete = new Set(logIds);
+
+    const newHistory = history.filter(log => {
+      if (logsToDelete.has(log.id)) {
+        pointsToDeduct += log.amount;
+        return false; // 이 로그는 삭제되므로 새 배열에서 제외
+      }
+      return true;
+    });
+
+    if (pointsToDeduct === 0 && newHistory.length === history.length) {
+        throw new Error('삭제할 포인트 내역을 찾을 수 없습니다.');
+    }
+
+    const newPoints = (userData.points || 0) - pointsToDeduct;
+    
+    transaction.update(userRef, {
+      points: newPoints,
+      pointHistory: newHistory
+    });
+  });
+};
+
+
+/**
  * @description 사용자의 포인트 적립/사용 내역을 가져옵니다.
  */
-export const getPointHistory = async (userId: string, maxCount?: number): Promise<PointLog[]> => {
+export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
   if (!userId) {
     console.error("User ID is required to get point history.");
     return [];
@@ -226,25 +341,20 @@ export const getPointHistory = async (userId: string, maxCount?: number): Promis
   const userData = userDoc.data() as UserDocument;
   const history = (userData.pointHistory as PointLog[]) || [];
 
-  const sorted = history.sort((a, b) => {
+  const historyWithIds = history.map((log, index) => ({
+    ...log,
+    id: log.id || `temp-${index}-${log.createdAt.toString()}`,
+  }));
+
+  const sorted = historyWithIds.sort((a, b) => {
     const aTime = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
     const bTime = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
     return bTime - aTime;
   });
 
-  return maxCount ? sorted.slice(0, maxCount) : sorted;
+  return sorted;
 };
 
-// ✅ [수정] '대기 순번 상승권' 사용을 위해 Cloud Function을 호출하던 함수를 삭제했습니다.
-/*
-export const applyWaitlistPriorityTicket = async (
-  productId: string,
-  roundId: string,
-  itemId: string
-): Promise<void> => {
-    ...
-};
-*/
 
 /**
  * @description 사용자의 일일 방문을 기록하고 포인트와 등급을 업데이트합니다.
@@ -259,20 +369,22 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
       if (!userDoc.exists()) return;
 
       const userData = userDoc.data() as UserDocument;
-      
+
       if (userData.lastLoginDate === todayStr) {
         return;
       }
 
       let pointsToAdd = 0;
-      const pointLogsToAdd: Omit<PointLog, 'id'>[] = [];
+      const pointLogsToAdd: PointLog[] = [];
       let newConsecutiveDays = userData.consecutiveLoginDays || 0;
+      const pointIdBase = doc(collection(db, 'users')).id;
 
       // 1. 기본 일일 로그인 포인트 추가
       pointsToAdd += POINT_POLICIES.DAILY_LOGIN.points;
       const dailyLoginExpiration = new Date();
       dailyLoginExpiration.setFullYear(dailyLoginExpiration.getFullYear() + 1);
       pointLogsToAdd.push({
+        id: `${pointIdBase}-daily`,
         amount: POINT_POLICIES.DAILY_LOGIN.points,
         reason: POINT_POLICIES.DAILY_LOGIN.reason,
         createdAt: Timestamp.now(),
@@ -287,7 +399,7 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
       if (userData.lastLoginDate === yesterdayStr) {
         newConsecutiveDays += 1;
       } else {
-        newConsecutiveDays = 1; 
+        newConsecutiveDays = 1;
       }
 
       // 3. 연속 출석 Milestone 달성 여부 확인 및 보상 추가
@@ -297,15 +409,16 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
         const bonusExpiration = new Date();
         bonusExpiration.setFullYear(bonusExpiration.getFullYear() + 1);
         pointLogsToAdd.push({
+          id: `${pointIdBase}-milestone-${newConsecutiveDays}`,
           amount: milestoneBonus.points,
           reason: milestoneBonus.reason,
           createdAt: Timestamp.now(),
           expiresAt: Timestamp.fromDate(bonusExpiration),
         });
       }
-      
+
       const newPoints = (userData.points || 0) + pointsToAdd;
-      
+
       const updateData = {
         points: newPoints,
         lastLoginDate: todayStr,

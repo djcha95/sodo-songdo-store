@@ -18,7 +18,7 @@ import './CustomerActionTabs.css';
 interface CustomerActionTabsProps {
     user: UserDocument;
     orders: Order[];
-    onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void; // 변경된 부분
+    onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
 }
 
@@ -30,14 +30,14 @@ const performAction = async (
     onSuccess: () => void,
     messages: { loading: string; success: string; error: string; }
 ) => {
-    optimisticUpdate(); // 1. UI 즉시 변경
+    optimisticUpdate();
     const toastId = toast.loading(messages.loading);
     try {
-        await actionPromise(); // 2. 실제 서버에 데이터 변경 요청
+        await actionPromise();
         toast.success(messages.success, { id: toastId });
-        onSuccess(); // 3. 성공 시 데이터 동기화
+        onSuccess();
     } catch (error: any) {
-        revertUpdate(); // 4. 실패 시 UI 롤백
+        revertUpdate();
         toast.error(error.message || messages.error, { id: toastId });
     }
 };
@@ -45,7 +45,7 @@ const performAction = async (
 // 주문 내역 테이블 컴포넌트
 const ActionableOrderTable: React.FC<{
     orders: Order[];
-    onStatusChange: (order: Order) => void; // onStatusChange에서 newStatus 제거
+    onStatusChange: (order: Order) => void;
 }> = ({ orders = [], onStatusChange }) => {
     const sortedOrders = useMemo(() =>
         [...orders].sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()),
@@ -79,7 +79,6 @@ const ActionableOrderTable: React.FC<{
                                     <tr key={order.id} className={`status-row-${order.status}`}>
                                         <td>{format((order.createdAt as Timestamp).toDate(), 'M/d(eee)', { locale: ko })}</td>
                                         <td>{order.items.map(item => `${item.productName} (${item.quantity}개)`).join(', ')}</td>
-                                        {/* ✅ [수정] order.totalPrice가 undefined일 경우를 대비하여 기본값 0 설정 */}
                                         <td>{(order.totalPrice || 0).toLocaleString()}원</td>
                                         <td className="status-cell">
                                             <div className="status-cell-content">
@@ -192,15 +191,19 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         pickupOrders.forEach(order => {
             order.items.forEach(item => {
                 const groupKey = `${order.userId}-${item.productId}-${item.itemId}-${order.status}`;
+                // ✅ [수정] item.unitPrice가 undefined일 경우 0으로 처리
+                const itemPrice = (item.unitPrice || 0) * item.quantity;
+
                 if (groups.has(groupKey)) {
                     const existingGroup = groups.get(groupKey)!;
                     existingGroup.totalQuantity += item.quantity;
-                    existingGroup.totalPrice += (item.unitPrice * item.quantity);
+                    existingGroup.totalPrice += itemPrice;
                     existingGroup.originalOrders.push({ orderId: order.id, quantity: item.quantity, status: order.status });
                 } else {
                     groups.set(groupKey, {
                         groupKey, customerInfo: order.customerInfo, item,
-                        totalQuantity: item.quantity, totalPrice: item.unitPrice * item.quantity,
+                        totalQuantity: item.quantity, 
+                        totalPrice: itemPrice, // ✅ [수정] 안전하게 계산된 itemPrice 사용
                         status: order.status, pickupDate: order.pickupDate, pickupDeadlineDate: order.pickupDeadlineDate,
                         originalOrders: [{ orderId: order.id, quantity: item.quantity, status: order.status }]
                     });
@@ -239,7 +242,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         const messages = { loading: '상태 변경 중...', success: '상태가 변경되었습니다.', error: '상태 변경 실패' };
 
         if (status === 'PICKED_UP') {
-            const pointsEarned = Math.floor(totalAmount * 0.005); // 0.5% 적립
+            const pointsEarned = Math.floor(totalAmount * 0.005);
             updates.pickup = 1;
             updates.points = pointsEarned;
             messages.success = `픽업 완료! ${pointsEarned}P 적립.`;
@@ -247,7 +250,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
 
         if (status === 'CANCELED' || status === 'NO_SHOW') {
             const basePenalty = -50;
-            const proportionalPenalty = -Math.floor(totalAmount * 0.05); // 주문액의 5%
+            const proportionalPenalty = -Math.floor(totalAmount * 0.05);
             const totalPenalty = basePenalty + proportionalPenalty;
             updates.noshow = 1;
             updates.points = totalPenalty;
@@ -257,7 +260,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         performAction(
             () => updateMultipleOrderStatuses(orderIdsToUpdate, status),
             () => onStatUpdate(updates),
-            () => onStatUpdate({ // 롤백 로직
+            () => onStatUpdate({
                 pickup: -(updates.pickup || 0),
                 noshow: -(updates.noshow || 0),
                 points: -(updates.points || 0),
@@ -269,11 +272,12 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
 
     const handleTableStatusChange = (order: Order) => {
         const originalStatus = order.status;
-        const totalAmount = order.totalPrice;
+        // ✅ [수정] order.totalPrice가 undefined일 경우 0으로 처리
+        const totalAmount = order.totalPrice || 0;
         const updates: { pickup?: number; noshow?: number; points?: number } = {};
 
         if (originalStatus === 'PICKED_UP') {
-            const pointsLost = -Math.floor(totalAmount * 0.005); // 적립됐던 포인트 회수
+            const pointsLost = -Math.floor(totalAmount * 0.005);
             updates.pickup = -1;
             updates.points = pointsLost;
         }
@@ -281,7 +285,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         if (originalStatus === 'CANCELED' || originalStatus === 'NO_SHOW') {
             const basePoints = 50;
             const proportionalPoints = Math.floor(totalAmount * 0.05);
-            const totalPointsToRestore = basePoints + proportionalPoints; // 차감됐던 포인트 복구
+            const totalPointsToRestore = basePoints + proportionalPoints;
             updates.noshow = -1;
             updates.points = totalPointsToRestore;
         }
@@ -289,7 +293,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         performAction(
             () => revertOrderStatus([order.id], originalStatus),
             () => onStatUpdate(updates),
-            () => onStatUpdate({ // 롤백 로직
+            () => onStatUpdate({
                 pickup: -(updates.pickup || 0),
                 noshow: -(updates.noshow || 0),
                 points: -(updates.points || 0),
@@ -315,13 +319,20 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         if (!splitInfo) return;
         const performSplitAction = (remainingStatus: OrderStatus) => {
             const orderIdToSplit = splitInfo.group.originalOrders[0].orderId;
-            const pointsEarned = Math.floor(splitInfo.group.item.unitPrice * splitInfo.newQuantity * 0.005);
+            // ✅ [수정] splitInfo.group.item.unitPrice가 undefined일 경우 0으로 처리
+            const unitPrice = splitInfo.group.item.unitPrice || 0;
+            const pickupPrice = unitPrice * splitInfo.newQuantity;
+            const remainingPrice = splitInfo.group.totalPrice - pickupPrice;
+
+            const pointsEarned = Math.floor(pickupPrice * 0.005);
             const updates: { pickup?: number; noshow?: number; points?: number } = { pickup: 1, points: pointsEarned };
+            
             if (remainingStatus === 'NO_SHOW') {
-                const penalty = -50 - Math.floor((splitInfo.group.totalPrice - splitInfo.group.item.unitPrice * splitInfo.newQuantity) * 0.05);
+                const penalty = -50 - Math.floor(remainingPrice * 0.05);
                 updates.noshow = 1;
                 updates.points = (updates.points || 0) + penalty;
             }
+
             performAction(
                 () => splitAndUpdateOrderStatus(orderIdToSplit, splitInfo.newQuantity, remainingStatus),
                 () => onStatUpdate(updates),

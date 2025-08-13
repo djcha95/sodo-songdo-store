@@ -48,7 +48,7 @@ export type NotificationType =
 // =================================================================
 
 export interface PointLog {
-  id?: string;
+  id: string;
   amount: number;
   reason: string;
   createdAt: Timestamp | FieldValue;

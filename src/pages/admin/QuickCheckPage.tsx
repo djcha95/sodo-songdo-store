@@ -4,13 +4,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { UserDocument, Order } from '@/types';
 import { getAllUsersForQuickCheck } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';
-import { deleteOldProducts } from '@/firebase/productService'; // 상품 삭제 함수 임포트
 import toast from 'react-hot-toast';
 import CustomerFocusView from '@/components/admin/CustomerFocusView';
 import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { AnimatePresence } from 'framer-motion';
-import { Search, X, Users, SearchSlash, Trash2 } from 'lucide-react'; // 아이콘 추가
+import { Search, X, Users, SearchSlash } from 'lucide-react';
+// ✅ [추가] 포인트 복구 버튼 컴포넌트를 가져옵니다.
+
 import './QuickCheckPage.css';
 
 const QuickCheckPage: React.FC = () => {
@@ -139,44 +140,6 @@ const QuickCheckPage: React.FC = () => {
     setUserOrders([]);
   };
 
-  // --- 추가된 함수: 삭제 확인 및 실행 ---
-  const handleConfirmDelete = () => {
-    toast(
-      (t) => (
-        <div className="confirmation-toast">
-          <h4>데이터 영구 삭제</h4>
-          <p>
-            <strong>2025년 8월 10일 이전</strong>의 모든 상품 데이터를 영구적으로
-            삭제합니다. 이 작업은 되돌릴 수 없습니다.
-            <br />
-            정말 실행하시겠습니까?
-          </p>
-          <div className="confirmation-buttons">
-            <button
-              className="confirm-btn-cancel"
-              onClick={() => toast.dismiss(t.id)}
-            >
-              취소
-            </button>
-            <button
-              className="confirm-btn-delete"
-              onClick={() => {
-                toast.dismiss(t.id);
-                deleteOldProducts();
-              }}
-            >
-              삭제 실행
-            </button>
-          </div>
-        </div>
-      ),
-      {
-        duration: Infinity, // 사용자가 선택할 때까지 토스트 유지
-      },
-    );
-  };
-  // --- 여기까지 ---
-
   useEffect(() => {
     if (disambiguation.length > 0) setFocusedUser(null);
   }, [disambiguation]);
@@ -219,16 +182,7 @@ const QuickCheckPage: React.FC = () => {
           </button>
         </form>
       </div>
-
-      {/* --- 추가된 섹션: 관리자 도구 --- */}
-      <div className="qcp-admin-actions">
-        <button className="qcp-delete-button" onClick={handleConfirmDelete}>
-          <Trash2 size={16} />
-          <span>오래된 상품 데이터 삭제</span>
-        </button>
-      </div>
-      {/* --- 여기까지 --- */}
-
+      
       <AnimatePresence mode="wait">
         {isLoading && <SodomallLoader message="사용자 목록을 불러오는 중..." />}
 

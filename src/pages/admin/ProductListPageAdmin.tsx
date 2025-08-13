@@ -8,7 +8,7 @@ import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './ProductListPageAdmin.css';
@@ -25,6 +25,31 @@ import { reportError, reportInfo } from '@/utils/logger';
 // =================================================================
 // 📌 타입 정의 및 헬퍼 함수
 // =================================================================
+
+// ✅ [추가] 상품 ID 복사 컴포넌트
+const CopyableId: React.FC<{ id: string }> = ({ id }) => {
+    if (!id) return null;
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation(); // 행 클릭/확장 이벤트 전파 방지
+        navigator.clipboard.writeText(id)
+            .then(() => {
+                toast.success('상품 ID가 클립보드에 복사되었습니다.');
+            })
+            .catch(err => {
+                toast.error('ID 복사에 실패했습니다.');
+                reportError('CopyableId.handleCopy.fail', err, { id });
+            });
+    };
+
+    return (
+        <div className="copyable-id-cell" onClick={handleCopy} title={`전체 ID: ${id}\n클릭하여 복사`}>
+            <span>{id.substring(0, 6)}..</span>
+            <Copy size={12} className="copy-icon" />
+        </div>
+    );
+};
+
 
 interface DynamicStatus {
   text: string;
@@ -181,7 +206,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
     const navigate = useNavigate();
     const handleAddNewRound = () => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } });
     if (!item.enrichedVariantGroups || item.enrichedVariantGroups.length === 0) {
-        return (<tr className="master-row error-row"><td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td><td>{index + 1}</td><td colSpan={12} style={{color: 'var(--danger-color)'}}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td><td><div className="action-buttons-wrapper"><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></div></td></tr>);
+        // ✅ [수정] 상품 ID 컬럼 및 colSpan 수정
+        return (<tr className="master-row error-row"><td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td><td>{index + 1}</td><td><CopyableId id={item.productId} /></td><td colSpan={11} style={{color: 'var(--danger-color)'}}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td><td><div className="action-buttons-wrapper"><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></div></td></tr>);
     }
     const isExpandable = item.enrichedVariantGroups.length > 1;
 
@@ -194,6 +220,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
           <tr className="master-row">
             <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
             <td>{index + 1}</td>
+            {/* ✅ [추가] 상품 ID 셀 */}
+            <td><CopyableId id={item.productId} /></td>
             <td>{formatDate(item.round.createdAt)}</td>
             <td>{formatDateShort(item.round.pickupDate)}</td>
             <td>{item.category}</td>
@@ -226,6 +254,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
         <tr className="master-row expandable">
           <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
           <td><div className="no-and-expander"><span>{index + 1}</span><button className="expand-button" onClick={() => onToggleExpansion(item.uniqueId)} title={isExpanded ? "하위 항목 접기" : "하위 항목 펼치기"}><ChevronDown size={20} className={`chevron-icon ${isExpanded ? 'expanded' : ''}`} /></button></div></td>
+          {/* ✅ [추가] 상품 ID 셀 */}
+          <td><CopyableId id={item.productId} /></td>
           <td>{formatDate(item.round.createdAt)}</td>
           <td>{formatDateShort(item.round.pickupDate)}</td>
           <td>{item.category}</td>
@@ -247,6 +277,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
               <tr key={subVgUniqueId} className="detail-row sub-row">
                   <td></td>
                   <td><span className="sub-row-no">{`${index + 1}-${vgIndex + 1}`}</span></td>
+                  {/* ✅ [추가] 상품 ID 컬럼을 위한 빈 셀 */}
+                  <td></td>
                   <td></td>
                   <td></td>
                   <td></td>
@@ -658,6 +690,8 @@ const ProductListPageAdmin: React.FC = () => {
                   <tr>
                     <th><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
                     <th>No.</th>
+                    {/* ✅ [추가] 상품 ID 헤더 */}
+                    <th>상품 ID</th>
                     <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일 {sortConfig.key === 'roundCreatedAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th className="sortable-header" onClick={() => handleSortChange('pickupDate')}>픽업일 {sortConfig.key === 'pickupDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th className="sortable-header" onClick={() => handleSortChange('category')}>카테고리 {sortConfig.key === 'category' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
@@ -674,7 +708,8 @@ const ProductListPageAdmin: React.FC = () => {
                 </thead>
                 <tbody>
                   {paginatedRounds.length > 0 ? ( paginatedRounds.map((item, index) => (<ProductAdminRow key={item.uniqueId} item={item} index={(currentPage - 1) * itemsPerPage + index} isExpanded={expandedRoundIds.has(item.uniqueId)} isSelected={selectedItems.has(item.uniqueId)} editingStockId={editingStockId} stockInputs={stockInputs} onToggleExpansion={toggleRowExpansion} onSelectionChange={handleSelectionChange} onStockEditStart={handleStockEditStart} onStockEditSave={handleStockEditSave} onSetStockInputs={setStockInputs} onOpenWaitlistModal={handleOpenWaitlistModal}/>)) ) : (
-                    <tr><td colSpan={14} style={{textAlign: 'center', padding: '4rem', color: 'var(--text-color-light)'}}>표시할 판매 회차가 없습니다.</td></tr>
+                    // ✅ [수정] colSpan 수정
+                    <tr><td colSpan={15} style={{textAlign: 'center', padding: '4rem', color: 'var(--text-color-light)'}}>표시할 판매 회차가 없습니다.</td></tr>
                   )}
                 </tbody>
               </table>
