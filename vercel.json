@@ -3,7 +3,7 @@
   "routes": [
     { "src": "^/api/og$", "dest": "/api/og" },
     { "src": "^/api/img$", "dest": "/api/img" },
-    { "src": "^/api/product$", "dest": "/api/product" },  
+    { "src": "^/api/product$", "dest": "/api/product" },
 
     { "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
 
@@ -16,8 +16,11 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(KAKAOTALK|KakaoTalk|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|naver|NaverBot|Yeti).*"
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|LinkedInBot|Googlebot|bingbot|Yeti|Daum|KakaoTalk-Scrap).*"
         }
+      ],
+      "missing": [
+        { "type": "header", "key": "sec-fetch-mode", "value": "navigate" }
       ],
       "dest": "/api/og?id=$1"
     },

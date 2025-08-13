@@ -97,9 +97,10 @@ IMPORTANT INSTRUCTIONS:
     - **No Markdown Headers**: Do NOT use Markdown headers like \`##\` or \`###\`. They appear too large on the mobile screen. Use **bold text** and emojis for all emphasis and sectioning.
     - **Structure for Readability**:
         a. **Engaging Intro**: Start with a warm, inviting sentence or two to grab attention.
-        b. **Key Features (Bulleted List)**: Use a bulleted list (\`* \`) to clearly present the main selling points. Elaborate slightly on each point (1-2 short sentences). Use plenty of emojis to make it visually appealing. Example: \`* 🧑‍🍳 **전문가의 손길**: 20년 경력 셰프가 직접 손질했어요! \`
-        c. **Why You'll Love It**: Add another short paragraph or a few more bullet points explaining why this product is special or how to enjoy it best.
-        d. **Friendly CTA**: End with an encouraging call-to-action that feels personal. Example: \`💖 망설이면 품절! 지금 바로 소중한 분들과 함께 즐겨보세요! \`
+        b. **Product Explanation (For Unfamiliar Items)**: If the product is not a well-known item (e.g., a specialized health supplement), you MUST include a simple, clear explanation of what the product is and its benefits.
+        c. **Key Features (Bulleted List)**: Use a bulleted list (\`* \`) to clearly present the main selling points. **One of these bullet points MUST clearly state the product's specification (e.g., \`* 📦 **구성**: 1곽 (3g*14포)\`, \`* ⚖️ **중량**: 1팩 (500g)\`).** Elaborate slightly on other points (1-2 short sentences). Use plenty of emojis. Example: \`* 🧑‍🍳 **전문가의 손길**: 20년 경력 셰프가 직접 손질했어요! \`
+        d. **Why You'll Love It**: Add another short paragraph or a few more bullet points explaining why this product is special or how to enjoy it best.
+        e. **Friendly CTA**: End with an encouraging call-to-action that feels personal. Example: \`💖 망설이면 품절! 지금 바로 소중한 분들과 함께 즐겨보세요! \`
     - **Formatting**: Use Markdown \`**bold**\` for emphasis, liberal use of relevant emojis (✨, 💖, 🎉, 🧑‍🍳, 🚛), and ensure good spacing with line breaks (\`\\n\`) for mobile viewing. Make it look great!
 
 2) Hashtag Generation (MANDATORY REQUIREMENT!)
