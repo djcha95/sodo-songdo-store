@@ -101,7 +101,7 @@ IMPORTANT INSTRUCTIONS:
   6. **굵은 글씨**와 이모지를 적절히 사용  
   7. 불필요한 문장은 제거하고, 시각적으로 깔끔하게  
 
-  2) Hashtag Generation (MANDATORY REQUIREMENT!)
+2) Hashtag Generation (MANDATORY REQUIREMENT!)
     - You MUST generate between 2 and 4 relevant hashtags based on the product description.
     - This is not an optional task. The 'hashtags' field must be populated.
     - Hashtags must be in Korean and start with '#'.
@@ -113,8 +113,9 @@ IMPORTANT INSTRUCTIONS:
 
 4) Storage type: Infer from '냉장', '냉동', '실온'. Default to 'ROOM'.
 
-5) Naming Rules:
-    - **Product Type**: If multiple distinct options (flavors/sizes) exist, use 'group', else 'single'.
+5) Product Type Rules (CRITICAL):
+    - **'single'**: Use when there is ONLY ONE KIND of product, but it's sold in different quantities or packages. For example, "Narangd Cider 5-pack" and "Narangd Cider 30-pack" are quantity variations of the SAME product, so the type must be 'single'. In this case, the 'variantGroups' array should usually contain only one object.
+    - **'group'**: Use when there are MULTIPLE KINDS of products, such as different flavors, colors, or types. For example, "Spicy Ramen" and "Mild Ramen" are different kinds, so the type must be 'group'. Each kind should be a separate object within the 'variantGroups' array.
     - **Clean Names**: When extracting 'groupName' and 'variantGroups.groupName', **ALWAYS remove** store names like "소도몰" and any special characters like "X" or "x". The name should be clean and represent only the product itself.
 
 6) variantGroups / items:
