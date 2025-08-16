@@ -32,7 +32,7 @@ export type ProductActionState =
   | 'SCHEDULED'
   | 'ENDED'
   | 'INELIGIBLE'
-  | 'AWAITING_STOCK';
+  | 'AWAITING_STOCK'; // ✅ [핵심] '재고 준비중' 상태 추가
 
 export const safeToDate = (date: any): Date | null => {
   if (!date) return null;
@@ -59,11 +59,9 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: Date | nu
   
   if (publishAt) {
     let deadlineDate = dayjs(publishAt);
-    const publishDay = deadlineDate.day();
+    const publishDay = deadlineDate.day(); 
 
-    if (publishDay === 5) { // 금요일
-      deadlineDate = deadlineDate.add(3, 'day');
-    } else if (publishDay === 6) { // 토요일
+    if (publishDay === 6) { 
       deadlineDate = deadlineDate.add(2, 'day');
     } else {
       deadlineDate = deadlineDate.add(1, 'day');
@@ -174,14 +172,13 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
       const totalStock = vg.totalPhysicalStock;
       const reserved = vg.reservedCount || 0;
       
-      // 무제한 재고는 항상 구매 가능
       if (totalStock === null || totalStock === -1) return 'PURCHASABLE';
       
-      // 한정 재고는 품절 시 '대기 가능'으로 전환
       const isSoldOut = totalStock - reserved <= 0;
+      // ✅ [핵심] 1차 공구 품절 시 '대기' 가능 상태 유지
       return isSoldOut ? 'WAITLISTABLE' : 'PURCHASABLE';
     }
-    return 'ENDED'; // 옵션 정보가 없는 비정상적인 경우
+    return 'ENDED';
   }
 
   // 5. 2차 공구 기간 로직 (1차 마감 후 ~ 픽업일 13시)
@@ -189,17 +186,17 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
     if (hasMultipleOptions && !isOptionSelected) return 'REQUIRE_OPTION';
     
     const vg = selectedVg || round.variantGroups[0];
-    if (!vg) return 'ENDED'; // 옵션 정보가 없는 경우
+    if (!vg) return 'ENDED'; 
 
     const totalStock = vg.totalPhysicalStock;
     const reserved = vg.reservedCount || 0; 
     
-    // [수정] 2차 공구에서는 무제한 재고(null, -1)는 판매 불가로 간주하고 '마감' 처리
+    // ✅ [핵심] 2차 공구에서 무제한 재고는 '재고 준비중'으로 처리
     if (totalStock === null || totalStock === -1) {
-        return 'ENCORE_REQUESTABLE';
+        return 'AWAITING_STOCK';
     }
     
-    // [수정] 한정 재고의 경우, 남은 재고가 0 이하면 '마감' 처리. '대기' 없음.
+    // ✅ [핵심] 2차 공구 한정 재고 품절 시 '앵콜 요청' 상태로 변경 (-> '마감 공구'로 이동됨)
     const isSoldOut = totalStock - reserved <= 0;
     return isSoldOut ? 'ENCORE_REQUESTABLE' : 'PURCHASABLE';
   }

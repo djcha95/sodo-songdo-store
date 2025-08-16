@@ -158,6 +158,7 @@ const ProductListPage: React.FC = () => {
       
       const actionState = determineActionState(round as SalesRound, userDocument);
       
+      // ✅ [핵심] 'AWAITING_STOCK' 상태도 화면에 표시되도록 추가
       const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION', 'AWAITING_STOCK', 'ENCORE_REQUESTABLE'].includes(actionState);
       
       if (!isDisplayableState) return;
@@ -213,17 +214,14 @@ const ProductListPage: React.FC = () => {
     
     return {
       primarySaleProducts: tempPrimary.sort(sortProductsForDisplay as any),
-      // [수정] 2차 공구 상품을 '픽업일' 기준으로 정렬합니다.
       secondarySaleProducts: tempSecondary.sort((a, b) => {
         const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() ?? Infinity;
         const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() ?? Infinity;
 
-        // 픽업일이 다르면 날짜가 빠른 순서(오름차순)로 정렬
         if (dateA !== dateB) {
           return dateA - dateB;
         }
 
-        // 픽업일이 같으면 기존 정렬 로직(재고, 가격 등)을 따름
         return sortProductsForDisplay(a as any, b as any);
       }),
       pastProductsByDate: sortedPastGroups,

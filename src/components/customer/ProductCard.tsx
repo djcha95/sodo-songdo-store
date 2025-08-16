@@ -14,7 +14,8 @@ import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as O
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
-import { determineActionState, safeToDate } from '@/utils/productUtils';
+// ✅ [핵심] getDeadlines 함수를 import합니다.
+import { determineActionState, safeToDate, getDeadlines } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
 type Product = OriginalProduct & {
@@ -159,6 +160,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     if (!cardData) return 'ENDED';
     const { displayRound, isMultiOption, singleOptionVg } = cardData;
     
+    // ✅ [핵심] 그룹 상품이 2차 공구 기간이고 무제한 재고 옵션이 있을 경우, '재고 준비중'으로 우선 처리합니다.
+    const now = dayjs();
+    const { primaryEnd, secondaryEnd } = getDeadlines(displayRound);
+    const isSecondSalePeriod = secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]');
+
+    if (isMultiOption && isSecondSalePeriod) {
+        const hasInfiniteStockOption = (displayRound.variantGroups as VariantGroup[]).some(
+            vg => vg.totalPhysicalStock === null || vg.totalPhysicalStock === -1
+        );
+        if (hasInfiniteStockOption) {
+            return 'AWAITING_STOCK';
+        }
+    }
+
+    // 그 외의 경우, 기존 로직을 따릅니다.
     const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
     
     if (state === 'PURCHASABLE' && isMultiOption) {
@@ -316,7 +332,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         const requested = hasRequestedEncore(product.id);
         return <button className={`encore-btn ${requested ? 'requested' : ''}`} onClick={handleEncoreRequest} disabled={requested || encoreLoading}><Star size={16} /> {encoreLoading ? '처리중' : requested ? '요청완료' : '앵콜 요청'}</button>;
 
-      // ✅ [핵심] 요청사항: '재고 준비중' 상태일 때 버튼을 비활성화하고 텍스트를 표시합니다.
       case 'AWAITING_STOCK':
         return <div className="options-btn disabled"><Hourglass size={16} /> 재고 준비중</div>;
       case 'ENDED':
@@ -373,7 +388,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             loading="lazy"
             onError={handleImageError} 
           />
-          {/* ✅ [핵심] 요청사항: '재고 준비중' 상태일 때 이미지 위에 오버레이 뱃지를 표시합니다. */}
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
           {actionState === 'WAITLISTABLE' && <div className="card-overlay-badge">대기 가능</div>}
           {isSuspendedUser && product.phase !== 'past' && (
