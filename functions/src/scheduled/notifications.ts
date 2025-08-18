@@ -17,6 +17,94 @@ const normalizeToDate = (value: unknown): Date | null => {
     return null;
 };
 
+/**
+ * @description 픽업 안내 알림톡 발송 로직 (테스트 및 스케줄링 모두 사용)
+ * @param targetUserPhone 특정 사용자에게만 보낼 경우 전화번호 전달 (예: '+821012345678')
+ */
+export async function executePickupReminders(targetUserPhone: string | null = null) {
+  const mode = targetUserPhone ? `테스트 실행 (대상: ${targetUserPhone})` : "정기 실행";
+  logger.info(`[${mode}] 픽업 안내 알림톡 발송 작업을 시작합니다.`);
+  
+  try {
+    const db = getFirestore();
+    const now = new Date();
+    const kstDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    const todayStart = new Date(`${kstDateString}T00:00:00.000+09:00`);
+    const tomorrow = new Date(todayStart);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStart = tomorrow;
+    
+    // ⚠️ 테스트 시에는 24시간 제한을 잠시 비활성화하거나 시간을 조절할 수 있습니다.
+    // 여기서는 기존 로직을 유지합니다.
+    const twentyFourHoursAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+    
+    const ordersSnapshot = await db.collection("orders")
+      .where("pickupDate", ">=", todayStart)
+      .where("pickupDate", "<", tomorrowStart)
+      .where("status", "in", ["RESERVED", "PREPAID"])
+      .get();
+
+    if (ordersSnapshot.empty) {
+      logger.info(`[${mode}] 오늘 픽업 시작인 주문이 없습니다. 작업을 종료합니다.`);
+      return;
+    }
+    
+    const pickupsByUser = new Map<string, Order[]>();
+    
+    ordersSnapshot.forEach(doc => {
+      const order = doc.data() as Order;
+      // 24시간 이내 생성된 주문 건너뛰기 로직은 테스트 시에도 동일하게 적용
+      const createdAt = normalizeToDate(order.createdAt);
+      if (!targetUserPhone && createdAt && createdAt > twentyFourHoursAgo) {
+        logger.info(`[SKIP] Order ${doc.id} was created recently, skipping reminder.`);
+        return;
+      }
+
+      const existingOrders = pickupsByUser.get(order.userId) || [];
+      pickupsByUser.set(order.userId, [...existingOrders, order]);
+    });
+
+    if (pickupsByUser.size === 0) {
+      logger.info(`[${mode}] 발송할 리마인더가 없습니다. (최근 생성 주문 제외)`);
+      return;
+    }
+
+    let sentCount = 0;
+    for (const [userId, userOrders] of pickupsByUser.entries()) {
+      const userDoc = await db.collection("users").doc(userId).get();
+      if (!userDoc.exists) continue;
+      const userData = userDoc.data() as UserDocument;
+      if (!userData?.phone || !userData.displayName) continue;
+
+      // ✅ [핵심 수정] targetUserPhone이 지정되었고, 현재 사용자의 번호와 다르면 건너뜁니다.
+      if (targetUserPhone && userData.phone.replace(/\D/g, '') !== targetUserPhone.replace(/\D/g, '')) {
+          continue;
+      }
+
+      const allPickupItems = userOrders.flatMap(order => order.items);
+      if (allPickupItems.length === 0) continue;
+
+      const productListText = allPickupItems
+          .map(item => `・${item.productName || '주문 상품'} ${item.quantity}개`)
+          .join('\n');
+
+      const templateCode = "STANDARD_PICKUP_STAR";
+      const templateVariables = {
+          고객명: userData.displayName,
+          오늘픽업상품목록: productListText,
+      };
+
+      await sendAlimtalk(userData.phone, templateCode, templateVariables);
+      sentCount++;
+    }
+
+    logger.info(`[${mode}] 총 ${sentCount}건의 픽업 안내 알림톡 발송을 완료했습니다.`);
+  } catch (error) {
+    logger.error(`[${mode}] 픽업 안내 알림톡 발송 중 오류 발생:`, error);
+  }
+}
+
+// 기존 스케줄 함수는 분리된 로직을 호출하는 방식으로 변경
 export const sendPickupReminders = onSchedule(
   {
     schedule: "every day 09:00",
@@ -25,79 +113,11 @@ export const sendPickupReminders = onSchedule(
     secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (context: ScheduledEvent) => {
-    logger.info("오전 9시: 픽업 안내 알림톡 발송 작업을 시작합니다.");
-    try {
-      const db = getFirestore();
-      const now = new Date();
-      const kstDateString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-      const todayStart = new Date(`${kstDateString}T00:00:00.000+09:00`);
-      const tomorrow = new Date(todayStart);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStart = tomorrow;
-      const twentyFourHoursAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-      
-      const ordersSnapshot = await db.collection("orders")
-        .where("pickupDate", ">=", todayStart)
-        .where("pickupDate", "<", tomorrowStart)
-        .where("status", "in", ["RESERVED", "PREPAID"])
-        .get();
-
-      if (ordersSnapshot.empty) {
-        logger.info("오늘 픽업 시작인 주문이 없습니다. 작업을 종료합니다.");
-        return;
-      }
-      
-      const pickupsByUser = new Map<string, Order[]>();
-      
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data() as Order;
-        const createdAt = normalizeToDate(order.createdAt);
-        
-        if (createdAt && createdAt > twentyFourHoursAgo) {
-          logger.info(`[SKIP] Order ${doc.id} was created recently, skipping reminder.`);
-          return;
-        }
-
-        const existingOrders = pickupsByUser.get(order.userId) || [];
-        pickupsByUser.set(order.userId, [...existingOrders, order]);
-      });
-
-      if (pickupsByUser.size === 0) {
-        logger.info("모든 픽업 예정 주문이 최근에 생성되어, 발송할 리마인더가 없습니다.");
-        return;
-      }
-
-      for (const [userId, userOrders] of pickupsByUser.entries()) {
-        const userDoc = await db.collection("users").doc(userId).get();
-        if (!userDoc.exists) continue;
-        const userData = userDoc.data() as UserDocument;
-        if (!userData?.phone || !userData.displayName) continue;
-
-        const allPickupItems = userOrders.flatMap(order => order.items);
-
-        if (allPickupItems.length === 0) {
-            continue;
-        }
-
-        const productListText = allPickupItems
-            .map(item => `・${item.productName || '주문 상품'} ${item.quantity}개`)
-            .join('\n');
-
-        const templateCode = "STANDARD_PICKUP_STAR";
-        const templateVariables = {
-            고객명: userData.displayName,
-            오늘픽업상품목록: productListText,
-        };
-
-        await sendAlimtalk(userData.phone, templateCode, templateVariables);
-      }
-
-      logger.info(`${pickupsByUser.size}명의 사용자에게 픽업 안내 알림톡 발송을 완료했습니다.`);
-    } catch (error) {
-      logger.error("오전 9시 픽업 안내 알림톡 발송 중 오류 발생:", error);
-    }
+    // 인자 없이 호출하여 모든 사용자를 대상으로 실행
+    await executePickupReminders();
   });
 
+// ... 이 파일의 나머지 함수들 (sendPrepaymentReminders, etc.) ...
 export const sendPrepaymentReminders = onSchedule(
   {
     schedule: "every day 19:00",

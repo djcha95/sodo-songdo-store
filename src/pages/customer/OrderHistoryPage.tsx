@@ -30,7 +30,7 @@ import './OrderHistoryPage.css';
 // 📌 이미지 안전 로더 (수정 없음)
 // =================================================================
 
-const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
+const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
 
 type ThumbSize = '200x200' | '1080x1080';
@@ -456,19 +456,21 @@ const WaitlistItemCard: React.FC<{ item: WaitlistInfo; onCancel: (item: Waitlist
 const OrderHistoryPage: React.FC = () => {
   const { user, userDocument } = useAuth();
   const { runPageTourIfFirstTime } = useTutorial();
-  const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('orders');
+  const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('pickup'); 
   const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
   const [loadingWaitlist, setLoadingWaitlist] = useState(false);
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
 
+  // ✅ [수정] basePayload에 userId를 추가하고, user를 의존성 배열에 추가합니다.
   const basePayload = useMemo(() => {
+    const payload = { userId: user?.uid };
     if (viewMode === 'pickup') {
       const today = new Date(); today.setHours(0, 0, 0, 0);
-      return { orderByField: 'pickupDate', orderDirection: 'asc', startDate: today.toISOString() };
+      return { ...payload, orderByField: 'pickupDate', orderDirection: 'asc', startDate: today.toISOString() };
     }
-    return { orderByField: 'createdAt', orderDirection: 'desc' };
-  }, [viewMode]);
+    return { ...payload, orderByField: 'createdAt', orderDirection: 'desc' };
+  }, [viewMode, user]);
 
   const { data: orders, setData: setOrders, loading: ordersLoading, hasMore: hasMoreOrders, loadMore: loadMoreOrders } =
     usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'orders' || viewMode === 'pickup');

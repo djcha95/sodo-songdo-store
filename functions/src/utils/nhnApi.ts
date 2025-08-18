@@ -30,6 +30,15 @@ export async function sendAlimtalk(recipientPhone: string, templateCode: string,
     }],
   };
 
+  // =================================================================
+  // ✅ [디버깅 로그 추가]
+  // NHN API로 전송하기 직전의 실제 요청 데이터 전체를 로그로 출력합니다.
+  // 이 로그를 통해 변수 내용이 어떻게 구성되었는지 정확히 확인할 수 있습니다.
+  logger.info(`[NHN ALIMTALK PAYLOAD] 템플릿(${templateCode}) 요청 데이터:`, {
+    payload: JSON.stringify(payload, null, 2),
+  });
+  // =================================================================
+
   try {
     const response = await axios.post<NhnAlimtalkResponse>(API_URL, payload, {
       headers: {

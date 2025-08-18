@@ -26,7 +26,10 @@ export { testAlimtalk, testAlimtalk as testSendAlimtalk } from "./callable/testA
  */
 export * from "./http/auth.js";
 export * from "./http/product.js";
-export * from "./http/testNotifications.js"; // 선입금 안내 즉시 실행 테스트용
+// ✅ [수정] 아래 라인을 추가하여 테스트 함수를 포함시킵니다.
+export * from "./http/testNotifications.js";
+export * from "./http/migration.js";
+
 
 
 /**

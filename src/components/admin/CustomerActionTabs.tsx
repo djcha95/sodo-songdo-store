@@ -5,11 +5,14 @@ import type { Timestamp } from 'firebase/firestore';
 import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatus } from '@/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
-    updateMultipleOrderStatuses, revertOrderStatus, deleteMultipleOrders, splitAndUpdateOrderStatus
+    updateMultipleOrderStatuses, revertOrderStatus, deleteMultipleOrders, splitAndUpdateOrderStatus,
+    // ✅ [추가] 주문 분할 함수 import
+    splitBundledOrder
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import toast from 'react-hot-toast';
-import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle, Undo2 } from 'lucide-react';
+// ✅ [추가] 아이콘 import
+import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle, Undo2, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
@@ -46,7 +49,9 @@ const performAction = async (
 const ActionableOrderTable: React.FC<{
     orders: Order[];
     onStatusChange: (order: Order) => void;
-}> = ({ orders = [], onStatusChange }) => {
+    // ✅ [추가] 주문 분할 핸들러 prop 추가
+    onSplitOrder: (orderId: string) => void;
+}> = ({ orders = [], onStatusChange, onSplitOrder }) => {
     const sortedOrders = useMemo(() =>
         [...orders].sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()),
         [orders]
@@ -70,11 +75,19 @@ const ActionableOrderTable: React.FC<{
                                 <th>상품 정보</th>
                                 <th>금액</th>
                                 <th>상태</th>
+                                {/* ✅ [추가] 작업 열 추가 */}
+                                <th>작업</th>
                             </tr>
                         </thead>
                         <tbody>
                             {sortedOrders.map(order => {
                                 const isFinalState = ['PICKED_UP', 'NO_SHOW', 'CANCELED'].includes(order.status);
+                                // ✅ [추가] 분할 가능한 주문인지 확인하는 조건
+                                // 단일 아이템만 있는 주문이라도, 해당 주문이 '묶음 주문'에서 분할된 것이 아니라면
+                                // (즉, splitFrom 필드가 없는 경우), 추가 분할이 필요한 경우가 있을 수 있습니다.
+                                // 여기서는 단순히 아이템 개수가 1개 초과인 경우를 가정합니다.
+                                const isSplittable = Array.isArray(order.items) && order.items.length > 1;
+
                                 return (
                                     <tr key={order.id} className={`status-row-${order.status}`}>
                                         <td>{format((order.createdAt as Timestamp).toDate(), 'M/d(eee)', { locale: ko })}</td>
@@ -82,19 +95,21 @@ const ActionableOrderTable: React.FC<{
                                         <td>{(order.totalPrice || 0).toLocaleString()}원</td>
                                         <td className="status-cell">
                                             <div className="status-cell-content">
-                                                {isFinalState ? (
-                                                    <>
-                                                        <span className={`status-badge ${statusInfo[order.status]?.className || ''}`}>{statusInfo[order.status]?.label}</span>
-                                                        {order.status !== 'CANCELED' && (
-                                                            <button onClick={() => onStatusChange(order)} className="revert-button" title="이전 상태로 되돌리기">
-                                                                <Undo2 size={14} /> 되돌리기
-                                                            </button>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <span className={`status-badge ${statusInfo[order.status]?.className || ''}`}>{statusInfo[order.status]?.label}</span>
-                                                )}
+                                                <span className={`status-badge ${statusInfo[order.status]?.className || ''}`}>{statusInfo[order.status]?.label}</span>
                                             </div>
+                                        </td>
+                                        {/* ✅ [추가] 작업 버튼 렌더링 */}
+                                        <td className="action-cell">
+                                            {isFinalState && order.status !== 'CANCELED' && (
+                                                <button onClick={() => onStatusChange(order)} className="revert-button" title="이전 상태로 되돌리기">
+                                                    <Undo2 size={14} /> 되돌리기
+                                                </button>
+                                            )}
+                                            {isSplittable && (
+                                                <button onClick={() => onSplitOrder(order.id)} className="split-button" title="이 주문을 개별 주문으로 분할합니다">
+                                                    <GitBranch size={14} /> 주문 분할
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -354,6 +369,32 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         ), { duration: Infinity, position: 'top-center' });
     };
 
+    // ✅ [신규 추가] 주문 분할 버튼 클릭 핸들러
+    const handleSplitOrder = (orderId: string) => {
+        toast.custom((t) => (
+            <div className="confirmation-toast-content">
+              <AlertTriangle size={44} className="toast-icon" style={{ color: 'var(--warning-color)' }} />
+              <h4>주문 분할 확인</h4>
+              <p>이 묶음 주문을 여러 개의 개별 주문으로 분할하시겠습니까? <br/><strong>원본 주문은 취소 처리됩니다.</strong></p>
+              <div className="toast-buttons">
+                <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>아니오</button>
+                <button className="common-button button-warning button-medium" onClick={() => {
+                    toast.dismiss(t.id);
+                    const promise = splitBundledOrder(orderId);
+                    toast.promise(promise, {
+                        loading: '주문을 분할하는 중입니다...',
+                        success: (res) => {
+                            onActionSuccess(); // 성공 시 데이터 새로고침
+                            return res.message;
+                        },
+                        error: (err) => err.message || '주문 분할에 실패했습니다.'
+                    });
+                }}>네, 분할합니다</button>
+              </div>
+            </div>
+          ), { id: 'split-order-confirmation', duration: Infinity, style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
+    };
+
     const renderTabContent = () => {
         switch (activeTab) {
             case 'pickup':
@@ -372,7 +413,8 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                     </div>
                 );
             case 'history':
-                return <ActionableOrderTable orders={orders} onStatusChange={handleTableStatusChange} />;
+                // ✅ [수정] onSplitOrder prop 전달
+                return <ActionableOrderTable orders={orders} onStatusChange={handleTableStatusChange} onSplitOrder={handleSplitOrder} />;
             case 'manage':
                 return <TrustManagementCard user={user} />;
             default:

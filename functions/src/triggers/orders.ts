@@ -127,6 +127,12 @@ export const onOrderCreated = onDocumentCreated(
     const order = snapshot.data() as Order;
     const orderId = event.params.orderId;
 
+    // ✅ [신규 추가] 스크립트로 생성된 주문은 알림 및 재고 계산 로직을 건너킵니다.
+    if (order.splitFrom || order.notes?.startsWith('[분할된 주문]')) {
+        logger.info(`Skipping onOrderCreated triggers for split order ${orderId}.`);
+        return;
+    }
+
     // --- 1. 재고 수량 업데이트 로직 ---
     if (order.status !== "CANCELED") {
       const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
@@ -224,7 +230,7 @@ export const onOrderCreated = onDocumentCreated(
             logger.info(`주문(${orderId})은 미래 픽업 건이므로, 다음 날 오후 1시 스케줄링된 알림으로 처리됩니다.`);
         } else {
             // pickupStartDateOnly < todayStart (과거 픽업일)
-            logger.info(`주문(${orderId})은 과거 픽업 건이므로, 생성 시점 알림을 건너뜁니다.`);
+            logger.info(`주문(${orderId})은 과거 픽업 건이므로, 생성 시점 알림을 건너킵니다.`);
         }
 
     } catch (alimtalkError) {
@@ -392,6 +398,12 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
 
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
+
+    // ✅ [신규 추가] 스크립트에 의한 변경(분할된 주문, 원본 주문 보관 처리)은 포인트/등급 변경을 건너킵니다.
+    if (after.splitFrom || after.notes?.includes('[주문 분할 완료]')) {
+        logger.info(`Skipping stats update for migrated/split order ${event.params.orderId}.`);
+        return;
+    }
 
     let updateType: OrderUpdateType | null = null;
     const now = new Date();

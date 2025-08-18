@@ -124,6 +124,9 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
  * @description ✅ [수정] 주문 분할 로직에서 포인트/등급/알림 관련 로직을 모두 제거합니다.
  * 💡 [개선 제안] 이 기능은 여러 문서를 다루는 복잡한 트랜잭션이므로,
  * 보안과 데이터 정합성을 위해 추후에 'Callable Cloud Function'으로 이전하는 것을 강력히 권장합니다.
+ *
+ * 이 함수는 이제 사용되지 않으므로, 더 이상 클라이언트에서 호출되어서는 안 됩니다.
+ * 대신 `splitBundledOrder` callable 함수를 사용하세요.
  */
 export const splitAndUpdateOrderStatus = async (
   originalOrderId: string,
@@ -182,6 +185,34 @@ export const splitAndUpdateOrderStatus = async (
     // 3. ❌ 포인트, 등급, 알림 관련 로직은 여기서 모두 제거! ❌
     // 서버의 onCreate, onUpdate 트리거가 새로 생성/수정된 주문들을 감지하고 모든 것을 처리합니다.
   });
+};
+
+
+// =================================================================
+// ✅ [신규 추가] 주문 분할을 위한 Callable Function 호출
+// =================================================================
+export const splitBundledOrder = async (orderId: string): Promise<{ success: boolean; message: string }> => {
+  if (!orderId) {
+    throw new Error("주문 ID가 제공되지 않았습니다.");
+  }
+
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const splitOrderCallable = httpsCallable<{ orderId: string }, { success: boolean, message: string }>(functions, 'splitBundledOrder');
+    
+    const result = await splitOrderCallable({ orderId });
+    
+    return result.data;
+
+  } catch (error: any) {
+    console.error("Callable function 'splitBundledOrder' failed:", error);
+    if (error.code && error.message) {
+      // Firebase HttpsError의 경우, 서버에서 보낸 메시지를 그대로 사용자에게 보여줍니다.
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
+    }
+    throw new Error('주문 분할 중 예상치 못한 오류가 발생했습니다.');
+  }
 };
 
 
