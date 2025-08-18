@@ -14,8 +14,7 @@ import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as O
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
-// ✅ [핵심] getDeadlines 함수를 import합니다.
-import { determineActionState, safeToDate, getDeadlines } from '@/utils/productUtils';
+import { safeToDate } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
 type Product = OriginalProduct & {
@@ -80,6 +79,7 @@ const QuantityInput: React.FC<{
 
 interface ProductCardProps {
   product: Product;
+  actionState: ProductActionState; // [수정] prop으로 actionState를 받음
 }
 
 const PLACEHOLDER = 'https://placeholder.com/200x200.png?text=No+Image';
@@ -95,7 +95,7 @@ const isFirebaseStorage = (url?: string) => {
 };
 
 
-const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { // [수정] prop으로 actionState를 받음
   const navigate = useNavigate();
   const location = useLocation();
   const { addToCart } = useCart();
@@ -156,33 +156,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     };
   }, [product]);
   
-  const actionState = useMemo<ProductActionState>(() => {
-    if (!cardData) return 'ENDED';
-    const { displayRound, isMultiOption, singleOptionVg } = cardData;
-    
-    // ✅ [핵심] 그룹 상품이 2차 공구 기간이고 무제한 재고 옵션이 있을 경우, '재고 준비중'으로 우선 처리합니다.
-    const now = dayjs();
-    const { primaryEnd, secondaryEnd } = getDeadlines(displayRound);
-    const isSecondSalePeriod = secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]');
-
-    if (isMultiOption && isSecondSalePeriod) {
-        const hasInfiniteStockOption = (displayRound.variantGroups as VariantGroup[]).some(
-            vg => vg.totalPhysicalStock === null || vg.totalPhysicalStock === -1
-        );
-        if (hasInfiniteStockOption) {
-            return 'AWAITING_STOCK';
-        }
-    }
-
-    // 그 외의 경우, 기존 로직을 따릅니다.
-    const state = determineActionState(displayRound as SalesRound, userDocument, singleOptionVg);
-    
-    if (state === 'PURCHASABLE' && isMultiOption) {
-      return 'REQUIRE_OPTION';
-    }
-    
-    return state;
-  }, [cardData, userDocument]);
+  // [수정] 내부 actionState 계산 로직 제거
     
   const handleCardClick = useCallback(() => { 
     if (isSuspendedUser) {
@@ -343,33 +317,34 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   const TopBadge = () => {
-    if (product.phase === 'past') return null;
-    
-    if (isPreLaunch) return null;
+    if (product.phase === 'past' || isPreLaunch) return null;
     if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
-
-    const { isMultiOption, singleOptionVg, displayRound } = cardData;
+  
+    const { displayRound } = cardData;
     let isLimited = false;
     let stockText = '한정수량';
-
-    if (isMultiOption) {
-      isLimited = (displayRound.variantGroups as VariantGroup[]).some(vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1);
-    } else if (singleOptionVg) {
-      const totalStock = singleOptionVg.totalPhysicalStock;
+  
+    if (displayRound.variantGroups?.length === 1) {
+      const vg = displayRound.variantGroups[0] as VariantGroup;
+      const totalStock = vg.totalPhysicalStock;
       isLimited = totalStock !== null && totalStock !== -1;
       if (isLimited) {
-        const reserved = singleOptionVg.reservedCount || 0;
+        const reserved = vg.reservedCount || 0;
         const remaining = (totalStock || 0) - reserved;
         if (remaining > 0) {
-            stockText = `${remaining}개 남음!`;
+          stockText = `${remaining}개 남음!`;
         } else {
-            return null; 
+          return null;
         }
       }
+    } else if ((displayRound.variantGroups?.length ?? 0) > 1) {
+      isLimited = (displayRound.variantGroups as VariantGroup[]).some(
+        vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1
+      );
     }
-    
+  
     if (!isLimited) return null;
-
+  
     return (
       <div className="card-top-badge">
         <Flame size={14} /> {stockText}

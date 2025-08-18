@@ -20,6 +20,7 @@ import { PackageSearch, RefreshCw, ArrowDown } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { getDisplayRound, getDeadlines, safeToDate, sortProductsForDisplay, determineActionState } from '@/utils/productUtils';
+import type { ProductActionState } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './ProductListPage.css';
 import '@/styles/common.css';
@@ -33,6 +34,7 @@ interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
   deadlines: { primaryEnd: Date | null; secondaryEnd: Date | null; };
   displayRound: SalesRound;
+  actionState: ProductActionState; // [추가] actionState 포함
 }
 
 const ProductListPage: React.FC = () => {
@@ -151,18 +153,14 @@ const ProductListPage: React.FC = () => {
       const round = getDisplayRound(product);
       if (!round || round.status === 'draft') return;
 
-      const allowedTiers = round.allowedTiers || [];
-      if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier))) return;
-      
-      const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
-      
       const actionState = determineActionState(round as SalesRound, userDocument);
       
-      // ✅ [핵심] 'AWAITING_STOCK' 상태도 화면에 표시되도록 추가
       const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION', 'AWAITING_STOCK', 'ENCORE_REQUESTABLE'].includes(actionState);
       
       if (!isDisplayableState) return;
 
+      const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
+      
       let finalPhase: 'primary' | 'secondary' | 'past';
 
       if (actionState === 'ENCORE_REQUESTABLE') {
@@ -183,6 +181,7 @@ const ProductListPage: React.FC = () => {
         phase: finalPhase,
         deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
         displayRound: round as SalesRound,
+        actionState, // [추가] 계산된 actionState를 객체에 포함
       };
       
       if (finalPhase === 'primary') {
@@ -271,7 +270,8 @@ const ProductListPage: React.FC = () => {
           tutorialId="primary-sale-section"
         >
           {primarySaleProducts.length > 0 ? (
-            primarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} />)
+            // [수정] actionState를 prop으로 전달
+            primarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} actionState={p.actionState} />)
           ) : !loading && (
             <div className="product-list-placeholder">
               <PackageSearch size={48} />
@@ -287,7 +287,8 @@ const ProductListPage: React.FC = () => {
             title={<>⏰ 픽업임박! 추가공구</>}
             tutorialId="secondary-sale-section"
           >
-            {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} />)}
+            {/* [수정] actionState를 prop으로 전달 */}
+            {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} actionState={p.actionState} />)}
           </ProductSection>
         )}
 
@@ -297,7 +298,8 @@ const ProductListPage: React.FC = () => {
             if (!productsForDate || productsForDate.length === 0) return null;
             return (
               <ProductSection key={date} title={<>{dayjs(date).format('M월 D일')} 마감공구</>}>
-                {productsForDate.map(p => <ProductCard key={p.id} product={p as any} />)}
+                {/* [수정] actionState를 prop으로 전달 */}
+                {productsForDate.map(p => <ProductCard key={p.id} product={p as any} actionState={p.actionState} />)}
               </ProductSection>
             );
           })}

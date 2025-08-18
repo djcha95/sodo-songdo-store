@@ -85,7 +85,7 @@ Schema:
       "totalPhysicalStock": "number | null",
       "expirationDate": "string | null (YYYY-MM-DD)",
       "pickupDate": "string | null (YYYY-MM-DD)",
-      "items": [{"name": "string", "price": "number"}]
+      "items": [{"name": "string", "price": "number", "stockDeductionAmount": "number"}]
     }
   ]
 }
@@ -96,8 +96,8 @@ IMPORTANT INSTRUCTIONS:
   1. **첫 3줄**: 상품의 핵심 이미지와 매력을 간단명료하게 3줄로 묘사 (첫 줄은 강렬하게 시작)  
   2. **다음 3줄**: 사용 방법, 경험, 먹는 순간·사용 순간의 느낌을 묘사  
   3. **핵심 특징 3줄**: 📌 아이콘 + 짧은 문장 (한 줄 1특징)  
-  4. **마지막 줄**: ✔️ + 제품명 (규격/용량) 형태로 표기  
-  5. 전체 분량은 8~9줄, 줄 간격을 유지해 모바일 가독성 확보  
+  4. **판매 옵션 요약**: ✔️ 아이콘 + 각 판매 옵션명과 최종 가격을 한 줄씩 명확히 기재. (예: ✔️ 하늘보리 1병: 800원\\n✔️ 하늘보리 1박스(20병): 12,500원)
+  5. 전체 분량은 8~10줄, 줄 간격을 유지해 모바일 가독성 확보  
   6. **굵은 글씨**와 이모지를 적절히 사용  
   7. 불필요한 문장은 제거하고, 시각적으로 깔끔하게  
 
@@ -125,6 +125,14 @@ IMPORTANT INSTRUCTIONS:
 7) Pickup Date Rule (매우 중요): Today is ${today}. Resolve all pickup dates to be in the future. If a year is missing (e.g., 8/15), find the next future occurrence. If a date is in the past, add years until it is in the future.
 
 8) Nulls: Use null for genuinely missing values, but be aggressive in parsing what's there. The 'hashtags' field is an exception and must not be null.
+
+9) Stock Deduction Unit (차감 단위) Rules (CRITICAL):
+    - For each item in the 'items' array, determine the 'stockDeductionAmount'.
+    - This is the number of base units deducted from inventory for one purchase of that item.
+    - Example: If the options are "하늘보리 1병" and "하늘보리 1박스(20병)":
+      - For the "1병" item, 'stockDeductionAmount' MUST be 1.
+      - For the "1박스(20병)" item, 'stockDeductionAmount' MUST be 20.
+    - Infer this number from the item name (e.g., '20병', '30캔', '5개입'). If it's a single item, the value is 1.
 
 원문:
 ${text}

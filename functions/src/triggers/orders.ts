@@ -217,6 +217,8 @@ export const onOrderCreated = onDocumentCreated(
           .join('\n');
         
         let recipientPhone = (userData.phone || '').replace(/\D/g, '');
+        
+        // ✅ [수정] 당일 픽업 건에 대해서만 'ORD_CONFIRM_NOW' 알림톡을 발송합니다.
         if (pickupStartDateOnly.getTime() === todayStart.getTime()) {
             const templateCode = "ORD_CONFIRM_NOW";
             const templateVariables: { [key: string]: string } = {
@@ -226,11 +228,9 @@ export const onOrderCreated = onDocumentCreated(
             logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}.`);
             await sendAlimtalk(recipientPhone, templateCode, templateVariables);
             logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 성공적으로 발송했습니다.`);
-        } else if (pickupStartDateOnly > todayStart) {
-            logger.info(`주문(${orderId})은 미래 픽업 건이므로, 다음 날 오후 1시 스케줄링된 알림으로 처리됩니다.`);
         } else {
-            // pickupStartDateOnly < todayStart (과거 픽업일)
-            logger.info(`주문(${orderId})은 과거 픽업 건이므로, 생성 시점 알림을 건너킵니다.`);
+            // 미래 또는 과거 픽업 건에 대해서는 생성 시점 알림을 보내지 않습니다.
+            logger.info(`주문(${orderId})은 당일 픽업 건이 아니므로, 생성 시점 알림을 건너뜁니다.`);
         }
 
     } catch (alimtalkError) {

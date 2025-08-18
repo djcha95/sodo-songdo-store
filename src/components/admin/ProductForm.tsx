@@ -13,8 +13,9 @@ import {
   updateSalesRound,
   updateProductCoreInfo,
   functions,
-  getReservedQuantitiesMap // [추가] 예약 수량 조회를 위해 import
+  getReservedQuantitiesMap 
 } from '@/firebase';
+// [추가] Cloud Function 호출을 위해 import
 import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import type {
   Category,
@@ -62,7 +63,7 @@ interface ProductItemUI {
 }
 interface VariantGroupUI {
   id: string; groupName: string; totalPhysicalStock: number | '';
-  stockUnitType: string; expirationDate: Date | null; // expirationDateInput 속성 제거
+  stockUnitType: string; expirationDate: Date | null;
   items: ProductItemUI[];
 }
 
@@ -78,57 +79,38 @@ interface AIParsedData {
     totalPhysicalStock: number | null;
     expirationDate: string | null; // YYYY-MM-DD
     pickupDate: string | null;     // YYYY-MM-DD
-    items: { name: string; price: number; }[];
+    items: { name: string; price: number; stockDeductionAmount: number; }[];
   }[];
 }
 
 // --- 헬퍼 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
 
-/**
- * ✅ [수정] 날짜 문자열 파싱 함수 안정성 강화
- * - YYMMDD, YYYYMMDD 등 숫자 형식 입력을 YYYY-MM-DD 형식으로 안정적으로 변환합니다.
- */
 const parseDateStringToDate = (dateString: string | null | undefined): Date | null => {
   if (!dateString) return null;
-
-  // 1. 표준 ISO 형식 (YYYY-MM-DD)을 먼저 시도합니다.
   let date = new Date(dateString);
-  if (!isNaN(date.getTime()) && date.getFullYear() > 1970) {
-    return date;
-  }
+  if (!isNaN(date.getTime()) && date.getFullYear() > 1970) return date;
 
-  // 2. 다양한 숫자 형식(YYMMDD, YYYYMMDD 등)을 시도합니다.
   const cleaned = String(dateString).replace(/[^0-9]/g, '');
   let year: number, month: number, day: number;
 
-  if (cleaned.length === 8) { // YYYYMMDD 형식
+  if (cleaned.length === 8) {
     year = parseInt(cleaned.substring(0, 4), 10);
-    month = parseInt(cleaned.substring(4, 6), 10) - 1; // 월은 0부터 시작
+    month = parseInt(cleaned.substring(4, 6), 10) - 1;
     day = parseInt(cleaned.substring(6, 8), 10);
-  } else if (cleaned.length === 6) { // YYMMDD 형식
+  } else if (cleaned.length === 6) {
     const tempYear = parseInt(cleaned.substring(0, 2), 10);
-    // 2000년대 년도로 변환 (앱의 사용 시나리오상 안전한 가정)
     year = 2000 + tempYear;
     month = parseInt(cleaned.substring(2, 4), 10) - 1;
     day = parseInt(cleaned.substring(4, 6), 10);
   } else {
-    return null; // 지원하지 않는 숫자 형식
-  }
-
-  // 파싱된 날짜 구성 요소의 유효성 검사
-  if (month < 0 || month > 11 || day < 1 || day > 31) {
     return null;
   }
-  
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
   const finalDate = new Date(year, month, day);
-
-  // Date 생성자가 월/일을 자동으로 조정하는 경우를 대비해 최종 유효성 검사
-  // (예: 2월 30일 -> 3월 1~2일로 바뀌는 것 방지)
   if (finalDate.getFullYear() === year && finalDate.getMonth() === month && finalDate.getDate() === day) {
     return finalDate;
   }
-
   return null;
 };
 
@@ -248,6 +230,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [pageTitle, setPageTitle] = useState('새 상품 등록');
   const [submitButtonText, setSubmitButtonText] = useState('신규 상품 등록하기');
 
+  // [추가] 수정 시 변경사항 감지를 위한 원본 데이터 저장 State
+  const [initialProduct, setInitialProduct] = useState<Partial<Product> | null>(null);
+  const [initialRound, setInitialRound] = useState<Partial<SalesRound> | null>(null);
+
   const [productType, setProductType] = useState<'single' | 'group'>('single');
   const [categories, setCategories] = useState<Category[]>([]);
   const [groupName, setGroupName] = useState('');
@@ -266,8 +252,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
   const [roundName, setRoundName] = useState('1차 판매');
   const [variantGroups, setVariantGroups] = useState<VariantGroupUI[]>([]);
-
-  // [추가] 수정 모드에서 로드 시점의 예약 수량을 저장하기 위한 state
   const [initialReservedMap, setInitialReservedMap] = useState<Map<string, number>>(new Map());
 
   const [publishDate, setPublishDate] = useState<Date>(() => new Date(new Date().setHours(14, 0, 0, 0)));
@@ -316,7 +300,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
       if (!productId) return;
       setIsLoading(true);
       try {
-        // [수정] 수정 모드일 때 예약 수량 정보를 함께 가져옵니다.
         const [product, reservedMapData] = await Promise.all([
             getProductById(productId),
             mode === 'editRound' ? getReservedQuantitiesMap() : Promise.resolve(new Map<string, number>())
@@ -327,6 +310,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
 
         if (!product) { toast.error('상품을 찾을 수 없습니다.'); navigate('/admin/products'); return; }
+
+        // [추가] 수정 모드에서 원본 데이터 저장
+        if (mode === 'editRound') {
+            setInitialProduct({
+                groupName: product.groupName,
+                description: product.description,
+                hashtags: product.hashtags,
+                storageType: product.storageType,
+                category: product.category,
+            });
+        }
+
         setGroupName(product.groupName);
         setDescription(product.description);
         setHashtags(product.hashtags || []);
@@ -343,6 +338,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           roundToLoad = product.salesHistory.find(r => r.roundId === roundId);
           if (!roundToLoad) { toast.error('판매 회차를 찾을 수 없습니다.'); navigate(`/admin/products/edit/${productId}`); return; }
           setPageTitle(`'${product.groupName}' 회차 수정`);
+
+          // [추가] 수정 모드에서 원본 회차 데이터 저장
+          setInitialRound(JSON.parse(JSON.stringify(roundToLoad)));
+
         } else if (mode === 'newRound') {
           roundToLoad = initialState?.lastRound || product.salesHistory[0];
           if (roundToLoad) {
@@ -361,7 +360,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
             
-            // [수정] 수정 모드일 때, '총 재고'가 아닌 '남은 재고'를 계산하여 표시합니다.
             let displayStock: number | '' = vg.totalPhysicalStock ?? '';
             if (mode === 'editRound' && roundId) {
                 const key = `${product.id}-${roundId}-${vg.id}`;
@@ -369,9 +367,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                 const configuredStock = vg.totalPhysicalStock ?? -1;
                 
                 if (configuredStock === -1) {
-                    displayStock = ''; // UI에서 무제한을 의미
+                    displayStock = '';
                 } else {
-                    // 남은 재고가 음수가 되지 않도록 보정
                     displayStock = Math.max(0, configuredStock - reservedCount);
                 }
             }
@@ -379,9 +376,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             return {
               id: vg.id,
               groupName: vg.groupName,
-              totalPhysicalStock: displayStock, // [수정] 계산된 값으로 설정
+              totalPhysicalStock: displayStock,
               stockUnitType: vg.stockUnitType,
-              expirationDate, // ✅ 이 줄을 추가해주세요.
+              expirationDate,
               items: (vg.items || []).map((item: ProductItem) => ({
                 id: item.id,
                 name: item.name,
@@ -492,7 +489,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const addNewVariantGroup = useCallback(() => {
     setVariantGroups(prev => [...prev, {
       id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개',
-      expirationDate: null, expirationDateInput: '',
+      expirationDate: null,
       items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }]
     }]);
   }, []);
@@ -654,7 +651,7 @@ const applyParsed = (data: any) => {
             name: String(it.name ?? ''),
             price: typeof it.price === 'number' ? it.price : '',
             limitQuantity: '',
-            deductionAmount: 1,
+            deductionAmount: it.stockDeductionAmount ?? 1,
             isBundleOption: bundleUnitKeywords.some(k => String(it.name ?? '').includes(k)),
           }))
         : [{
@@ -667,7 +664,6 @@ const applyParsed = (data: any) => {
         totalPhysicalStock: vg.totalPhysicalStock ?? '',
         stockUnitType: '개',
         expirationDate: exp,
-        expirationDateInput: exp ? toYmd(exp) : (vg.expirationDate || ''),
         items,
       };
     });
@@ -759,7 +755,6 @@ const settingsSummary = useMemo(() => {
         roundName: roundName.trim(),
         status,
         variantGroups: variantGroups.map(vg => {
-          // [수정] 수정 모드일 때, 입력된 '남은 재고'를 기반으로 '새로운 총 재고'를 계산
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
 
@@ -767,24 +762,21 @@ const settingsSummary = useMemo(() => {
             const key = `${productId}-${roundId}-${vg.id}`;
             const initialReserved = initialReservedMap.get(key) || 0;
             
-            if (newStockFromInput === '' || newStockFromInput < 0) { // 빈 문자열이나 음수는 무제한(-1)으로 처리
+            if (newStockFromInput === '' || newStockFromInput < 0) {
               finalTotalPhysicalStock = -1;
             } else {
               finalTotalPhysicalStock = Number(newStockFromInput) + initialReserved;
             }
           } else {
-             // 새 상품/새 회차 모드에서는 입력값을 그대로 사용
             finalTotalPhysicalStock = newStockFromInput === '' ? null : Number(newStockFromInput);
           }
         
           return {
-            // ✅ [수정] ID 보존 로직 강화: ID가 존재하면 길이에 상관없이 무조건 유지
             id: vg.id || generateUniqueId(),
             groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
-            totalPhysicalStock: finalTotalPhysicalStock, // [수정] 계산된 값으로 설정
+            totalPhysicalStock: finalTotalPhysicalStock,
             stockUnitType: vg.stockUnitType,
             items: vg.items.map(item => ({
-              // ✅ [수정] ID 보존 로직 강화: ID가 존재하면 길이에 상관없이 무조건 유지
               id: item.id || generateUniqueId(),
               name: item.name,
               price: Number(item.price) || 0,
@@ -819,6 +811,40 @@ const settingsSummary = useMemo(() => {
         await addNewSalesRound(productId, salesRoundData as any);
         toast.success(isDraft ? '새 회차가 임시저장되었습니다.' : '새로운 판매 회차가 추가되었습니다.');
       } else if (mode === 'editRound' && productId && roundId) {
+        
+        // --- [추가] 변경사항 감지 및 알림 전송 로직 ---
+        const changes: string[] = [];
+        const currentCategoryName = categories.find(c => c.id === selectedMainCategory)?.name || '';
+        const storageTypeMap = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동' };
+
+        if (initialProduct?.groupName !== groupName.trim()) changes.push(`상품명 변경`);
+        if (initialProduct?.description !== description.trim()) changes.push(`상세 설명 변경`);
+        if (initialProduct?.storageType !== selectedStorageType) changes.push(`보관 방법: ${storageTypeMap[initialProduct?.storageType!]} -> ${storageTypeMap[selectedStorageType]}`);
+        if (initialProduct?.category !== currentCategoryName) changes.push(`카테고리: ${initialProduct?.category} -> ${currentCategoryName}`);
+        
+        if (initialRound?.roundName !== salesRoundData.roundName) changes.push(`회차명: ${initialRound?.roundName} -> ${salesRoundData.roundName}`);
+        if (toYmd(convertToDate(initialRound?.pickupDate)) !== toYmd(convertToDate(salesRoundData.pickupDate))) changes.push(`픽업 시작일 변경`);
+        if (toYmd(convertToDate(initialRound?.pickupDeadlineDate)) !== toYmd(convertToDate(salesRoundData.pickupDeadlineDate))) changes.push(`픽업 마감일 변경`);
+        // 옵션/가격 변경은 너무 복잡하므로 간단하게 알림
+        if (JSON.stringify(initialRound?.variantGroups) !== JSON.stringify(salesRoundData.variantGroups)) changes.push('가격/옵션 정보 변경');
+
+        if (changes.length > 0 && !isDraft) {
+            try {
+                const notifyUsersOfProductUpdate = httpsCallable(functions, 'notifyUsersOfProductUpdate');
+                await notifyUsersOfProductUpdate({
+                    productId,
+                    roundId,
+                    productName: groupName.trim(),
+                    changes: [...new Set(changes)], // 중복 제거
+                });
+                toast.success('상품 정보 변경 알림을 발송했습니다.');
+            } catch (err) {
+                reportError('notifyUsersOfProductUpdate call failed', err);
+                toast.error('변경 알림 발송에 실패했습니다.');
+            }
+        }
+        // --- 알림 로직 끝 ---
+
         const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> & { hashtags?: string[] } = {
           groupName: groupName.trim(),
           description: description.trim(),
@@ -833,8 +859,6 @@ const settingsSummary = useMemo(() => {
           .map(p => previewUrlToFile.get(p))
           .filter((f): f is File => !!f);
 
-        // 아래 두 함수는 기존 상품/회차 정보를 업데이트합니다.
-        // ID 보존 로직이 수정되어 이제 ID가 안전하게 유지됩니다.
         await updateProductCoreInfo(productId, productDataToUpdate, newFiles, finalImageUrls, initialImageUrls);
         await updateSalesRound(productId, roundId, salesRoundData as any);
 
@@ -1059,7 +1083,6 @@ const settingsSummary = useMemo(() => {
                       <input type="text" value={vg.groupName} onChange={e => handleVariantGroupChange(vg.id, 'groupName', e.target.value)} placeholder={productType === 'group' ? '예: 얼큰소고기맛' : '상품명과 동일하게'} required />
                     </div>
                     <div className="form-group">
-                      {/* [수정] 수정 모드일 때 레이블을 '남은 재고'로 변경하여 혼동 방지 */}
                       <label>
                         <Tippy content={mode === 'editRound' ? "현재 남은 재고 수량입니다. 여기에 추가할 수량을 더해서 입력하면 됩니다." : "판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다."}>
                           <span>{mode === 'editRound' ? '남은 재고' : '총 재고'}</span>
@@ -1074,7 +1097,7 @@ const settingsSummary = useMemo(() => {
 <label>유통기한</label>
 <input
   type="date"
-  className="date-input-native" // 필요한 경우 CSS 스타일링을 위한 클래스
+  className="date-input-native"
   value={toYmd(vg.expirationDate)}
   onChange={e => handleVariantGroupChange(vg.id, 'expirationDate', fromYmd(e.target.value))}
 />                    </div>
