@@ -8,26 +8,25 @@ import {
     deleteOrder,
     updateOrderNotes,
     toggleOrderBookmark,
-    updateMultipleOrderStatuses
-} from '../../firebase'; // 우리 파일에서는 기존 함수들만 가져옵니다.
-
-// ✅ Firebase 라이브러리에서 직접 필요한 함수를 가져옵니다.
-import { getFunctions, httpsCallable } from "firebase/functions";
-
+    updateMultipleOrderStatuses,
+} from '../../firebase';
+// ✅ [수정] firebase 라이브러리가 아닌, 우리가 설정한 config 파일에서 'functions'를 가져옵니다.
+import { functions } from '@/firebase/firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
 import type { Order, OrderItem, OrderStatus } from '../../types';
 import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
-// ✅ [수정] 'GitMerge' 아이콘 추가
 import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight, ClipboardCopy, GitMerge } from 'lucide-react';
 import './OrderManagementPage.css';
 import { formatKRW } from '@/utils/number';
 
-// ✅ [추가] Firebase Functions 초기화
-const functions = getFunctions();
+// ❌ const functions = getFunctions(); // 이 라인을 삭제하고
+// ✅ 우리가 만든 'functions' 인스턴스를 사용하도록 변경합니다.
 const splitBundledOrderCallable = httpsCallable(functions, 'splitBundledOrder');
 
 
-// --- 타입 정의 (변경 없음) ---
+// (이하 나머지 코드는 이전과 동일)
+// --- 타입 정의 ---
 interface FlattenedOrderRow {
     orderId: string;
     isBookmarked: boolean;
@@ -47,7 +46,7 @@ interface FlattenedOrderRow {
     uniqueRowKey: string;
 }
 
-// --- Helper Functions (변경 없음) ---
+// --- Helper Functions ---
 const formatPhoneLast4 = (phone?: string | null): string => {
     if (!phone || phone.length < 4) return '-';
     return phone.slice(-4);
@@ -75,7 +74,7 @@ const formatDateWithDay = (timestamp: any): string => {
 
 const formatCurrency = (amount: number): string => `${formatKRW(amount)}원`;
 
-// --- Status Configuration (변경 없음) ---
+// --- Status Configuration ---
 const ORDER_STATUS_CONFIG: Record<OrderStatus, { label: string; icon: React.ReactNode; className: string; sortOrder: number }> = {
     PICKED_UP: { label: '픽업 완료', icon: <PackageCheck size={14} />, className: 'status-picked-up', sortOrder: 0 },
     PREPAID: { label: '선입금', icon: <DollarSign size={14} />, className: 'status-prepaid', sortOrder: 1 },
@@ -96,7 +95,7 @@ const getDisplayStatusInfo = (order: Order) => {
     return { ...ORDER_STATUS_CONFIG[order.status], badge: null };
 };
 
-// --- Editable Notes Component (변경 없음) ---
+// --- Editable Notes Component ---
 const EditableNote: React.FC<{ order: Order; onSave: (id: string, notes: string) => void }> = ({ order, onSave }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [note, setNote] = useState(order.notes || '');
@@ -126,7 +125,6 @@ interface OrderTableRowProps {
     onSaveNote: (orderId: string, notes: string) => void;
     onToggleBookmark: (order: Order) => void;
     onDeleteOrder: (orderId: string, customerName: string) => void;
-    // ✅ [추가] 주문 분리 함수를 props로 받음
     onSplitOrder: (orderId: string) => void;
 }
 
@@ -180,7 +178,6 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
                     <Star size={16} fill={row.isBookmarked ? 'currentColor' : 'none'}/>
                 </button>
             </td>
-            {/* ✅ [추가] 주문 분리 버튼을 위한 새로운 셀 */}
             <td className="action-cell cell-center">
                 {row.originalOrder.items.length > 1 && (
                     <button
@@ -205,7 +202,7 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
     );
 });
 
-// --- PaginationControls (변경 없음) ---
+// --- PaginationControls ---
 interface PaginationControlsProps {
     currentPage: number;
     totalPages: number;
@@ -347,7 +344,6 @@ const OrderManagementPage: React.FC = () => {
         setCurrentPage(1);
     }, [filters, itemsPerPage]);
 
-    // ... (handleFilterChange, handleSort, handleStatusChange, handleDeleteOrder, handleSaveNote, handleToggleBookmark는 변경 없음) ...
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         if (type === 'checkbox') {
@@ -431,7 +427,6 @@ const OrderManagementPage: React.FC = () => {
         }
     }, []);
 
-    // ✅ [추가] 주문 분리 버튼 클릭 핸들러
     const handleSplitOrder = useCallback(async (orderId: string) => {
         const isConfirmed = window.confirm(`[주의] 이 주문을 여러 개의 개별 주문으로 분리하시겠습니까?\n\n- 원본 주문은 '취소' 상태로 변경됩니다.\n- 이 작업은 되돌릴 수 없습니다.`);
         
@@ -441,7 +436,7 @@ const OrderManagementPage: React.FC = () => {
                 const result = await splitBundledOrderCallable({ orderId });
                 if ((result.data as any).success) {
                     toast.success("주문이 성공적으로 분리되었습니다. 목록을 새로고침합니다.", { id: toastId });
-                    fetchOrders(); // 목록 새로고침
+                    fetchOrders();
                 } else {
                     throw new Error((result.data as any).message || "알 수 없는 오류가 발생했습니다.");
                 }
@@ -454,7 +449,6 @@ const OrderManagementPage: React.FC = () => {
 
 
     const filteredAndSortedRows = useMemo(() => {
-        // ... (내부 로직 변경 없음) ...
         const filtered = orders.filter(order => {
             const statusMatch = filters.status === 'all' || order.status === filters.status;
             const searchMatch = filters.searchQuery === '' ||
@@ -544,7 +538,6 @@ const OrderManagementPage: React.FC = () => {
                 </button>
             </header>
             <div className="list-controls-v3">
-                {/* ... (필터 및 검색 UI 변경 없음) ... */}
                 <div className="search-bar-wrapper-v2">
                     <Search size={20} className="search-icon-v2" />
                     <input type="text" name="searchQuery" placeholder="고객명, 전화번호, 품목으로 검색..." value={filters.searchQuery} onChange={handleFilterChange} className="search-input-v2" />
@@ -586,7 +579,6 @@ const OrderManagementPage: React.FC = () => {
                             <th style={{ width: 'var(--table-col-상태-width)' }}><div className="sortable-header" onClick={() => handleSort('status')}><span>상태</span><ArrowUpDown size={12} /></div></th>
                             <th style={{ width: 'var(--table-col-비고-width)' }}>비고</th>
                             <th className="cell-center" style={{ width: 'var(--table-col-북마크-width)' }} title="북마크"><Star size={16} /></th>
-                            {/* ✅ [추가] 주문 분리 버튼을 위한 헤더 */}
                             <th className="cell-center" style={{ width: 'var(--table-col-삭제-width)' }} title="분리"><GitMerge size={16} /></th>
                             <th className="cell-center" style={{ width: 'var(--table-col-삭제-width)' }} title="삭제"><Trash2 size={16} /></th>
                         </tr>
@@ -602,7 +594,6 @@ const OrderManagementPage: React.FC = () => {
                                     onSaveNote={handleSaveNote}
                                     onToggleBookmark={handleToggleBookmark}
                                     onDeleteOrder={handleDeleteOrder}
-                                    // ✅ [추가] 주문 분리 함수를 props로 전달
                                     onSplitOrder={handleSplitOrder}
                                 />
                             ))

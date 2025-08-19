@@ -14,7 +14,7 @@ import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as O
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';
-import { safeToDate } from '@/utils/productUtils';
+import { safeToDate, getStockInfo } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 
 type Product = OriginalProduct & {
@@ -79,7 +79,7 @@ const QuantityInput: React.FC<{
 
 interface ProductCardProps {
   product: Product;
-  actionState: ProductActionState; // [수정] prop으로 actionState를 받음
+  actionState: ProductActionState;
 }
 
 const PLACEHOLDER = 'https://placeholder.com/200x200.png?text=No+Image';
@@ -95,11 +95,12 @@ const isFirebaseStorage = (url?: string) => {
 };
 
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { // [수정] prop으로 actionState를 받음
+const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { userDocument } = useAuth();
   const { addToCart } = useCart();
-  const { isSuspendedUser, userDocument } = useAuth();
+  const { isSuspendedUser } = useAuth();
   const { hasRequestedEncore, requestEncore, loading: encoreLoading } = useEncoreRequest();
   const { isPreLaunch, launchDate } = useLaunch();
   const [quantity, setQuantity] = useState(1);
@@ -155,8 +156,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { 
       storageType: product.storageType,
     };
   }, [product]);
-  
-  // [수정] 내부 actionState 계산 로직 제거
     
   const handleCardClick = useCallback(() => { 
     if (isSuspendedUser) {
@@ -183,7 +182,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { 
     }
     const { displayRound, singleOptionItem, singleOptionVg } = cardData;
 
-    const reserved = singleOptionVg?.reservedCount || 0;
+    const reserved = singleOptionVg?.reservedCount ?? 0;
     const totalStock = singleOptionVg?.totalPhysicalStock;
     const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
 
@@ -255,7 +254,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { 
       success: '앵콜 요청이 접수되었습니다!',
       error: '오류가 발생했습니다.'
     });
-  }, [userDocument, product.id, requestEncore, hasRequestedEncore]);
+  }, [product.id, requestEncore, userDocument, hasRequestedEncore]);
 
   if (!cardData) return null;
 
@@ -282,7 +281,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { 
 
     switch (actionState) {
       case 'PURCHASABLE':
-        const reserved = cardData.singleOptionVg?.reservedCount || 0;
+        const reserved = cardData.singleOptionVg?.reservedCount ?? 0;
         const totalStock = cardData.singleOptionVg?.totalPhysicalStock;
         const remainingStock = (totalStock === null || totalStock === -1) ? Infinity : (totalStock || 0) - reserved;
         const maxStockForUI = Math.floor(remainingStock / (cardData.singleOptionItem?.stockDeductionAmount || 1));
@@ -321,29 +320,28 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => { 
     if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
   
     const { displayRound } = cardData;
-    let isLimited = false;
-    let stockText = '한정수량';
+    let isLimitedOverall = false;
+    let stockText: React.ReactNode = '한정수량';
   
     if (displayRound.variantGroups?.length === 1) {
       const vg = displayRound.variantGroups[0] as VariantGroup;
-      const totalStock = vg.totalPhysicalStock;
-      isLimited = totalStock !== null && totalStock !== -1;
-      if (isLimited) {
-        const reserved = vg.reservedCount || 0;
-        const remaining = (totalStock || 0) - reserved;
-        if (remaining > 0) {
-          stockText = `${remaining}개 남음!`;
-        } else {
-          return null;
-        }
+      const stockInfo = getStockInfo(vg);
+  
+      isLimitedOverall = stockInfo.isLimited;
+  
+      if (stockInfo.isLimited && stockInfo.remainingUnits > 0) {
+        // [수정] "박스" 단위를 제거하고 항상 "개" 단위로만 표시
+        stockText = <>{stockInfo.remainingUnits}개 남음</>;
+      } else if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
+        return null; // 품절이면 뱃지 미표시
       }
     } else if ((displayRound.variantGroups?.length ?? 0) > 1) {
-      isLimited = (displayRound.variantGroups as VariantGroup[]).some(
-        vg => vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1
+      isLimitedOverall = (displayRound.variantGroups as VariantGroup[]).some(
+        vg => getStockInfo(vg).isLimited
       );
     }
   
-    if (!isLimited) return null;
+    if (!isLimitedOverall) return null;
   
     return (
       <div className="card-top-badge">

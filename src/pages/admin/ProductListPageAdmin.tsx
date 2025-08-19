@@ -411,12 +411,14 @@ const ProductListPageAdmin: React.FC = () => {
         
         const pickedUpMap = new Map<string, number>();
         pickedUpOrdersData.forEach(doc => {
-            const order = doc.data() as Order;
-            (order.items || []).forEach((item: OrderItem) => {
-                const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-                pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + item.quantity);
-            });
-        });
+  const order = doc.data() as Order;
+  (order.items || []).forEach((item: OrderItem) => {
+    const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+    const unit = Number(item.stockDeductionAmount ?? 1);
+    pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + (Number(item.quantity ?? 0) * unit));
+  });
+});
+
 
         setPageData({
             allProducts: allFetchedProducts,

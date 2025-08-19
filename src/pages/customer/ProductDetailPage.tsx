@@ -15,7 +15,7 @@ import { Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRound as OriginalSalesRound } from '@/types';
-import { getDisplayRound, determineActionState, safeToDate, getDeadlines } from '@/utils/productUtils';
+import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getStockInfo } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 
@@ -144,27 +144,28 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                     <div className="info-label"><PackageCheck size={16} />잔여 수량</div>
                     <div className="info-value">
                         <div className="stock-list">
-                            {round.variantGroups.map(vg => {
-                                const totalStock = vg.totalPhysicalStock;
-                                let stockElement: React.ReactNode;
+                        {round.variantGroups.map(vg => {
+                            const stockInfo = getStockInfo(vg);
+                            let stockElement: React.ReactNode;
 
-                                if (totalStock === null || totalStock === -1) {
-                                    stockElement = <span className="unlimited-stock">수량 제한 없음</span>;
-                                } else {
-                                    const reserved = vg.reservedCount || 0;
-                                    const remainingStock = Math.max(0, totalStock - reserved);
-                                    
-                                    if (remainingStock > 0) {
-                                        if (remainingStock <= 10) { stockElement = <span className="low-stock"><Flame size={14} /> {remainingStock}개 남음! <Flame size={14} /></span>;
-                                        } else { stockElement = <span className="limited-stock">{remainingStock}개 남음</span>; }
-                                    } else {
-                                        stockElement = <span className="sold-out">{actionState === 'WAITLISTABLE' ? '대기 가능' : '품절'}</span>;
-                                    }
-                                }
+                            if (!stockInfo.isLimited) {
+                                stockElement = <span className="unlimited-stock">수량 제한 없음</span>;
+                            } else if (stockInfo.remainingUnits > 0) {
+                                // [수정] "박스" 단위를 제거하고 항상 "개" 단위로만 표시
+                                const pretty = <>{stockInfo.remainingUnits}개 남음</>;
                                 
-                                const displayText = isMultiGroup ? <>{vg.groupName}: {stockElement}</> : stockElement;
-                                return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
-                            })}
+                                if (stockInfo.remainingUnits <= 10) {
+                                    stockElement = <span className="low-stock"><Flame size={14} /> {pretty} <Flame size={14} /></span>;
+                                } else {
+                                    stockElement = <span className="limited-stock">{pretty}</span>;
+                                }
+                            } else {
+                                stockElement = <span className="sold-out">{actionState === 'WAITLISTABLE' ? '대기 가능' : '품절'}</span>;
+                            }
+
+                            const displayText = isMultiGroup ? <>{vg.groupName}: {stockElement}</> : stockElement;
+                            return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
+                        })}
                         </div>
                     </div>
                 </div>
@@ -389,30 +390,22 @@ const ProductDetailPage: React.FC = () => {
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
-    // ✅ [수정] actionState 로직 변경
     const actionState = useMemo<ProductActionState>(() => {
         if (!displayRound) return 'LOADING';
         
-        // 1. productUtils에서 상품의 기본 상태를 가져옵니다.
         const baseState = determineActionState(displayRound, userDocument);
 
-        // 2. '옵션 선택 필요' 상태일 때, 사용자가 옵션을 선택했는지 확인합니다.
         if (baseState === 'REQUIRE_OPTION') {
-            // 사용자가 모든 옵션(하위그룹, 세부항목)을 선택했다면, '구매 가능' 상태로 변경합니다.
             if (selectedItem) {
                 return 'PURCHASABLE';
             }
-            // 아직 옵션을 선택하지 않았다면, 그대로 '옵션 선택 필요' 상태를 유지합니다.
             return 'REQUIRE_OPTION';
         }
 
-        // 3. 단일 상품이면서 구매 가능한 상태인데, 유일한 옵션이 품절된 경우를 처리합니다.
         if (baseState === 'PURCHASABLE' && !selectedItem) {
-            // 이 경우, 대기 가능하거나 앵콜 요청 상태로 변경하는 것이 더 적절합니다.
             return 'ENCORE_REQUESTABLE';
         }
 
-        // 4. 그 외 모든 경우에는 기본 상태를 그대로 사용합니다.
         return baseState;
     }, [displayRound, userDocument, selectedItem]);
 

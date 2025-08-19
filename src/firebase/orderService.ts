@@ -40,12 +40,27 @@ export const submitOrder = async (
       throw new Error('주문 처리 중 사용자 정보를 찾을 수 없습니다.');
     }
 
+    // ✅ 먼저 새 order 문서 참조 생성
     const newOrderRef = doc(collection(db, 'orders'));
     newOrderId = newOrderRef.id;
-    const originalTotalPrice = orderData.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+
+    // ✅ stockDeductionAmount 보강
+    const itemsWithDeduction = orderData.items.map((item) => {
+      return {
+        ...item,
+        stockDeductionAmount: item.stockDeductionAmount ?? 1, 
+        // ⚠️ 추후 여기서 실제 variantGroup 값(예: 20)을 가져와 넣는 게 베스트
+      };
+    });
+
+    const originalTotalPrice = itemsWithDeduction.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0
+    );
 
     const newOrderData: Omit<Order, 'id'> = {
       ...orderData,
+      items: itemsWithDeduction,   // ✅ 보강된 items 저장
       status: 'RESERVED',
       createdAt: serverTimestamp(),
       orderNumber: `SODOMALL-${Date.now()}`,
@@ -57,7 +72,6 @@ export const submitOrder = async (
 
   return { orderId: newOrderId };
 };
-
 
 /**
  * @description ✅ [수정] 사용자의 예약을 취소합니다.
@@ -363,12 +377,16 @@ export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> =
   const quantitiesMap = new Map<string, number>();
   const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
   const querySnapshot = await getDocs(q);
-  querySnapshot.forEach((doc) => {
-    const order = doc.data() as Order;
+
+  querySnapshot.forEach((docSnap) => {
+    const order = docSnap.data() as Order;
     (order.items || []).forEach((item: OrderItem) => {
       const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-      quantitiesMap.set(key, (quantitiesMap.get(key) || 0) + item.quantity);
+      const unit = Number(item.stockDeductionAmount ?? 1);
+      const qty = Number(item.quantity ?? 0) * unit;
+      quantitiesMap.set(key, (quantitiesMap.get(key) || 0) + qty);
     });
   });
+
   return quantitiesMap;
 };

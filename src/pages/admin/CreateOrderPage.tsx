@@ -4,20 +4,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import toast from 'react-hot-toast';
 import { getAllUsersForQuickCheck } from '@/firebase/userService';
-// ✅ [수정] 올바른 경로에서 함수를 가져옵니다.
 import { getAllProducts } from '@/firebase';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+// ✅ [수정] firebase 라이브러리가 아닌, 우리가 설정한 config 파일에서 'functions'를 가져옵니다.
+import { functions } from '@/firebase/firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
 import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, ProductItem } from '@/types';
 import { Search, User, Package, X, CheckCircle, PlusCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './CreateOrderPage.css';
 
-const functions = getFunctions();
+// ❌ const functions = getFunctions(); // 이 라인을 삭제하고
+// ✅ 우리가 만든 'functions' 인스턴스를 사용하도록 변경합니다.
 const createOrderAsAdminCallable = httpsCallable(functions, 'createOrderAsAdmin');
 
 const CreateOrderPage: React.FC = () => {
     useDocumentTitle('관리자 주문 생성');
 
+    // (이하 나머지 코드는 이전과 동일)
     // State variables
     const [allUsers, setAllUsers] = useState<UserDocument[]>([]);
     const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -38,7 +41,6 @@ const CreateOrderPage: React.FC = () => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                // ✅ [수정] getAllProducts 함수로 변경
                 const [users, products] = await Promise.all([
                     getAllUsersForQuickCheck(),
                     getAllProducts()
@@ -57,7 +59,6 @@ const CreateOrderPage: React.FC = () => {
     // Memoized search results
     const filteredUsers = useMemo(() => {
         if (!userSearch) return [];
-        // ✅ [수정] displayName이 null일 경우를 대비하여 기본값('')을 사용합니다.
         return allUsers.filter(u =>
             (u.displayName || '').toLowerCase().includes(userSearch.toLowerCase()) ||
             u.phoneLast4?.includes(userSearch)
@@ -106,9 +107,8 @@ const CreateOrderPage: React.FC = () => {
             return;
         }
 
-        // ✅ [수정] OrderItem 타입에 필요한 모든 속성을 추가합니다.
         const orderItem: OrderItem = {
-            id: `${selectedProduct.id}-${selectedItem.id}-${Date.now()}`, // 프론트엔드에서 임시 ID 생성
+            id: `${selectedProduct.id}-${selectedItem.id}-${Date.now()}`,
             productId: selectedProduct.id,
             productName: selectedProduct.groupName,
             roundId: selectedRound.roundId,
@@ -119,13 +119,13 @@ const CreateOrderPage: React.FC = () => {
             itemName: selectedItem.name,
             quantity: quantity,
             unitPrice: selectedItem.price,
-            stock: selectedItem.stock || -1, // 재고 정보가 있다면 사용, 없다면 -1
+            stock: selectedItem.stock || -1,
             stockDeductionAmount: selectedItem.stockDeductionAmount || 1,
             imageUrl: selectedProduct.imageUrls?.[0] || '',
             deadlineDate: selectedRound.deadlineDate,
             pickupDate: selectedRound.pickupDate,
             isPrepaymentRequired: selectedRound.isPrepaymentRequired || false,
-            arrivalDate: null, // 도착일은 현재 사용하지 않으므로 null
+            arrivalDate: null,
         };
 
         const toastId = toast.loading(`${selectedUser.displayName}님의 주문을 생성하는 중...`);

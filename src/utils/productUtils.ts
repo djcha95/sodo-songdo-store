@@ -23,6 +23,46 @@ export interface SalesRound extends OriginalSalesRound {
   variantGroups: VariantGroup[];
 }
 
+/**
+ * 재고 정보를 담는 인터페이스
+ */
+export interface StockInfo {
+  isLimited: boolean;       // 한정 수량 여부
+  remainingUnits: number;   // 남은 개별 단위 수량
+  unitPerBox: number;       // 박스당 단위 수 (1이면 개별 상품)
+}
+
+/**
+ * VariantGroup의 재고 정보를 계산하여 반환하는 공통 함수
+ * @param vg - 재고 정보를 계산할 VariantGroup
+ * @returns StockInfo 객체
+ */
+export const getStockInfo = (vg: VariantGroup): StockInfo => {
+  const totalStock = vg.totalPhysicalStock;
+  // totalPhysicalStock이 null 또는 -1이면 무제한 재고로 간주
+  const isLimited = totalStock !== null && totalStock !== -1;
+
+  if (!isLimited) {
+    return { isLimited: false, remainingUnits: Infinity, unitPerBox: 1 };
+  }
+
+  // reservedCount는 이미 '실개수'로 환산되었다고 가정
+  const reserved = vg.reservedCount || 0;
+  const remainingUnits = Math.max(0, (totalStock || 0) - reserved);
+
+  // 그룹 내 모든 아이템의 stockDeductionAmount가 동일한지 확인하여 '박스' 단위 계산
+  const units = (vg.items?.map(it => it.stockDeductionAmount || 1) || []);
+  const allSame = units.length > 0 && units.every(u => u === units[0]);
+  // 모두 동일하고 1보다 클 때만 박스 단위로 인정
+  const unitPerBox = allSame && units[0] > 1 ? (units[0] || 1) : 1;
+
+  return {
+    isLimited: true,
+    remainingUnits,
+    unitPerBox,
+  };
+};
+
 export type ProductActionState =
   | 'LOADING'
   | 'PURCHASABLE'
@@ -152,7 +192,6 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
       }
   }
 
-  // [수정] 여러 구매 옵션(items)이 있는 경우를 명확하게 감지
   const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
 
   if (primaryEnd && now.isBefore(primaryEnd)) {
@@ -170,7 +209,7 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]')) {
     const isAnyVgAvailable = round.variantGroups.some(vg => {
         const totalStock = vg.totalPhysicalStock;
-        if (totalStock === null || totalStock === -1) return false; // 무제한 재고는 2차 판매 안함
+        if (totalStock === null || totalStock === -1) return false;
         return (totalStock - (vg.reservedCount || 0)) > 0;
     });
 
@@ -229,3 +268,21 @@ export const sortProductsForDisplay = (a: { displayRound: SalesRound }, b: { dis
 
     return 0;
 };
+
+export function computeRemainingUnits(vg: { totalPhysicalStock: number | null; reservedCount?: number | null }) {
+  const total = vg.totalPhysicalStock;
+  if (total === null || total === -1) return Infinity;
+  const reserved = vg.reservedCount || 0;
+  return Math.max(0, (total || 0) - reserved);
+}
+
+export function getMaxPurchasableQuantity(
+  vg: { totalPhysicalStock: number | null; reservedCount?: number | null },
+  item: { stockDeductionAmount?: number | null; limitQuantity?: number | null }
+) {
+  const remainingUnits = computeRemainingUnits(vg);
+  const unit = Number(item.stockDeductionAmount ?? 1);
+  const stockBound = Math.floor(remainingUnits / (unit > 0 ? unit : 1));
+  const limitBound = Number.isFinite(item.limitQuantity ?? null) ? Number(item.limitQuantity) : Infinity;
+  return Math.max(0, Math.min(stockBound, limitBound));
+}
