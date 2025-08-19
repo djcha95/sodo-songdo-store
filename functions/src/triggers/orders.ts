@@ -127,7 +127,6 @@ export const onOrderCreated = onDocumentCreated(
     const order = snapshot.data() as Order;
     const orderId = event.params.orderId;
 
-    // ✅ [신규 추가] 스크립트로 생성된 주문은 알림 및 재고 계산 로직을 건너킵니다.
     if (order.splitFrom || order.notes?.startsWith('[분할된 주문]')) {
         logger.info(`Skipping onOrderCreated triggers for split order ${orderId}.`);
         return;
@@ -138,10 +137,12 @@ export const onOrderCreated = onDocumentCreated(
       const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
       for (const item of order.items) {
           const currentChanges = changesByProduct.get(item.productId) || [];
+          // ✅ [수정] item.quantity에 stockDeductionAmount를 곱하여 실제 재고 차감량을 계산합니다.
+          const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
           currentChanges.push({
               roundId: item.roundId,
               variantGroupId: item.variantGroupId,
-              delta: item.quantity,
+              delta: actualDeduction,
           });
           changesByProduct.set(item.productId, currentChanges);
       }
@@ -180,7 +181,7 @@ export const onOrderCreated = onDocumentCreated(
       }
     }
 
-    // --- 2. 알림톡 발송 로직 ---
+    // --- 2. 알림톡 발송 로직 (변경 없음) ---
     logger.info(`신규 주문(${orderId}) 생성. 알림톡 발송 로직을 시작합니다.`);
     try {
         const normalizeToDate = (value: unknown): Date | null => {
@@ -212,18 +213,16 @@ export const onOrderCreated = onDocumentCreated(
             return;
         }
 
-const TRUNCATE_LENGTH = 6; // ✅ [최종 수정] 글자 수 제한을 위한 상수
+        const TRUNCATE_LENGTH = 6;
         let productList;
         if (order.items.length > 1) {
             const firstItemName = order.items[0].productName || '주문 상품';
-            // ✅ [최종 수정] 'OO 외 N건'의 OO 이름도 글자 수를 제한합니다.
             const truncatedName = firstItemName.length > TRUNCATE_LENGTH ? firstItemName.substring(0, TRUNCATE_LENGTH) + "…" : firstItemName;
             const otherItemsCount = order.items.length - 1;
             productList = `・${truncatedName} 외 ${otherItemsCount}건`;
         } else if (order.items.length === 1) {
             const item = order.items[0];
             const productName = item.productName || '주문 상품';
-            // ✅ [최종 수정] 단일 상품명도 더 안전하게 글자 수를 제한합니다.
             const truncatedName = productName.length > TRUNCATE_LENGTH ? productName.substring(0, TRUNCATE_LENGTH) + "…" : productName;
             productList = `・${truncatedName} ${item.quantity}개`;
         } else {
@@ -268,10 +267,12 @@ export const onOrderDeleted = onDocumentDeleted(
     const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
     for (const item of order.items) {
         const currentChanges = changesByProduct.get(item.productId) || [];
+        // ✅ [수정] 복원되는 재고량도 stockDeductionAmount를 곱하여 정확하게 계산합니다.
+        const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
         currentChanges.push({
             roundId: item.roundId,
             variantGroupId: item.variantGroupId,
-            delta: -item.quantity,
+            delta: -actualDeduction,
         });
         changesByProduct.set(item.productId, currentChanges);
     }
@@ -326,11 +327,13 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
     const after = event.data.after.data() as Order;
     const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
 
+    // ✅ [수정] 주문 수량(quantity) 대신 실제 재고 차감량(totalDeduction)을 Map에 저장합니다.
     const beforeItemsMap = new Map<string, number>();
     if (before.status !== 'CANCELED') {
         (before.items || []).forEach(item => {
             const key = `${item.productId}:${item.roundId}:${item.variantGroupId}`;
-            beforeItemsMap.set(key, item.quantity);
+            const totalDeduction = item.quantity * (item.stockDeductionAmount || 1);
+            beforeItemsMap.set(key, totalDeduction);
         });
     }
 
@@ -338,7 +341,8 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
     if (after.status !== 'CANCELED') {
         (after.items || []).forEach(item => {
             const key = `${item.productId}:${item.roundId}:${item.variantGroupId}`;
-            afterItemsMap.set(key, item.quantity);
+            const totalDeduction = item.quantity * (item.stockDeductionAmount || 1);
+            afterItemsMap.set(key, totalDeduction);
         });
     }
 
@@ -346,9 +350,9 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
 
     for (const key of allKeys) {
         const [productId, roundId, variantGroupId] = key.split(':');
-        const beforeQty = beforeItemsMap.get(key) || 0;
-        const afterQty = afterItemsMap.get(key) || 0;
-        const delta = afterQty - beforeQty;
+        const beforeStock = beforeItemsMap.get(key) || 0;
+        const afterStock = afterItemsMap.get(key) || 0;
+        const delta = afterStock - beforeStock; // 이제 delta는 실제 재고량의 변화를 의미합니다.
 
         if (delta !== 0) {
             const currentChanges = changesByProduct.get(productId) || [];
@@ -399,9 +403,9 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
 );
 
 
-// functions/src/triggers/orders.ts
-
-// ✅ [핵심 개선] updateUserStatsOnOrderStatusChange 함수
+// updateUserStatsOnOrderStatusChange, rewardReferrerOnFirstPickup 등
+// 사용자 포인트 및 등급 관련 로직은 변경 사항이 없으므로 생략합니다.
+// ... (기존 코드와 동일) ...
 export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
   {
     document: "orders/{orderId}",
@@ -413,7 +417,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
 
-    // ✅ [신규 추가] 스크립트에 의한 변경(분할된 주문, 원본 주문 보관 처리)은 포인트/등급 변경을 건너킵니다.
     if (after.splitFrom || after.notes?.includes('[주문 분할 완료]')) {
         logger.info(`Skipping stats update for migrated/split order ${event.params.orderId}.`);
         return;
@@ -422,7 +425,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     let updateType: OrderUpdateType | null = null;
     const now = new Date();
 
-    // 상태 변경 유형을 명확하게 감지
     if (before.status !== "PICKED_UP" && after.status === "PICKED_UP") {
       updateType = "PICKUP_CONFIRMED";
     } else if (before.status !== "NO_SHOW" && after.status === "NO_SHOW") {
@@ -432,10 +434,8 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     } else if (before.status === "NO_SHOW" && after.status !== "NO_SHOW") {
       updateType = "NO_SHOW_REVERTED";
     }
-    // ✅ [비즈니스 로직 추가] CANCELED 상태 변경 감지
     else if (before.status !== "CANCELED" && after.status === "CANCELED") {
       const pickupDeadline = (after.pickupDeadlineDate as Timestamp)?.toDate() || (after.pickupDate as Timestamp)?.toDate();
-      // 마감일이 지났다면 '노쇼'와 동일하게 처리
       if (pickupDeadline && now > pickupDeadline) {
         logger.info(`Order ${event.params.orderId} canceled after deadline. Processing as NO_SHOW.`);
         updateType = "NO_SHOW_CONFIRMED";
@@ -444,7 +444,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     }
 
     if (!updateType) {
-      // 우리가 관심 있는 상태 변경이 아니면 함수 종료
       return;
     }
 
@@ -509,7 +508,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
 
-    // ✅ [수정] 이 로직은 오직 '첫 픽업' 시에만 동작해야 하므로, 상태가 'PICKED_UP'으로 '변경'되는 시점만 감지
     if (before.status === "PICKED_UP" || after.status !== "PICKED_UP") {
       return;
     }
@@ -522,15 +520,14 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
     const userRef = db.collection("users").doc(userId);
 
     try {
-        await db.runTransaction(async (transaction: Transaction) => { // 트랜잭션으로 감싸기
-            const userDocSnap = await transaction.get(userRef); // 트랜잭션 내에서 문서 읽기
+        await db.runTransaction(async (transaction: Transaction) => {
+            const userDocSnap = await transaction.get(userRef);
             if (!userDocSnap.exists) {
                 logger.warn(`User document for orderer (ID: ${userId}) not found.`);
-                return; // 함수 종료 대신 트랜잭션 중단
+                return;
             }
             const userDoc = userDocSnap.data() as UserDocument;
 
-            // pickupCount는 updateUserStatsOnOrderStatusChange에서 이미 업데이트된 최신 값이어야 함
             const isFirstPickup = userDoc.pickupCount === 1;
             const wasReferred = userDoc.referredBy && userDoc.referredBy !== "__SKIPPED__";
 
@@ -541,10 +538,10 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
                     .where("referralCode", "==", userDoc.referredBy)
                     .limit(1);
 
-                const referrerSnapshot = await transaction.get(referrerQuery); // 트랜잭션 내에서 쿼리 실행
+                const referrerSnapshot = await transaction.get(referrerQuery);
                 if (referrerSnapshot.empty) {
                     logger.warn(`User with referral code (${userDoc.referredBy}) not found.`);
-                    return; // 함수 종료 대신 트랜잭션 중단
+                    return;
                 }
 
                 const referrerDoc = referrerSnapshot.docs[0];
@@ -571,7 +568,7 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
                 });
                 logger.info(`Successfully awarded ${rewardPoints}P to referrer (ID: ${referrerRef.id}).`);
             }
-        }); // 트랜잭션 닫기
+        });
     } catch (error) {
       logger.error("An error occurred while processing the referrer reward:", error);
     }
