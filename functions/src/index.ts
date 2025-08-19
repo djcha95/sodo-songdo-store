@@ -29,6 +29,8 @@ export * from "./http/product.js";
 // ✅ [수정] 아래 라인을 추가하여 테스트 함수를 포함시킵니다.
 export * from "./http/testNotifications.js";
 export * from "./http/migration.js";
+export * from "./http/manualTrigger.js";
+export * from "./http/manualTriggerRecent.js";
 
 
 

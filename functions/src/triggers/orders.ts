@@ -212,32 +212,46 @@ export const onOrderCreated = onDocumentCreated(
             return;
         }
 
-        const productList = order.items
-          .map(item => `・${item.productName || '주문 상품'} ${item.quantity}개`)
-          .join('\n');
+const TRUNCATE_LENGTH = 6; // ✅ [최종 수정] 글자 수 제한을 위한 상수
+        let productList;
+        if (order.items.length > 1) {
+            const firstItemName = order.items[0].productName || '주문 상품';
+            // ✅ [최종 수정] 'OO 외 N건'의 OO 이름도 글자 수를 제한합니다.
+            const truncatedName = firstItemName.length > TRUNCATE_LENGTH ? firstItemName.substring(0, TRUNCATE_LENGTH) + "…" : firstItemName;
+            const otherItemsCount = order.items.length - 1;
+            productList = `・${truncatedName} 외 ${otherItemsCount}건`;
+        } else if (order.items.length === 1) {
+            const item = order.items[0];
+            const productName = item.productName || '주문 상품';
+            // ✅ [최종 수정] 단일 상품명도 더 안전하게 글자 수를 제한합니다.
+            const truncatedName = productName.length > TRUNCATE_LENGTH ? productName.substring(0, TRUNCATE_LENGTH) + "…" : productName;
+            productList = `・${truncatedName} ${item.quantity}개`;
+        } else {
+            productList = '주문 상품 정보 없음';
+        }
         
         let recipientPhone = (userData.phone || '').replace(/\D/g, '');
         
-        // ✅ [수정] 당일 픽업 건에 대해서만 'ORD_CONFIRM_NOW' 알림톡을 발송합니다.
         if (pickupStartDateOnly.getTime() === todayStart.getTime()) {
             const templateCode = "ORD_CONFIRM_NOW";
-            const templateVariables: { [key: string]: string } = {
-                고객명: userData.displayName,
+            const sanitizedDisplayName = userData.displayName.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s]/g, '');
+
+            const templateVariables = {
+                고객명: sanitizedDisplayName,
                 상품목록: productList,
             };
             logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}.`);
             await sendAlimtalk(recipientPhone, templateCode, templateVariables);
             logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 성공적으로 발송했습니다.`);
         } else {
-            // 미래 또는 과거 픽업 건에 대해서는 생성 시점 알림을 보내지 않습니다.
             logger.info(`주문(${orderId})은 당일 픽업 건이 아니므로, 생성 시점 알림을 건너뜁니다.`);
         }
-
     } catch (alimtalkError) {
         logger.error(`Failed to process Alimtalk for order ${orderId}:`, alimtalkError);
     }
   }
 );
+
 
 export const onOrderDeleted = onDocumentDeleted(
   {

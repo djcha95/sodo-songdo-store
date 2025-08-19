@@ -389,16 +389,32 @@ const ProductDetailPage: React.FC = () => {
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
+    // ✅ [수정] actionState 로직 변경
     const actionState = useMemo<ProductActionState>(() => {
         if (!displayRound) return 'LOADING';
-        // [수정] 불필요한 세 번째 인자 제거
-        const state = determineActionState(displayRound, userDocument);
         
-        if ((state === 'PURCHASABLE' || state === 'REQUIRE_OPTION') && !selectedItem) {
-            return 'ENDED';
+        // 1. productUtils에서 상품의 기본 상태를 가져옵니다.
+        const baseState = determineActionState(displayRound, userDocument);
+
+        // 2. '옵션 선택 필요' 상태일 때, 사용자가 옵션을 선택했는지 확인합니다.
+        if (baseState === 'REQUIRE_OPTION') {
+            // 사용자가 모든 옵션(하위그룹, 세부항목)을 선택했다면, '구매 가능' 상태로 변경합니다.
+            if (selectedItem) {
+                return 'PURCHASABLE';
+            }
+            // 아직 옵션을 선택하지 않았다면, 그대로 '옵션 선택 필요' 상태를 유지합니다.
+            return 'REQUIRE_OPTION';
         }
-        return state;
-    }, [displayRound, userDocument, selectedItem]); // [수정] 의존성 배열에서 selectedVariantGroup 제거
+
+        // 3. 단일 상품이면서 구매 가능한 상태인데, 유일한 옵션이 품절된 경우를 처리합니다.
+        if (baseState === 'PURCHASABLE' && !selectedItem) {
+            // 이 경우, 대기 가능하거나 앵콜 요청 상태로 변경하는 것이 더 적절합니다.
+            return 'ENCORE_REQUESTABLE';
+        }
+
+        // 4. 그 외 모든 경우에는 기본 상태를 그대로 사용합니다.
+        return baseState;
+    }, [displayRound, userDocument, selectedItem]);
 
     const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (isPreLaunch) { toast(`상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!\n 그 전까지는 카카오톡으로 예약주세요!`, { icon: '🗓️', position: "top-center", duration: 4000 }); return; }
