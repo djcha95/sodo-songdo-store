@@ -1,13 +1,8 @@
-// firestore.rules (보안 강화 버전)
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ✅ [개선 제안 1] Custom Claims를 사용하도록 변경
-    // Firestore DB 조회가 필요 없어 더 빠르고 안정적입니다.
-    // 사용자가 재로그인하여 새 토큰을 받아야 적용됩니다.
     function isAdmin() {
       return request.auth.token.role in ['admin', 'master'];
     }
@@ -35,23 +30,27 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if request.auth.uid == userId || isAdmin();
       allow list: if isAdmin();
-
-      // ✅ [개선 제안 2] 사용자가 자신의 역할(role)이나 포인트(points)를 임의로 수정하는 것을 방지
       allow create: if request.auth.uid == userId || isAdmin();
       allow update: if (request.auth.uid == userId
-                       && !('role' in request.resource.data)      // role 필드 추가/수정 시도 차단
-                       && !('points' in request.resource.data))   // points 필드 추가/수정 시도 차단
-                      || isAdmin(); // 관리자는 모든 수정 가능
-      
+                        && !('role' in request.resource.data)
+                        && !('points' in request.resource.data))
+                      || isAdmin();
       allow delete: if isAdmin();
-    }
-    match /users/{userId}/{subcollection}/{docId} {
-      allow read, write: if request.auth.uid == userId || isAdmin();
-    }
 
+      // ✅ [신규 추가] cart 서브컬렉션에 대한 명시적 규칙
+      // 자신의 장바구니는 본인만 모든 작업을 할 수 있습니다.
+      match /cart/{cartItemId} {
+        allow read, write, delete: if request.auth.uid == userId;
+      }
+
+      // ✅ [수정] 기타 서브컬렉션 규칙 (cart 제외)
+      // notifications, pointHistory 등은 본인 또는 관리자만 접근 가능합니다.
+      match /{subcollection}/{docId} {
+        allow read, write: if subcollection != 'cart' && (request.auth.uid == userId || isAdmin());
+      }
+    }
 
     // --- 주문 정보 ---
-    // 이 규칙은 완벽하게 작성되었습니다.
     match /orders/{orderId} {
       allow get: if request.auth.uid == resource.data.userId || isAdmin();
       allow list: if isAdmin();
