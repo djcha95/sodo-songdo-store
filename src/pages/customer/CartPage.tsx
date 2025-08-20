@@ -11,7 +11,7 @@ import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Timestamp } from 'firebase/firestore';
-import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote, Clock } from 'lucide-react';
+import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -19,7 +19,6 @@ import dayjs from 'dayjs';
 import useLongPress from '@/hooks/useLongPress';
 import './CartPage.css';
 import { getProductsByIds } from '@/firebase';
-import { showToast, showPromiseToast } from '@/utils/toastUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 
 // =================================================================
@@ -66,8 +65,8 @@ const CartItemCard: React.FC<{
       const finalQuantity = !isNaN(newQuantity) && newQuantity > 0 ? Math.min(newQuantity, stockLimit) : 1;
       if (finalQuantity !== item.quantity) {
         updateCartItemQuantity(item.id, finalQuantity);
-        if (newQuantity > stockLimit) showToast('error', `최대 ${stockLimit}개까지만 구매 가능합니다.`);
-        else if (newQuantity < 1) showToast('error', '최소 1개 이상 구매해야 합니다.');
+        if (newQuantity > stockLimit) toast.error(`최대 ${stockLimit}개까지만 구매 가능합니다.`, { duration: 2000 });
+        else if (newQuantity < 1) toast.error('최소 1개 이상 구매해야 합니다.', { duration: 2000 });
       }
       setIsEditing(false);
     }, [inputValue, item.id, item.quantity, stockLimit, updateCartItemQuantity]);
@@ -92,18 +91,6 @@ const CartItemCard: React.FC<{
       if (!date) return '픽업일 정보 없음';
       return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
     }
-
-    const formatDeadlineDate = (dateValue: any) => {
-      const date = safeToDate(dateValue);
-      if (!date || item.status !== 'RESERVATION') return null;
-      const isPast = new Date() > date;
-      return {
-        text: `1차 마감: ${format(date, 'M/d(EEE) HH:mm', { locale: ko })}`,
-        isPast: isPast,
-      };
-    }
-
-    const deadlineInfo = formatDeadlineDate(item.deadlineDate);
   
     return (
       <div className={`cart-item-card ${isSelected ? 'selected' : ''} ${!isEligible ? 'ineligible' : ''}`} onClick={() => onSelect(item.id)}>
@@ -114,9 +101,14 @@ const CartItemCard: React.FC<{
             </div>
         )}
         <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
-            {/* ✅ [수정] OptimizedImage 대신 일반 img 태그를 사용하여 placeholder.com 오류를 회피합니다. */}
-            {item.imageUrl ? (
-                <img src={item.imageUrl} alt={item.productName} className="item-image" />
+             {item.imageUrl ? (
+                // ✅ [최종 수정] 컴포넌트 정의에 맞게 originalUrl과 size prop을 사용
+                <OptimizedImage
+                  originalUrl={item.imageUrl}
+                  size="200x200"
+                  alt={item.productName}
+                  className="item-image"
+                />
             ) : (
                 <div className="item-image no-image-placeholder"><span>No Image</span></div>
             )}
@@ -128,11 +120,6 @@ const CartItemCard: React.FC<{
                   <span className="item-option-name">선택: {item.itemName}</span>
               </div>
               <div className="item-pickup-info"><CalendarDays size={14} /><span>{formatPickupDate(item.pickupDate)}</span></div>
-              {deadlineInfo && (
-                <div className={`item-deadline-info ${deadlineInfo.isPast ? 'past' : ''}`}>
-                    <Clock size={14} /><span>{deadlineInfo.text}</span>
-                </div>
-              )}
           </div>
           <div className="item-footer">
               {item.status === 'WAITLIST' ? (
@@ -226,18 +213,18 @@ const CartPage: React.FC = () => {
           data.updatedItems.forEach((item: { id: string, newQuantity: number }) => updateCartItemQuantity(item.id, item.newQuantity));
           if (data.removedItemIds.length > 0) removeItems(data.removedItemIds);
         });
-        toast.error('일부 상품의 재고가 변경되어 자동 조정되었습니다.');
+        toast.error('일부 상품의 재고가 변경되어 자동 조정되었습니다.', { duration: 2000 });
       }
       
       if (!data.isSufficient) {
-        toast.error('일부 상품의 재고가 부족하여 주문을 진행할 수 없습니다.');
+        toast.error('일부 상품의 재고가 부족하여 주문을 진행할 수 없습니다.', { duration: 2000 });
       }
 
       return data.isSufficient;
 
     } catch (error: any) {
       console.error("Cloud Function 호출 중 오류:", error);
-      toast.error(error.message || "장바구니 정보를 동기화하는 중 오류가 발생했습니다.");
+      toast.error(error.message || "장바구니 정보를 동기화하는 중 오류가 발생했습니다.", { duration: 2000 });
       return false;
     } finally {
       setIsSyncing(false);
@@ -258,7 +245,11 @@ const CartPage: React.FC = () => {
   
   const handleBulkRemove = useCallback((type: 'reservation' | 'waitlist') => {
     const keysToRemove = type === 'reservation' ? selectedReservationKeys : selectedWaitlistKeys;
-    if (keysToRemove.size === 0) { showToast('info', '삭제할 상품을 선택해주세요.'); return; }
+    if (keysToRemove.size === 0) { 
+        // ✅ [수정] toast.info를 아이콘을 포함한 toast()로 변경
+        toast('삭제할 상품을 선택해주세요.', { icon: 'ℹ️', duration: 2000 }); 
+        return; 
+    }
     
     toast((t) => (
       <div className="confirmation-toast-content">
@@ -269,7 +260,7 @@ const CartPage: React.FC = () => {
           <button className="common-button button-danger button-medium" onClick={() => {
               toast.dismiss(t.id); removeItems(Array.from(keysToRemove));
               if (type === 'reservation') setSelectedReservationKeys(new Set()); else setSelectedWaitlistKeys(new Set());
-              showToast('success', '선택된 상품이 삭제되었습니다.');
+              toast.success('선택된 상품이 삭제되었습니다.', { duration: 2000 });
           }}>삭제</button>
         </div>
       </div>
@@ -284,12 +275,12 @@ const CartPage: React.FC = () => {
   
   const handleConfirmReservation = async () => {
     if (!user || !user.uid || !userDocument) {
-      showToast('error', '요청을 확정하려면 로그인이 필요합니다.');
+      toast.error('요청을 확정하려면 로그인이 필요합니다.', { duration: 2000 });
       navigate('/login', { state: { from: '/cart' }, replace: true });
       return;
     }
     if (isSuspendedUser) {
-      showToast('error', '반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.');
+      toast.error('반복적인 약속 불이행으로 공동구매 참여가 제한되었습니다.', { duration: 2000 });
       return;
     }
     if (isProcessingOrder || (eligibleReservationItems.length === 0 && waitlistItems.length === 0)) return;
@@ -337,10 +328,10 @@ const CartPage: React.FC = () => {
       };
       allPromises.push(addWaitlistEntryCallable(waitlistPayload));
     });
+    
+    const toastId = toast.loading('요청을 처리하는 중입니다...');
 
-    showPromiseToast(Promise.all(allPromises), {
-      loading: '요청을 처리하는 중입니다...',
-      success: (results) => {
+    Promise.all(allPromises).then((results) => {
         if (orderPayload && results.length > 0) {
           const orderResult = results[0];
           if (orderResult && orderResult.data && orderResult.data.success === false) {
@@ -356,10 +347,12 @@ const CartPage: React.FC = () => {
         const prepaymentRequired = orderPayload?.wasPrepaymentRequired ?? false;
         
         if (prepaymentRequired) {
-          const toastId = 'prepayment-toast';
+          toast.dismiss(toastId); // 로딩 토스트 제거
+
+          const customToastId = 'prepayment-toast';
 
           const performNavigation = () => {
-            toast.dismiss(toastId);
+            toast.dismiss(customToastId);
             startTransition(() => {
               removeItems(processedItemIds);
               navigate('/mypage/history');
@@ -385,43 +378,41 @@ const CartPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ), { id: toastId, duration: Infinity });
+          ), { id: customToastId, duration: Infinity });
 
-          return '';
         } else {
+          const message = eligibleReservationItems.length > 0 && waitlistItems.length > 0
+            ? '예약 및 대기 신청이 모두 완료되었습니다!'
+            : eligibleReservationItems.length > 0
+            ? '예약이 성공적으로 완료되었습니다!'
+            : '대기 신청이 성공적으로 완료되었습니다!';
+          
+          toast.success(message, { id: toastId, duration: 2000 });
+          
           setTimeout(() => {
             startTransition(() => {
               removeItems(processedItemIds);
               navigate('/mypage/history');
             });
           }, 50);
-
-          const message = eligibleReservationItems.length > 0 && waitlistItems.length > 0
-            ? '예약 및 대기 신청이 모두 완료되었습니다!'
-            : eligibleReservationItems.length > 0
-            ? '예약이 성공적으로 완료되었습니다!'
-            : '대기 신청이 성공적으로 완료되었습니다!';
-          return message;
         }
-      },
-      error: (err) => err.message || '요청 처리 중 오류가 발생했습니다.',
+    }).catch((err) => {
+        toast.error(err.message || '요청 처리 중 오류가 발생했습니다.', { id: toastId, duration: 2000 });
     }).finally(() => {
-      setIsProcessingOrder(false);
+        setIsProcessingOrder(false);
     });
   };
 
-  // ✅ [수정] 1차/2차 공구 정책에 따른 경고 메시지 로직 수정
   const showOrderConfirmation = () => {
     if (isPreLaunch) {
       toast(
           `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 
-          { icon: '🗓️', position: "top-center" }
+          { icon: '🗓️', position: "top-center", duration: 2000 }
       );
       return;
     }
     
     const now = new Date();
-    // 장바구니에 담긴 상품 중 하나라도 1차 마감일이 지난(2차 예약) 상품이 있는지 확인
     const isAnyItemInPhase2 = eligibleReservationItems.some(item => {
         const deadline = safeToDate(item.deadlineDate);
         return deadline && now > deadline;
@@ -439,7 +430,6 @@ const CartPage: React.FC = () => {
     let finalWarning = "";
     const isLimitedItemInCart = eligibleReservationItems.some(item => item.stock !== null && item.stock !== -1);
     
-    // 2차 예약 상품이 있을 경우, 최우선으로 노쇼 페널티 경고를 표시
     if (isAnyItemInPhase2) {
         finalWarning = "지금은 2차 예약 기간입니다. 확정 후 취소는 가능하지만, 약속 불이행(노쇼) 시 페널티가 부과될 수 있습니다.";
     } else if (isLimitedItemInCart) {

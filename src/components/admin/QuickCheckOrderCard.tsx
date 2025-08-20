@@ -12,6 +12,7 @@ interface OrderCardProps {
   onSelect: (groupKey: string) => void;
   isSelected: boolean;
   onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
+  isFuture: boolean; // ✅ [추가] 미래 입고 상품 여부를 받는 prop
 }
 
 // 개별 품목 행: 수량 편집 UX/에러 처리 강화
@@ -21,7 +22,6 @@ const CardItemRow: React.FC<{
   onUpdateQuantity: (newQuantity: number) => void;
 }> = ({ item, totalQuantity, onUpdateQuantity }) => {
   const [isEditing, setIsEditing] = useState(false);
-  // 문자열 상태로 관리하여 빈 값 입력 허용
   const [currentQuantity, setCurrentQuantity] = useState<string>(String(totalQuantity));
 
   useEffect(() => {
@@ -45,7 +45,6 @@ const CardItemRow: React.FC<{
     setIsEditing(true);
   };
 
-  // +/- 버튼: 클릭 전파 방지 및 즉시 반영
   const adjustQuantity = (e: React.MouseEvent, amount: number) => {
     e.stopPropagation();
     const newQuantity = Math.max(1, parseInt(currentQuantity || '0', 10) + amount);
@@ -96,7 +95,7 @@ const CardItemRow: React.FC<{
 };
 
 // 메인 카드
-const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSelected, onQuantityChange }) => {
+const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSelected, onQuantityChange, isFuture }) => {
   const { groupKey, status, item, totalPrice, customerInfo, pickupDate, pickupDeadlineDate, totalQuantity } = group;
 
   const formatDate = (timestamp: any): string => {
@@ -146,7 +145,11 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
   };
 
   return (
-    <div className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)}`} onClick={() => onSelect(groupKey)}>
+    // ✅ [수정] isFuture 값에 따라 'is-future' 클래스를 동적으로 추가합니다.
+    <div className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)} ${isFuture ? 'is-future' : ''}`} onClick={() => onSelect(groupKey)}>
+      {/* ✅ [추가] isFuture가 true일 때만 '입고 예정' 배지를 표시합니다. */}
+      {isFuture && <div className="qco-future-badge">입고 예정</div>}
+
       {isSelected && (
         <div className="qco-checkmark">
           <CheckSquare size={24} />

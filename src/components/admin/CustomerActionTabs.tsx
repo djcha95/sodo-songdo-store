@@ -6,12 +6,10 @@ import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatu
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
     updateMultipleOrderStatuses, revertOrderStatus, deleteMultipleOrders, splitAndUpdateOrderStatus,
-    // ✅ [추가] 주문 분할 함수 import
     splitBundledOrder
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import toast from 'react-hot-toast';
-// ✅ [추가] 아이콘 import
 import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle, Undo2, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -24,6 +22,20 @@ interface CustomerActionTabsProps {
     onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
 }
+
+// ✅ [추가] Timestamp 또는 Date 객체를 안전하게 Date 객체로 변환하는 헬퍼 함수
+const convertToDate = (date: Timestamp | Date | null | undefined): Date | null => {
+    if (!date) {
+        return null;
+    }
+    // 'toDate' 메서드가 존재하면 Timestamp 객체로 간주하고 변환
+    if ('toDate' in date && typeof date.toDate === 'function') {
+        return date.toDate();
+    }
+    // 그렇지 않으면 이미 Date 객체이므로 그대로 반환
+    return date as Date;
+};
+
 
 // 재사용 가능한 액션 처리 헬퍼 함수
 const performAction = async (
@@ -49,7 +61,6 @@ const performAction = async (
 const ActionableOrderTable: React.FC<{
     orders: Order[];
     onStatusChange: (order: Order) => void;
-    // ✅ [추가] 주문 분할 핸들러 prop 추가
     onSplitOrder: (orderId: string) => void;
 }> = ({ orders = [], onStatusChange, onSplitOrder }) => {
     const sortedOrders = useMemo(() =>
@@ -75,17 +86,12 @@ const ActionableOrderTable: React.FC<{
                                 <th>상품 정보</th>
                                 <th>금액</th>
                                 <th>상태</th>
-                                {/* ✅ [추가] 작업 열 추가 */}
                                 <th>작업</th>
                             </tr>
                         </thead>
                         <tbody>
                             {sortedOrders.map(order => {
                                 const isFinalState = ['PICKED_UP', 'NO_SHOW', 'CANCELED'].includes(order.status);
-                                // ✅ [추가] 분할 가능한 주문인지 확인하는 조건
-                                // 단일 아이템만 있는 주문이라도, 해당 주문이 '묶음 주문'에서 분할된 것이 아니라면
-                                // (즉, splitFrom 필드가 없는 경우), 추가 분할이 필요한 경우가 있을 수 있습니다.
-                                // 여기서는 단순히 아이템 개수가 1개 초과인 경우를 가정합니다.
                                 const isSplittable = Array.isArray(order.items) && order.items.length > 1;
 
                                 return (
@@ -98,7 +104,6 @@ const ActionableOrderTable: React.FC<{
                                                 <span className={`status-badge ${statusInfo[order.status]?.className || ''}`}>{statusInfo[order.status]?.label}</span>
                                             </div>
                                         </td>
-                                        {/* ✅ [추가] 작업 버튼 렌더링 */}
                                         <td className="action-cell">
                                             {isFinalState && order.status !== 'CANCELED' && (
                                                 <button onClick={() => onStatusChange(order)} className="revert-button" title="이전 상태로 되돌리기">
@@ -206,7 +211,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         pickupOrders.forEach(order => {
             order.items.forEach(item => {
                 const groupKey = `${order.userId}-${item.productId}-${item.itemId}-${order.status}`;
-                // ✅ [수정] item.unitPrice가 undefined일 경우 0으로 처리
                 const itemPrice = (item.unitPrice || 0) * item.quantity;
 
                 if (groups.has(groupKey)) {
@@ -217,15 +221,23 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                 } else {
                     groups.set(groupKey, {
                         groupKey, customerInfo: order.customerInfo, item,
-                        totalQuantity: item.quantity, 
-                        totalPrice: itemPrice, // ✅ [수정] 안전하게 계산된 itemPrice 사용
+                        totalQuantity: item.quantity,
+                        totalPrice: itemPrice,
                         status: order.status, pickupDate: order.pickupDate, pickupDeadlineDate: order.pickupDeadlineDate,
                         originalOrders: [{ orderId: order.id, quantity: item.quantity, status: order.status }]
                     });
                 }
             });
         });
-        return Array.from(groups.values());
+
+        const sortedGroups = Array.from(groups.values()).sort((a, b) => {
+            // ✅ [수정] 헬퍼 함수를 사용하여 안전하게 Date 객체로 변환 후 비교
+            const dateA = convertToDate(a.pickupDate)?.getTime() || 0;
+            const dateB = convertToDate(b.pickupDate)?.getTime() || 0;
+            return dateA - dateB;
+        });
+
+        return sortedGroups;
     }, [orders]);
 
     const selectedGroups = useMemo(() =>
@@ -287,7 +299,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
 
     const handleTableStatusChange = (order: Order) => {
         const originalStatus = order.status;
-        // ✅ [수정] order.totalPrice가 undefined일 경우 0으로 처리
         const totalAmount = order.totalPrice || 0;
         const updates: { pickup?: number; noshow?: number; points?: number } = {};
 
@@ -334,14 +345,13 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         if (!splitInfo) return;
         const performSplitAction = (remainingStatus: OrderStatus) => {
             const orderIdToSplit = splitInfo.group.originalOrders[0].orderId;
-            // ✅ [수정] splitInfo.group.item.unitPrice가 undefined일 경우 0으로 처리
             const unitPrice = splitInfo.group.item.unitPrice || 0;
             const pickupPrice = unitPrice * splitInfo.newQuantity;
             const remainingPrice = splitInfo.group.totalPrice - pickupPrice;
 
             const pointsEarned = Math.floor(pickupPrice * 0.005);
             const updates: { pickup?: number; noshow?: number; points?: number } = { pickup: 1, points: pointsEarned };
-            
+
             if (remainingStatus === 'NO_SHOW') {
                 const penalty = -50 - Math.floor(remainingPrice * 0.05);
                 updates.noshow = 1;
@@ -369,7 +379,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         ), { duration: Infinity, position: 'top-center' });
     };
 
-    // ✅ [신규 추가] 주문 분할 버튼 클릭 핸들러
     const handleSplitOrder = (orderId: string) => {
         toast.custom((t) => (
             <div className="confirmation-toast-content">
@@ -384,7 +393,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                     toast.promise(promise, {
                         loading: '주문을 분할하는 중입니다...',
                         success: (res) => {
-                            onActionSuccess(); // 성공 시 데이터 새로고침
+                            onActionSuccess();
                             return res.message;
                         },
                         error: (err) => err.message || '주문 분할에 실패했습니다.'
@@ -398,22 +407,31 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     const renderTabContent = () => {
         switch (activeTab) {
             case 'pickup':
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
                 return (
                     <div className="qcp-results-grid">
-                        {aggregatedPickupOrders.map(group => (
-                            <QuickCheckOrderCard
-                                key={group.groupKey}
-                                group={group}
-                                isSelected={selectedGroupKeys.includes(group.groupKey)}
-                                onSelect={handleSelectGroup}
-                                onQuantityChange={handleQuantityChange}
-                            />
-                        ))}
+                        {aggregatedPickupOrders.map(group => {
+                            // ✅ [수정] 헬퍼 함수를 사용하여 안전하게 Date 객체로 변환 후 비교
+                            const pickupJsDate = convertToDate(group.pickupDate);
+                            const isFuture = pickupJsDate ? pickupJsDate > today : false;
+
+                            return (
+                                <QuickCheckOrderCard
+                                    key={group.groupKey}
+                                    group={group}
+                                    isSelected={selectedGroupKeys.includes(group.groupKey)}
+                                    onSelect={handleSelectGroup}
+                                    onQuantityChange={handleQuantityChange}
+                                    isFuture={isFuture}
+                                />
+                            );
+                        })}
                         {aggregatedPickupOrders.length === 0 && <p className="no-data-message">처리 대기중인 항목이 없습니다.</p>}
                     </div>
                 );
             case 'history':
-                // ✅ [수정] onSplitOrder prop 전달
                 return <ActionableOrderTable orders={orders} onStatusChange={handleTableStatusChange} onSplitOrder={handleSplitOrder} />;
             case 'manage':
                 return <TrustManagementCard user={user} />;

@@ -84,15 +84,17 @@
   border-radius: 12px;
   border: 1px solid #e5e7eb;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
   overflow: hidden;
+  user-select: none; /* 텍스트 선택 방지 */
 }
 
 .order-card-v3.cancellable {
   cursor: pointer;
 }
 
-.order-card-v3.cancellable:hover {
+/* ✅ [수정] 선택되지 않은 카드에만 hover 효과 적용 */
+.order-card-v3.cancellable:not(.selected):hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
@@ -228,7 +230,7 @@
   cursor: pointer;
   transition: background-color 0.2s;
 }
-.go-to-shop-btn:hover { background-color: #1d4ed8; }
+.go-to-shop-btn:hover { background-color: #1e40af; }
 
 /* =================================================================
    📌 대기 목록 카드 스타일
@@ -248,6 +250,8 @@
   align-items: center;
   position: relative;
   cursor: pointer;
+  user-select: none; /* 텍스트 선택 방지 */
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .waitlist-card .item-aggregated-info {
@@ -263,14 +267,9 @@
   margin-top: 8px;
 }
 
-.cancel-instruction-waitlist {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: #6b7280;
-}
-
+/* ✅ [삭제] 더 이상 사용하지 않는 스타일
+.cancel-instruction-waitlist { ... }
+*/
 
 .priority-ticket-btn {
   display: inline-flex;
@@ -361,42 +360,41 @@
 /* =================================================================
    📌 react-hot-toast 커스텀 모달
    ================================================================= */
-.confirmation-toast {
-  padding: 20px;
+.confirmation-toast-content {
+  padding: 24px;
   background-color: white;
   border-radius: 12px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  width: 360px;
+  width: 380px;
   max-width: 90vw;
-  text-align: left;
-  transition: all 0.3s ease-out;
-  opacity: 0;
-  transform: translateY(20px);
+  text-align: center;
 }
-.confirmation-toast.animate-enter {
-  opacity: 1;
-  transform: translateY(0);
+
+.confirmation-toast-content .toast-icon {
+  margin: 0 auto 16px;
+  display: block;
 }
-.toast-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-color-primary);
-  margin: 0 0 12px;
+
+.confirmation-toast-content h4 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 8px;
 }
-.toast-message {
-  margin: 12px 0 20px;
-  font-size: 15px;
-  color: var(--text-color-secondary);
-  line-height: 1.5;
+
+.confirmation-toast-content p {
+  margin: 0 0 24px;
+  font-size: 1rem;
+  color: #6b7280;
+  line-height: 1.6;
 }
+
 .toast-buttons {
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  justify-content: center; /* 버튼 중앙 정렬 */
 }
+
 .common-button {
   border: 1px solid transparent;
   padding: 8px 16px;
@@ -431,19 +429,21 @@
   border-color: #1d4ed8;
 }
 .button-accent:hover {
-  background-color: #1d4ed8;
-  border-color: #1d4ed8;
+  background-color: #1e40af;
+  border-color: #1e40af;
 }
 
-/* ✅ [추가] 이벤트 태그와 상태 배지를 정렬하기 위한 스타일 */
+/* =================================================================
+   📌 기타 스타일
+   ================================================================= */
+
 .status-and-event-wrapper {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0; /* 내용이 길어져도 줄어들지 않도록 설정 */
+  flex-shrink: 0;
 }
 
-/* ✅ [추가] 이벤트 태그 스타일 */
 .event-badge {
   background-color: #6a3dff; /* 시그니처 보라색 */
   color: white;
@@ -457,32 +457,70 @@
   line-height: 1;
 }
 
-/* ✅ [수정] 카드 상단 정보 행의 정렬 방식을 수정 */
 .info-top-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  gap: 8px; /* 이름과 배지 사이의 최소 간격 */
+  gap: 8px;
 }
 
-/* ✅ [수정] 상품 이름이 너무 길 경우 잘리도록 설정 */
 .product-name-top {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-grow: 1; /* 남은 공간을 차지하도록 설정 */
+  flex-grow: 1;
 }
 
-/* ... (기존 CSS 코드) ... */
-
-/* ✅ [추가] 이벤트 상품 카드 스타일 */
 .order-card-v3.event-item {
-  cursor: default; /* 커서를 기본 모양으로 변경 */
+  cursor: default;
 }
 
 .order-card-v3.event-item:hover {
-  transform: none; /* 마우스를 올려도 움직이지 않음 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); /* 기본 그림자 유지 */
+  transform: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
+/* ✅ [추가] 선택된 카드 스타일 */
+.order-card-v3.selected,
+.waitlist-card.selected {
+  border-color: #3b82f6; /* Tailwind blue-500 */
+  background-color: #eff6ff; /* Tailwind blue-50 */
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+/* ✅ [추가] 일괄 작업 바 스타일 */
+.bulk-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background-color: #374151; /* gray-700 */
+  color: white;
+  border-radius: 10px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.bulk-action-bar span {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.bulk-cancel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #ef4444; /* red-500 */
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.bulk-cancel-btn:hover {
+  background-color: #dc2626; /* red-600 */
+}

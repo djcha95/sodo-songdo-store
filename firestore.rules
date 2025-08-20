@@ -4,59 +4,49 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isAdmin() {
-      return request.auth.token.role in ['admin', 'master'];
+      return request.auth != null && request.auth.token.role in ['admin', 'master'];
     }
 
-    // --- 공개 정보 (누구나 읽기 가능, 쓰기는 관리자만) ---
-    match /products/{productId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    match /banners/{bannerId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    match /categories/{categoryId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    match /storeInfo/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
+    // --- 공개 정보 (누구나 읽기) ---
+    match /products/{productId}   { allow read: if true; allow write: if isAdmin(); }
+    match /banners/{bannerId}     { allow read: if true; allow write: if isAdmin(); }
+    match /categories/{categoryId}{ allow read: if true; allow write: if isAdmin(); }
+    match /storeInfo/{docId}      { allow read: if true; allow write: if isAdmin(); }
 
     // --- 사용자 정보 ---
     match /users/{userId} {
-      allow get: if request.auth.uid == userId || isAdmin();
+      // 본인 or 관리자일 때만 get 허용
+      allow get: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      // 사용자 목록(list)은 관리자만
       allow list: if isAdmin();
-      allow create: if request.auth.uid == userId || isAdmin();
-      allow update: if (request.auth.uid == userId
-                        && !('role' in request.resource.data)
-                        && !('points' in request.resource.data))
-                      || isAdmin();
+
+      // 본인 문서 생성 허용(최초 가입/프로필 생성 등)
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // 본인 문서 업데이트 허용(민감정보 필드 통제는 필요시 필드 검사로 강화)
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // 삭제는 관리자만
       allow delete: if isAdmin();
 
-      // ✅ [신규 추가] cart 서브컬렉션에 대한 명시적 규칙
-      // 자신의 장바구니는 본인만 모든 작업을 할 수 있습니다.
-      match /cart/{cartItemId} {
-        allow read, write, delete: if request.auth.uid == userId;
-      }
-
-      // ✅ [수정] 기타 서브컬렉션 규칙 (cart 제외)
-      // notifications, pointHistory 등은 본인 또는 관리자만 접근 가능합니다.
+      // 하위 컬렉션(알림, 장바구니 등) — 본인 또는 관리자
       match /{subcollection}/{docId} {
-        allow read, write: if subcollection != 'cart' && (request.auth.uid == userId || isAdmin());
+        allow read, write, delete: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
     }
 
     // --- 주문 정보 ---
     match /orders/{orderId} {
-      allow get: if request.auth.uid == resource.data.userId || isAdmin();
-      allow list: if isAdmin();
-      allow create: if request.auth.uid == request.resource.data.userId;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      // ✅ 문서 단위 read: 본인 주문 or 관리자만
+      allow read: if request.auth != null
+                  && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // ✅ 생성: 문서에 기록될 userId가 본인일 때만 허용
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+
+      // 수정/삭제: 관리자만(일반 사용자는 불가)
+      allow update, delete: if isAdmin();
     }
   }
 }

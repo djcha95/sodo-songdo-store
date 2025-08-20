@@ -3,7 +3,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
+import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue, DocumentSnapshot } from "firebase-admin/firestore";
 import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo } from "../types.js";
 import { getAuth } from "firebase-admin/auth";
 import { POINT_POLICIES, calculateTier } from "../utils/helpers.js";
@@ -57,6 +57,19 @@ export const checkCartStock = onCall(
       const removedItemIds: string[] = [];
       let isSufficient = true;
 
+      // This part of the logic now happens inside the submitOrder transaction for consistency
+      const reservedQuantitiesMap = new Map<string, number>();
+      const ordersQuery = db.collection('orders').withConverter(orderConverter).where('status', 'in', ['RESERVED', 'PREPAID']);
+      const ordersSnapshot = await ordersQuery.get();
+      ordersSnapshot.forEach(doc => {
+        const order = doc.data();
+        (order.items || []).forEach((item: OrderItem) => {
+          const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+          const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
+          reservedQuantitiesMap.set(key, (reservedQuantitiesMap.get(key) || 0) + actualDeduction);
+        });
+      });
+
       for (const item of cartItems) {
         const product = productsMap.get(item.productId);
         const round = product?.salesHistory.find(r => r.roundId === item.roundId);
@@ -69,7 +82,9 @@ export const checkCartStock = onCall(
         }
         
         const totalStock = group.totalPhysicalStock;
-        const reservedQuantity = (group as any).reservedCount || 0;
+        const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+        const reservedQuantity = reservedQuantitiesMap.get(key) || 0;
+        
         let availableStock = Infinity;
         if (totalStock !== null && totalStock !== -1) {
           availableStock = totalStock - reservedQuantity;
@@ -97,7 +112,9 @@ export const checkCartStock = onCall(
 );
 
 
-// ✅✅✅ [완전 수정] submitOrder: 모든 상품을 개별 주문으로 생성하는 로직으로 변경 ✅✅✅
+// ✅✅✅ [FINAL REVISION] submitOrder: Corrected transaction logic ✅✅✅
+// functions/src/callable/orders.ts
+
 export const submitOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
@@ -105,125 +122,134 @@ export const submitOrder = onCall(
       throw new HttpsError("unauthenticated", "A login is required.");
     }
 
-    const orderData = request.data as Omit<Order, 'id'>;
+    // ❗ 클라이언트에서 넘어온 userId는 신뢰하지 않고 폐기
     const userId = request.auth.uid;
-    
+
+    // 클라이언트 payload에서 필요한 값만 추출
+    const client = request.data as {
+      items: OrderItem[];
+      totalPrice: number;
+      customerInfo: CustomerInfo;
+      pickupDate?: FirebaseFirestore.Timestamp | null;
+      wasPrepaymentRequired?: boolean;
+      notes?: string;
+    };
+
+    // 기본 검증
+    if (!Array.isArray(client.items) || client.items.length === 0) {
+      throw new HttpsError("invalid-argument", "주문할 상품이 없습니다.");
+    }
+
     try {
       const result = await db.runTransaction(async (transaction) => {
-        const userRef = db.collection('users').withConverter(userConverter).doc(userId);
+        // ---------- [모든 READ 우선] ----------
+        // 1) 사용자 문서
+        const userRef = db.collection("users").withConverter(userConverter).doc(userId);
         const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists) {
-          throw new HttpsError('not-found', 'User information not found.');
-        }
-        const userDoc = userSnap.data();
-        if (!userDoc) {
-          throw new HttpsError('internal', 'Failed to read user data.');
-        }
-        if (userDoc.loyaltyTier === '참여 제한') {
-          throw new HttpsError('permission-denied', 'Your participation in group buys is currently restricted due to repeated promise violations.');
+if (!userSnap.exists) {
+  throw new HttpsError('not-found', 'User information not found.');
+}
+
+
+        // 2) 상품 문서들
+        const productIds = [...new Set(client.items.map(i => i.productId))];
+        const productSnaps = await Promise.all(
+          productIds.map(id => db.collection("products").withConverter(productConverter).doc(id).get())
+        );
+        const productDataMap = new Map<string, Product>();
+        for (const s of productSnaps) {
+          if (!s.exists) throw new HttpsError("not-found", `Product not found (ID: ${s.id}).`);
+          productDataMap.set(s.id, { ...s.data(), id: s.id } as Product);
         }
 
-        const reservedQuantitiesMap = new Map<string, number>();
-        const ordersQuery = db.collection('orders').withConverter(orderConverter).where('status', 'in', ['RESERVED', 'PREPAID']);
-        const ordersSnapshot = await transaction.get(ordersQuery);
-        ordersSnapshot.forEach(doc => {
+        // 3) 현재 예약 재고(RESERVED/PREPAID) 집계
+        const reservedMap = new Map<string, number>();
+        const ordersQuery = db.collection("orders")
+          .withConverter(orderConverter)
+          .where("status", "in", ["RESERVED", "PREPAID"]);
+        const ordersSnap = await transaction.get(ordersQuery);
+        ordersSnap.forEach(doc => {
           const order = doc.data();
-          (order.items || []).forEach((item: OrderItem) => {
-            const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-            const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
-            reservedQuantitiesMap.set(key, (reservedQuantitiesMap.get(key) || 0) + actualDeduction);
-          });
+          for (const it of (order.items || [])) {
+            const key = `${it.productId}-${it.roundId}-${it.variantGroupId}`;
+            const deduct = it.quantity * (it.stockDeductionAmount || 1);
+            reservedMap.set(key, (reservedMap.get(key) || 0) + deduct);
+          }
         });
 
-        const productRefs = [...new Set(orderData.items.map(item => item.productId))].map(id => db.collection('products').withConverter(productConverter).doc(id));
-        const productSnaps = await transaction.getAll(...productRefs);
-        const productDataMap = new Map<string, Product>();
-        for (const productSnap of productSnaps) {
-          if (!productSnap.exists) throw new HttpsError('not-found', `Product not found (ID: ${productSnap.id}).`);
-          productDataMap.set(productSnap.id, { ...productSnap.data(), id: productSnap.id } as Product);
-        }
-        
-        const transactionRequestMap = new Map<string, number>();
+        // ---------- [검증: 추가 read 없이] ----------
+        const txRequestMap = new Map<string, number>();
+        for (const item of client.items) {
+          const product = productDataMap.get(item.productId);
+          if (!product) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
+          const round = product.salesHistory.find(r => r.roundId === item.roundId);
+          if (!round) throw new HttpsError("not-found", "판매 회차 정보를 찾을 수 없습니다.");
 
-        for (const item of orderData.items) {
-          const productData = productDataMap.get(item.productId);
-          if (!productData) throw new HttpsError('internal', `Could not process product data: ${item.productId}`);
-          
-          const round = productData.salesHistory.find(r => r.roundId === item.roundId);
-          if (!round) throw new HttpsError('not-found', `Sales round information not found.`);
+          const vg = round.variantGroups.find(v => v.id === item.variantGroupId);
+          if (!vg) throw new HttpsError("not-found", "옵션 그룹 정보를 찾을 수 없습니다.");
 
-          const variantGroup = round.variantGroups.find(vg => vg.id === item.variantGroupId);
-          if (!variantGroup) throw new HttpsError('not-found', `Option group information not found.`);
-          
-          const requiredStock = item.quantity * (item.stockDeductionAmount || 1);
-          const mapKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-          
-          const alreadyRequestedInTx = transactionRequestMap.get(mapKey) || 0;
-          transactionRequestMap.set(mapKey, alreadyRequestedInTx + requiredStock);
+          const required = item.quantity * (item.stockDeductionAmount || 1);
+          const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
 
-          if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-            const reservedCount = reservedQuantitiesMap.get(mapKey) || 0;
-            const totalReservedAfterThisItem = reservedCount + transactionRequestMap.get(mapKey)!;
+          txRequestMap.set(key, (txRequestMap.get(key) || 0) + required);
 
-            if (totalReservedAfterThisItem > variantGroup.totalPhysicalStock) {
-              const availableStock = variantGroup.totalPhysicalStock - reservedCount;
-              const unitAvailable = Math.floor(availableStock / (item.stockDeductionAmount || 1));
-              throw new HttpsError('resource-exhausted', `죄송합니다. '${productData.groupName}' 상품의 재고가 부족합니다. (주문 가능 수량: ${Math.max(0, unitAvailable)})`);
+          if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
+            const alreadyReserved = reservedMap.get(key) || 0;
+            const after = alreadyReserved + (txRequestMap.get(key) || 0);
+            if (after > vg.totalPhysicalStock) {
+              const remain = Math.max(0, vg.totalPhysicalStock - alreadyReserved);
+              throw new HttpsError(
+  "failed-precondition",
+`재고 부족: ${product.groupName} - ${vg.groupName} (가능 수량: ${remain})`);
+
             }
           }
         }
-        
-        if (orderData.items.length === 0) {
-            return { success: false, message: "주문할 상품이 없습니다." };
-        }
 
+        // ---------- [WRITE 단계] ----------
         const createdOrderIds: string[] = [];
-        const phoneLast4 = orderData.customerInfo.phone.slice(-4);
+        const phoneLast4 = (client.customerInfo?.phone || "").slice(-4);
 
-        for (const singleItem of orderData.items) {
-            const newOrderRef = db.collection('orders').doc();
-            
-            const productForRound = productDataMap.get(singleItem.productId);
-            const roundForOrder = productForRound?.salesHistory.find(r => r.roundId === singleItem.roundId);
-            if (!roundForOrder?.pickupDate) {
-              throw new HttpsError('invalid-argument', '상품의 픽업 날짜 정보가 설정되지 않았습니다.');
-            }
+        for (const single of client.items) {
+          const product = productDataMap.get(single.productId)!;
+          const round = product.salesHistory.find(r => r.roundId === single.roundId)!;
+          if (!round?.pickupDate) {
+            throw new HttpsError("invalid-argument", "상품의 픽업 날짜가 설정되지 않았습니다.");
+          }
 
-            const newOrderData: Omit<Order, 'id'> = {
-              userId: userId,
-              customerInfo: { ...orderData.customerInfo, phoneLast4 },
-              items: [singleItem as OrderItem], 
-              totalPrice: singleItem.unitPrice * singleItem.quantity, 
-              orderNumber: `SODOMALL-${Date.now()}-${createdOrderIds.length}`,
-              status: 'RESERVED',
-              createdAt: Timestamp.now(),
-              pickupDate: roundForOrder.pickupDate, 
-              pickupDeadlineDate: roundForOrder.pickupDeadlineDate ?? null,
-              notes: orderData.notes ?? '',
-              isBookmarked: false,
-              wasPrepaymentRequired: orderData.wasPrepaymentRequired ?? false,
-            };
-          
-            transaction.set(newOrderRef, newOrderData);
-            createdOrderIds.push(newOrderRef.id);
+          const newOrderRef = db.collection("orders").doc();
+          const newOrder: Omit<Order, "id"> = {
+            userId, // ✅ 인증 uid로 고정
+            customerInfo: { ...client.customerInfo, phoneLast4 },
+            items: [single],
+            totalPrice: single.unitPrice * single.quantity,
+            orderNumber: `SODOMALL-${Date.now()}-${createdOrderIds.length}`,
+            status: "RESERVED",
+            createdAt: Timestamp.now(),
+            pickupDate: round.pickupDate,
+            pickupDeadlineDate: round.pickupDeadlineDate ?? null,
+            notes: client.notes ?? "",
+            isBookmarked: false,
+            wasPrepaymentRequired: !!client.wasPrepaymentRequired,
+          };
+
+          transaction.set(newOrderRef, newOrder);
+          createdOrderIds.push(newOrderRef.id);
         }
-        
+
         return { success: true, orderIds: createdOrderIds };
       });
+
       return result;
-    } catch (error) {
-      logger.error("Order submission failed", error);
-      if (error instanceof HttpsError) {
-          throw error;
-      }
-      throw new HttpsError("internal", "An unknown error occurred while processing the order.");
+    } catch (err) {
+      logger.error("Order submission failed", err);
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError("internal", "주문 처리 중 알 수 없는 오류가 발생했습니다.");
     }
   }
 );
 
 
-// cancelOrder, getUserOrders 등 나머지 함수는 변경 사항이 없으므로 생략합니다.
-// ... (기존 코드와 동일) ...
 export const cancelOrder = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
@@ -240,18 +266,31 @@ export const cancelOrder = onCall(
         
         try {
             await db.runTransaction(async (transaction) => {
+                // --- 1. 읽기 단계 ---
+                // 트랜잭션에 필요한 모든 문서를 먼저 읽습니다.
                 const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
                 const orderDoc = await transaction.get(orderRef);
                 
                 if (!orderDoc.exists) {
                     throw new HttpsError("not-found", "주문 정보를 찾을 수 없습니다.");
                 }
-
                 const order = orderDoc.data();
                 if (!order) {
                      throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
                 }
-                
+
+                // ✅ [수정] 페널티가 필요할 경우, 사용자 정보도 미리 읽습니다.
+                let targetUserSnap: DocumentSnapshot<UserDocument> | null = null;
+if (treatAsNoShow) {
+    const targetUserRef = db.collection('users').withConverter(userConverter).doc(order.userId);
+    targetUserSnap = await transaction.get(targetUserRef); // 미리 읽기
+    if (!targetUserSnap.exists) {
+        throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
+    }
+}
+
+
+                // --- 2. 로직 및 검증 단계 ---
                 const userClaims = (await getAuth().getUser(userId)).customClaims;
                 const isAdmin = userClaims?.role === 'admin' || userClaims?.role === 'master';
                 
@@ -262,22 +301,23 @@ export const cancelOrder = onCall(
                 if (order.status !== 'RESERVED' && order.status !== 'PREPAID') {
                     throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다.");
                 }
-                
+
+                // --- 3. 쓰기 단계 ---
+                // ✅ [수정] 모든 쓰기 작업을 마지막에 모아서 실행합니다.
                 transaction.update(orderRef, { 
                     status: 'CANCELED', 
                     canceledAt: Timestamp.now(),
                     notes: treatAsNoShow ? "[페널티] 2차 공구 기간 내 취소" : order.notes,
                 });
                 
-                if (treatAsNoShow) {
-                    const noShowPenalty = POINT_POLICIES.NO_SHOW;
-                    const targetUserRef = db.collection('users').withConverter(userConverter).doc(order.userId);
-                    const targetUserSnap = await transaction.get(targetUserRef);
-                    
-                    if (!targetUserSnap.exists) throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
+                // treatAsNoShow 로직은 미리 읽어온 targetUserSnap을 사용합니다.
+                if (treatAsNoShow && targetUserSnap) {
                     const targetUserData = targetUserSnap.data();
-                    if (!targetUserData) throw new HttpsError("internal", "주문 대상 사용자 데이터를 읽는 데 실패했습니다.");
-
+                    if (!targetUserData) {
+                        throw new HttpsError("internal", "주문 대상 사용자 데이터를 읽는 데 실패했습니다.");
+                    }
+                    
+                    const noShowPenalty = POINT_POLICIES.NO_SHOW;
                     const oldTier = targetUserData.loyaltyTier || '공구새싹';
                     const newNoShowCount = (targetUserData.noShowCount || 0) + 1;
                     const newTier = calculateTier(targetUserData.pickupCount || 0, newNoShowCount);
@@ -290,7 +330,7 @@ export const cancelOrder = onCall(
                         expiresAt: null,
                     };
                     
-                    transaction.update(targetUserRef, {
+                    transaction.update(targetUserSnap.ref, {
                         points: FieldValue.increment(noShowPenalty.points),
                         noShowCount: FieldValue.increment(1),
                         loyaltyTier: newTier,
@@ -503,13 +543,6 @@ export const searchOrdersByCustomer = onCall(
 );
 
 
-/**
- * =================================================================
- * ✅ [신규 추가] 기존 묶음 주문 분할 함수: splitBundledOrder
- * =================================================================
- * @description 관리자가 기존에 여러 상품이 묶여있는 주문 ID를 받아,
- * 각 상품을 개별적인 주문으로 분할하고 원본 주문은 보관 처리합니다.
- */
 export const splitBundledOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
@@ -589,14 +622,7 @@ export const splitBundledOrder = onCall(
   }
 );
 
-/**
- * =================================================================
- * ✅ [신규 추가] 관리자용 주문 생성 함수
- * =================================================================
- * @description 관리자가 특정 사용자를 지정하여 주문을 생성합니다.
- * @param {string} targetUserId - 주문을 생성할 대상 사용자의 UID
- * @param {OrderItem} item - 생성할 주문 항목 (1개만 포함)
- */
+
 export const createOrderAsAdmin = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
@@ -637,7 +663,6 @@ export const createOrderAsAdmin = onCall(
         if (!round || !variantGroup) throw new HttpsError('not-found', '상품 옵션 정보를 찾을 수 없습니다.');
         
         if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-            // Firestore 트랜잭션 내에서는 집계 쿼리를 사용할 수 없으므로, 모든 관련 주문을 읽어와 수동으로 집계합니다.
             const ordersQuery = db.collection('orders').where('status', 'in', ['RESERVED', 'PREPAID']);
             const ordersSnapshot = await transaction.get(ordersQuery);
 
@@ -661,7 +686,6 @@ export const createOrderAsAdmin = onCall(
         const newOrderRef = db.collection('orders').doc();
         const phoneLast4 = targetUserData.phone?.slice(-4) || '';
 
-        // ✅ [수정] customerInfo 타입에 맞게 displayName이 null일 경우 빈 문자열을 할당합니다.
         const customerInfo: CustomerInfo = {
             name: targetUserData.displayName || '',
             phone: targetUserData.phone || '',

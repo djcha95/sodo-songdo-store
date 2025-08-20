@@ -174,8 +174,41 @@
 /* 🎨 [모바일 UI/UX 고도화] 768px 이하 */
 @media (max-width: 768px) {
     .qc-order-card.selected {
-        /* 선택 시 카드 '팝업' 효과 */
         transform: scale(1.02);
         box-shadow: var(--shadow-lg);
     }
+}
+
+/* ✅ [추가] 미래 입고 상품 카드 스타일 */
+.qc-order-card.is-future {
+    border: 2px dashed var(--primary-color);
+}
+
+/* ✅ [추가] '입고 예정' 배지 스타일 */
+.qco-future-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 3px 8px;
+    border-radius: var(--border-radius-pill);
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-bold);
+    z-index: 2; /* 체크마크 위에 표시될 수 있도록 z-index 추가 */
+}
+
+/* ✅ [수정] 체크마크가 배지 위에 올라오지 않도록 z-index 조정 */
+.qco-checkmark {
+    z-index: 1;
+}
+
+/* ✅ [추가] 선택되었을 때 '입고 예정' 배지가 체크마크에 가려지지 않도록 조정 */
+.qc-order-card.selected .qco-future-badge {
+    top: -1px;
+    right: 30px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: var(--border-radius-pill);
+    border-bottom-left-radius: var(--border-radius-pill);
 }

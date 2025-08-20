@@ -89,16 +89,19 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     const isMultiGroup = round.variantGroups.length > 1;
     return (
         <>
-            <h1 className="product-name">{product.groupName}</h1>
-
-            <div className="markdown-content">
-              <ReactMarkdown>{product.description || ''}</ReactMarkdown>
+            {/* ▼▼▼▼▼ [수정] 상품명, 설명을 감싸는 div 추가 ▼▼▼▼▼ */}
+            <div className="product-header-content">
+                <h1 className="product-name">{product.groupName}</h1>
+                <div className="markdown-content">
+                    <ReactMarkdown>{product.description || ''}</ReactMarkdown>
+                </div>
             </div>
+            {/* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */}
 
             {product.hashtags && product.hashtags.length > 0 && (
                 <div className="product-hashtags">
                     {product.hashtags.map(tag => (
-                        <span key={tag} className="hashtag">{`#${tag.replace(/#/g, '')}`}</span>
+                        <span key={tag} className="hashtag">{`${tag.replace(/#/g, '')}`}</span>
                     ))}
                 </div>
             )}
@@ -151,7 +154,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                             if (!stockInfo.isLimited) {
                                 stockElement = <span className="unlimited-stock">수량 제한 없음</span>;
                             } else if (stockInfo.remainingUnits > 0) {
-                                // [수정] "박스" 단위를 제거하고 항상 "개" 단위로만 표시
                                 const pretty = <>{stockInfo.remainingUnits}개 남음</>;
                                 
                                 if (stockInfo.remainingUnits <= 10) {
@@ -180,7 +182,8 @@ const ItemSelector: React.FC<{
   selectedVariantGroup: VariantGroup;
   selectedItem: ProductItem | null;
   onItemChange: (item: ProductItem) => void;
-}> = React.memo(({ selectedVariantGroup, selectedItem, onItemChange }) => {
+  actionState: ProductActionState;
+}> = React.memo(({ selectedVariantGroup, selectedItem, onItemChange, actionState }) => {
   if (!selectedVariantGroup.items || selectedVariantGroup.items.length <= 1) {
     return null;
   }
@@ -208,7 +211,7 @@ const ItemSelector: React.FC<{
       >
         <option value="" disabled>세부 옵션을 선택해주세요.</option>
         {selectedVariantGroup.items.map(item => {
-          const isAvailable = (item.stockDeductionAmount || 1) <= remainingStock;
+          const isAvailable = actionState === 'WAITLISTABLE' || (item.stockDeductionAmount || 1) <= remainingStock;
           return (
             <option key={item.id} value={item.id} disabled={!isAvailable}>
               {item.name} (+{item.price.toLocaleString()}원) {!isAvailable ? '(재고 부족)' : ''}
@@ -234,7 +237,7 @@ const PurchasePanel: React.FC<{ actionState: ProductActionState; round: SalesRou
                 return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={() => onCartAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button"><ShoppingCart size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 담기` : ''}</span></button></div> );
             case 'WAITLISTABLE':
                 const waitlistMax = selectedItem?.limitQuantity ?? 99;
-                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} /><button onClick={() => onCartAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button"><Hourglass size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 대기` : '대기 신청'}</span></button></div> );
+                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} /><button onClick={() => onCartAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button" disabled={!selectedItem}><Hourglass size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 대기` : '대기 신청'}</span></button></div> );
             case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" onClick={() => toast('페이지 하단에서 옵션을 먼저 선택해주세요!')}><Box size={20} /><span>옵션을 선택해주세요</span></button>;
             case 'ENDED': case 'ENCORE_REQUESTABLE':
                 if (isEncoreLoading) return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>;
@@ -366,52 +369,52 @@ const ProductDetailPage: React.FC = () => {
         return product?.imageUrls?.filter(url => typeof url === 'string' && url.trim() !== '') || [];
     }, [product?.imageUrls]);
 
+    const actionState = useMemo<ProductActionState>(() => {
+        if (!displayRound) return 'LOADING';
+        const baseState = determineActionState(displayRound, userDocument);
+        if (baseState === 'REQUIRE_OPTION' && selectedItem) return 'PURCHASABLE';
+        if (baseState === 'PURCHASABLE' && !selectedItem) {
+             const isAnyItemAvailable = displayRound.variantGroups.some(vg => {
+                const stock = getStockInfo(vg);
+                return !stock.isLimited || stock.remainingUnits > 0;
+            });
+            if (!isAnyItemAvailable) return 'WAITLISTABLE';
+            return 'REQUIRE_OPTION';
+        }
+        return baseState;
+    }, [displayRound, userDocument, selectedItem]);
+    
+    const selectInitialItemForVg = useCallback((vg: VariantGroup) => {
+        const findFirstAvailableItem = (variantGroup: VariantGroup) => {
+            const totalStock = variantGroup.totalPhysicalStock;
+            if (totalStock === null || totalStock === -1) return variantGroup.items?.[0] || null;
+            const reserved = variantGroup.reservedCount || 0;
+            const remainingStock = Math.max(0, totalStock - reserved);
+            return variantGroup.items?.find(item => (item.stockDeductionAmount || 1) <= remainingStock) || null;
+        };
+        const availableItem = findFirstAvailableItem(vg);
+        setSelectedItem(availableItem || vg.items?.[0] || null);
+    }, []);
+
     useEffect(() => {
         if (displayRound && displayRound.variantGroups.length > 0 && !selectedVariantGroup) {
-            
-            const findFirstAvailableItem = (vg: VariantGroup) => {
-                const totalStock = vg.totalPhysicalStock;
-                if (totalStock === null || totalStock === -1) {
-                    return vg.items?.[0] || null;
-                }
-                const reserved = vg.reservedCount || 0;
-                const remainingStock = Math.max(0, totalStock - reserved);
-                return vg.items?.find(item => (item.stockDeductionAmount || 1) <= remainingStock) || null;
-            };
-
             const initialVg = displayRound.variantGroups[0];
             if (initialVg) {
                 setSelectedVariantGroup(initialVg);
-                setSelectedItem(findFirstAvailableItem(initialVg));
+                selectInitialItemForVg(initialVg);
             }
         }
-    }, [displayRound, selectedVariantGroup]);
+    }, [displayRound, selectedVariantGroup, selectInitialItemForVg]);
 
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
-    const actionState = useMemo<ProductActionState>(() => {
-        if (!displayRound) return 'LOADING';
-        
-        const baseState = determineActionState(displayRound, userDocument);
-
-        if (baseState === 'REQUIRE_OPTION') {
-            if (selectedItem) {
-                return 'PURCHASABLE';
-            }
-            return 'REQUIRE_OPTION';
-        }
-
-        if (baseState === 'PURCHASABLE' && !selectedItem) {
-            return 'ENCORE_REQUESTABLE';
-        }
-
-        return baseState;
-    }, [displayRound, userDocument, selectedItem]);
-
     const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (isPreLaunch) { toast(`상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!\n 그 전까지는 카카오톡으로 예약주세요!`, { icon: '🗓️', position: "top-center", duration: 4000 }); return; }
-        if (!product || !displayRound || !selectedVariantGroup || !selectedItem) return;
+        if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
+            toast.error('옵션을 선택해주세요.');
+            return;
+        }
         const cartItem: CartItem = { id: `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}-${selectedItem.id}`, productId: product.id, productName: product.groupName, roundId: displayRound.roundId, roundName: displayRound.roundName, variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName, itemId: selectedItem.id, itemName: selectedItem.name, quantity, unitPrice: selectedItem.price, stock: selectedItem.stock, imageUrl: product.imageUrls?.[0] || '', status: status, stockDeductionAmount: selectedItem.stockDeductionAmount, deadlineDate: displayRound.deadlineDate, pickupDate: displayRound.pickupDate, isPrepaymentRequired: displayRound.isPrepaymentRequired || false };
         addToCart(cartItem);
         if (status === 'RESERVATION') toast.success(`${quantity}개를 담았어요!`);
@@ -461,16 +464,7 @@ const ProductDetailPage: React.FC = () => {
                             selectedVariantGroup={selectedVariantGroup} 
                             onVariantGroupChange={(vg) => { 
                                 setSelectedVariantGroup(vg);
-                                const totalStock = vg.totalPhysicalStock;
-                                let firstAvailableItem: ProductItem | null = null;
-                                if (totalStock === null || totalStock === -1) {
-                                    firstAvailableItem = vg.items?.[0] || null;
-                                } else {
-                                    const reserved = vg.reservedCount || 0;
-                                    const remainingStock = Math.max(0, totalStock - reserved);
-                                    firstAvailableItem = vg.items?.find(item => (item.stockDeductionAmount || 1) <= remainingStock) || null;
-                                }
-                                setSelectedItem(firstAvailableItem); 
+                                selectInitialItemForVg(vg);
                                 setQuantity(1); 
                                 toast.success(`'${vg.groupName}' 옵션을 선택했어요.`); 
                             }} 
@@ -484,6 +478,7 @@ const ProductDetailPage: React.FC = () => {
                                     setQuantity(1);
                                     toast.success(`'${item.name}'으로 변경했어요.`);
                                 }}
+                                actionState={actionState}
                             />
                         )}
                         <PurchasePanel 

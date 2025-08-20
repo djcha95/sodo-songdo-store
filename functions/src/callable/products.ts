@@ -1,6 +1,6 @@
 // functions/src/callable/products.ts
 // Cloud Functions (v2) — Products related callables
-// v1.3 - 페이지네이션 로직 제거로 전체 상품 조회하도록 수정
+// v1.4 - notifyUsersOfProductUpdate 함수의 주문 조회 로직 수정
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -356,7 +356,7 @@ export const notifyUsersOfProductUpdate = onCall(
   async (request) => {
     const userRole = request.auth?.token.role;
 
-    // 1. 관리자 권한 확인 (✅ 'admin'과 'master' 모두 허용하도록 수정)
+    // 1. 관리자 권한 확인
     if (!userRole || !['admin', 'master'].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자만 이 기능을 사용할 수 있습니다.");
     }
@@ -368,26 +368,31 @@ export const notifyUsersOfProductUpdate = onCall(
     }
 
     try {
-      // 3. 해당 상품/회차를 주문한 모든 사용자 ID 조회
+      // 3. 해당 상품/회차를 주문한 모든 사용자 ID 조회 (✅ 수정된 로직)
       const ordersSnapshot = await db.collection("orders")
-        .where("items", "array-contains-any", [{ productId, roundId }])
+        .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
-
-      if (ordersSnapshot.empty) {
-        logger.info(`No orders found for productId: ${productId}, roundId: ${roundId}. No notifications sent.`);
-        return { success: true, message: "알림 대상자가 없습니다." };
-      }
 
       const userIds = new Set<string>();
       ordersSnapshot.forEach(doc => {
         const order = doc.data() as Order;
-        if(order.userId) {
+        // 각 주문에 포함된 상품(items)들을 순회하며 조건 확인
+        const isTargetOrder = (order.items || []).some(item => 
+            item.productId === productId && item.roundId === roundId
+        );
+
+        if(isTargetOrder && order.userId) {
           userIds.add(order.userId);
         }
       });
+
+      if (userIds.size === 0) {
+        logger.info(`No orders found for productId: ${productId}, roundId: ${roundId}. No notifications sent.`);
+        return { success: true, message: "알림 대상자가 없습니다." };
+      }
       
       const uniqueUserIds = Array.from(userIds);
-      logger.info(`Found ${uniqueUserIds.length} users to notify.`);
+      logger.info(`Found ${uniqueUserIds.length} users to notify for product ${productId} round ${roundId}.`);
 
       // 4. 각 사용자에게 알림 생성 (Batch 사용으로 원자적 실행)
       const batch = db.batch();
