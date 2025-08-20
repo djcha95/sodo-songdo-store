@@ -5,7 +5,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, admin, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
+import { Timestamp, DocumentData, DocumentSnapshot, FieldValue } from "firebase-admin/firestore";
 
 import type {
   Product,
@@ -78,30 +78,16 @@ export const getProductsWithStock = onCall(
   {
     region: "asia-northeast3",
     cors: allowedOrigins,
-    memory: "1GiB", // [수정] 전체 상품 조회를 위해 메모리 상향
+    memory: "1GiB", // 전체 상품 조회를 위해 메모리 상향
     timeoutSeconds: 60,
     enforceAppCheck: false,
   },
   async (request) => {
     try {
-      // [제거] 페이지네이션 관련 로직을 모두 제거합니다.
-      // const pageSizeRaw = request.data?.pageSize;
-      // const lastVisibleTimestamp = request.data?.lastVisibleTimestamp;
-      // const pageSize =
-      //   typeof pageSizeRaw === "number" && pageSizeRaw > 0 && pageSizeRaw <= 50
-      //     ? pageSizeRaw
-      //     : 20;
-
-      // [수정] 모든 보관처리되지 않은 상품을 가져옵니다.
       const query = db
         .collection("products")
         .where("isArchived", "==", false)
         .orderBy("createdAt", "desc");
-      
-      // [제거] 페이지네이션 시작점 로직 제거
-      // if (lastVisibleTimestamp) {
-      //   query = query.startAfter(Timestamp.fromMillis(lastVisibleTimestamp));
-      // }
 
       const productsSnapshot = await query.get();
       const products = productsSnapshot.docs.map((doc) => ({
@@ -111,23 +97,25 @@ export const getProductsWithStock = onCall(
 
       const ordersSnap = await db
         .collection("orders")
-        .where("status", "in", ["RESERVED", "PREPAID"])
+        .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
 
-      const reservedMap = new Map<string, number>();
+      const claimedMap = new Map<string, number>();
       ordersSnap.docs.forEach((od) => {
         const order = od.data() as Order;
         const items: OrderItem[] = Array.isArray(order.items) ? order.items : [];
         items.forEach((it) => {
           if (!it.productId || !it.roundId || !it.variantGroupId) return;
           const key = `${it.productId}-${it.roundId}-${it.variantGroupId}`;
-          const qty = Number(it.quantity || 0);
-          if (!qty) return;
-          reservedMap.set(key, (reservedMap.get(key) || 0) + qty);
+          
+          const quantityToDeduct = (it.quantity || 0) * (it.stockDeductionAmount || 1);
+          if (!quantityToDeduct) return;
+
+          claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
         });
       });
 
-      const productsWithReservedData = products.map((product) => {
+      const productsWithClaimedData = products.map((product) => {
         if (!Array.isArray(product.salesHistory)) {
           return product;
         }
@@ -139,7 +127,7 @@ export const getProductsWithStock = onCall(
             const key = `${product.id}-${round.roundId}-${vg.id}`;
             return {
               ...vg,
-              reservedCount: reservedMap.get(key) || 0,
+              reservedCount: claimedMap.get(key) || 0,
             };
           });
 
@@ -154,16 +142,9 @@ export const getProductsWithStock = onCall(
           salesHistory: newSalesHistory,
         };
       });
-
-      // [제거] 페이지네이션 커서 로직 제거
-      // const lastVisible =
-      //   productsSnapshot.docs.length > 0
-      //     ? (productsSnapshot.docs[productsSnapshot.docs.length - 1].get("createdAt") as Timestamp | null)
-      //     : null;
       
-      // [수정] lastVisible 대신 null을 반환하여 클라이언트의 무한 스크롤이 멈추도록 합니다.
       return {
-        products: productsWithReservedData,
+        products: productsWithClaimedData,
         lastVisible: null, 
       };
     } catch (error) {
@@ -176,9 +157,7 @@ export const getProductsWithStock = onCall(
 
 
 /** --------------------------------
- * ✅ [신규 추가] ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock
- * - productId를 받아 단일 상품의 상세 정보와
- * - 실시간 예약 수량이 합산된 데이터를 반환합니다.
+ * 3) ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock
  * --------------------------------- */
 export const getProductByIdWithStock = onCall(
   {
@@ -204,25 +183,24 @@ export const getProductByIdWithStock = onCall(
 
       const product = { ...(productSnap.data() as Product), id: productSnap.id };
 
-      // RESERVED / PREPAID 상태의 모든 주문을 가져와 예약 수량을 계산합니다.
       const ordersSnap = await db
         .collection("orders")
-        .where("status", "in", ["RESERVED", "PREPAID"])
+        .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
 
-      const reservedMap = new Map<string, number>();
+      const claimedMap = new Map<string, number>();
       ordersSnap.docs.forEach((doc) => {
         const order = doc.data() as Order;
         (order.items || []).forEach((item) => {
-          // 현재 조회 중인 상품과 관련된 항목만 계산에 포함합니다.
           if (item.productId === productId) {
             const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-            reservedMap.set(key, (reservedMap.get(key) || 0) + item.quantity);
+            const quantityToDeduct = (item.quantity || 0) * (item.stockDeductionAmount || 1);
+            if (!quantityToDeduct) return;
+            claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
           }
         });
       });
 
-      // 조회된 상품 데이터에 계산된 예약 수량을 추가(enrich)합니다.
       if (Array.isArray(product.salesHistory)) {
         product.salesHistory = product.salesHistory.map((round) => {
           if (!Array.isArray(round.variantGroups)) return round;
@@ -231,14 +209,13 @@ export const getProductByIdWithStock = onCall(
             const key = `${product.id}-${round.roundId}-${vg.id}`;
             return {
               ...vg,
-              reservedCount: reservedMap.get(key) || 0,
+              reservedCount: claimedMap.get(key) || 0,
             };
           });
           return round;
         });
       }
 
-      // 재고 정보가 포함된 최종 상품 데이터를 반환합니다.
       return { product };
 
     } catch (error) {
@@ -251,7 +228,7 @@ export const getProductByIdWithStock = onCall(
 
 
 /** --------------------------------
- * 3) 페이지네이션용 단순 목록: getProductsPage
+ * 4) 페이지네이션용 단순 목록: getProductsPage
  * --------------------------------- */
 export const getProductsPage = onCall(
   {
@@ -298,7 +275,7 @@ export const getProductsPage = onCall(
 );
 
 /** --------------------------------
- * 4) 앵콜 요청: requestEncore
+ * 5) 앵콜 요청: requestEncore
  * --------------------------------- */
 export const requestEncore = onCall(
   {
@@ -359,6 +336,84 @@ export const requestEncore = onCall(
         throw error;
       }
       throw new HttpsError("internal", "앵콜 요청 처리 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+/**
+ * ----------------------------------------------------------------
+ * ✅ [신규 추가] 6) 상품 정보 변경 알림: notifyUsersOfProductUpdate
+ * ----------------------------------------------------------------
+ * 상품 정보가 수정되었을 때, 해당 상품/회차를 주문했던 모든 사용자에게 알림을 보냅니다.
+ */
+export const notifyUsersOfProductUpdate = onCall(
+  {
+    region: "asia-northeast3",
+    cors: allowedOrigins,
+    memory: "512MiB",
+    timeoutSeconds: 120, // 사용자 조회 및 알림 생성으로 시간 여유 있게 설정
+  },
+  async (request) => {
+    // 1. 관리자 권한 확인
+    if (request.auth?.token.role !== "admin") {
+      throw new HttpsError("permission-denied", "관리자만 이 기능을 사용할 수 있습니다.");
+    }
+    
+    // 2. 파라미터 유효성 검사
+    const { productId, roundId, productName, changes } = request.data;
+    if (!productId || !roundId || !productName || !Array.isArray(changes) || changes.length === 0) {
+      throw new HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다.");
+    }
+
+    try {
+      // 3. 해당 상품/회차를 주문한 모든 사용자 ID 조회
+      const ordersSnapshot = await db.collection("orders")
+        .where("items", "array-contains-any", [{ productId, roundId }])
+        .get();
+
+      if (ordersSnapshot.empty) {
+        logger.info(`No orders found for productId: ${productId}, roundId: ${roundId}. No notifications sent.`);
+        return { success: true, message: "알림 대상자가 없습니다." };
+      }
+
+      const userIds = new Set<string>();
+      ordersSnapshot.forEach(doc => {
+        const order = doc.data() as Order;
+        if(order.userId) {
+          userIds.add(order.userId);
+        }
+      });
+      
+      const uniqueUserIds = Array.from(userIds);
+      logger.info(`Found ${uniqueUserIds.length} users to notify.`);
+
+      // 4. 각 사용자에게 알림 생성 (Batch 사용으로 원자적 실행)
+      const batch = db.batch();
+      const changeText = changes.join(", ");
+      const message = `[상품 정보 변경] '${productName}' 상품의 정보가 변경되었습니다. (변경: ${changeText})`;
+
+      uniqueUserIds.forEach(userId => {
+        const notificationRef = db.collection("users").doc(userId).collection("notifications").doc();
+        batch.set(notificationRef, {
+          message,
+          read: false,
+          timestamp: FieldValue.serverTimestamp(),
+          type: 'PRODUCT_UPDATE',
+          link: `/my-orders`, // 내 주문내역 페이지로 이동 링크
+        });
+      });
+      
+      await batch.commit();
+
+      logger.info(`Successfully sent notifications to ${uniqueUserIds.length} users.`);
+      return { success: true, message: `${uniqueUserIds.length}명에게 알림을 보냈습니다.` };
+
+    } catch (error) {
+      logger.error("Error in notifyUsersOfProductUpdate:", error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError("internal", "알림 전송 중 서버 오류가 발생했습니다.");
     }
   }
 );

@@ -5,7 +5,8 @@ import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
 import { calculateTier, POINT_POLICIES } from "../utils/helpers.js";
-import { sendAlimtalk } from "../utils/nhnApi.js";
+// ✅ [수정] sendAlimtalk import는 더 이상 필요 없으므로 제거합니다.
+// import { sendAlimtalk } from "../utils/nhnApi.js"; 
 import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
 
 
@@ -115,7 +116,8 @@ export const onOrderCreated = onDocumentCreated(
   {
     document: "orders/{orderId}",
     region: "asia-northeast3",
-    secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
+    // ✅ [수정] 알림톡을 보내지 않으므로 secrets가 더 이상 필요 없습니다.
+    // secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (event: FirestoreEvent<DocumentSnapshot | undefined, { orderId: string }>) => {
     const snapshot = event.data;
@@ -181,73 +183,12 @@ export const onOrderCreated = onDocumentCreated(
       }
     }
 
-    // --- 2. 알림톡 발송 로직 (변경 없음) ---
-    logger.info(`신규 주문(${orderId}) 생성. 알림톡 발송 로직을 시작합니다.`);
-    try {
-        const normalizeToDate = (value: unknown): Date | null => {
-            if (!value) return null;
-            if ((value as Timestamp).toDate) return (value as Timestamp).toDate();
-            if (value instanceof Date) return value;
-            return null;
-        };
-
-        const pickupStartDate = normalizeToDate(order.pickupDate);
-        if (!pickupStartDate) {
-            logger.error(`주문(${orderId})의 픽업 시작일이 유효하지 않아 알림톡을 건너뜁니다.`);
-            return;
-        }
-
-        const now = new Date();
-        const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-        const todayStart = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
-        const pickupStartDateOnly = new Date(pickupStartDate.getFullYear(), pickupStartDate.getMonth(), pickupStartDate.getDate());
-        
-        const userDoc = await db.collection("users").doc(order.userId).get();
-        if (!userDoc.exists) {
-            logger.error(`주문(${orderId})에 대한 사용자(${order.userId})를 찾을 수 없습니다.`);
-            return;
-        }
-        const userData = userDoc.data() as UserDocument;
-        if (!userData?.phone || !userData.displayName) {
-            logger.warn(`사용자(${order.userId})의 전화번호 또는 이름 정보가 없어 알림을 보내지 못했습니다.`);
-            return;
-        }
-
-        const TRUNCATE_LENGTH = 6;
-        let productList;
-        if (order.items.length > 1) {
-            const firstItemName = order.items[0].productName || '주문 상품';
-            const truncatedName = firstItemName.length > TRUNCATE_LENGTH ? firstItemName.substring(0, TRUNCATE_LENGTH) + "…" : firstItemName;
-            const otherItemsCount = order.items.length - 1;
-            productList = `・${truncatedName} 외 ${otherItemsCount}건`;
-        } else if (order.items.length === 1) {
-            const item = order.items[0];
-            const productName = item.productName || '주문 상품';
-            const truncatedName = productName.length > TRUNCATE_LENGTH ? productName.substring(0, TRUNCATE_LENGTH) + "…" : productName;
-            productList = `・${truncatedName} ${item.quantity}개`;
-        } else {
-            productList = '주문 상품 정보 없음';
-        }
-        
-        let recipientPhone = (userData.phone || '').replace(/\D/g, '');
-        
-        if (pickupStartDateOnly.getTime() === todayStart.getTime()) {
-            const templateCode = "ORD_CONFIRM_NOW";
-            const sanitizedDisplayName = userData.displayName.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s]/g, '');
-
-            const templateVariables = {
-                고객명: sanitizedDisplayName,
-                상품목록: productList,
-            };
-            logger.info(`Sending ${templateCode} to ${recipientPhone} for order ${orderId}.`);
-            await sendAlimtalk(recipientPhone, templateCode, templateVariables);
-            logger.info(`주문(${orderId})에 대한 ${templateCode} 알림톡을 성공적으로 발송했습니다.`);
-        } else {
-            logger.info(`주문(${orderId})은 당일 픽업 건이 아니므로, 생성 시점 알림을 건너뜁니다.`);
-        }
-    } catch (alimtalkError) {
-        logger.error(`Failed to process Alimtalk for order ${orderId}:`, alimtalkError);
-    }
+    // --- 2. 알림톡 발송 로직 (제거) ---
+    // ✅ [핵심 수정]
+    // 잘못된 시간에 알림이 가는 문제를 해결하기 위해 주문 생성 시점의 알림 로직을 제거합니다.
+    // 모든 픽업 안내 알림은 `functions/src/scheduled/notifications.ts`의 
+    // `sendPickupReminders` 스케줄러가 매일 아침 9시에 정확한 대상에게 발송하도록 일원화합니다.
+    logger.info(`신규 주문(${orderId}) 생성. 재고 업데이트 완료. 주문 생성 시점의 알림톡 발송은 정책상 제거되었습니다.`);
   }
 );
 
