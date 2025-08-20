@@ -34,7 +34,7 @@ interface ProductWithUIState extends ProductForList {
   phase: 'primary' | 'secondary' | 'past';
   deadlines: { primaryEnd: Date | null; secondaryEnd: Date | null; };
   displayRound: SalesRound;
-  actionState: ProductActionState; // [추가] actionState 포함
+  actionState: ProductActionState;
 }
 
 const ProductListPage: React.FC = () => {
@@ -181,7 +181,7 @@ const ProductListPage: React.FC = () => {
         phase: finalPhase,
         deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
         displayRound: round as SalesRound,
-        actionState, // [추가] 계산된 actionState를 객체에 포함
+        actionState,
       };
       
       if (finalPhase === 'primary') {
@@ -209,10 +209,37 @@ const ProductListPage: React.FC = () => {
       sortedPastGroups[key] = pastGroups[key].sort((a, b) => (a.groupName || '').localeCompare(b.groupName || ''));
     });
 
-    const firstPrimarySaleEndDate = tempPrimary.length > 0 ? tempPrimary[0].deadlines.primaryEnd : null;
+    const firstPrimarySaleEndDate = tempPrimary.length > 0 
+      ? (tempPrimary.find(p => p.actionState !== 'WAITLISTABLE')?.deadlines.primaryEnd || tempPrimary[0].deadlines.primaryEnd)
+      : null;
+
+    // [수정] 1차 공구 상품 정렬 로직 변경
+    const sortedPrimaryProducts = tempPrimary.sort((a, b) => {
+      const getStatePriority = (state: ProductActionState): number => {
+        switch (state) {
+          case 'PURCHASABLE':
+          case 'REQUIRE_OPTION':
+            return 1; // 구매 가능 상품이 최우선
+          case 'WAITLISTABLE':
+            return 2; // '대기' 상태 상품이 그 다음
+          default:
+            return 3; // 나머지
+        }
+      };
+
+      const priorityA = getStatePriority(a.actionState);
+      const priorityB = getStatePriority(b.actionState);
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB; // 상태 우선순위에 따라 정렬
+      }
+
+      // 상태가 같을 경우, 기존 정렬 로직(재고, 가격 등)을 따름
+      return sortProductsForDisplay(a as any, b as any);
+    });
     
     return {
-      primarySaleProducts: tempPrimary.sort(sortProductsForDisplay as any),
+      primarySaleProducts: sortedPrimaryProducts,
       secondarySaleProducts: tempSecondary.sort((a, b) => {
         const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() ?? Infinity;
         const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() ?? Infinity;
@@ -270,7 +297,6 @@ const ProductListPage: React.FC = () => {
           tutorialId="primary-sale-section"
         >
           {primarySaleProducts.length > 0 ? (
-            // [수정] actionState를 prop으로 전달
             primarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} actionState={p.actionState} />)
           ) : !loading && (
             <div className="product-list-placeholder">
@@ -287,7 +313,6 @@ const ProductListPage: React.FC = () => {
             title={<>⏰ 픽업임박! 추가공구</>}
             tutorialId="secondary-sale-section"
           >
-            {/* [수정] actionState를 prop으로 전달 */}
             {secondarySaleProducts.map(p => <ProductCard key={p.id} product={p as any} actionState={p.actionState} />)}
           </ProductSection>
         )}
@@ -298,7 +323,6 @@ const ProductListPage: React.FC = () => {
             if (!productsForDate || productsForDate.length === 0) return null;
             return (
               <ProductSection key={date} title={<>{dayjs(date).format('M월 D일')} 마감공구</>}>
-                {/* [수정] actionState를 prop으로 전달 */}
                 {productsForDate.map(p => <ProductCard key={p.id} product={p as any} actionState={p.actionState} />)}
               </ProductSection>
             );
