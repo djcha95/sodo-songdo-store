@@ -39,7 +39,10 @@ const orderStatusInfo: Record<OrderStatus, { label: string; className: string }>
     COMPLETED: { label: '처리완료', className: 'status-picked-up' },
     CANCELED: { label: '취소', className: 'status-canceled' },
     NO_SHOW: { label: '노쇼', className: 'status-no-show' },
+    // ✅ [추가] LATE_CANCELED 상태에 대한 정의 추가
+    LATE_CANCELED: { label: '마감임박취소', className: 'status-canceled' },
 };
+
 
 type Tab = 'profile' | 'orders' | 'waitlist' | 'points';
 

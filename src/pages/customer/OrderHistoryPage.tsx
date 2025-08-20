@@ -24,10 +24,7 @@ import toast from 'react-hot-toast';
 
 import './OrderHistoryPage.css';
 
-// =================================================================
-// 📌 이미지 안전 로더 (수정 없음)
-// =================================================================
-
+// ... (SafeThumb, 타입 정의, 헬퍼 함수들은 변경 없이 그대로 유지)
 const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
 
@@ -84,10 +81,6 @@ const SafeThumb: React.FC<{
 };
 
 
-// =================================================================
-// 📌 타입 정의 및 헬퍼 함수
-// =================================================================
-
 interface AggregatedItem {
   id: string;
   stableId: string;
@@ -102,7 +95,6 @@ interface AggregatedItem {
   wasPrepaymentRequired: boolean;
 }
 
-// ✅ [추가] 취소 가능 여부 상세 정보 반환 타입
 interface CancellationDetails {
   cancellable: boolean;
   orderToCancel?: Order;
@@ -142,7 +134,6 @@ const formatPickupDateShort = (date: Date): string => {
   return `${date.getMonth() + 1}/${date.getDate()}(${dayOfWeek})`;
 };
 
-// ✅ [추가] 주문 취소 가능 여부 로직을 별도 함수로 추출
 const getCancellationDetails = (item: AggregatedItem): CancellationDetails => {
   const latestOrder = item.originalOrders[0];
   if (!latestOrder) {
@@ -191,9 +182,6 @@ const getCancellationDetails = (item: AggregatedItem): CancellationDetails => {
   return { cancellable: true, orderToCancel: latestOrder, cancelDisabledReason: null, isEvent: false, isPenaltyPeriod: isPenalty };
 };
 
-// =================================================================
-// 📌 커스텀 훅 (수정 없음)
-// =================================================================
 const DATA_PER_PAGE = 10;
 
 const usePaginatedData = <T,>(
@@ -269,11 +257,6 @@ const usePaginatedData = <T,>(
   return { data, setData, loading: loading || loadingMore, hasMore, loadMore };
 };
 
-
-// =================================================================
-// 📌 하위 컴포넌트
-// =================================================================
-
 const DateHeader: React.FC<{ date: Date }> = React.memo(({ date }) => (
   <h2 className="date-header">{formatSimpleDate(date)}</h2>
 ));
@@ -311,8 +294,8 @@ const AggregatedItemCard: React.FC<{
     if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
       return { statusText: '선입금 필요', StatusIcon: CreditCard, statusClass: 'status-prepayment_required' };
     }
-    const textMap: Record<OrderStatus, string> = { RESERVED: '예약 완료', PREPAID: '선입금 완료', PICKED_UP: '픽업 완료', COMPLETED: '처리 완료', CANCELED: '취소됨', NO_SHOW: '노쇼' };
-    const iconMap: Record<OrderStatus, React.ElementType> = { RESERVED: Hourglass, PREPAID: PackageCheck, PICKED_UP: PackageCheck, COMPLETED: CircleCheck, CANCELED: PackageX, NO_SHOW: AlertCircle };
+    const textMap: Record<OrderStatus, string> = { RESERVED: '예약 완료', PREPAID: '선입금 완료', PICKED_UP: '픽업 완료', COMPLETED: '처리 완료', CANCELED: '취소됨', NO_SHOW: '노쇼', LATE_CANCELED: '취소됨' };
+    const iconMap: Record<OrderStatus, React.ElementType> = { RESERVED: Hourglass, PREPAID: PackageCheck, PICKED_UP: PackageCheck, COMPLETED: CircleCheck, CANCELED: PackageX, NO_SHOW: AlertCircle, LATE_CANCELED: PackageX };
     return {
       statusText: textMap[item.status] || '알 수 없음',
       StatusIcon: iconMap[item.status] || AlertCircle,
@@ -320,7 +303,6 @@ const AggregatedItemCard: React.FC<{
     }
   }, [item.status, item.wasPrepaymentRequired]);
 
-  // ✅ [수정] 외부 헬퍼 함수를 사용하여 취소 가능 여부 확인
   const { cancellable, isEvent } = useMemo(() => getCancellationDetails(item), [item]);
 
   const topText = useMemo(
@@ -333,7 +315,6 @@ const AggregatedItemCard: React.FC<{
     [isEvent, item.originalOrders, item.itemName]
   );
   
-  // ✅ [수정] 상호작용 로직 변경 (클릭: 선택, 길게 누르기: 이동)
   const handleNavigate = useCallback(() => {
     if (isEvent) return;
     navigate(`/product/${item.productId}`);
@@ -403,7 +384,6 @@ const WaitlistItemCard: React.FC<{
   const navigate = useNavigate();
   const stableId = useMemo(() => item.timestamp.toMillis().toString(), [item.timestamp]);
   
-  // ✅ [수정] 상호작용 로직 변경 (클릭: 선택, 길게 누르기: 이동)
   const handleNavigate = useCallback(() => {
     navigate(`/product/${item.productId}`);
   }, [item.productId, navigate]);
@@ -447,10 +427,6 @@ const WaitlistItemCard: React.FC<{
   );
 });
 
-// =================================================================
-// 📌 메인 컴포넌트
-// =================================================================
-
 const OrderHistoryPage: React.FC = () => {
   const { user, userDocument } = useAuth();
   const { runPageTourIfFirstTime } = useTutorial();
@@ -458,14 +434,12 @@ const OrderHistoryPage: React.FC = () => {
   const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
   const [loadingWaitlist, setLoadingWaitlist] = useState(false);
   
-  // ✅ [추가] 선택된 항목 상태
   const [selectedOrderKeys, setSelectedOrderKeys] = useState<Set<string>>(new Set());
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
 
-  // ✅ [수정] 뷰 모드 변경 시 선택 초기화
   const handleViewChange = (mode: 'orders' | 'pickup' | 'waitlist') => {
     setViewMode(mode);
     setSelectedOrderKeys(new Set());
@@ -563,7 +537,6 @@ const OrderHistoryPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // ✅ [추가] 항목 선택 핸들러
   const handleItemSelect = useCallback((itemKey: string, type: 'order' | 'waitlist') => {
     const setter = type === 'order' ? setSelectedOrderKeys : setSelectedWaitlistKeys;
     setter(prev => {
@@ -574,7 +547,6 @@ const OrderHistoryPage: React.FC = () => {
     });
   }, []);
   
-  // ✅ [추가] 선택 항목 일괄 취소 핸들러
   const handleBulkCancel = useCallback((type: 'order' | 'waitlist') => {
     if (type === 'order') {
       const allAggregatedItems = Object.values(aggregatedItems).flat();
@@ -609,7 +581,10 @@ const OrderHistoryPage: React.FC = () => {
             <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
             <button className="common-button button-danger button-medium" onClick={() => {
               toast.dismiss(t.id);
-              const cancelPromises = ordersToCancel.map(item => cancelOrder(item.order, { treatAsNoShow: item.isPenalty }));
+              // ✅ [수정] cancelOrder 호출 시 orderId와 penaltyType을 올바르게 전달
+              const cancelPromises = ordersToCancel.map(item => 
+                cancelOrder(item.order.id, { penaltyType: item.isPenalty ? 'late' : 'none' })
+              );
               
               toast.promise(Promise.all(cancelPromises), {
                 loading: `${ordersToCancel.length}개 항목 취소 중...`,
@@ -694,7 +669,7 @@ const OrderHistoryPage: React.FC = () => {
                     key={item.id}
                     item={item}
                     isSelected={selectedOrderKeys.has(item.id)}
-                    onSelect={(id) => handleItemSelect(id, 'order')} // 올바른 타입으로 수정
+                    onSelect={(id) => handleItemSelect(id, 'order')}
                     displayDateInfo={viewMode === 'orders'
                       ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! }
                       : { type: 'order', date: safeToDate(item.originalOrders[0]?.createdAt)! }}
@@ -742,7 +717,6 @@ const OrderHistoryPage: React.FC = () => {
           <button className={`toggle-btn ${viewMode === 'waitlist' ? 'active' : ''}`} onClick={() => handleViewChange('waitlist')}> <Hourglass size={18} /> 대기목록 </button>
         </div>
         
-        {/* ✅ [추가] 일괄 작업 바 */}
         <AnimatePresence>
           {((viewMode === 'orders' || viewMode === 'pickup') && selectedOrderKeys.size > 0) && (
             <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -20, opacity: 0 }} transition={{ duration: 0.2 }}>

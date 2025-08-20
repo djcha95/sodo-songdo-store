@@ -75,27 +75,31 @@ export const submitOrder = async (
 
 /**
  * @description ✅ [수정] 사용자의 예약을 취소합니다.
- * 보안을 위해 Callable Cloud Function을 호출하며, '노쇼 처리' 여부를 함께 전달합니다.
+ * 보안을 위해 Callable Cloud Function을 호출하며, 페널티 종류를 함께 전달합니다.
  */
 export const cancelOrder = async (
-  order: Order,
-  options: { treatAsNoShow: boolean } = { treatAsNoShow: false }
-): Promise<void> => {
+  orderId: string,
+  // ✅ [수정] treatAsNoShow 대신 penaltyType을 사용합니다.
+  options: { penaltyType: 'none' | 'late' } = { penaltyType: 'none' }
+): Promise<{ success: boolean; message: string }> => {
   try {
     const functions = getFunctions(getApp(), 'asia-northeast3');
-    // ✅ [수정] 백엔드 폴더 구조 변경에 따라 함수 이름 수정
-    const cancelOrderCallable = httpsCallable(functions, 'cancelOrder');
+    const cancelOrderCallable = httpsCallable<
+        { orderId: string; penaltyType: 'none' | 'late' }, 
+        { success: boolean; message: string }
+    >(functions, 'cancelOrder');
     
-    // ✅ [수정] Cloud Function에 orderId와 함께 treatAsNoShow 플래그를 전달
-    await cancelOrderCallable({ 
-      orderId: order.id, 
-      treatAsNoShow: options.treatAsNoShow 
+    // ✅ [수정] Cloud Function에 orderId와 함께 penaltyType을 전달합니다.
+    const result = await cancelOrderCallable({ 
+      orderId: orderId, 
+      penaltyType: options.penaltyType 
     });
+    
+    return result.data;
   
   } catch (error: any) {
     console.error("Callable function 'cancelOrder' failed:", error);
     if (error.code && error.message) {
-      // Firebase HttpsError의 경우, 서버에서 보낸 메시지를 그대로 사용자에게 보여줍니다.
       const message = (error.details as any)?.message || error.message;
       throw new Error(message);
     }

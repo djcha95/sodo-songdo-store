@@ -6,7 +6,7 @@ import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatu
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
     updateMultipleOrderStatuses, revertOrderStatus, deleteMultipleOrders, splitAndUpdateOrderStatus,
-    splitBundledOrder
+    splitBundledOrder, cancelOrder
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import toast from 'react-hot-toast';
@@ -15,29 +15,19 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
 
-// Props 인터페이스
 interface CustomerActionTabsProps {
     user: UserDocument;
     orders: Order[];
-    onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
+    onStatUpdate: (updates: { pickup?: number; noshow?: number; }) => void;
     onActionSuccess: () => void;
 }
 
-// ✅ [추가] Timestamp 또는 Date 객체를 안전하게 Date 객체로 변환하는 헬퍼 함수
 const convertToDate = (date: Timestamp | Date | null | undefined): Date | null => {
-    if (!date) {
-        return null;
-    }
-    // 'toDate' 메서드가 존재하면 Timestamp 객체로 간주하고 변환
-    if ('toDate' in date && typeof date.toDate === 'function') {
-        return date.toDate();
-    }
-    // 그렇지 않으면 이미 Date 객체이므로 그대로 반환
+    if (!date) return null;
+    if ('toDate' in date && typeof date.toDate === 'function') return date.toDate();
     return date as Date;
 };
 
-
-// 재사용 가능한 액션 처리 헬퍼 함수
 const performAction = async (
     actionPromise: () => Promise<any>,
     optimisticUpdate: () => void,
@@ -48,8 +38,9 @@ const performAction = async (
     optimisticUpdate();
     const toastId = toast.loading(messages.loading);
     try {
-        await actionPromise();
-        toast.success(messages.success, { id: toastId });
+        const result = await actionPromise();
+        const successMessage = typeof result === 'object' && result.message ? result.message : messages.success;
+        toast.success(successMessage, { id: toastId });
         onSuccess();
     } catch (error: any) {
         revertUpdate();
@@ -57,7 +48,6 @@ const performAction = async (
     }
 };
 
-// 주문 내역 테이블 컴포넌트
 const ActionableOrderTable: React.FC<{
     orders: Order[];
     onStatusChange: (order: Order) => void;
@@ -74,6 +64,7 @@ const ActionableOrderTable: React.FC<{
         COMPLETED: { label: '처리완료', className: 'status-picked-up' },
         CANCELED: { label: '취소', className: 'status-canceled' },
         NO_SHOW: { label: '노쇼', className: 'status-no-show' },
+        LATE_CANCELED: { label: '마감임박취소', className: 'status-canceled' }
     };
     return (
         <div className="order-table-container">
@@ -91,7 +82,7 @@ const ActionableOrderTable: React.FC<{
                         </thead>
                         <tbody>
                             {sortedOrders.map(order => {
-                                const isFinalState = ['PICKED_UP', 'NO_SHOW', 'CANCELED'].includes(order.status);
+                                const isFinalState = ['PICKED_UP', 'NO_SHOW', 'CANCELED', 'LATE_CANCELED'].includes(order.status);
                                 const isSplittable = Array.isArray(order.items) && order.items.length > 1;
 
                                 return (
@@ -127,7 +118,6 @@ const ActionableOrderTable: React.FC<{
     );
 };
 
-// 신뢰도 관리 카드 컴포넌트
 const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
     const [pickupCount, setPickupCount] = useState(user.pickupCount || 0);
     const [noShowCount, setNoShowCount] = useState(user.noShowCount || 0);
@@ -183,7 +173,7 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
                     </div>
                     <div className="form-group-inline">
                         <label>노쇼</label>
-                        <input type="number" value={noShowCount} onChange={e => setNoShowCount(Number(e.target.value))} />
+                        <input type="number" step="0.5" value={noShowCount} onChange={e => setNoShowCount(Number(e.target.value))} />
                     </div>
                     <button onClick={handleCountsSave} className="common-button button-secondary button-small"><Save size={14}/> 횟수 저장</button>
                 </div>
@@ -196,7 +186,6 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
     );
 };
 
-// 메인 컴포넌트
 type Tab = 'pickup' | 'history' | 'manage';
 interface SplitInfo { group: AggregatedOrderGroup; newQuantity: number; }
 
@@ -231,7 +220,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         });
 
         const sortedGroups = Array.from(groups.values()).sort((a, b) => {
-            // ✅ [수정] 헬퍼 함수를 사용하여 안전하게 Date 객체로 변환 후 비교
             const dateA = convertToDate(a.pickupDate)?.getTime() || 0;
             const dateB = convertToDate(b.pickupDate)?.getTime() || 0;
             return dateA - dateB;
@@ -264,24 +252,14 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     const handleStatusUpdate = (status: OrderStatus) => {
         if (selectedGroupKeys.length === 0) return;
         const orderIdsToUpdate = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
-        const totalAmount = selectedGroups.reduce((sum, group) => sum + group.totalPrice, 0);
-        const updates: { pickup?: number; noshow?: number; points?: number } = {};
+        
+        const updates: { pickup?: number; noshow?: number; } = {};
         const messages = { loading: '상태 변경 중...', success: '상태가 변경되었습니다.', error: '상태 변경 실패' };
 
         if (status === 'PICKED_UP') {
-            const pointsEarned = Math.floor(totalAmount * 0.005);
-            updates.pickup = 1;
-            updates.points = pointsEarned;
-            messages.success = `픽업 완료! ${pointsEarned}P 적립.`;
-        }
-
-        if (status === 'CANCELED' || status === 'NO_SHOW') {
-            const basePenalty = -50;
-            const proportionalPenalty = -Math.floor(totalAmount * 0.05);
-            const totalPenalty = basePenalty + proportionalPenalty;
-            updates.noshow = 1;
-            updates.points = totalPenalty;
-            messages.success = `처리 완료! ${totalPenalty}P 차감.`;
+            updates.pickup = selectedGroupKeys.length;
+        } else if (status === 'NO_SHOW') {
+            updates.noshow = selectedGroupKeys.length;
         }
 
         performAction(
@@ -290,30 +268,44 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             () => onStatUpdate({
                 pickup: -(updates.pickup || 0),
                 noshow: -(updates.noshow || 0),
-                points: -(updates.points || 0),
             }),
-            onActionSuccess,
+            () => { setSelectedGroupKeys([]); onActionSuccess(); },
             messages
+        );
+    };
+
+    const handleCancelOrder = () => {
+        if (selectedGroupKeys.length === 0) return;
+
+        const now = new Date();
+        const firstOrder = orders.find(o => o.id === selectedGroups[0].originalOrders[0].orderId);
+        const deadlineDate = convertToDate(firstOrder?.pickupDeadlineDate);
+
+        const isLateCancellation = deadlineDate ? now > deadlineDate : false;
+        const penaltyType = isLateCancellation ? 'late' : 'none';
+        
+        const updates = { noshow: penaltyType === 'late' ? 0.5 * selectedGroupKeys.length : 0 };
+        const orderIdsToCancel = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
+
+        const cancelPromises = orderIdsToCancel.map(orderId => cancelOrder(orderId, { penaltyType }));
+        
+        performAction(
+            () => Promise.all(cancelPromises),
+            () => onStatUpdate(updates),
+            () => onStatUpdate({ noshow: -(updates.noshow || 0) }),
+            () => { setSelectedGroupKeys([]); onActionSuccess(); },
+            { loading: '주문 취소 중...', success: '주문이 취소되었습니다.', error: '취소 실패' }
         );
     };
 
     const handleTableStatusChange = (order: Order) => {
         const originalStatus = order.status;
-        const totalAmount = order.totalPrice || 0;
-        const updates: { pickup?: number; noshow?: number; points?: number } = {};
+        const updates: { pickup?: number; noshow?: number; } = {};
 
         if (originalStatus === 'PICKED_UP') {
-            const pointsLost = -Math.floor(totalAmount * 0.005);
             updates.pickup = -1;
-            updates.points = pointsLost;
-        }
-
-        if (originalStatus === 'CANCELED' || originalStatus === 'NO_SHOW') {
-            const basePoints = 50;
-            const proportionalPoints = Math.floor(totalAmount * 0.05);
-            const totalPointsToRestore = basePoints + proportionalPoints;
+        } else if (originalStatus === 'NO_SHOW') {
             updates.noshow = -1;
-            updates.points = totalPointsToRestore;
         }
 
         performAction(
@@ -322,13 +314,12 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             () => onStatUpdate({
                 pickup: -(updates.pickup || 0),
                 noshow: -(updates.noshow || 0),
-                points: -(updates.points || 0),
             }),
             onActionSuccess,
             { loading: '상태를 되돌리는 중...', success: '예약 상태로 되돌렸습니다.', error: '되돌리기에 실패했습니다.' }
         );
     };
-
+    
     const handleDelete = () => {
         if (selectedGroupKeys.length === 0) return;
         const orderIdsToDelete = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
@@ -345,23 +336,15 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         if (!splitInfo) return;
         const performSplitAction = (remainingStatus: OrderStatus) => {
             const orderIdToSplit = splitInfo.group.originalOrders[0].orderId;
-            const unitPrice = splitInfo.group.item.unitPrice || 0;
-            const pickupPrice = unitPrice * splitInfo.newQuantity;
-            const remainingPrice = splitInfo.group.totalPrice - pickupPrice;
-
-            const pointsEarned = Math.floor(pickupPrice * 0.005);
-            const updates: { pickup?: number; noshow?: number; points?: number } = { pickup: 1, points: pointsEarned };
-
+            const updates: { pickup?: number; noshow?: number; } = { pickup: 1 };
             if (remainingStatus === 'NO_SHOW') {
-                const penalty = -50 - Math.floor(remainingPrice * 0.05);
                 updates.noshow = 1;
-                updates.points = (updates.points || 0) + penalty;
             }
 
             performAction(
                 () => splitAndUpdateOrderStatus(orderIdToSplit, splitInfo.newQuantity, remainingStatus),
                 () => onStatUpdate(updates),
-                () => onStatUpdate({ pickup: -(updates.pickup || 0), noshow: -(updates.noshow || 0), points: -(updates.points || 0) }),
+                () => onStatUpdate({ pickup: -(updates.pickup || 0), noshow: -(updates.noshow || 0) }),
                 onActionSuccess,
                 { loading: '분할 처리 중...', success: '분할 처리가 완료되었습니다.', error: '분할 처리 실패' }
             );
@@ -413,7 +396,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                 return (
                     <div className="qcp-results-grid">
                         {aggregatedPickupOrders.map(group => {
-                            // ✅ [수정] 헬퍼 함수를 사용하여 안전하게 Date 객체로 변환 후 비교
                             const pickupJsDate = convertToDate(group.pickupDate);
                             const isFuture = pickupJsDate ? pickupJsDate > today : false;
 
@@ -474,7 +456,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                 <div className="cat-footer-actions">
                     <button onClick={() => handleStatusUpdate('PICKED_UP')} className="common-button button-pickup"><CheckCircle size={20} /> 픽업</button>
                     {prepaymentButton}
-                    <button onClick={() => handleStatusUpdate('CANCELED')} className="common-button button-cancel"><XCircle size={16} /> 취소</button>
+                    <button onClick={handleCancelOrder} className="common-button button-cancel"><XCircle size={16} /> 취소</button>
                     <button onClick={handleDelete} className="common-button button-dark"><Trash2 size={16} /> 삭제</button>
                 </div>
             </div>
@@ -489,6 +471,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                 <button className={activeTab === 'manage' ? 'active' : ''} onClick={() => setActiveTab('manage')}>신뢰도 관리</button>
             </div>
             <div className={`cat-tab-content ${activeTab === 'pickup' ? 'is-grid-view' : ''}`}>
+                {/* ✅ [수정] renderContent -> renderTabContent 오타 수정 */}
                 {renderTabContent()}
             </div>
             {renderFooter()}

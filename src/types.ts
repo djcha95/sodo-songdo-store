@@ -14,7 +14,14 @@ import type { DocumentData } from "firebase/firestore"; // DocumentData는 클�
 
 export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
-export type OrderStatus = 'RESERVED' | 'PREPAID' | 'PICKED_UP' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
+export type OrderStatus = 
+  | 'RESERVED' 
+  | 'PREPAID' 
+  | 'PICKED_UP' 
+  | 'COMPLETED' 
+  | 'CANCELED' 
+  | 'NO_SHOW'
+  | 'LATE_CANCELED'; 
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 

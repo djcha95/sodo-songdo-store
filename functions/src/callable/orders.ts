@@ -3,10 +3,26 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue, DocumentSnapshot } from "firebase-admin/firestore";
+// ✅ [수정] 사용하지 않는 DocumentSnapshot 제거
+import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
 import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo } from "../types.js";
 import { getAuth } from "firebase-admin/auth";
-import { POINT_POLICIES, calculateTier } from "../utils/helpers.js";
+// ✅ [수정] 경로 확인 필요. ../utils/pointService.js가 올바른 경로인지 확인해주세요.
+import type { LoyaltyTier } from "../types.js";
+
+const POINT_POLICIES = {
+  LATE_CANCEL_PENALTY: { points: -50, reason: '마감 임박 취소 (0.5 노쇼)' },
+} as const;
+
+const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
+    if (noShowCount >= 3) return '참여 제한';
+    if (noShowCount >= 1) return '주의 요망';
+    if (pickupCount >= 50) return '공구의 신';
+    if (pickupCount >= 30) return '공구왕';
+    if (pickupCount >= 10) return '공구요정';
+    return '공구새싹';
+};
+
 
 const productConverter = {
   toFirestore(product: Product): DocumentData { return product; },
@@ -32,7 +48,7 @@ export const checkCartStock = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
+      throw new HttpsError("internal", "Error while checking stock.");
     }
     
     const cartItems = request.data.items as CartItem[];
@@ -57,7 +73,6 @@ export const checkCartStock = onCall(
       const removedItemIds: string[] = [];
       let isSufficient = true;
 
-      // This part of the logic now happens inside the submitOrder transaction for consistency
       const reservedQuantitiesMap = new Map<string, number>();
       const ordersQuery = db.collection('orders').withConverter(orderConverter).where('status', 'in', ['RESERVED', 'PREPAID']);
       const ordersSnapshot = await ordersQuery.get();
@@ -111,21 +126,15 @@ export const checkCartStock = onCall(
   }
 );
 
-
-// ✅✅✅ [FINAL REVISION] submitOrder: Corrected transaction logic ✅✅✅
-// functions/src/callable/orders.ts
-
 export const submitOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
     if (!request.auth) {
+      // ✅ [수정] HpsError -> HttpsError 오타 수정
       throw new HttpsError("unauthenticated", "A login is required.");
     }
 
-    // ❗ 클라이언트에서 넘어온 userId는 신뢰하지 않고 폐기
     const userId = request.auth.uid;
-
-    // 클라이언트 payload에서 필요한 값만 추출
     const client = request.data as {
       items: OrderItem[];
       totalPrice: number;
@@ -135,23 +144,18 @@ export const submitOrder = onCall(
       notes?: string;
     };
 
-    // 기본 검증
     if (!Array.isArray(client.items) || client.items.length === 0) {
       throw new HttpsError("invalid-argument", "주문할 상품이 없습니다.");
     }
 
     try {
       const result = await db.runTransaction(async (transaction) => {
-        // ---------- [모든 READ 우선] ----------
-        // 1) 사용자 문서
         const userRef = db.collection("users").withConverter(userConverter).doc(userId);
         const userSnap = await transaction.get(userRef);
-if (!userSnap.exists) {
-  throw new HttpsError('not-found', 'User information not found.');
-}
+        if (!userSnap.exists) {
+          throw new HttpsError('not-found', 'User information not found.');
+        }
 
-
-        // 2) 상품 문서들
         const productIds = [...new Set(client.items.map(i => i.productId))];
         const productSnaps = await Promise.all(
           productIds.map(id => db.collection("products").withConverter(productConverter).doc(id).get())
@@ -162,7 +166,6 @@ if (!userSnap.exists) {
           productDataMap.set(s.id, { ...s.data(), id: s.id } as Product);
         }
 
-        // 3) 현재 예약 재고(RESERVED/PREPAID) 집계
         const reservedMap = new Map<string, number>();
         const ordersQuery = db.collection("orders")
           .withConverter(orderConverter)
@@ -177,7 +180,6 @@ if (!userSnap.exists) {
           }
         });
 
-        // ---------- [검증: 추가 read 없이] ----------
         const txRequestMap = new Map<string, number>();
         for (const item of client.items) {
           const product = productDataMap.get(item.productId);
@@ -198,15 +200,11 @@ if (!userSnap.exists) {
             const after = alreadyReserved + (txRequestMap.get(key) || 0);
             if (after > vg.totalPhysicalStock) {
               const remain = Math.max(0, vg.totalPhysicalStock - alreadyReserved);
-              throw new HttpsError(
-  "failed-precondition",
-`재고 부족: ${product.groupName} - ${vg.groupName} (가능 수량: ${remain})`);
-
+              throw new HttpsError("failed-precondition", `재고 부족: ${product.groupName} - ${vg.groupName} (가능 수량: ${remain})`);
             }
           }
         }
 
-        // ---------- [WRITE 단계] ----------
         const createdOrderIds: string[] = [];
         const phoneLast4 = (client.customerInfo?.phone || "").slice(-4);
 
@@ -219,7 +217,7 @@ if (!userSnap.exists) {
 
           const newOrderRef = db.collection("orders").doc();
           const newOrder: Omit<Order, "id"> = {
-            userId, // ✅ 인증 uid로 고정
+            userId,
             customerInfo: { ...client.customerInfo, phoneLast4 },
             items: [single],
             totalPrice: single.unitPrice * single.quantity,
@@ -249,7 +247,6 @@ if (!userSnap.exists) {
   }
 );
 
-
 export const cancelOrder = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
@@ -257,17 +254,16 @@ export const cancelOrder = onCall(
             throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
         }
 
-        const { orderId, treatAsNoShow = false } = request.data;
+        const { orderId, penaltyType = 'none' } = request.data as { orderId: string; penaltyType: 'none' | 'late' };
         if (!orderId || typeof orderId !== 'string') {
             throw new HttpsError("invalid-argument", "주문 ID가 올바르지 않습니다.");
         }
         
-        const userId = request.auth.uid;
+        const requesterId = request.auth.uid;
         
         try {
-            await db.runTransaction(async (transaction) => {
-                // --- 1. 읽기 단계 ---
-                // 트랜잭션에 필요한 모든 문서를 먼저 읽습니다.
+            // ✅ [수정] 사용하지 않는 updatedUser 변수 제거
+            const { message } = await db.runTransaction(async (transaction) => {
                 const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
                 const orderDoc = await transaction.get(orderRef);
                 
@@ -279,22 +275,16 @@ export const cancelOrder = onCall(
                      throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
                 }
 
-                // ✅ [수정] 페널티가 필요할 경우, 사용자 정보도 미리 읽습니다.
-                let targetUserSnap: DocumentSnapshot<UserDocument> | null = null;
-if (treatAsNoShow) {
-    const targetUserRef = db.collection('users').withConverter(userConverter).doc(order.userId);
-    targetUserSnap = await transaction.get(targetUserRef); // 미리 읽기
-    if (!targetUserSnap.exists) {
-        throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
-    }
-}
+                const userRef = db.collection('users').withConverter(userConverter).doc(order.userId);
+                const userSnap = await transaction.get(userRef);
+                if (!userSnap.exists) {
+                    throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
+                }
 
-
-                // --- 2. 로직 및 검증 단계 ---
-                const userClaims = (await getAuth().getUser(userId)).customClaims;
+                const userClaims = (await getAuth().getUser(requesterId)).customClaims;
                 const isAdmin = userClaims?.role === 'admin' || userClaims?.role === 'master';
                 
-                if (order.userId !== userId && !isAdmin) {
+                if (order.userId !== requesterId && !isAdmin) {
                     throw new HttpsError("permission-denied", "자신의 주문만 취소할 수 있습니다.");
                 }
                 
@@ -302,52 +292,56 @@ if (treatAsNoShow) {
                     throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다.");
                 }
 
-                // --- 3. 쓰기 단계 ---
-                // ✅ [수정] 모든 쓰기 작업을 마지막에 모아서 실행합니다.
-                transaction.update(orderRef, { 
-                    status: 'CANCELED', 
-                    canceledAt: Timestamp.now(),
-                    notes: treatAsNoShow ? "[페널티] 2차 공구 기간 내 취소" : order.notes,
-                });
-                
-                // treatAsNoShow 로직은 미리 읽어온 targetUserSnap을 사용합니다.
-                if (treatAsNoShow && targetUserSnap) {
-                    const targetUserData = targetUserSnap.data();
-                    if (!targetUserData) {
-                        throw new HttpsError("internal", "주문 대상 사용자 데이터를 읽는 데 실패했습니다.");
-                    }
-                    
-                    const noShowPenalty = POINT_POLICIES.NO_SHOW;
-                    const oldTier = targetUserData.loyaltyTier || '공구새싹';
-                    const newNoShowCount = (targetUserData.noShowCount || 0) + 1;
-                    const newTier = calculateTier(targetUserData.pickupCount || 0, newNoShowCount);
+                const userData = userSnap.data();
+                if(!userData) {
+                    throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
+                }
+
+                let userUpdateData: any = {};
+                let finalMessage = "주문이 성공적으로 취소되었습니다.";
+
+                if (penaltyType === 'late') {
+                    const penalty = POINT_POLICIES.LATE_CANCEL_PENALTY;
+                    const oldTier = userData.loyaltyTier || '공구새싹';
+                    const newNoShowCount = (userData.noShowCount || 0) + 0.5;
+                    const newTier = calculateTier(userData.pickupCount || 0, newNoShowCount);
 
                     const penaltyLog: Omit<PointLog, "id"> = {
-                        amount: noShowPenalty.points,
-                        reason: "2차 공구 기간 예약 취소 (노쇼 처리)",
+                        amount: penalty.points,
+                        reason: penalty.reason,
                         createdAt: Timestamp.now(),
                         orderId: orderId,
                         expiresAt: null,
                     };
                     
-                    transaction.update(targetUserSnap.ref, {
-                        points: FieldValue.increment(noShowPenalty.points),
-                        noShowCount: FieldValue.increment(1),
+                    userUpdateData = {
+                        points: FieldValue.increment(penalty.points),
+                        noShowCount: newNoShowCount,
                         loyaltyTier: newTier,
                         pointHistory: FieldValue.arrayUnion(penaltyLog),
-                    });
+                    };
+                    transaction.update(userRef, userUpdateData);
+                    finalMessage = "주문이 취소되고 0.5 노쇼 페널티가 적용되었습니다.";
                     
                     if (oldTier !== newTier) {
-                        logger.info(`User ${order.userId} tier changed from ${oldTier} to ${newTier} due to no-show penalty cancellation.`);
+                        logger.info(`User ${order.userId} tier changed from ${oldTier} to ${newTier} due to late cancellation penalty.`);
                     }
                 }
+
+                transaction.update(orderRef, { 
+                    status: 'CANCELED', 
+                    canceledAt: Timestamp.now(),
+                    notes: penaltyType === 'late' ? `[페널티] ${POINT_POLICIES.LATE_CANCEL_PENALTY.reason}` : order.notes,
+                });
+
+                return { message: finalMessage };
             });
             
-            logger.info(`Order ${orderId} canceled. Actor: ${userId}. Penalty applied: ${treatAsNoShow}`);
-            return { success: true, message: "주문이 성공적으로 취소되었습니다." };
+            logger.info(`Order ${orderId} canceled. Actor: ${requesterId}. Penalty type: ${penaltyType}`);
+            return { success: true, message };
 
         } catch (error) {
-            logger.error(`Error canceling order ${orderId} by actor ${userId}:`, error);
+            logger.error(`Error canceling order ${orderId} by actor ${requesterId}:`, error);
             if (error instanceof HttpsError) throw error;
             throw new HttpsError("internal", "주문 취소 중 오류가 발생했습니다.");
         }
@@ -355,6 +349,7 @@ if (treatAsNoShow) {
 );
 
 
+// ... (파일의 나머지 부분은 변경 없음)
 export const getUserOrders = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {

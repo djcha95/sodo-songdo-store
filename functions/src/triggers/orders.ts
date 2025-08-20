@@ -4,18 +4,26 @@ import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
-import { calculateTier, POINT_POLICIES } from "../utils/helpers.js";
-// ✅ [수정] sendAlimtalk import는 더 이상 필요 없으므로 제거합니다.
-// import { sendAlimtalk } from "../utils/nhnApi.js"; 
+// ✅ [수정] helpers.js 대신 필요한 타입을 직접 가져오거나 여기서 정의합니다.
 import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
 
+// ✅ [수정] calculateTier와 POINT_POLICIES를 helpers.js 대신 여기에 직접 정의하여 외부 의존성을 제거합니다.
+const POINT_POLICIES = {
+  FRIEND_INVITED: { points: 100, reason: '친구 초대 성공' },
+};
 
-// ✅ [핵심 수정] 주문 상태 변경의 '방향'을 명시하기 위한 타입 정의
+const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
+    if (noShowCount >= 3) return '참여 제한';
+    if (noShowCount >= 1) return '주의 요망';
+    if (pickupCount >= 50) return '공구의 신';
+    if (pickupCount >= 30) return '공구왕';
+    if (pickupCount >= 10) return '공구요정';
+    return '공구새싹';
+};
+
+
 type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED";
 
-/**
- * @description ✅ [핵심 수정] 주문 상태 변경 유형(확정/취소)에 따라 사용자 정보를 계산하는 헬퍼 함수
- */
 function calculateUserUpdateFromOrder(
   currentUserData: UserDocument,
   order: Order,
@@ -29,38 +37,36 @@ function calculateUserUpdateFromOrder(
   let noShowCountIncrement = 0;
 
   const oldTier = currentUserData.loyaltyTier || '공구새싹';
-  const orderIdSuffix = `(...${order.id.slice(-6)})`; // 주문 ID 접미사 한 번만 정의
+  const orderIdSuffix = `(...${order.id.slice(-6)})`;
 
   switch (updateType) {
     case "PICKUP_CONFIRMED": {
-      const purchasePoints = Math.floor(order.totalPrice * 0.005);
+      // ✅ [핵심 수정] 결제액의 0.5% + 선입금 보너스 5P 로직으로 변경
+      const purchasePoints = Math.floor((order.totalPrice || 0) * 0.005);
       const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
       const totalPoints = purchasePoints + prepaidBonus;
       let reason = `구매 확정 ${orderIdSuffix}`;
-      if (prepaidBonus > 0) reason = `선결제 ${reason}`;
+      if (prepaidBonus > 0) reason = `[선결제] ${reason}`;
       pointPolicy = { points: totalPoints, reason };
       pickupCountIncrement = 1;
       break;
     }
-    case "NO_SHOW_CONFIRMED": { // ✅ '노쇼' 시 주문 금액 비례 페널티 적용
-      const basePenalty = 50;
-      const proportionalPenalty = Math.floor(order.totalPrice * 0.05);
-      const totalPenalty = basePenalty + proportionalPenalty;
-      pointPolicy = { points: -totalPenalty, reason: `미수령/예약 취소 페널티 ${orderIdSuffix}` };
+    case "NO_SHOW_CONFIRMED": {
+      // ✅ [수정] 노쇼 페널티 단순화: -100P
+      pointPolicy = { points: -100, reason: `미수령 페널티 ${orderIdSuffix}` };
       noShowCountIncrement = 1;
       break;
     }
     case "PICKUP_REVERTED": {
-      const pointsToRevert = Math.floor(order.totalPrice * 0.005) + (order.wasPrepaymentRequired ? 5 : 0);
+      // ✅ [수정] 픽업 취소 시에도 적립되었던 포인트만큼 정확히 차감
+      const pointsToRevert = Math.floor((order.totalPrice || 0) * 0.005) + (order.wasPrepaymentRequired ? 5 : 0);
       pointPolicy = { points: -pointsToRevert, reason: `픽업 처리 취소 ${orderIdSuffix}` };
       pickupCountIncrement = -1;
       break;
     }
-    case "NO_SHOW_REVERTED": { // ✅ '노쇼 취소' 시 주문 금액 비례 페널티 복구
-      const basePoints = 50;
-      const proportionalPoints = Math.floor(order.totalPrice * 0.05);
-      const totalPointsToRestore = basePoints + proportionalPoints;
-      pointPolicy = { points: totalPointsToRestore, reason: `미수령 처리 취소 ${orderIdSuffix}` };
+    case "NO_SHOW_REVERTED": {
+      // ✅ [수정] 노쇼 취소 시에도 차감되었던 100P 복구
+      pointPolicy = { points: 100, reason: `미수령 처리 취소 ${orderIdSuffix}` };
       noShowCountIncrement = -1;
       break;
     }
@@ -80,7 +86,6 @@ function calculateUserUpdateFromOrder(
   }
 
   const now = new Date();
-  // 포인트가 지급될 때만 만료일을 1년 뒤로 설정, 차감/회수 시에는 null
   const expirationDate = pointPolicy.points > 0 ? new Date(now.setFullYear(now.getFullYear() + 1)) : null;
 
   const newPointLog: Omit<PointLog, 'id'> = {
@@ -364,7 +369,6 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     }
 
     let updateType: OrderUpdateType | null = null;
-    const now = new Date();
 
     if (before.status !== "PICKED_UP" && after.status === "PICKED_UP") {
       updateType = "PICKUP_CONFIRMED";
@@ -375,16 +379,10 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     } else if (before.status === "NO_SHOW" && after.status !== "NO_SHOW") {
       updateType = "NO_SHOW_REVERTED";
     }
-    else if (before.status !== "CANCELED" && after.status === "CANCELED") {
-      const pickupDeadline = (after.pickupDeadlineDate as Timestamp)?.toDate() || (after.pickupDate as Timestamp)?.toDate();
-      if (pickupDeadline && now > pickupDeadline) {
-        logger.info(`Order ${event.params.orderId} canceled after deadline. Processing as NO_SHOW.`);
-        updateType = "NO_SHOW_CONFIRMED";
-      }
-
-    }
-
+    // LATE_CANCELED 상태는 Callable Function에서 직접 처리하므로 트리거에서는 제외합니다.
+    
     if (!updateType) {
+      logger.info(`No relevant status change for order ${event.params.orderId} from ${before.status} to ${after.status}. Skipping.`);
       return;
     }
 
@@ -399,11 +397,13 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
         }
 
         const userData = userDoc.data() as UserDocument;
-
         const orderWithId = { ...after, id: event.params.orderId };
+        
+        logger.info(`Calculating user update for user [${after.userId}] due to order [${orderWithId.id}] change: ${updateType}`);
         const updateResult = calculateUserUpdateFromOrder(userData, orderWithId, updateType);
 
         if (updateResult) {
+            logger.info(`Applying update to user [${after.userId}]:`, updateResult.updateData);
             transaction.update(userRef, updateResult.updateData);
 
             if (updateResult.tierChange) {
@@ -416,16 +416,16 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
                     : `회원님의 등급이 [${from}]에서 [${to}](으)로 변경되었습니다.`;
 
                 const newNotification = {
-                    message,
-                    type: isPromotion ? "TIER_UP" : "TIER_DOWN",
-                    read: false,
-                    timestamp: FieldValue.serverTimestamp(),
-                    link: "/mypage",
+                    message, type: isPromotion ? "TIER_UP" : "TIER_DOWN", read: false,
+                    timestamp: FieldValue.serverTimestamp(), link: "/mypage",
                 };
 
                 const notificationRef = userRef.collection("notifications").doc();
                 transaction.set(notificationRef, newNotification);
+                logger.info(`Tier change notification sent to user [${after.userId}]. ${from} -> ${to}`);
             }
+        } else {
+           logger.warn(`Calculation for user update returned null for order [${orderWithId.id}]. No update applied.`);
         }
       });
       logger.info(`Successfully updated user stats for order ${event.params.orderId} to status ${updateType}`);

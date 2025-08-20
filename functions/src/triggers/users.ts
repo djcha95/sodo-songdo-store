@@ -3,7 +3,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { MISSION_REWARDS } from '../pointService.js';
+import { MISSION_REWARDS } from '../utils/pointService.js';
 import type { UserDocument, Product } from '../types.js';
 
 if (admin.apps.length === 0) {

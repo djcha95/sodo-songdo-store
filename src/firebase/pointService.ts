@@ -12,6 +12,7 @@ import {
   getDoc,
   collection,
 } from 'firebase/firestore';
+// ✅ [수정] OrderStatus에 'LATE_CANCELED' 타입을 추가해야 합니다 (types.ts 파일에서).
 import type { UserDocument, Order, OrderStatus, PointLog, LoyaltyTier } from '@/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
 
@@ -34,6 +35,8 @@ export const ATTENDANCE_MILESTONES: { [key: number]: { points: number; reason:st
 export const POINT_POLICIES = {
   LATE_PICKED_UP: { points: -40, reason: '지각 픽업 완료' },
   NO_SHOW: { points: -100, reason: '노쇼 (미픽업)' },
+  // ✅ [신규] 2차 공구 기간 내 취소 패널티 (0.5 노쇼)
+  LATE_CANCEL_PENALTY: { points: -50, reason: '마감 임박 취소 (0.5 노쇼)' },
   CANCEL_PENALTY: {
     basePoints: -20,
     rate: 0.003,
@@ -66,6 +69,7 @@ export const MISSION_REWARDS: { [missionId: string]: { points: number; reason: s
 
 /**
  * @description 주문 상태 변경에 따라 변경될 사용자 데이터를 계산하여 반환하는 함수
+ * @important `types.ts` 파일에서 `UserDocument`의 `noShowCount` 타입을 `number`로 변경해야 합니다.
  */
 export const calculateUserUpdateByStatus = (
   userDoc: UserDocument,
@@ -73,32 +77,41 @@ export const calculateUserUpdateByStatus = (
   newStatus: OrderStatus
 ): {
     updateData: Partial<UserDocument>;
-    pointLog: PointLog | null; // ✅ [수정] Omit -> PointLog
+    pointLog: PointLog | null;
     tierChange: { from: LoyaltyTier; to: LoyaltyTier } | null;
 } | null => {
   let policy: { points: number; reason: string } | null = null;
   let pickupCountIncrement = 0;
-  let noShowCountIncrement = 0;
+  // ✅ [수정] 0.5 노쇼를 반영하기 위해 number 타입으로 변경
+  let noShowCountIncrement: number = 0;
 
   const oldTier = userDoc.loyaltyTier || '공구새싹';
 
   switch (newStatus) {
     case 'PICKED_UP':
+      // ✅ [수정] order.totalPrice가 undefined일 경우를 대비하여 0을 기본값으로 사용
       const orderTotal = order.totalPrice || 0;
       const purchasePoints = Math.floor(orderTotal * 0.005);
+      // ✅ [신규] 선결제 주문건에 5P 보너스 추가
       const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
       const totalPoints = purchasePoints + prepaidBonus;
 
+      // ✅ [수정] 선결제 보너스가 있을 경우 사유에 명시
       let reason = `구매 확정 (결제액: ₩${orderTotal.toLocaleString()})`;
       if (prepaidBonus > 0) {
-        reason = `선결제 ${reason}`;
+        reason = `[선결제 보너스] ${reason}`;
       }
       policy = { points: totalPoints, reason };
       pickupCountIncrement = 1;
       break;
     case 'NO_SHOW':
       policy = POINT_POLICIES.NO_SHOW;
-      noShowCountIncrement = 1;
+      noShowCountIncrement = 1; // 1.0 노쇼
+      break;
+    // ✅ [신규] 2차 공구 기간 내 취소(0.5 노쇼) 케이스 추가
+    case 'LATE_CANCELED':
+      policy = POINT_POLICIES.LATE_CANCEL_PENALTY;
+      noShowCountIncrement = 0.5; // 0.5 노쇼
       break;
   }
 
@@ -122,7 +135,7 @@ export const calculateUserUpdateByStatus = (
   expirationDate.setFullYear(expirationDate.getFullYear() + 1);
 
   const pointLog: PointLog | null = policy ? {
-    id: doc(collection(db, 'users')).id, // ✅ [추가] 고유 ID 생성
+    id: doc(collection(db, 'users')).id,
     amount: policy.points,
     reason: policy.reason,
     createdAt: Timestamp.now(),
@@ -130,6 +143,7 @@ export const calculateUserUpdateByStatus = (
     expiresAt: policy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
   } : null;
 
+  // ✅ [수정] noShowCount가 number 타입이어야 함 (types.ts에서 수정 필요)
   const updateData: Partial<UserDocument> & { pointHistory?: any } = {
     points: newPoints,
     loyaltyTier: newTier,
@@ -195,8 +209,8 @@ export const adjustUserPoints = async (
     const expirationDate = new Date(now);
     expirationDate.setFullYear(expirationDate.getFullYear() + 1);
 
-    const newPointHistoryEntry: PointLog = { // ✅ [수정] PointLog 타입으로 변경
-      id: doc(collection(db, 'users')).id, // ✅ [추가] 고유 ID 생성
+    const newPointHistoryEntry: PointLog = {
+      id: doc(collection(db, 'users')).id,
       amount,
       reason: `(수동) ${reason}`,
       createdAt: Timestamp.now(),

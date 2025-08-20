@@ -11,9 +11,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './PointHistoryPage.css';
 
-// =================================================================
-// 헬퍼 함수
-// =================================================================
 const formatDate = (timestamp: any) => {
     if (!timestamp || typeof timestamp.toDate !== 'function') return '-';
     return timestamp.toDate().toLocaleDateString('ko-KR', {
@@ -25,11 +22,6 @@ const formatDate = (timestamp: any) => {
     });
 };
 
-// =================================================================
-// 하위 컴포넌트
-// =================================================================
-
-// 1. 포인트 시스템 안내 모달 컴포넌트
 const PointGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   return (
     <AnimatePresence>
@@ -84,7 +76,6 @@ const PointGuideModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
   );
 };
 
-// 2. 포인트 내역 아이템 컴포넌트
 const PointLogItem: React.FC<{ log: PointLog }> = ({ log }) => {
     const isPositive = log.amount > 0;
     return (
@@ -112,20 +103,16 @@ const PointLogItem: React.FC<{ log: PointLog }> = ({ log }) => {
     );
 };
 
-
-// =================================================================
-// 메인 컴포넌트
-// =================================================================
-
 const PointHistoryPage: React.FC = () => {
     const { user, userDocument } = useAuth();
     const [history, setHistory] = useState<PointLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isGuideModalOpen, setIsGuideModalOpen] = useState(false); // 모달 상태 추가
+    const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
 
     useEffect(() => {
         if (user?.uid) {
-            getPointHistory(user.uid, 50) // 최근 50개까지 조회
+            // ✅ [수정] 불필요한 두 번째 인자 제거
+            getPointHistory(user.uid)
                 .then(setHistory)
                 .catch(err => console.error("포인트 내역 로딩 실패:", err))
                 .finally(() => setLoading(false));
@@ -154,7 +141,6 @@ const PointHistoryPage: React.FC = () => {
                       <History size={24} />
                       <h2>포인트 내역</h2>
                     </div>
-                    {/* MyPage와 동일한 디자인 적용 */}
                     <div className="current-points-display-v2">
                         <div className="points-label">
                           <TrendingUp size={18} />

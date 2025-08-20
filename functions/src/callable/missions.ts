@@ -3,7 +3,7 @@
 import { https } from 'firebase-functions/v2';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 
-import { MISSION_REWARDS } from '../pointService.js';
+import { MISSION_REWARDS } from '../utils/pointService.js';
 import type { UserDocument, Order } from '../types.js';
 
 // 클라이언트의 getOrderStatusDisplay와 유사한 로직을 서버에도 구현
