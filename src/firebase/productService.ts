@@ -39,7 +39,7 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 }
 
 // ========================================================
-// 상태/보관 관련
+// 상태/보관/카테고리 관련
 // ========================================================
 export const updateProductsStatus = async (productIds: string[], isArchived: boolean): Promise<void> => {
   const batch = writeBatch(db);
@@ -49,6 +49,27 @@ export const updateProductsStatus = async (productIds: string[], isArchived: boo
   });
   await batch.commit();
 };
+
+/**
+ * ✅ [신규 추가] Vercel 빌드 오류를 해결하기 위한 함수입니다.
+ * 여러 상품을 지정된 카테고리로 한 번에 이동시킵니다.
+ * @param productIds 이동할 상품 ID 배열
+ * @param newCategoryName 새 카테고리 이름. '' 또는 null로 지정하면 '분류 없음'이 됩니다.
+ */
+export const moveProductsToCategory = async (productIds: string[], newCategoryName: string): Promise<void> => {
+  if (!productIds || productIds.length === 0) {
+    return;
+  }
+
+  const batch = writeBatch(db);
+  productIds.forEach(id => {
+    const productRef = doc(db, 'products', id);
+    batch.update(productRef, { category: newCategoryName || '' });
+  });
+
+  await batch.commit();
+};
+
 
 export const deleteProducts = async (productIds: string[]): Promise<void> => {
   const batch = writeBatch(db);
@@ -201,7 +222,7 @@ export const updateEncoreRequest = async (productId: string, userId: string): Pr
     encoreRequesterIds: arrayUnion(userId),
   });
   batch.update(userRef, {
-    encoreRequestedProductIds: arrayUnion(productId),
+    encoreRequestedProductIds: arrayUnion(userId),
   });
   await batch.commit();
 };
