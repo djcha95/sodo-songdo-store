@@ -342,7 +342,7 @@ export const requestEncore = onCall(
 
 /**
  * ----------------------------------------------------------------
- * ✅ [신규 추가] 6) 상품 정보 변경 알림: notifyUsersOfProductUpdate
+ * ✅ 6) 상품 정보 변경 알림: notifyUsersOfProductUpdate (수정됨)
  * ----------------------------------------------------------------
  * 상품 정보가 수정되었을 때, 해당 상품/회차를 주문했던 모든 사용자에게 알림을 보냅니다.
  */
@@ -354,8 +354,10 @@ export const notifyUsersOfProductUpdate = onCall(
     timeoutSeconds: 120, // 사용자 조회 및 알림 생성으로 시간 여유 있게 설정
   },
   async (request) => {
-    // 1. 관리자 권한 확인
-    if (request.auth?.token.role !== "admin") {
+    const userRole = request.auth?.token.role;
+
+    // 1. 관리자 권한 확인 (✅ 'admin'과 'master' 모두 허용하도록 수정)
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자만 이 기능을 사용할 수 있습니다.");
     }
     

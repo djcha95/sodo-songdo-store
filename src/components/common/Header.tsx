@@ -37,6 +37,10 @@ const notificationIcons: { [key in NotificationType | 'default']: React.ReactNod
   PARTICIPATION_RESTRICTED: <ShieldX size={20} className="icon-danger" />,
   TIER_UP: <Crown size={20} className="icon-tier-up" />,
   TIER_DOWN: <ShieldAlert size={20} className="icon-tier-down" />,
+  // ✅ [신규 추가] 상품 정보 변경 알림 타입
+  PRODUCT_UPDATE: <AlertCircle size={20} className="icon-info" />,
+  // ✅ [신규 추가] 앵콜 가능 알림 타입
+  ENCORE_AVAILABLE: <BellRing size={20} className="icon-success" />,
   success: <CheckCircle size={20} className="icon-success" />,
   error: <XCircle size={20} className="icon-danger" />,
   default: <Info size={20} className="icon-info" />,

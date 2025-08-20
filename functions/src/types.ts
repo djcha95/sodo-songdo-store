@@ -39,6 +39,7 @@ export type NotificationType =
   | 'TIER_UP'
   | 'TIER_DOWN'
   | 'ENCORE_AVAILABLE'
+  | 'PRODUCT_UPDATE' // ✅ [수정] 이 타입을 추가했습니다.
   | 'success'
   | 'error';
 
@@ -47,7 +48,7 @@ export type NotificationType =
 // =================================================================
 
 export interface PointLog {
-  id?: string;
+  id: string;
   amount: number;
   reason: string;
   createdAt: Timestamp | FieldValue;
@@ -206,6 +207,8 @@ export interface UserTutorialProgress {
     hasSeenCalendarPage?: boolean;
 }
 
+export type UserRole = 'master' | 'admin' | 'customer';
+
 export interface UserDocument {
   uid: string;
   email: string | null;
@@ -213,7 +216,7 @@ export interface UserDocument {
   phone: string | null;
   phoneLast4?: string;
   photoURL?: string | null;
-  role: 'master' | 'admin' | 'customer';
+  role: UserRole;
   encoreRequestedProductIds?: string[];
   createdAt?: Timestamp | FieldValue;
   points: number;

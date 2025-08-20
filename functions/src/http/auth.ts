@@ -84,20 +84,39 @@ export const setUserRole = onRequest(
       return;
     }
 
+    // 1. 요청을 보낸 사용자가 관리자인지 먼저 확인합니다.
+    try {
+      const idToken = request.headers.authorization?.split("Bearer ")[1];
+      if (!idToken) {
+        response.status(401).send("인증되지 않은 사용자입니다. (No token provided)");
+        return;
+      }
+      
+      const decodedToken = await auth.verifyIdToken(idToken);
+      if (decodedToken.role !== "admin") {
+        response.status(403).send("관리자 권한이 없습니다.");
+        return;
+      }
+    } catch (error) {
+      logger.error("Error verifying admin token:", error);
+      response.status(401).send("인증되지 않은 사용자입니다. (Invalid token)");
+      return;
+    }
+
+    // 2. 관리자임이 확인되면, 대상 사용자에게 역할을 부여합니다.
     const { uid, role } = request.query;
 
     if (typeof uid !== 'string' || typeof role !== 'string') {
-      response.status(400).send("Please provide uid and role parameters accurately.");
+      response.status(400).send("uid와 role 파라미터를 정확히 입력해주세요.");
       return;
     }
 
     try {
-      // ✅ [수정] 일관성을 위해 getAuth() 대신 import한 auth 객체를 사용합니다.
       await auth.setCustomUserClaims(uid, { role: role });
-      response.send(`Success! The '${role}' role has been assigned to user (${uid}).`);
+      response.send(`성공! 사용자(${uid})에게 '${role}' 역할이 부여되었습니다.`);
     } catch (error) {
       logger.error("Error setting custom claim:", error);
-      response.status(500).send(`An error occurred while setting the custom claim: ${error}`);
+      response.status(500).send(`커스텀 클레임 설정 중 오류 발생: ${error}`);
     }
   }
 );
