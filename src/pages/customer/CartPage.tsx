@@ -42,6 +42,8 @@ const safeToDate = (date: any): Date | null => {
     return null;
 };
   
+// src/pages/customer/CartPage.tsx의 CartItemCard 컴포넌트
+
 const CartItemCard: React.FC<{ 
     item: CartItem; 
     isSelected: boolean; 
@@ -91,11 +93,9 @@ const CartItemCard: React.FC<{
       return format(date, 'M/d(EEE)', { locale: ko }) + ' 픽업';
     }
 
-    // ✅ [추가] 1차 마감일 포맷팅 함수
     const formatDeadlineDate = (dateValue: any) => {
       const date = safeToDate(dateValue);
       if (!date || item.status !== 'RESERVATION') return null;
-      // 마감일이 이미 지났는지 확인
       const isPast = new Date() > date;
       return {
         text: `1차 마감: ${format(date, 'M/d(EEE) HH:mm', { locale: ko })}`,
@@ -114,12 +114,12 @@ const CartItemCard: React.FC<{
             </div>
         )}
         <div className="item-image-wrapper" onClick={(e) => onImageClick(e, item.productId)}>
-          <OptimizedImage
-            originalUrl={item.imageUrl}
-            size='200x200'
-            alt={item.productName}
-            className="item-image"
-          />
+            {/* ✅ [수정] OptimizedImage 대신 일반 img 태그를 사용하여 placeholder.com 오류를 회피합니다. */}
+            {item.imageUrl ? (
+                <img src={item.imageUrl} alt={item.productName} className="item-image" />
+            ) : (
+                <div className="item-image no-image-placeholder"><span>No Image</span></div>
+            )}
         </div>
         <div className="item-details-wrapper">
           <div className="item-header">
@@ -128,7 +128,6 @@ const CartItemCard: React.FC<{
                   <span className="item-option-name">선택: {item.itemName}</span>
               </div>
               <div className="item-pickup-info"><CalendarDays size={14} /><span>{formatPickupDate(item.pickupDate)}</span></div>
-              {/* ✅ [추가] 1차 마감일 정보 표시 */}
               {deadlineInfo && (
                 <div className={`item-deadline-info ${deadlineInfo.isPast ? 'past' : ''}`}>
                     <Clock size={14} /><span>{deadlineInfo.text}</span>
@@ -155,7 +154,6 @@ const CartItemCard: React.FC<{
       </div>
     );
 };
-
 // =================================================================
 // 📌 메인 컴포넌트
 // =================================================================
