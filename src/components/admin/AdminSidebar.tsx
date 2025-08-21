@@ -5,7 +5,7 @@ import React from 'react';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ClipboardList,
-  Image as ImageIcon, ExternalLink, Menu, SlidersHorizontal, Zap, PlusSquare
+  Image as ImageIcon, ExternalLink, Menu, SlidersHorizontal, Zap, PlusSquare, Wallet
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -42,8 +42,9 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
         <ul>
           <MenuItem to="/admin/dashboard" icon={<Home size={18} />} text="대시보드" isSidebarOpen={isSidebarOpen} end={true} />
           <MenuItem to="/admin/quick-check" icon={<Zap size={18} />} text="빠른 예약확인" isSidebarOpen={isSidebarOpen} />
+          {/* [추가] 선입금 관리 페이지 메뉴 */}
+          <MenuItem to="/admin/prepaid-check" icon={<Wallet size={18} />} text="선입금 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/orders" icon={<ShoppingCart size={18} />} text="주문 통합 관리" isSidebarOpen={isSidebarOpen} />
-          {/* ✅ [추가] 관리자 주문 생성 페이지 메뉴 */}
           <MenuItem to="/admin/create-order" icon={<PlusSquare size={18} />} text="새 주문 생성" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/users" icon={<Users size={18} />} text="고객 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products" icon={<Package size={18} />} text="상품 목록" isSidebarOpen={isSidebarOpen} end={true} />

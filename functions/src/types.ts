@@ -46,7 +46,7 @@ export type NotificationType =
   | 'TIER_UP'
   | 'TIER_DOWN'
   | 'ENCORE_AVAILABLE'
-  | 'PRODUCT_UPDATE' // ✅ [수정] 이 타입을 추가했습니다.
+  | 'PRODUCT_UPDATE'
   | 'success'
   | 'error';
 
@@ -145,7 +145,7 @@ export interface Product {
   subCategory?: string;
   updatedAt?: Timestamp;
   tags?: string[];
-  hashtags?: string[]; // ✅ 이 줄을 추가해주세요.
+  hashtags?: string[];
   reservedQuantities?: { [key: string]: number };
 }
 
@@ -203,7 +203,6 @@ export interface Order {
   eventId?: string;
 }
 
-// ⭐️ [수정됨] UserTutorialProgress 타입을 최신 버전으로 통일했습니다.
 export interface UserTutorialProgress {
     hasCompletedMain?: boolean;
     hasSeenProductDetailPage?: boolean;
@@ -254,6 +253,26 @@ export interface UserDocument {
 // =================================================================
 // 📌 프론트엔드 전용 타입 (Client-Side Only)
 // =================================================================
+
+// ✅ [신규] 선입금 관리 페이지 테이블 뷰를 위한 타입
+export interface AggregatedProductInfo {
+  id: string; // Map key: productId-variantGroupId
+  productName: string;
+  variantName: string;
+  totalQuantity: number;
+  customers: {
+    name: string;
+    phoneLast4: string;
+    quantity: number;
+  }[];
+}
+
+// ✅ [신규] 그룹화된 선입금 데이터 타입
+export interface GroupedPrepaidData {
+  groupKey: string; // 픽업일 또는 상품명 등
+  orders: Order[]; // 그룹에 속한 모든 원본 주문
+  products: AggregatedProductInfo[]; // '픽업일별' 집계 시 사용될 데이터
+}
 
 export interface AggregatedOrderGroup {
   groupKey: string;

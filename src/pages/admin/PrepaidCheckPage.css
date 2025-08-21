@@ -1,0 +1,198 @@
+/* src/pages/admin/PrepaidCheckPage.css */
+
+.prepaid-check-page {
+  padding: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+.pcp-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.pcp-header h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--text-color-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.pcp-header .header-icon {
+  color: var(--primary-color);
+}
+
+.pcp-header p {
+  font-size: 1.1rem;
+  color: var(--text-color-light);
+  margin-top: 0.5rem;
+}
+
+.pcp-filter-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background-color: var(--card-bg-color);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-xl);
+  margin-bottom: 1.5rem;
+  align-items: center; /* 버튼과 정렬 맞춤 */
+}
+
+.pcp-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+}
+
+.pcp-filter-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pcp-filter-container input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: 1rem;
+  background-color: var(--bg-color);
+  transition: all 0.2s ease;
+}
+
+.pcp-filter-container input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color-softer);
+}
+
+.pcp-search-group {
+  flex-grow: 1;
+  min-width: 300px;
+}
+
+/* ✅ [추가] 펼치기/접기 버튼 컨테이너 */
+.pcp-view-controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.pcp-view-controls button {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-color-secondary);
+  padding: 0.65rem 1rem;
+  border-radius: var(--border-radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pcp-view-controls button:hover {
+  background-color: var(--bg-color-soft);
+  color: var(--text-color-dark);
+  border-color: var(--border-color-dark);
+}
+
+
+.pcp-bulk-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding: 1rem 1.5rem;
+  background-color: var(--primary-color-dark);
+  color: #fff;
+  border-radius: var(--border-radius-lg);
+  opacity: 0;
+  max-height: 0;
+  transform: scaleY(0.95);
+  transform-origin: top;
+  overflow: hidden;
+  transition: all 0.3s ease-in-out;
+}
+
+.pcp-bulk-actions.visible {
+  opacity: 1;
+  max-height: 200px;
+  transform: scaleY(1);
+}
+
+.bulk-info {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.bulk-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.pcp-bulk-button {
+  padding: 0.6rem 1.25rem;
+  border-radius: var(--border-radius-md);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  color: #fff;
+}
+.pcp-bulk-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+.pcp-bulk-button.pickup { background-color: var(--success-color-dark); }
+.pcp-bulk-button.unprepaid { background-color: var(--accent-color-dark); }
+.pcp-bulk-button.cancel { background-color: var(--danger-color-dark); }
+.pcp-bulk-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pcp-list-container {
+  display: block;
+}
+
+.pcp-message-area {
+  text-align: center;
+  padding: 5rem 1rem;
+  background-color: var(--card-bg-color);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-xl);
+  color: var(--text-color-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.pcp-message-area svg {
+  color: var(--border-color);
+}
+.pcp-message-area p {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
