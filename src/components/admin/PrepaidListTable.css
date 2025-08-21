@@ -1,0 +1,127 @@
+/* src/components/admin/PrepaidListTable.css */
+
+.pcp-table-wrapper {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-xl);
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.pcp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.pcp-table th {
+  background-color: var(--bg-color-soft);
+  padding: 0.8rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-color-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pcp-table td {
+  padding: 0.9rem 1rem; /* 행 높이 살짝 증가 */
+  border-bottom: 1px solid var(--border-color-light);
+  color: var(--text-color-dark);
+  vertical-align: middle;
+}
+
+/* ✅ [수정] 아코디언 헤더 행 스타일 */
+.pcp-group-header-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.pcp-group-header-row:hover {
+  background-color: var(--bg-color-soft);
+}
+.pcp-group-header-row td {
+  background-color: var(--card-bg-color);
+  padding: 0;
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+}
+
+.pcp-group-header-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  width: 100%;
+}
+
+.pcp-group-header-content h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-color-dark);
+  margin: 0;
+}
+
+/* ✅ [추가] 쉐브론 아이콘 스타일 */
+.chevron-icon {
+  margin-left: auto;
+  color: var(--text-color-light);
+  transition: transform 0.3s ease;
+}
+.pcp-table-group.expanded .chevron-icon {
+  transform: rotate(180deg);
+}
+
+
+.pcp-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+  z-index: 1; /* 헤더 위로 */
+}
+.unchecked-box {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+.pcp-checkbox-wrapper:hover .unchecked-box {
+  border-color: var(--primary-color);
+}
+.checked-icon {
+  color: var(--primary-color);
+}
+
+.total-quantity-badge {
+  display: inline-block;
+  background-color: var(--primary-color-softer);
+  color: var(--primary-color-dark);
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  text-align: center;
+  min-width: 40px;
+}
+
+.customer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.customer-tag {
+  background-color: var(--bg-color-soft);
+  color: var(--text-color-secondary);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pcp-table-group:last-child tr:last-child td {
+    border-bottom: none;
+}

@@ -1,8 +1,7 @@
-// src/main.tsx (수정 완료)
+// src/main.tsx
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-// ✅ useLocation을 import합니다.
 import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
@@ -23,7 +22,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { LaunchProvider } from './context/LaunchContext';
 
-// --- 페이지 컴포넌트 lazy loading (기존과 동일) ---
+// --- 페이지 컴포넌트 lazy loading ---
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
@@ -50,11 +49,13 @@ const CategoryManagementPage = React.lazy(() => import('@/pages/admin/CategoryMa
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
-const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage')); // 페이지 import 추가
+const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage'));
+// [추가] 선입금 관리 페이지 컴포넌트 import
+const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
+
 const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
 const Root = () => {
   const { user, loading } = useAuth();
-  // ✅ useLocation 훅을 사용하여 현재 경로 정보를 가져옵니다.
   const location = useLocation();
 
   if (loading) {
@@ -63,7 +64,6 @@ const Root = () => {
   
   if (!user) {
     const allowedPaths = ['/login', '/terms', '/privacy'];
-    // ✅ window.location.pathname 대신 location.pathname을 사용하여 안정성을 높입니다.
     if (!allowedPaths.includes(location.pathname)) {
       return <Navigate to="/login" replace />;
     }
@@ -94,6 +94,8 @@ const router = createBrowserRouter([
                   { index: true, element: <DashboardPage /> },
                   { path: 'dashboard', element: <DashboardPage /> },
                   { path: 'quick-check', element: <QuickCheckPage /> },
+                  // [추가] 선입금 관리 페이지 라우트
+                  { path: 'prepaid-check', element: <PrepaidCheckPage /> },
                   { path: 'products', element: <ProductListPageAdmin /> },
                   { path: 'products/add', element: <ProductAddAdminPage /> },
                   { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },

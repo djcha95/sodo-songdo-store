@@ -259,6 +259,26 @@ export interface UserDocument {
 // 📌 프론트엔드 전용 타입 (Client-Side Only)
 // =================================================================
 
+// ✅ [신규] 선입금 관리 페이지 테이블 뷰를 위한 타입
+export interface AggregatedProductInfo {
+  id: string; // Map key: productId-variantGroupId
+  productName: string;
+  variantName: string;
+  totalQuantity: number;
+  customers: {
+    name: string;
+    phoneLast4: string;
+    quantity: number;
+  }[];
+}
+
+// ✅ [신규] 그룹화된 선입금 데이터 타입
+export interface GroupedPrepaidData {
+  groupKey: string; // 픽업일 또는 상품명 등
+  orders: Order[]; // 그룹에 속한 모든 원본 주문
+  products: AggregatedProductInfo[]; // '픽업일별' 집계 시 사용될 데이터
+}
+
 export interface AggregatedOrderGroup {
   groupKey: string;
   customerInfo: Order['customerInfo'];

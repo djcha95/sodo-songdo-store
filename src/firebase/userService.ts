@@ -1,7 +1,7 @@
 // src/firebase/userService.ts
 
 
-import { db, functions } from './firebaseConfig';
+import { auth, db, functions } from './firebaseConfig';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions'; 
 import {
@@ -21,7 +21,17 @@ import type { UserDocument, PointLog, LoyaltyTier } from '@/types';
 import { POINT_POLICIES } from './pointService';
 import { calculateTier } from '@/utils/loyaltyUtils';
 
-// processUserSignIn 등 다른 함수들은 기존과 동일하게 유지합니다.
+// ---------------------------------------------------------------------------------
+// 👇👇👇 중요: 아래 두 값을 본인의 Firebase 프로젝트에 맞게 수정해주세요! 👇👇👇
+// ---------------------------------------------------------------------------------
+const FIREBASE_PROJECT_ID = 'sso-do'; // 예: sodomall-12345
+const FIREBASE_REGION = 'asia-northeast3';   // 예: asia-northeast3 (서울)
+// ---------------------------------------------------------------------------------
+
+// Cloud Function URL을 동적으로 생성합니다.
+const setUserRoleUrl = `https://${FIREBASE_REGION}-${FIREBASE_PROJECT_ID}.cloudfunctions.net/setUserRole`;
+
+
 /* ------------------------------------------------------------------ */
 /* 0. 유틸리티 함수                                                   */
 /* ------------------------------------------------------------------ */
@@ -129,19 +139,47 @@ export const skipReferralCode = async (userId: string): Promise<void> => {
 };
 
 /* ------------------------------------------------------------------ */
-/* 3. 조회용 유틸                                                      */
+/* 3. 조회 및 관리용 유틸                                              */
 /* ------------------------------------------------------------------ */
+
+/**
+ * ✅ [핵심 수정] 사용자의 역할(커스텀 클레임 및 Firestore 문서)을 업데이트합니다.
+ * @param targetUid 역할을 변경할 대상 사용자의 UID
+ * @param newRole 새로운 역할 ('customer', 'admin', 'master')
+ */
+export const updateUserRole = async (targetUid: string, newRole: UserDocument['role']): Promise<string> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+        throw new Error("인증된 관리자가 없습니다. 다시 로그인해주세요.");
+    }
+
+    // 1. 현재 로그인한 관리자의 ID 토큰을 가져옵니다. (서버 인증용)
+    const idToken = await currentUser.getIdToken();
+
+    // 2. 백엔드의 setUserRole HTTP 함수를 호출하여 실제 권한을 변경합니다.
+    const response = await fetch(`${setUserRoleUrl}?uid=${targetUid}&role=${newRole}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+        },
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Cloud Function Error:", errorText);
+        throw new Error(`역할 변경에 실패했습니다. (서버 응답: ${response.status})`);
+    }
+
+    // 성공 메시지를 반환합니다.
+    return await response.text();
+};
+
+
 export const getUserDocById = async (userId: string): Promise<UserDocument | null> => {
   const snap = await getDoc(doc(db, 'users', userId));
   return snap.exists() ? (snap.data() as UserDocument) : null;
 };
-export const updateUserRole = async (targetUserId: string, newRole: UserDocument['role']): Promise<void> => {
-  if (!targetUserId || !newRole) {
-    throw new Error("사용자 ID와 새로운 역할은 필수입니다.");
-  }
-  const userRef = doc(db, 'users', targetUserId);
-  await updateDoc(userRef, { role: newRole });
-};
+
 export const adjustUserCounts = async (userId: string, newPickupCount: number, newNoShowCount: number): Promise<void> => {
   if (newPickupCount < 0 || newNoShowCount < 0) {
     throw new Error("횟수는 0 이상이어야 합니다.");
@@ -155,6 +193,7 @@ export const adjustUserCounts = async (userId: string, newPickupCount: number, n
     manualTier: null,
   });
 };
+
 export const setManualTierForUser = async (userId: string, tier: LoyaltyTier | null): Promise<void> => {
   const userRef = doc(db, 'users', userId);
   if (tier) {
@@ -175,14 +214,10 @@ export const setManualTierForUser = async (userId: string, tier: LoyaltyTier | n
   }
 };
 
-/**
- * ✅ [핵심 변경] 빠른 예약 확인 페이지에서 사용할 모든 사용자 목록을 가져오는 함수
- * 이 함수는 처음에 한 번만 호출되어 모든 사용자를 브라우저로 가져옵니다.
- */
 export const getAllUsersForQuickCheck = async (): Promise<UserDocument[]> => {
   try {
     const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(query(usersRef)); // query()로 감싸서 사용
+    const querySnapshot = await getDocs(query(usersRef));
     const users = querySnapshot.docs.map(doc => ({
       uid: doc.id,
       ...doc.data()

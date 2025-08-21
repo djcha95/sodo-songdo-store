@@ -402,3 +402,25 @@ export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> =
 
   return quantitiesMap;
 };
+
+export const getPrepaidOrders = async (): Promise<Order[]> => {
+  const ordersRef = collection(db, 'orders');
+  // 'PREPAID' 상태인 주문만 조회하고, 픽업 날짜 기준으로 오름차순 정렬합니다.
+  const q = query(
+    ordersRef,
+    where('status', '==', 'PREPAID'),
+    orderBy('pickupDate', 'asc')
+  );
+
+  try {
+    const querySnapshot = await getDocs(q);
+    const orders = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Order));
+    return orders;
+  } catch (error) {
+    console.error("Error fetching prepaid orders: ", error);
+    throw new Error('선입금 주문 목록을 불러오는 데 실패했습니다.');
+  }
+};
