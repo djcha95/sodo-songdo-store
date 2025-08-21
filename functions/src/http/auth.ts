@@ -2,10 +2,8 @@
 import { onRequest, Request } from "firebase-functions/v2/https";
 import { Response } from "express";
 import * as logger from "firebase-functions/logger";
-// ✅ [수정] authAdmin을 auth라는 별칭으로 가져옵니다.
-import { authAdmin as auth, allowedOrigins } from "../firebase/admin.js";
-// ✅ [수정] 아래 import는 더 이상 필요 없으므로 제거합니다.
-// import { getAuth } from "firebase-admin/auth";
+// ✅ [수정] dbAdmin을 db라는 별칭으로 가져와 Firestore를 사용합니다.
+import { authAdmin as auth, dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import axios from "axios";
 
 export const kakaoLogin = onRequest(
@@ -84,7 +82,7 @@ export const setUserRole = onRequest(
       return;
     }
 
-    // 1. 요청을 보낸 사용자가 관리자인지 먼저 확인합니다.
+    // 1. 요청을 보낸 사용자가 관리자 또는 마스터인지 확인합니다.
     try {
       const idToken = request.headers.authorization?.split("Bearer ")[1];
       if (!idToken) {
@@ -93,17 +91,19 @@ export const setUserRole = onRequest(
       }
       
       const decodedToken = await auth.verifyIdToken(idToken);
-      if (decodedToken.role !== "admin") {
-        response.status(403).send("관리자 권한이 없습니다.");
+      // ✅ [수정] 'admin'과 'master' 역할을 모두 허용하도록 변경합니다.
+      const userRole = decodedToken.role;
+      if (!userRole || !['admin', 'master'].includes(userRole)) {
+        response.status(403).send("관리자 또는 마스터 권한이 없습니다.");
         return;
       }
     } catch (error) {
-      logger.error("Error verifying admin token:", error);
+      logger.error("Error verifying admin/master token:", error);
       response.status(401).send("인증되지 않은 사용자입니다. (Invalid token)");
       return;
     }
 
-    // 2. 관리자임이 확인되면, 대상 사용자에게 역할을 부여합니다.
+    // 2. 권한이 확인되면, 대상 사용자에게 역할을 부여합니다.
     const { uid, role } = request.query;
 
     if (typeof uid !== 'string' || typeof role !== 'string') {
@@ -112,11 +112,21 @@ export const setUserRole = onRequest(
     }
 
     try {
-      await auth.setCustomUserClaims(uid, { role: role });
-      response.send(`성공! 사용자(${uid})에게 '${role}' 역할이 부여되었습니다.`);
+      // ✅ [추가] Firestore의 사용자 문서도 함께 업데이트하여 데이터 일관성을 유지합니다.
+      const userDocRef = db.collection("users").doc(uid);
+
+      await Promise.all([
+        // 커스텀 클레임 설정
+        auth.setCustomUserClaims(uid, { role: role }),
+        // Firestore 문서 업데이트
+        userDocRef.update({ role: role })
+      ]);
+      
+      logger.info(`Successfully set role '${role}' for user ${uid}.`);
+      response.send(`성공! 사용자(${uid})에게 '${role}' 역할이 부여되었으며, 데이터베이스에 반영되었습니다.`);
     } catch (error) {
-      logger.error("Error setting custom claim:", error);
-      response.status(500).send(`커스텀 클레임 설정 중 오류 발생: ${error}`);
+      logger.error("Error setting custom claim and updating firestore:", error);
+      response.status(500).send(`역할 설정 중 오류 발생: ${error}`);
     }
   }
 );
