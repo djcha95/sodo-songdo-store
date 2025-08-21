@@ -1,7 +1,9 @@
 // src/firebase/userService.ts
 
+
 import { db, functions } from './firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions'; 
 import {
   collection,
   query,
@@ -189,5 +191,56 @@ export const getAllUsersForQuickCheck = async (): Promise<UserDocument[]> => {
   } catch (error) {
     console.error("Error fetching all users:", error);
     throw new Error("전체 사용자 목록을 가져오는데 실패했습니다.");
+  }
+};
+
+export const runDataReaggregation = async (): Promise<{ success: boolean; message: string }> => {
+  try {
+    const reaggregate = httpsCallable<void, { success: boolean; message: string }>(functions, 'reaggregateAllUserData');
+    const result = await reaggregate();
+    return result.data;
+  } catch (error: any) {
+    console.error("Callable function 'reaggregateAllUserData' failed:", error);
+    if (error.code && error.message) {
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
+    }
+    throw new Error('데이터 보정 스크립트 실행 중 예상치 못한 오류가 발생했습니다.');
+  }
+};
+
+export const runGrant100PointsToAll = async (): Promise<{ success: boolean; message: string }> => {
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const grant = httpsCallable<void, { success: boolean; message: string }>(functions, 'grant100PointsToAllUsers');
+    const result = await grant();
+    return result.data;
+  } catch (error: any) {
+    // ... (에러 처리 부분은 기존과 동일)
+    throw new Error((error.details as any)?.message || '포인트 지급 스크립트 실행 중 오류가 발생했습니다.');
+  }
+};
+
+/**
+ * @description 사용자 ID로 단일 사용자 문서를 가져옵니다.
+ */
+export const getUserById = async (userId: string): Promise<UserDocument | null> => {
+  if (!userId) return null;
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      // 문서 데이터와 함께 문서 ID(uid)를 포함하여 반환합니다.
+      return { uid: userSnap.id, ...userSnap.data() } as UserDocument;
+    }
+    
+    // 사용자를 찾지 못한 경우 null을 반환합니다.
+    return null;
+
+  } catch (error) {
+    console.error("Error fetching user by ID:", error);
+    // 오류 발생 시 예외를 던져 상위 컴포넌트에서 처리하도록 합니다.
+    throw new Error("사용자 정보를 불러오는 데 실패했습니다.");
   }
 };

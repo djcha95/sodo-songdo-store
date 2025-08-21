@@ -5,7 +5,7 @@ import React from 'react';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ClipboardList,
-  Image as ImageIcon, ExternalLink, Menu, SlidersHorizontal, Zap, PlusSquare
+  Image as ImageIcon, ExternalLink, Menu, SlidersHorizontal, Zap, PlusSquare, Database 
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -51,6 +51,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
           <MenuItem to="/admin/products/batch-category" icon={<SlidersHorizontal size={18} />} text="카테고리 일괄 변경" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/categories" icon={<ClipboardList size={18} />} text="카테고리 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/banners" icon={<ImageIcon size={18} />} text="배너 관리" isSidebarOpen={isSidebarOpen} />
+          <MenuItem to="/admin/data-tools" icon={<Database size={18} />} text="데이터 보정" isSidebarOpen={isSidebarOpen} />        
         </ul>
       </nav>
 

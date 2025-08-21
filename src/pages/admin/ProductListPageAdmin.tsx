@@ -3,10 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate } from 'react-router-dom';
-import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, getReservedQuantitiesMap, deleteSalesRounds } from '../../firebase';
-import { db } from '@/firebase/firebaseConfig';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
-import type { Product, SalesRound, Category, SalesRoundStatus, Order, OrderItem, VariantGroup, StorageType } from '../../types';
+import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, deleteSalesRounds } from '../../firebase';
+import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType } from '../../types';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
@@ -16,22 +14,25 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
 
-// ✅ [추가] Firebase Cloud Functions 관련 import
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import { formatKRW } from '@/utils/number';
 import { reportError, reportInfo } from '@/utils/logger';
 
+import { getProductsWithStock } from '@/firebase/productService'; 
+// ✅ [수정] 'Timestamp'를 값으로 사용하기 위해 'import type'이 아닌 일반 'import'로 변경합니다.
+import { Timestamp } from 'firebase/firestore';
+
+
 // =================================================================
 // 📌 타입 정의 및 헬퍼 함수
 // =================================================================
 
-// ✅ [추가] 상품 ID 복사 컴포넌트
 const CopyableId: React.FC<{ id: string }> = ({ id }) => {
     if (!id) return null;
 
     const handleCopy = (e: React.MouseEvent) => {
-        e.stopPropagation(); // 행 클릭/확장 이벤트 전파 방지
+        e.stopPropagation(); 
         navigator.clipboard.writeText(id)
             .then(() => {
                 toast.success('상품 ID가 클립보드에 복사되었습니다.');
@@ -63,7 +64,6 @@ interface WaitlistInfo {
   timestamp: Timestamp;
 }
 
-// ✅ [추가] Cloud Function의 반환 타입을 위한 인터페이스
 interface WaitlistProcessResult {
     convertedCount: number;
     failedCount: number;
@@ -74,6 +74,7 @@ const safeToDate = (date: any): Date | null => {
     if (!date) return null;
     if (date instanceof Date) { if (isNaN(date.getTime())) return null; return date; }
     if (typeof date.toDate === 'function') return date.toDate();
+    // ✅ 'new Timestamp'가 이제 정상적으로 동작합니다.
     if (typeof date === 'object' && date.seconds !== undefined) { return new Timestamp(date.seconds, date.nanoseconds || 0).toDate(); }
     if (typeof date === 'string') { const parsedDate = new Date(date); if (!isNaN(parsedDate.getTime())) return parsedDate; }
     if (typeof date === 'number' && isFinite(date)) { return new Date(date); }
@@ -155,14 +156,14 @@ const getEarliestExpirationDateForGroup = (variantGroup: VariantGroup): number =
 };
 
 const translateStorageType = (storageType: StorageType): string => {
-    const typeMap: Record<StorageType, string> = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동' };
+    const typeMap: Record<StorageType, string> = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
     return typeMap[storageType] || storageType;
 };
 
 interface EnrichedVariantGroup extends VariantGroup {
-    reservedQuantity: number;
+    reservedCount: number; 
+    pickedUpCount: number; 
     configuredStock: number;
-    pickedUpQuantity: number;
     remainingStock: number;
     dynamicStatus: DynamicStatus;
 }
@@ -206,7 +207,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
     const navigate = useNavigate();
     const handleAddNewRound = () => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } });
     if (!item.enrichedVariantGroups || item.enrichedVariantGroups.length === 0) {
-        // ✅ [수정] 상품 ID 컬럼 및 colSpan 수정
         return (<tr className="master-row error-row"><td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td><td>{index + 1}</td><td><CopyableId id={item.productId} /></td><td colSpan={11} style={{color: 'var(--danger-color)'}}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td><td><div className="action-buttons-wrapper"><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></div></td></tr>);
     }
     const isExpandable = item.enrichedVariantGroups.length > 1;
@@ -220,7 +220,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
           <tr className="master-row">
             <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
             <td>{index + 1}</td>
-            {/* ✅ [추가] 상품 ID 셀 */}
             <td><CopyableId id={item.productId} /></td>
             <td>{formatDate(item.round.createdAt)}</td>
             <td>{formatDateShort(item.round.pickupDate)}</td>
@@ -230,8 +229,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
             <td><span className={`status-badge ${status.className}`} title={`Status: ${status.text}`}>{status.text}</span></td>
             <td style={{textAlign: 'right'}}>{vg.items[0]?.price != null ? `${formatKRW(vg.items[0].price)} 원` : '–'}</td>
             <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
-            <td className="quantity-cell">{`${vg.reservedQuantity} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
-            <td className="quantity-cell">{vg.pickedUpQuantity}</td>
+            <td className="quantity-cell">{`${vg.reservedCount} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
+            <td className="quantity-cell">{vg.pickedUpCount}</td>
             <td className="stock-cell">
               {editingStockId === vgUniqueId ? (
                 <input type="number" className="stock-input" value={stockInputs[vgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [vgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(vgUniqueId, item)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(vgUniqueId, item); if (e.key === 'Escape') onStockEditStart('', 0); }} />
@@ -254,7 +253,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
         <tr className="master-row expandable">
           <td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td>
           <td><div className="no-and-expander"><span>{index + 1}</span><button className="expand-button" onClick={() => onToggleExpansion(item.uniqueId)} title={isExpanded ? "하위 항목 접기" : "하위 항목 펼치기"}><ChevronDown size={20} className={`chevron-icon ${isExpanded ? 'expanded' : ''}`} /></button></div></td>
-          {/* ✅ [추가] 상품 ID 셀 */}
           <td><CopyableId id={item.productId} /></td>
           <td>{formatDate(item.round.createdAt)}</td>
           <td>{formatDateShort(item.round.pickupDate)}</td>
@@ -277,7 +275,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
               <tr key={subVgUniqueId} className="detail-row sub-row">
                   <td></td>
                   <td><span className="sub-row-no">{`${index + 1}-${vgIndex + 1}`}</span></td>
-                  {/* ✅ [추가] 상품 ID 컬럼을 위한 빈 셀 */}
                   <td></td>
                   <td></td>
                   <td></td>
@@ -287,8 +284,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                   <td><span className={`status-badge ${subStatus.className}`} title={`Status: ${subStatus.text}`}>{subStatus.text}</span></td>
                   <td style={{textAlign: 'right'}}>{subVg.items[0]?.price != null ? `${formatKRW(subVg.items[0].price)} 원` : '–'}</td>
                   <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
-                  <td className="quantity-cell">{`${subVg.reservedQuantity} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
-                  <td className="quantity-cell">{subVg.pickedUpQuantity}</td>
+                  <td className="quantity-cell">{`${subVg.reservedCount} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
+                  <td className="quantity-cell">{subVg.pickedUpCount}</td>
                   <td className="stock-cell">
                       {editingStockId === subVgUniqueId ? (
                         <input type="number" className="stock-input" value={stockInputs[subVgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [subVgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(subVgUniqueId, item)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(subVgUniqueId, item); if (e.key === 'Escape') onStockEditStart('', 0); }} />
@@ -363,8 +360,6 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
 interface PageDataState {
     allProducts: Product[];
     categories: Category[];
-    reservedQuantitiesMap: Map<string, number>;
-    pickedUpQuantitiesMap: Map<string, number>;
 }
 
 const ProductListPageAdmin: React.FC = () => {
@@ -374,8 +369,6 @@ const ProductListPageAdmin: React.FC = () => {
   const [pageData, setPageData] = useState<PageDataState>({
     allProducts: [],
     categories: [],
-    reservedQuantitiesMap: new Map(),
-    pickedUpQuantitiesMap: new Map(),
   });
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -400,31 +393,14 @@ const ProductListPageAdmin: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-        const [categoriesData, reservedMapData, pickedUpOrdersData, productsSnapshot] = await Promise.all([
+        const [categoriesData, productsData] = await Promise.all([
             getCategories(),
-            getReservedQuantitiesMap(),
-            getDocs(query(collection(db, 'orders'), where('status', '==', 'PICKED_UP'))),
-            getDocs(query(collection(db, "products"))),
+            getProductsWithStock()
         ]);
 
-        const allFetchedProducts = productsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Product));
-        
-        const pickedUpMap = new Map<string, number>();
-        pickedUpOrdersData.forEach(doc => {
-  const order = doc.data() as Order;
-  (order.items || []).forEach((item: OrderItem) => {
-    const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-    const unit = Number(item.stockDeductionAmount ?? 1);
-    pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + (Number(item.quantity ?? 0) * unit));
-  });
-});
-
-
         setPageData({
-            allProducts: allFetchedProducts,
+            allProducts: productsData.products,
             categories: categoriesData,
-            reservedQuantitiesMap: reservedMapData,
-            pickedUpQuantitiesMap: pickedUpMap,
         });
 
     } catch (error) {
@@ -456,14 +432,14 @@ const ProductListPageAdmin: React.FC = () => {
                 });
                 return; 
             }
-
+            
             const enrichedVariantGroups: EnrichedVariantGroup[] = r.variantGroups.map(vg => {
-                const key = `${p.id}-${r.roundId}-${vg.id}`;
-                const reservedQuantity = pageData.reservedQuantitiesMap.get(key) || 0;
+                const reservedCount = vg.reservedCount || 0;
+                const pickedUpCount = vg.pickedUpCount || 0;
                 const configuredStock = vg.totalPhysicalStock ?? -1;
-                const remainingStock = configuredStock === -1 ? Infinity : configuredStock - reservedQuantity;
+                const remainingStock = configuredStock === -1 ? Infinity : configuredStock - reservedCount;
                 const dynamicStatus = getDynamicStatus(r, remainingStock);
-                return { ...vg, reservedQuantity, pickedUpQuantity: pageData.pickedUpQuantitiesMap.get(key) || 0, configuredStock, remainingStock, dynamicStatus };
+                return { ...vg, reservedCount, pickedUpCount, configuredStock, remainingStock, dynamicStatus };
             });
 
             const isAllSoldOut = enrichedVariantGroups.every(vg => vg.dynamicStatus.className === 'sold-out');
@@ -574,7 +550,6 @@ const ProductListPageAdmin: React.FC = () => {
   const handleBulkAction = async () => {
     if (selectedItems.size === 0) { toast.error("선택된 항목이 없습니다."); return; }
     
-    // ✅ [버그 수정] roundId에 '-'가 포함된 경우를 대비해, 첫 번째 '-'를 기준으로 파싱
     const updates = Array.from(selectedItems).map(id => {
         const separatorIndex = id.indexOf('-');
         if (separatorIndex === -1) {
@@ -614,7 +589,6 @@ const ProductListPageAdmin: React.FC = () => {
                 <button className="common-button button-danger button-medium" style={{flex: 1}} onClick={async () => {
                     toast.dismiss(t.id);
                     
-                    // ✅ [버그 수정] roundId에 '-'가 포함된 경우를 대비해, 첫 번째 '-'를 기준으로 파싱
                     const deletions = Array.from(selectedItems).map(id => {
                         const separatorIndex = id.indexOf('-');
                         if (separatorIndex === -1) {
@@ -692,7 +666,6 @@ const ProductListPageAdmin: React.FC = () => {
                   <tr>
                     <th><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
                     <th>No.</th>
-                    {/* ✅ [추가] 상품 ID 헤더 */}
                     <th>상품 ID</th>
                     <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일 {sortConfig.key === 'roundCreatedAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th className="sortable-header" onClick={() => handleSortChange('pickupDate')}>픽업일 {sortConfig.key === 'pickupDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
@@ -702,7 +675,7 @@ const ProductListPageAdmin: React.FC = () => {
                     <th>상태</th>
                     <th>가격</th>
                     <th className="sortable-header" onClick={() => handleSortChange('expirationDate')}>유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
-                    <th title="예약된 수량 / 전체 대기자 수">예약/대기</th>
+                    <th title="전체 판매(예약+픽업) 수량 / 전체 대기자 수">판매/대기</th>
                     <th title="픽업 완료된 수량">픽업</th>
                     <th>재고</th>
                     <th>관리</th>
@@ -710,7 +683,6 @@ const ProductListPageAdmin: React.FC = () => {
                 </thead>
                 <tbody>
                   {paginatedRounds.length > 0 ? ( paginatedRounds.map((item, index) => (<ProductAdminRow key={item.uniqueId} item={item} index={(currentPage - 1) * itemsPerPage + index} isExpanded={expandedRoundIds.has(item.uniqueId)} isSelected={selectedItems.has(item.uniqueId)} editingStockId={editingStockId} stockInputs={stockInputs} onToggleExpansion={toggleRowExpansion} onSelectionChange={handleSelectionChange} onStockEditStart={handleStockEditStart} onStockEditSave={handleStockEditSave} onSetStockInputs={setStockInputs} onOpenWaitlistModal={handleOpenWaitlistModal}/>)) ) : (
-                    // ✅ [수정] colSpan 수정
                     <tr><td colSpan={15} style={{textAlign: 'center', padding: '4rem', color: 'var(--text-color-light)'}}>표시할 판매 회차가 없습니다.</td></tr>
                   )}
                 </tbody>

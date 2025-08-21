@@ -1,40 +1,25 @@
 // src/pages/admin/DashboardPage.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { getProducts } from '@/firebase/productService';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService'; 
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
-import { TrendingUp, SaveAll, Hourglass, CheckCircle, Search, Copy, Check } from 'lucide-react';
+// ✅ [수정] 링크 복사를 위한 Check, ClipboardCopy 아이콘 추가
+import { TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy } from 'lucide-react';
 import './DashboardPage.css';
 import { reportError } from '@/utils/logger';
 
-
-// ✅ [수정] 주문 검색 결과를 위한 UI 전용 타입 정의
-interface SearchedOrderForUI {
-  id: string;
-  createdAt: Date; // JS Date 객체로 명시
-  orderNumber?: string;
-  customerInfo: { name: string; phone: string; };
-  items: OrderItem[];
-  status: string;
-}
-
-// Cloud Function의 반환 타입을 위한 인터페이스
-interface WaitlistProcessResult {
-  convertedCount: number;
-  failedCount: number;
-}
 
 interface EnrichedGroupItem {
   id: string;
   productId: string;
   productName: string;
+  imageUrl: string;
   roundId: string;
   roundName: string;
   variantGroupId: string;
@@ -46,23 +31,27 @@ interface EnrichedGroupItem {
   configuredStock: number;
 }
 
-const CopyToClipboardButton: React.FC<{ textToCopy: string }> = ({ textToCopy }) => {
+// ✅ [추가] 상품 페이지 링크 복사 버튼 컴포넌트
+const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     const [copied, setCopied] = useState(false);
+    // TODO: 실제 운영 도메인으로 변경해야 합니다.
+    const productUrl = `https://www.sodomall.com/product/${productId}`;
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(textToCopy).then(() => {
+    const handleCopy = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard.writeText(productUrl).then(() => {
             setCopied(true);
-            toast.success(`ID가 복사되었습니다!`, { duration: 1500 });
+            toast.success('상품 링크가 복사되었습니다!');
             setTimeout(() => setCopied(false), 2000);
         }, () => {
-            toast.error('복사에 실패했습니다.');
+            toast.error('링크 복사에 실패했습니다.');
         });
     };
 
     return (
-        <button onClick={handleCopy} className="copy-id-button" title="클릭해서 ID 복사">
-            {copied ? <Check size={14} color="var(--success-color)" /> : <Copy size={14} />}
-            <span className="id-text">{textToCopy}</span>
+        <button onClick={handleCopy} className="admin-action-button" title={`클릭하여 링크 복사:\n${productUrl}`}>
+            {copied ? <Check size={16} color="var(--success-color)" /> : <ClipboardCopy size={16} />}
         </button>
     );
 };
@@ -80,22 +69,9 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [editingStockId, setEditingStockId] = useState<string | null>(null);
 
-  // ✅ [수정] 주문 검색 관련 상태의 타입을 새 UI 타입으로 변경
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchedOrders, setSearchedOrders] = useState<SearchedOrderForUI[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-
-
-  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const addStockAndProcessWaitlistCallable = useMemo(() => httpsCallable<any, WaitlistProcessResult>(functions, 'addStockAndProcessWaitlist'), [functions]);
-  
-  const searchOrdersByCustomerCallable = useMemo(() => httpsCallable<{ query: string }, { success: boolean; orders: any[] }>(functions, 'searchOrdersByCustomer'), [functions]);
-
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [productsResponse, allPendingOrders] = await Promise.all([
@@ -139,6 +115,7 @@ const DashboardPage: React.FC = () => {
               id: groupKey,
               productId: product.id,
               productName: product.groupName,
+              imageUrl: product.imageUrls?.[0] || '/placeholder.svg',
               roundId: round.roundId,
               roundName: round.roundName,
               variantGroupId: groupId,
@@ -170,47 +147,11 @@ const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
-
-  // ✅ [수정] 주문 검색 핸들러 내부 로직 수정
-  const handleOrderSearch = async (e?: React.FormEvent<HTMLFormElement>) => {
-      e?.preventDefault();
-      if (searchQuery.trim().length < 2) {
-          toast.error('검색어는 2자 이상 입력해주세요.');
-          return;
-      }
-
-      setSearchLoading(true);
-      setHasSearched(true);
-      setSearchedOrders([]);
-
-      try {
-          const result = await searchOrdersByCustomerCallable({ query: searchQuery });
-          if (result.data.success) {
-              // UI 전용 타입으로 데이터를 가공
-              const ordersForUI: SearchedOrderForUI[] = result.data.orders.map(o => ({
-                id: o.id,
-                createdAt: new Date(o.createdAt._seconds * 1000), // Date 객체로 변환
-                orderNumber: o.orderNumber,
-                customerInfo: o.customerInfo,
-                items: o.items || [],
-                status: o.status,
-              }));
-              setSearchedOrders(ordersForUI);
-          } else {
-              toast.error('검색에 실패했습니다.');
-          }
-      } catch (error: any) {
-          reportError('OrderSearch.handleSearch', error);
-          toast.error(error.message || '검색 중 오류가 발생했습니다.');
-      } finally {
-          setSearchLoading(false);
-      }
-  };
+  }, [fetchData]);
 
   const sortedDateKeys = useMemo(() => {
     return Object.keys(groupedItems).sort((a, b) => b.localeCompare(a));
@@ -219,62 +160,55 @@ const DashboardPage: React.FC = () => {
   const handleStockInputChange = (groupId: string, value: string) => {
     setStockInputs(prev => ({ ...prev, [groupId]: value }));
   };
+  
+  const handleStockEditStart = (itemId: string, currentStock: number) => {
+    setEditingStockId(itemId);
+    setStockInputs(prev => ({
+        ...prev,
+        [itemId]: currentStock === -1 ? '' : String(currentStock)
+    }));
+  };
 
-  const handleBulkSave = async () => {
-    if (Object.keys(stockInputs).length === 0) {
-      toast.error("변경된 내용이 없습니다.");
-      return;
-    }
-    setIsSaving(true);
+  const handleStockEditSave = useCallback(async (itemId: string) => {
+    setEditingStockId(null);
+    const newStockValue = stockInputs[itemId];
+    if (newStockValue === undefined) return;
 
     const allItems = Object.values(groupedItems).flat();
-    let hasError = false;
+    const itemToUpdate = allItems.find(i => i.id === itemId);
 
-    const promises = Object.entries(stockInputs).map(async ([itemId, newStockValue]) => {
-      const item = allItems.find(i => i.id === itemId);
-      if (!item || newStockValue.trim() === '') return;
-
-      const newStock = parseInt(newStockValue, 10);
-      if (isNaN(newStock) || newStock < 0) {
-        toast.error(`'${item.productName}'의 재고 값이 올바르지 않습니다.`);
-        hasError = true;
-        return Promise.resolve();
-      }
-
-      const additionalStock = item.configuredStock !== -1 ? newStock - item.configuredStock : 0;
-
-      if (additionalStock > 0) {
-        const payload = {
-          productId: item.productId,
-          roundId: item.roundId,
-          variantGroupId: item.variantGroupId,
-          additionalStock: additionalStock
-        };
-        return addStockAndProcessWaitlistCallable(payload).catch(e => {
-          reportError(`'${item.productName}' 대기열 처리 실패`, e);
-          toast.error(`'${item.productName}' 처리 중 오류: ${(e as Error).message}`);
-          hasError = true;
-        });
-      }
-      return Promise.resolve();
-    });
-
-    await toast.promise(
-      Promise.all(promises),
-      {
-        loading: "재고 변경 및 대기열 처리 중...",
-        success: "모든 변경 작업이 완료되었습니다.",
-        error: "저장 작업 중 예기치 않은 오류가 발생했습니다.",
-      }
-    );
-
-    setIsSaving(false);
-    setStockInputs({});
-    if (!hasError) {
-      fetchData();
+    if (!itemToUpdate) {
+        toast.error("업데이트할 상품 정보를 찾지 못했습니다.");
+        return;
     }
-  };
-  
+    
+    const newStock = newStockValue.trim() === '' ? -1 : parseInt(newStockValue, 10);
+    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
+        toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다.");
+        return;
+    }
+
+    if (newStock === itemToUpdate.configuredStock) return;
+
+    const updatePayload = [{
+        productId: itemToUpdate.productId,
+        roundId: itemToUpdate.roundId,
+        variantGroupId: itemToUpdate.variantGroupId,
+        newStock: newStock
+    }];
+
+    const promise = updateMultipleVariantGroupStocks(updatePayload);
+
+    toast.promise(promise, {
+        loading: `'${itemToUpdate.productName}' 재고 업데이트 중...`,
+        success: () => {
+            fetchData();
+            return "재고가 성공적으로 업데이트되었습니다.";
+        },
+        error: "재고 업데이트 중 오류가 발생했습니다."
+    });
+  }, [stockInputs, groupedItems, fetchData]);
+
   if (loading) return <SodomallLoader />;
 
   return (
@@ -284,83 +218,7 @@ const DashboardPage: React.FC = () => {
           <TrendingUp size={28} />
           <h1>통합 판매 현황 대시보드</h1>
         </div>
-        <button
-          className="bulk-save-button"
-          onClick={handleBulkSave}
-          disabled={Object.keys(stockInputs).length === 0 || isSaving}
-        >
-          <SaveAll size={18} />
-          {isSaving ? '저장 중...' : '모든 변경사항 저장'}
-        </button>
       </div>
-      
-      <div className="dashboard-group">
-        <h2 className="group-title">고객 주문 검색</h2>
-        <form onSubmit={handleOrderSearch} className="order-search-form">
-            <div className="search-bar-wrapper" style={{ flexGrow: 1 }}>
-                <Search size={18} className="search-icon"/>
-                <input 
-                    type="text" 
-                    placeholder="고객 이름 또는 전화번호 뒷 4자리로 검색..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="search-input"
-                />
-            </div>
-            <button type="submit" className="search-button-in-form" disabled={searchLoading}>
-                {searchLoading ? '검색 중...' : '검색'}
-            </button>
-        </form>
-      </div>
-
-      {searchLoading && <SodomallLoader message="주문을 검색하고 있습니다..." />}
-      {!searchLoading && hasSearched && (
-        <div className="dashboard-group">
-          <h2 className="group-title">'{searchQuery}' 검색 결과 ({searchedOrders.length}건)</h2>
-          {searchedOrders.length > 0 ? (
-            <div className="table-wrapper">
-               <table className="dashboard-table">
-                  <thead>
-                      <tr>
-                          <th>주문일시</th>
-                          <th>주문번호</th>
-                          <th>고객명</th>
-                          <th>연락처</th>
-                          <th>주문 상품 (클릭해서 ID 복사)</th>
-                          <th>상태</th>
-                      </tr>
-                  </thead>
-                  <tbody>
-                      {searchedOrders.map(order => (
-                          <tr key={order.id}>
-                              {/* ✅ [수정] 이제 order.createdAt은 Date 객체이므로 바로 toLocaleString 사용 가능 */}
-                              <td>{order.createdAt.toLocaleString('ko-KR')}</td>
-                              <td>{order.orderNumber}</td>
-                              <td>{order.customerInfo.name}</td>
-                              <td>{order.customerInfo.phone}</td>
-                              <td>
-                                  <ul className="ordered-item-list">
-                                      {(order.items || []).map(item => (
-                                          <li key={item.variantGroupId}>
-                                              <span>{item.productName} - {item.itemName}</span>
-                                              <CopyToClipboardButton textToCopy={item.variantGroupId} />
-                                          </li>
-                                      ))}
-                                  </ul>
-                              </td>
-                              <td><span className={`status-badge status-${order.status.toLowerCase()}`}>{order.status}</span></td>
-                          </tr>
-                      ))}
-                  </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="no-data-message">검색 결과가 없습니다.</p>
-          )}
-        </div>
-      )}
-
-      <hr className="section-divider" />
 
       {sortedDateKeys.length > 0 ? (
         sortedDateKeys.map(date => (
@@ -371,28 +229,35 @@ const DashboardPage: React.FC = () => {
                 <thead>
                   <tr>
                     <th>No.</th>
-                    <th>상품명</th>
-                    <th>판매 회차</th>
+                    <th className="image-col">이미지</th> 
+                    <th>상품명 / 회차명</th>
                     <th className="wait-col"><Hourglass size={14} /> 선입금 대기</th>
                     <th className="reserve-col"><CheckCircle size={14} /> 확정 수량</th>
                     <th>대기 수량</th>
                     <th>남은 수량</th>
                     <th>설정된 재고</th>
-                    <th>최종 재고 입력</th>
+                    {/* ✅ [추가] 링크 복사 컬럼 */}
+                    <th>링크 복사</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedItems[date].map((item, index) => {
                     const remainingStock = item.configuredStock === -1 ? -1 : item.configuredStock - item.confirmedReservedQuantity;
-                    const displayName = item.productName === item.variantGroupName
-                      ? item.productName
-                      : `${item.productName} - ${item.variantGroupName}`;
-
+                    
                     return (
                       <tr key={item.id}>
                         <td>{index + 1}</td>
-                        <td className="product-name-cell">{displayName}</td>
-                        <td>{item.roundName}</td>
+                        <td><img src={item.imageUrl} alt={item.productName} className="dashboard-product-thumbnail" /></td>
+                        <td className="dashboard-product-name-cell">
+                          <Link to={`/admin/products/edit/${item.productId}/${item.roundId}`} className="product-link">
+                            {/* ✅ [수정] 상품명과 옵션명이 같으면 상품명만 표시 */}
+                            {item.productName === item.variantGroupName 
+                              ? item.productName
+                              : `${item.productName} - ${item.variantGroupName}`
+                            }
+                          </Link>
+                          <span className="round-name-subtext">{item.roundName}</span>
+                        </td>
                         <td className="quantity-cell wait-col">{item.pendingPrepaymentQuantity > 0 ? item.pendingPrepaymentQuantity : '-'}</td>
                         <td className="quantity-cell reserve-col">{item.confirmedReservedQuantity}</td>
                         <td className="quantity-cell">{item.waitlistedQuantity > 0 ? item.waitlistedQuantity : '-'}</td>
@@ -401,20 +266,35 @@ const DashboardPage: React.FC = () => {
                             ? <span className="unlimited-stock">무제한</span>
                             : `${remainingStock}`}
                         </td>
-                        <td className="quantity-cell">
-                          {item.configuredStock === -1
-                            ? <span className="unlimited-stock">무제한</span>
-                            : `${item.configuredStock}`}
+                        <td className="stock-cell">
+                          {editingStockId === item.id ? (
+                            <input
+                              type="number"
+                              className="stock-input"
+                              value={stockInputs[item.id] || ''}
+                              onChange={(e) => handleStockInputChange(item.id, e.target.value)}
+                              onBlur={() => handleStockEditSave(item.id)}
+                              onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleStockEditSave(item.id);
+                                  if (e.key === 'Escape') setEditingStockId(null);
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <button
+                              className="stock-display-button"
+                              onClick={() => handleStockEditStart(item.id, item.configuredStock)}
+                              title="재고 수량을 클릭하여 수정"
+                            >
+                              {item.configuredStock === -1
+                                ? <span className="unlimited-stock">무제한</span>
+                                : `${item.configuredStock}`}
+                            </button>
+                          )}
                         </td>
+                        {/* ✅ [추가] 링크 복사 버튼 셀 */}
                         <td>
-                          <input
-                            type="number"
-                            className="final-stock-input"
-                            placeholder="발주량 입력"
-                            value={stockInputs[item.id] || ''}
-                            onChange={(e) => handleStockInputChange(item.id, e.target.value)}
-                            disabled={isSaving}
-                          />
+                          <CopyLinkButton productId={item.productId} />
                         </td>
                       </tr>
                     );

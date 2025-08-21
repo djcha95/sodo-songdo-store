@@ -1,3 +1,5 @@
+// src/types.ts
+
 // ✅ 프론트엔드용 import (src/types.ts 에서 사용)
 import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
 
@@ -12,7 +14,7 @@ import type { DocumentData } from "firebase/firestore"; // DocumentData는 클�
 // 📌 공통 사용 타입 별칭 (Type Aliases)
 // =================================================================
 
-export type StorageType = 'ROOM' | 'COLD' | 'FROZEN';
+export type StorageType = 'ROOM' | 'COLD' | 'FROZEN' | 'FRESH';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
 export type OrderStatus = 
   | 'RESERVED' 
@@ -47,7 +49,7 @@ export type NotificationType =
   | 'TIER_UP'
   | 'TIER_DOWN'
   | 'ENCORE_AVAILABLE'
-  | 'PRODUCT_UPDATE' // ✅ [수정] 이 타입을 추가했습니다.
+  | 'PRODUCT_UPDATE'
   | 'success'
   | 'error';
 
@@ -99,6 +101,8 @@ export interface VariantGroup {
   totalPhysicalStock: number | null;
   stockUnitType: string;
   reservedCount?: number;
+  // ✅ [수정] 이 라인을 추가하여 'pickedUpCount' 속성을 정의합니다.
+  pickedUpCount?: number;
 }
 
 export interface WaitlistEntry {
@@ -146,7 +150,7 @@ export interface Product {
   subCategory?: string;
   updatedAt?: Timestamp;
   tags?: string[];
-  hashtags?: string[]; // ✅ 이 줄을 추가해주세요.
+  hashtags?: string[];
   reservedQuantities?: { [key: string]: number };
 }
 
@@ -204,7 +208,6 @@ export interface Order {
   eventId?: string;
 }
 
-// ⭐️ [수정됨] UserTutorialProgress 타입을 최신 버전으로 통일했습니다.
 export interface UserTutorialProgress {
     hasCompletedMain?: boolean;
     hasSeenProductDetailPage?: boolean;

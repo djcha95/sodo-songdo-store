@@ -1,6 +1,5 @@
 // src/firebase/orderService.ts
 
-// ✅ [수정] Cloud Functions 사용을 위한 import 추가
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from './firebaseConfig';
@@ -25,7 +24,7 @@ import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firest
 import type { Order, OrderStatus, OrderItem } from '@/types';
 
 /**
- * @description ✅ [수정] 주문 생성 시 클라이언트가 사용자 정보를 직접 수정하지 않도록 변경합니다.
+ * @description 주문 생성 시 클라이언트가 사용자 정보를 직접 수정하지 않도록 변경합니다.
  * 주문 생성에만 집중하고, 사용자 정보 업데이트(totalOrders 등)는 서버 트리거에 위임합니다.
  */
 export const submitOrder = async (
@@ -40,16 +39,13 @@ export const submitOrder = async (
       throw new Error('주문 처리 중 사용자 정보를 찾을 수 없습니다.');
     }
 
-    // ✅ 먼저 새 order 문서 참조 생성
     const newOrderRef = doc(collection(db, 'orders'));
     newOrderId = newOrderRef.id;
 
-    // ✅ stockDeductionAmount 보강
     const itemsWithDeduction = orderData.items.map((item) => {
       return {
         ...item,
-        stockDeductionAmount: item.stockDeductionAmount ?? 1, 
-        // ⚠️ 추후 여기서 실제 variantGroup 값(예: 20)을 가져와 넣는 게 베스트
+        stockDeductionAmount: item.stockDeductionAmount ?? 1,
       };
     });
 
@@ -60,7 +56,7 @@ export const submitOrder = async (
 
     const newOrderData: Omit<Order, 'id'> = {
       ...orderData,
-      items: itemsWithDeduction,   // ✅ 보강된 items 저장
+      items: itemsWithDeduction,
       status: 'RESERVED',
       createdAt: serverTimestamp(),
       orderNumber: `SODOMALL-${Date.now()}`,
@@ -74,12 +70,11 @@ export const submitOrder = async (
 };
 
 /**
- * @description ✅ [수정] 사용자의 예약을 취소합니다.
+ * @description 사용자의 예약을 취소합니다.
  * 보안을 위해 Callable Cloud Function을 호출하며, 페널티 종류를 함께 전달합니다.
  */
 export const cancelOrder = async (
   orderId: string,
-  // ✅ [수정] treatAsNoShow 대신 penaltyType을 사용합니다.
   options: { penaltyType: 'none' | 'late' } = { penaltyType: 'none' }
 ): Promise<{ success: boolean; message: string }> => {
   try {
@@ -89,7 +84,6 @@ export const cancelOrder = async (
         { success: boolean; message: string }
     >(functions, 'cancelOrder');
     
-    // ✅ [수정] Cloud Function에 orderId와 함께 penaltyType을 전달합니다.
     const result = await cancelOrderCallable({ 
       orderId: orderId, 
       penaltyType: options.penaltyType 
@@ -109,9 +103,7 @@ export const cancelOrder = async (
 
 
 /**
- * @description ✅ [수정] 여러 주문의 상태를 일괄적으로 변경하는, 단순화된 함수입니다.
- * 포인트 계산, 등급 산정, 알림 생성 등 모든 복잡한 로직을 제거하고
- * 오직 'status'와 '관련 timestamp'만 업데이트합니다.
+ * @description 여러 주문의 상태를 일괄적으로 변경하는, 단순화된 함수입니다.
  * 모든 후속 처리는 서버의 Cloud Function 트리거가 담당합니다.
  */
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
@@ -119,7 +111,6 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
 
   const batch = writeBatch(db);
   
-  // 상태에 따른 타임스탬프 필드를 결정합니다.
   let timestampField: string | null = null;
   if (status === 'PICKED_UP') timestampField = 'pickedUpAt';
   if (status === 'PREPAID') timestampField = 'prepaidAt';
@@ -131,7 +122,6 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
     if (timestampField) {
       updateData[timestampField] = serverTimestamp();
     }
-    // 상태와 타임스탬프만 업데이트하는 간단한 작업으로 변경
     batch.update(orderRef, updateData);
   });
 
@@ -139,11 +129,7 @@ export const updateMultipleOrderStatuses = async (orderIds: string[], status: Or
 };
 
 /**
- * @description ✅ [수정] 주문 분할 로직에서 포인트/등급/알림 관련 로직을 모두 제거합니다.
- * 💡 [개선 제안] 이 기능은 여러 문서를 다루는 복잡한 트랜잭션이므로,
- * 보안과 데이터 정합성을 위해 추후에 'Callable Cloud Function'으로 이전하는 것을 강력히 권장합니다.
- *
- * 이 함수는 이제 사용되지 않으므로, 더 이상 클라이언트에서 호출되어서는 안 됩니다.
+ * @description 이 함수는 이제 사용되지 않으므로, 더 이상 클라이언트에서 호출되어서는 안 됩니다.
  * 대신 `splitBundledOrder` callable 함수를 사용하세요.
  */
 export const splitAndUpdateOrderStatus = async (
@@ -172,7 +158,6 @@ export const splitAndUpdateOrderStatus = async (
       throw new Error('남는 수량이 없어 주문을 분할할 수 없습니다. 일반 상태 변경을 이용해주세요.');
     }
 
-    // 1. 남는 수량에 대한 새 주문 생성
     const remainingItem: OrderItem = { ...originalItem, quantity: remainingQuantity };
     const remainingOrder: Omit<Order, 'id'> = {
       ...originalOrder,
@@ -188,7 +173,6 @@ export const splitAndUpdateOrderStatus = async (
     const newOrderRef = doc(collection(db, 'orders'));
     transaction.set(newOrderRef, remainingOrder);
     
-    // 2. 픽업한 수량만큼 기존 주문 정보 수정
     const pickedUpItem: OrderItem = { ...originalItem, quantity: pickedUpQuantity };
     const pickedUpOrderUpdate = {
       items: [pickedUpItem],
@@ -199,16 +183,13 @@ export const splitAndUpdateOrderStatus = async (
     };
     
     transaction.update(originalOrderRef, pickedUpOrderUpdate);
-
-    // 3. ❌ 포인트, 등급, 알림 관련 로직은 여기서 모두 제거! ❌
-    // 서버의 onCreate, onUpdate 트리거가 새로 생성/수정된 주문들을 감지하고 모든 것을 처리합니다.
   });
 };
 
 
-// =================================================================
-// ✅ [신규 추가] 주문 분할을 위한 Callable Function 호출
-// =================================================================
+/**
+ * @description 주문 분할을 위한 Callable Function 호출
+ */
 export const splitBundledOrder = async (orderId: string): Promise<{ success: boolean; message: string }> => {
   if (!orderId) {
     throw new Error("주문 ID가 제공되지 않았습니다.");
@@ -225,7 +206,6 @@ export const splitBundledOrder = async (orderId: string): Promise<{ success: boo
   } catch (error: any) {
     console.error("Callable function 'splitBundledOrder' failed:", error);
     if (error.code && error.message) {
-      // Firebase HttpsError의 경우, 서버에서 보낸 메시지를 그대로 사용자에게 보여줍니다.
       const message = (error.details as any)?.message || error.message;
       throw new Error(message);
     }
@@ -233,9 +213,37 @@ export const splitBundledOrder = async (orderId: string): Promise<{ success: boo
   }
 };
 
+/**
+ * @description [신규 추가] 취소 포함, 확정된 주문을 되돌리는 Callable Function 호출
+ */
+export const revertFinalizedOrder = async (orderId: string, originalStatus: OrderStatus): Promise<{ success: boolean; message: string }> => {
+  if (!orderId) {
+    throw new Error("주문 ID가 제공되지 않았습니다.");
+  }
+
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const revertOrderCallable = httpsCallable<
+      { orderId: string, originalStatus: OrderStatus }, 
+      { success: boolean, message: string }
+    >(functions, 'revertFinalizedOrder');
+    
+    const result = await revertOrderCallable({ orderId, originalStatus });
+    
+    return result.data;
+
+  } catch (error: any) {
+    console.error("Callable function 'revertFinalizedOrder' failed:", error);
+    if (error.code && error.message) {
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
+    }
+    throw new Error('주문 상태 되돌리기 중 예상치 못한 오류가 발생했습니다.');
+  }
+};
 
 // =================================================================
-// 아래의 읽기(Read) 및 기타 함수들은 수정할 필요가 없습니다.
+// 읽기(Read) 및 기타 함수
 // =================================================================
 
 export const getUserOrders = async (userId: string): Promise<Order[]> => {

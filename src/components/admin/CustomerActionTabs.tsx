@@ -5,8 +5,13 @@ import type { Timestamp } from 'firebase/firestore';
 import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatus } from '@/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
-    updateMultipleOrderStatuses, revertOrderStatus, deleteMultipleOrders, splitAndUpdateOrderStatus,
-    splitBundledOrder, cancelOrder
+    updateMultipleOrderStatuses,
+    revertOrderStatus,
+    deleteMultipleOrders,
+    splitAndUpdateOrderStatus,
+    splitBundledOrder,
+    cancelOrder,
+    revertFinalizedOrder // [추가] 취소 복구 함수 import
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import toast from 'react-hot-toast';
@@ -18,7 +23,7 @@ import './CustomerActionTabs.css';
 interface CustomerActionTabsProps {
     user: UserDocument;
     orders: Order[];
-    onStatUpdate: (updates: { pickup?: number; noshow?: number; }) => void;
+    onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
 }
 
@@ -82,7 +87,8 @@ const ActionableOrderTable: React.FC<{
                         </thead>
                         <tbody>
                             {sortedOrders.map(order => {
-                                const isFinalState = ['PICKED_UP', 'NO_SHOW', 'CANCELED', 'LATE_CANCELED'].includes(order.status);
+                                // [수정] '되돌리기' 버튼이 CANCELED, LATE_CANCELED 상태에서도 보이도록 조건 변경
+                                const isRevertable = ['PICKED_UP', 'NO_SHOW', 'CANCELED', 'LATE_CANCELED'].includes(order.status);
                                 const isSplittable = Array.isArray(order.items) && order.items.length > 1;
 
                                 return (
@@ -96,8 +102,8 @@ const ActionableOrderTable: React.FC<{
                                             </div>
                                         </td>
                                         <td className="action-cell">
-                                            {isFinalState && order.status !== 'CANCELED' && (
-                                                <button onClick={() => onStatusChange(order)} className="revert-button" title="이전 상태로 되돌리기">
+                                            {isRevertable && (
+                                                <button onClick={() => onStatusChange(order)} className="revert-button" title="예약 상태로 되돌리기">
                                                     <Undo2 size={14} /> 되돌리기
                                                 </button>
                                             )}
@@ -253,13 +259,17 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         if (selectedGroupKeys.length === 0) return;
         const orderIdsToUpdate = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
         
-        const updates: { pickup?: number; noshow?: number; } = {};
+        const updates: { pickup?: number; noshow?: number; points?: number } = {};
         const messages = { loading: '상태 변경 중...', success: '상태가 변경되었습니다.', error: '상태 변경 실패' };
+
+        const calculatePoints = () => selectedGroups.reduce((sum, g) => sum + g.totalPrice, 0) * 0.01;
 
         if (status === 'PICKED_UP') {
             updates.pickup = selectedGroupKeys.length;
+            updates.points = Math.round(calculatePoints());
         } else if (status === 'NO_SHOW') {
             updates.noshow = selectedGroupKeys.length;
+            updates.points = -Math.round(calculatePoints()); 
         }
 
         performAction(
@@ -268,6 +278,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             () => onStatUpdate({
                 pickup: -(updates.pickup || 0),
                 noshow: -(updates.noshow || 0),
+                points: -(updates.points || 0),
             }),
             () => { setSelectedGroupKeys([]); onActionSuccess(); },
             messages
@@ -277,14 +288,37 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     const handleCancelOrder = () => {
         if (selectedGroupKeys.length === 0) return;
 
-        const now = new Date();
         const firstOrder = orders.find(o => o.id === selectedGroups[0].originalOrders[0].orderId);
-        const deadlineDate = convertToDate(firstOrder?.pickupDeadlineDate);
+        if (!firstOrder) return;
 
-        const isLateCancellation = deadlineDate ? now > deadlineDate : false;
-        const penaltyType = isLateCancellation ? 'late' : 'none';
+        // [핵심 수정] 새로운 페널티 규칙 로직
+        const now = new Date();
+        const pickupJsDate = convertToDate(firstOrder.pickupDate);
+        let isPenaltyCancellation = false;
+
+        if (pickupJsDate) {
+            const pickupDay = new Date(pickupJsDate);
+            pickupDay.setHours(0, 0, 0, 0);
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // 픽업일이 오늘이고,
+            if (pickupDay.getTime() === today.getTime()) {
+                // 현재 시간이 오후 1시(13시) 이전이라면 페널티 대상
+                if (now.getHours() < 13) {
+                    isPenaltyCancellation = true;
+                }
+            }
+        }
         
-        const updates = { noshow: penaltyType === 'late' ? 0.5 * selectedGroupKeys.length : 0 };
+        const penaltyType = isPenaltyCancellation ? 'late' : 'none';
+        
+        const updates = { 
+            noshow: penaltyType === 'late' ? 0.5 * selectedGroupKeys.length : 0,
+            // 백엔드 callable/orders.ts의 POINT_POLICIES.LATE_CANCEL_PENALTY.points 값과 일치시켜야 합니다.
+            points: penaltyType === 'late' ? -50 * selectedGroupKeys.length : 0 
+        };
         const orderIdsToCancel = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
 
         const cancelPromises = orderIdsToCancel.map(orderId => cancelOrder(orderId, { penaltyType }));
@@ -292,28 +326,42 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         performAction(
             () => Promise.all(cancelPromises),
             () => onStatUpdate(updates),
-            () => onStatUpdate({ noshow: -(updates.noshow || 0) }),
+            () => onStatUpdate({ noshow: -(updates.noshow || 0), points: -(updates.points || 0) }),
             () => { setSelectedGroupKeys([]); onActionSuccess(); },
-            { loading: '주문 취소 중...', success: '주문이 취소되었습니다.', error: '취소 실패' }
+            { 
+                loading: '주문 취소 중...', 
+                success: penaltyType === 'late' ? '주문이 취소되고 페널티가 적용되었습니다.' : '주문이 취소되었습니다.', 
+                error: '취소 실패' 
+            }
         );
     };
 
     const handleTableStatusChange = (order: Order) => {
         const originalStatus = order.status;
-        const updates: { pickup?: number; noshow?: number; } = {};
+        const updates: { pickup?: number; noshow?: number; points?: number } = {};
+
+        const pointChange = Math.round((order.totalPrice || 0) * 0.01);
 
         if (originalStatus === 'PICKED_UP') {
             updates.pickup = -1;
+            updates.points = -pointChange;
         } else if (originalStatus === 'NO_SHOW') {
             updates.noshow = -1;
+            updates.points = pointChange;
+        } else if (originalStatus === 'LATE_CANCELED') {
+            // [추가] 페널티 취소 복구 로직
+            updates.noshow = -0.5;
+            updates.points = 50; // 페널티로 차감된 50포인트 복구
         }
 
         performAction(
-            () => revertOrderStatus([order.id], originalStatus),
+            // [수정] 새로운 백엔드 함수 호출
+            () => revertFinalizedOrder(order.id, originalStatus),
             () => onStatUpdate(updates),
             () => onStatUpdate({
                 pickup: -(updates.pickup || 0),
                 noshow: -(updates.noshow || 0),
+                points: -(updates.points || 0),
             }),
             onActionSuccess,
             { loading: '상태를 되돌리는 중...', success: '예약 상태로 되돌렸습니다.', error: '되돌리기에 실패했습니다.' }
@@ -327,7 +375,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             () => deleteMultipleOrders(orderIdsToDelete),
             () => {},
             () => {},
-            onActionSuccess,
+            () => { setSelectedGroupKeys([]); onActionSuccess(); },
             { loading: '주문 삭제 중...', success: '삭제되었습니다.', error: '삭제 실패' }
         );
     };
@@ -336,7 +384,9 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         if (!splitInfo) return;
         const performSplitAction = (remainingStatus: OrderStatus) => {
             const orderIdToSplit = splitInfo.group.originalOrders[0].orderId;
-            const updates: { pickup?: number; noshow?: number; } = { pickup: 1 };
+            const pointChange = Math.round(splitInfo.group.item.unitPrice * splitInfo.newQuantity * 0.01);
+
+            const updates: { pickup?: number; noshow?: number; points?: number } = { pickup: 1, points: pointChange };
             if (remainingStatus === 'NO_SHOW') {
                 updates.noshow = 1;
             }
@@ -344,7 +394,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             performAction(
                 () => splitAndUpdateOrderStatus(orderIdToSplit, splitInfo.newQuantity, remainingStatus),
                 () => onStatUpdate(updates),
-                () => onStatUpdate({ pickup: -(updates.pickup || 0), noshow: -(updates.noshow || 0) }),
+                () => onStatUpdate({ pickup: -(updates.pickup || 0), noshow: -(updates.noshow || 0), points: -(updates.points || 0) }),
                 onActionSuccess,
                 { loading: '분할 처리 중...', success: '분할 처리가 완료되었습니다.', error: '분할 처리 실패' }
             );
@@ -471,7 +521,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                 <button className={activeTab === 'manage' ? 'active' : ''} onClick={() => setActiveTab('manage')}>신뢰도 관리</button>
             </div>
             <div className={`cat-tab-content ${activeTab === 'pickup' ? 'is-grid-view' : ''}`}>
-                {/* ✅ [수정] renderContent -> renderTabContent 오타 수정 */}
                 {renderTabContent()}
             </div>
             {renderFooter()}

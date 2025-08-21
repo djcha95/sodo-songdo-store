@@ -1,8 +1,8 @@
 /* src/pages/admin/DashboardPage.css */
 
 .dashboard-container {
-    padding: 24px 32px; /* 좌우 여백 추가 */
-    background-color: #f8f9fa; /* 배경색을 약간 더 부드럽게 */
+    padding: 24px 32px;
+    background-color: #f8f9fa;
     min-height: 100vh;
 }
 
@@ -10,7 +10,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 16px; /* 헤더 하단에 여백과 선 추가 */
+    padding-bottom: 16px;
     border-bottom: 1px solid #dee2e6;
     margin-bottom: 32px;
 }
@@ -19,46 +19,16 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    color: #212529; /* 텍스트 색상을 더 진하게 */
+    color: #212529;
 }
 
 .header-title-area h1 {
-    font-size: 1.75rem; /* 폰트 크기 미세 조정 */
+    font-size: 1.75rem;
     font-weight: 700;
     margin: 0;
 }
 
-/* --- ❗ [FIX] 버튼 디자인 수정 --- */
-.bulk-save-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background-color: #28a745; /* 활성 상태 색상 (성공) */
-    color: white;
-    font-weight: 600;
-    font-size: 0.9rem;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-}
-
-.bulk-save-button:hover:not(:disabled) {
-    background-color: #218838; /* 더 어두운 녹색 */
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
-}
-
-.bulk-save-button:disabled {
-    background-color: #e9ecef; /* 명확한 비활성 회색 */
-    color: #adb5bd; /* 비활성 텍스트 색상 */
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-/* -------------------------------- */
-
+/* --- ✅ [수정] 주문 검색 및 저장 버튼 관련 스타일 모두 제거 --- */
 
 .dashboard-group {
     background-color: #ffffff;
@@ -93,43 +63,67 @@
     border-bottom: 1px solid #f1f3f5;
     white-space: nowrap;
     vertical-align: middle;
-    font-size: 0.9rem; /* 테이블 폰트 크기 통일 */
+    font-size: 0.9rem;
 }
 
 .dashboard-table th {
     background-color: #f8f9fa;
     font-weight: 500;
     color: #495057;
-    text-transform: none; /* 대문자 변환 제거 */
+    text-transform: none;
     letter-spacing: 0px;
 }
 
-/* ❗ [ADD] 테이블 Zebra-Striping */
 .dashboard-table tbody tr:nth-child(even) {
     background-color: #fcfcfd;
 }
 
 .dashboard-table tbody tr:hover {
-    background-color: #f1f8ff; /* 호버 색상 변경 */
+    background-color: #f1f8ff;
 }
 
-.product-name-cell {
-    text-align: left;
-    font-weight: 500;
-    color: #343a40;
+.image-col {
+  width: 80px;
+}
+.dashboard-product-thumbnail {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.dashboard-product-name-cell {
+    text-align: left !important;
     white-space: normal;
-    min-width: 220px;
+    min-width: 250px;
+}
+.product-link {
+  font-weight: 600;
+  color: var(--text-color-dark);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.product-link:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+.round-name-subtext {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-color-light);
+  margin-top: 4px;
 }
 
 .quantity-cell {
-    font-family: 'Pretendard', sans-serif; /* 숫자도 Pretendard로 통일 */
+    font-family: 'Pretendard', sans-serif;
     font-weight: 500;
     font-size: 0.95rem;
 }
 
 .important-cell {
     font-weight: 700;
-    color: #1971c2; /* 파란색 계열로 변경 */
+    color: #1971c2;
 }
 
 .unlimited-stock {
@@ -139,22 +133,6 @@
     font-size: 0.85rem;
 }
 
-.final-stock-input {
-    width: 120px;
-    padding: 8px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    text-align: right;
-    font-size: 0.9rem;
-    transition: all 0.2s ease;
-}
-
-.final-stock-input:focus {
-    outline: none;
-    border-color: #86b7fe;
-    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.25);
-}
-
 .no-data-message {
     text-align: center;
     padding: 60px;
@@ -162,40 +140,57 @@
     font-size: 1.1rem;
 }
 
-/* ✅ [모바일] 반응형 디자인 추가 */
+.stock-cell {
+  text-align: center !important;
+}
+.stock-display-button {
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  padding: 0.5rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  width: 100%;
+  min-width: 60px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+.stock-display-button:hover {
+  border-color: var(--primary-color-light);
+  background-color: var(--primary-color-ultralight);
+}
+.stock-input {
+  width: 80px;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--primary-color);
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--primary-color-light);
+  outline: none;
+}
+
 @media (max-width: 768px) {
     .dashboard-container {
         padding: 16px;
     }
-
     .dashboard-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 16px;
         margin-bottom: 24px;
     }
-
     .header-title-area h1 {
         font-size: 1.5rem;
     }
-
-    .bulk-save-button {
-        width: 100%;
-        justify-content: center;
-    }
-
     .group-title {
         padding: 12px 16px;
         font-size: 1.05rem;
     }
-
     .dashboard-table th,
     .dashboard-table td {
         padding: 10px 12px;
         font-size: 0.85rem;
-    }
-
-    .final-stock-input {
-        width: 90px;
     }
 }

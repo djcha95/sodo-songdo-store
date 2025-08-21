@@ -1,6 +1,6 @@
 // functions/src/callable/products.ts
 // Cloud Functions (v2) — Products related callables
-// v1.4 - notifyUsersOfProductUpdate 함수의 주문 조회 로직 수정
+// v1.5 - getProductsWithStock에서 전체 예약/판매량과 픽업량을 분리하여 계산
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -72,7 +72,7 @@ export const parseProductText = onCall(
 );
 
 /** --------------------------------
- * 2) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock
+ * 2) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock (✅ 수정됨)
  * --------------------------------- */
 export const getProductsWithStock = onCall(
   {
@@ -100,7 +100,10 @@ export const getProductsWithStock = onCall(
         .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
 
+      // ✅ [수정] claimedMap은 픽업 포함 전체 판매량을, pickedUpMap은 픽업 완료된 수량만 계산
       const claimedMap = new Map<string, number>();
+      const pickedUpMap = new Map<string, number>();
+
       ordersSnap.docs.forEach((od) => {
         const order = od.data() as Order;
         const items: OrderItem[] = Array.isArray(order.items) ? order.items : [];
@@ -111,7 +114,13 @@ export const getProductsWithStock = onCall(
           const quantityToDeduct = (it.quantity || 0) * (it.stockDeductionAmount || 1);
           if (!quantityToDeduct) return;
 
+          // 전체 판매량 계산
           claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
+
+          // 픽업 완료량만 별도 계산
+          if (order.status === "PICKED_UP") {
+            pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + quantityToDeduct);
+          }
         });
       });
 
@@ -125,9 +134,11 @@ export const getProductsWithStock = onCall(
           }
           const newVariantGroups: VariantGroup[] = round.variantGroups.map((vg) => {
             const key = `${product.id}-${round.roundId}-${vg.id}`;
+            // ✅ [수정] reservedCount와 pickedUpCount를 모두 반환
             return {
               ...vg,
               reservedCount: claimedMap.get(key) || 0,
+              pickedUpCount: pickedUpMap.get(key) || 0,
             };
           });
 

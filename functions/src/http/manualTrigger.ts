@@ -4,7 +4,7 @@ import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { getAuth } from "firebase-admin/auth";
 import { dbAdmin as db } from "../firebase/admin.js";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { executePickupReminders } from "../scheduled/notifications.js";
 import type { Order, UserDocument, LoyaltyTier, PointLog } from "../types.js";
 
@@ -166,5 +166,60 @@ export const reaggregateAllUserData = onCall({
         logger.error("[Data-Reaggregation] An error occurred:", error);
         if (error instanceof HttpsError) throw error;
         throw new HttpsError("internal", "데이터 재계산 중 오류가 발생했습니다.");
+    }
+});
+
+// =================================================================
+// ✅ [신규 추가] 120P 미만 사용자 포인트 보정 스크립트
+// =================================================================
+export const grant100PointsToAllUsers = onCall({
+    region: "asia-northeast3",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+}, async (request) => {
+    // 1. 관리자 인증
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "인증된 사용자만 실행할 수 있습니다.");
+    }
+    const adminUser = await getAuth().getUser(request.auth.uid);
+    const userRole = adminUser.customClaims?.role;
+    if (userRole !== 'admin' && userRole !== 'master') {
+        throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    logger.info(`[Grant-100P] Started by admin: ${request.auth.uid}.`);
+
+    try {
+        const usersSnapshot = await db.collection('users').get();
+        if (usersSnapshot.empty) {
+            return { success: true, message: "포인트를 지급할 사용자가 없습니다." };
+        }
+
+        const batch = db.batch();
+        const POINTS_TO_ADD = 100;
+
+        const newPointLog: Omit<PointLog, "id"> = {
+            amount: POINTS_TO_ADD,
+            reason: `[공지] 포인트 시스템 오류 보상`,
+            createdAt: Timestamp.now(),
+            expiresAt: null, // 보상 포인트는 만료일 없음
+        };
+
+        usersSnapshot.forEach(doc => {
+            batch.update(doc.ref, {
+                points: FieldValue.increment(POINTS_TO_ADD),
+                pointHistory: FieldValue.arrayUnion(newPointLog)
+            });
+        });
+
+        await batch.commit();
+
+        const successMessage = `[Grant-100P] Success! Granted 100 points to ${usersSnapshot.size} users.`;
+        logger.info(successMessage);
+        return { success: true, message: `${usersSnapshot.size}명의 모든 사용자에게 100포인트가 지급되었습니다.` };
+
+    } catch (error) {
+        logger.error("[Grant-100P] An error occurred:", error);
+        throw new HttpsError("internal", "포인트 지급 중 오류가 발생했습니다.");
     }
 });

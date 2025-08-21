@@ -129,7 +129,8 @@ const convertToDate = (dateSource: any): Date | null => {
 const storageTypeOptions: { key: StorageType; name: string; className: string }[] = [
   { key: 'ROOM', name: '실온', className: 'storage-btn-room' },
   { key: 'FROZEN', name: '냉동', className: 'storage-btn-frozen' },
-  { key: 'COLD', name: '냉장', className: 'storage-btn-cold' }
+  { key: 'COLD', name: '냉장', className: 'storage-btn-cold' },
+  { key: 'FRESH', name: '신선', className: 'storage-btn-fresh' }
 ];
 const bundleUnitKeywords = ['묶음', '박스', '곽', '세트', '팩', '봉지'];
 const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'];
@@ -815,7 +816,7 @@ const settingsSummary = useMemo(() => {
         // --- [추가] 변경사항 감지 및 알림 전송 로직 ---
         const changes: string[] = [];
         const currentCategoryName = categories.find(c => c.id === selectedMainCategory)?.name || '';
-        const storageTypeMap = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동' };
+        const storageTypeMap = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
 
         if (initialProduct?.groupName !== groupName.trim()) changes.push(`상품명 변경`);
         if (initialProduct?.description !== description.trim()) changes.push(`상세 설명 변경`);

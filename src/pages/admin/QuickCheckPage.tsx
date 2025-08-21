@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { UserDocument, Order } from '@/types';
-import { getAllUsersForQuickCheck } from '@/firebase/userService';
+// [수정] getUserById를 orderService가 아닌 userService에서 가져오도록 경로를 수정합니다.
+import { getAllUsersForQuickCheck, getUserById } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';
 import toast from 'react-hot-toast';
 import CustomerFocusView from '@/components/admin/CustomerFocusView';
@@ -10,7 +11,7 @@ import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { AnimatePresence } from 'framer-motion';
 import { Search, X, Users, SearchSlash } from 'lucide-react';
-// ✅ [추가] 포인트 복구 버튼 컴포넌트를 가져옵니다.
+
 
 import './QuickCheckPage.css';
 
@@ -85,10 +86,12 @@ const QuickCheckPage: React.FC = () => {
     }
   }, []);
 
+  // [핵심 수정 1] UI 즉시 업데이트를 담당하는 함수
   const updateFocusedUserStats = useCallback(
     (updates: { pickup?: number; noshow?: number; points?: number }) => {
       setFocusedUser((prevUser) => {
         if (!prevUser) return null;
+        // 이전 상태를 기반으로 새로운 통계 값을 계산하여 즉시 UI에 반영
         return {
           ...prevUser,
           pickupCount: Math.max(
@@ -106,26 +109,28 @@ const QuickCheckPage: React.FC = () => {
     [],
   );
 
+  // [핵심 수정 2] 데이터를 새로고침하는 함수
   const refreshData = useCallback(async () => {
-    if (focusedUser) {
-      setIsLoading(true);
-      try {
-        const freshOrders = await getUserOrders(focusedUser.uid);
-        setUserOrders(freshOrders);
+    if (!focusedUser) return;
 
-        const freshAllUsers = await getAllUsersForQuickCheck();
-        setAllUsers(freshAllUsers);
-        const freshUser = freshAllUsers.find(
-          (u: UserDocument) => u.uid === focusedUser.uid,
-        );
-        if (freshUser) setFocusedUser(freshUser);
-      } catch {
-        toast.error('데이터를 새로고침하지 못했습니다.');
-      } finally {
-        setIsLoading(false);
+    try {
+      // 주문 내역은 항상 최신으로 다시 불러옴
+      const freshOrders = await getUserOrders(focusedUser.uid);
+      setUserOrders(freshOrders);
+
+      // 서버에서 특정 사용자 정보만 다시 가져와서 UI 상태를 업데이트
+      // 이 방식은 전체 목록을 불러오는 것보다 빠르고 정확합니다.
+      const freshUserFromServer = await getUserById(focusedUser.uid);
+      if (freshUserFromServer) {
+        setFocusedUser(freshUserFromServer);
       }
+      
+    } catch {
+      toast.error('데이터를 새로고침하지 못했습니다.');
+    } finally {
+      // 로딩 상태는 변경하지 않아 부드러운 UX 제공
     }
-  }, [focusedUser]);
+  }, [focusedUser]); // focusedUser가 변경될 때마다 이 함수도 최신 상태를 참조
 
   const clearFocus = () => {
     setFocusedUser(null);
@@ -191,8 +196,8 @@ const QuickCheckPage: React.FC = () => {
             user={focusedUser}
             orders={userOrders}
             onBack={clearFocus}
-            onStatUpdate={updateFocusedUserStats}
-            onActionSuccess={refreshData}
+            onStatUpdate={updateFocusedUserStats} // UI 즉시 업데이트 함수 전달
+            onActionSuccess={refreshData}         // 작업 성공 후 데이터 새로고침 함수 전달
           />
         )}
 

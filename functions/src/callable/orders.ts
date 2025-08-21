@@ -3,11 +3,10 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-// ✅ [수정] 사용하지 않는 DocumentSnapshot 제거
 import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
-import type { Order, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo } from "../types.js";
+// ✅ [수정] OrderStatus 타입을 import 목록에 추가합니다.
+import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo } from "../types.js";
 import { getAuth } from "firebase-admin/auth";
-// ✅ [수정] 경로 확인 필요. ../utils/pointService.js가 올바른 경로인지 확인해주세요.
 import type { LoyaltyTier } from "../types.js";
 
 const POINT_POLICIES = {
@@ -712,6 +711,75 @@ export const createOrderAsAdmin = onCall(
       logger.error(`Admin order creation failed for target user ${targetUserId} by admin ${adminUid}:`, error);
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "관리자 주문 생성 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+// ✅ [신규 추가] 취소된 주문을 포함하여 확정된 주문을 되돌리는 함수
+export const revertFinalizedOrder = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins },
+  async (request) => {
+    if (!request.auth?.token.role || !['admin', 'master'].includes(request.auth.token.role)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    const { orderId, originalStatus } = request.data as { orderId: string; originalStatus: OrderStatus };
+    if (!orderId || !originalStatus) {
+      throw new HttpsError("invalid-argument", "필수 정보(주문 ID, 원래 상태)가 누락되었습니다.");
+    }
+
+    try {
+      await db.runTransaction(async (transaction) => {
+        const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) throw new HttpsError("not-found", "주문을 찾을 수 없습니다.");
+        
+        const order = orderDoc.data();
+        if(!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+
+        const userRef = db.collection('users').withConverter(userConverter).doc(order.userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists) throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
+        
+        const userData = userSnap.data();
+        if(!userData) throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
+
+        const userUpdateData: any = {};
+        
+        // 페널티가 있었던 취소('LATE_CANCELED')를 되돌릴 경우, 노쇼와 포인트를 복구
+        if (originalStatus === 'LATE_CANCELED') {
+          const newNoShowCount = Math.max(0, (userData.noShowCount || 0) - 0.5);
+          const oldTier = userData.loyaltyTier;
+          const newTier = calculateTier(userData.pickupCount || 0, newNoShowCount);
+
+          userUpdateData.noShowCount = newNoShowCount;
+          userUpdateData.points = FieldValue.increment(POINT_POLICIES.LATE_CANCEL_PENALTY.points * -1); // 50점 복구
+          if (oldTier !== newTier) {
+            userUpdateData.loyaltyTier = newTier;
+          }
+        }
+        
+        // PICKED_UP, NO_SHOW 되돌리기는 onUpdate 트리거에서 처리하므로 여기서는 상태만 변경
+        // 일반 CANCELED 되돌리기는 사용자 통계 변경이 없으므로 상태만 변경
+        
+        // 사용자 정보 업데이트가 필요한 경우에만 트랜잭션에 추가
+        if (Object.keys(userUpdateData).length > 0) {
+          transaction.update(userRef, userUpdateData);
+        }
+
+        // 주문 상태를 'RESERVED'로 되돌리고 관련 타임스탬프 필드 제거
+        transaction.update(orderRef, {
+          status: 'RESERVED',
+          canceledAt: FieldValue.delete(),
+        });
+      });
+      
+      return { success: true, message: "주문이 예약 상태로 복구되었습니다." };
+
+    } catch (error) {
+      logger.error(`Error reverting order ${orderId}:`, error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "주문 복구 중 오류가 발생했습니다.");
     }
   }
 );

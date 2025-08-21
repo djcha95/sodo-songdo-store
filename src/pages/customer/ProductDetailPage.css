@@ -16,37 +16,35 @@
 }
 
 .product-detail-modal-content {
-  /* ▼▼▼▼▼ [수정] 배경색을 부드럽게 변경 ▼▼▼▼▼ */
   background-color: #f9f9f9;
-  /* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */
   width: 100%;
   max-width: 500px;
   height: 95%;
   max-height: 800px;
-  border-radius: 20px; /* [수정] 좀 더 둥글게 */
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); /* [추가] 그림자 효과 */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .modal-close-btn-top {
   position: absolute;
-  top: 16px; /* [수정] 위치 조정 */
-  right: 16px; /* [수정] 위치 조정 */
+  top: 16px;
+  right: 16px;
   background: rgba(0, 0, 0, 0.4);
   color: white;
   border: none;
   border-radius: 50%;
-  width: 36px; /* [수정] 크기 살짝 키움 */
-  height: 36px; /* [수정] 크기 살짝 키움 */
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 10;
-  transition: background-color 0.2s; /* [추가] 호버 효과 */
+  transition: background-color 0.2s;
 }
 .modal-close-btn-top:hover {
   background: rgba(0, 0, 0, 0.7);
@@ -104,20 +102,18 @@
 }
 
 .product-info-area {
-  padding: 0 1.5rem 1.5rem 1.5rem; /* [수정] 패딩 조정 */
+  padding: 0 1.5rem 1.5rem 1.5rem;
 }
 
-/* ▼▼▼▼▼ [추가] 상품명, 설명을 감싸는 영역 스타일 ▼▼▼▼▼ */
 .product-header-content {
   padding: 1.5rem 0;
 }
-/* ▲▲▲▲▲ [추가] 여기까지 ▲▲▲▲▲ */
 
 .product-name {
   text-align: center;
-  font-size: 1.8rem; /* [수정] 폰트 크기 */
-  font-weight: 800; /* [수정] 폰트 굵기 */
-  margin-bottom: 1rem; /* [수정] 여백 조정 */
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
   line-height: 1.4;
   word-break: keep-all;
 }
@@ -125,31 +121,29 @@
 .product-hashtags {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start; /* [수정] 왼쪽 정렬 */
+  justify-content: flex-start;
   gap: 0.6rem;
   margin-top: 1rem;
-  padding: 0 0.5rem; /* [수정] 좌우 패딩 */
+  padding: 0 0.5rem;
 }
 
 .hashtag {
   background-color: var(--color-primary-light, #e0eaff);
   color: var(--color-primary, #3366ff);
-  padding: 0.4rem 0.8rem; /* [수정] 패딩 조정 */
+  padding: 0.4rem 0.8rem;
   border-radius: 20px;
   font-size: 0.8rem;
-  font-weight: 600; /* [수정] 폰트 굵기 */
+  font-weight: 600;
 }
 
-/* ▼▼▼▼▼ [수정] 상세 설명 스타일 (줄바꿈 처리) ▼▼▼▼▼ */
 .markdown-content {
   font-size: 1rem;
   line-height: 1.8;
-  white-space: pre-wrap; /* <--- ✨ 핵심: 이 속성이 줄바꿈을 적용합니다! */
+  white-space: pre-wrap;
   word-break: keep-all;
-  text-align: center; /* <--- ✨ 가독성을 위해 왼쪽 정렬로 변경 */
-  color: #333; /* [수정] 폰트 색상 */
+  text-align: center;
+  color: #333;
 }
-/* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */
 
 
 .markdown-content p {
@@ -180,7 +174,6 @@
     text-decoration: underline;
 }
 
-/* ▼▼▼▼▼ [수정] 핵심 정보 카드 디자인 ▼▼▼▼▼ */
 .product-key-info {
   margin-top: 1.5rem;
   background-color: #ffffff;
@@ -189,14 +182,13 @@
   padding: 1.2rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
-/* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */
 
 .info-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.95rem; /* [수정] 폰트 크기 */
-  margin-bottom: 1rem; /* [수정] 여백 */
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
 }
 .info-row:last-child {
   margin-bottom: 0;
@@ -254,7 +246,6 @@
   font-size: 0.95rem;
 }
 
-/* ▼▼▼▼▼ [수정] 하단 구매 패널 디자인 ▼▼▼▼▼ */
 .product-purchase-footer {
   position: absolute;
   bottom: 0;
@@ -271,7 +262,6 @@
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
 }
-/* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */
 
 .purchase-action-row {
   display: flex;
@@ -284,19 +274,19 @@
   display: flex;
   align-items: center;
   border: 1px solid #ddd;
-  border-radius: 12px; /* [수정] */
+  border-radius: 12px;
 }
 .quantity-display-fixed {
   padding: 0 1rem;
   font-weight: 600;
-  font-size: 1.1rem; /* [수정] */
+  font-size: 1.1rem;
   min-width: 40px;
   text-align: center;
 }
 .quantity-btn {
   background-color: transparent;
   border: none;
-  padding: 0.8rem; /* [수정] */
+  padding: 0.8rem;
   cursor: pointer;
   color: #555;
 }
@@ -310,9 +300,9 @@
 .encore-request-btn-fixed {
   flex-grow: 1;
   border: none;
-  border-radius: 12px; /* [수정] */
-  padding: 0.9rem 1rem; /* [수정] */
-  font-size: 1.05rem; /* [수정] */
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: white;
   cursor: pointer;
@@ -320,10 +310,9 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  transition: all 0.2s ease-in-out; /* [수정] 트랜지션 효과 */
+  transition: all 0.2s ease-in-out;
 }
 
-/* ▼▼▼▼▼ [추가] 버튼 호버/클릭 효과 ▼▼▼▼▼ */
 .add-to-cart-btn-fixed:hover, .waitlist-btn-fixed:hover, .encore-request-btn-fixed:hover {
     transform: scale(1.02);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -331,7 +320,6 @@
 .add-to-cart-btn-fixed:active, .waitlist-btn-fixed:active, .encore-request-btn-fixed:active {
     transform: scale(0.98);
 }
-/* ▲▲▲▲▲ [추가] 여기까지 ▲▲▲▲▲ */
 
 .add-to-cart-btn-fixed { background-color: var(--color-primary, #2563eb); }
 .add-to-cart-btn-fixed:disabled { background-color: #ccc; cursor: not-allowed; transform: none; box-shadow: none;}
@@ -341,15 +329,13 @@
   color: #222;
 }
 
-
-/* ▼▼▼▼▼ [수정] 옵션 선택 드롭다운 디자인 개선 ▼▼▼▼▼ */
 .select-wrapper {
   width: 100%;
 }
 
 .price-select {
   width: 100%;
-  padding: 16px; /* [수정] 패딩 */
+  padding: 16px;
   border-radius: 12px;
   border: 1px solid #e5e7eb;
   font-size: 1rem;
@@ -376,7 +362,6 @@
 .price-select:invalid {
   color: #6b7280;
 }
-/* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */
 
 
 .action-notice {
@@ -386,7 +371,7 @@
     gap: 0.8rem;
     padding: 0.8rem;
     background-color: #f3f4f6;
-    border-radius: 12px; /* [수정] */
+    border-radius: 12px;
     color: #4b5563;
 }
 .action-notice p { margin: 0; font-size: 0.9rem; }
@@ -446,19 +431,22 @@
   background: rgba(0, 0, 0, 0.6);
 }
 
-.lightbox-content {
+.lightbox-content-wrapper {
   width: 100%;
   height: 100%;
   max-width: 100vw;
   max-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding-bottom: 20px;
+  box-sizing: border-box;
 }
 
 .lightbox-swiper {
   width: 100%;
-  height: 100%;
+  height: calc(100% - 80px);
 }
 
 .lightbox-swiper .swiper-button-next,
@@ -500,7 +488,6 @@
   opacity: 0.8;
 }
 
-/* 이미지 Zoom 기능을 위한 스타일 */
 .lightbox-swiper .swiper-zoom-container {
   width: 100%;
   height: 100%;
@@ -515,4 +502,43 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+.lightbox-thumbs-swiper {
+  height: 80px;
+  width: 100%;
+  max-width: 90vw;
+  padding: 10px 0;
+  box-sizing: border-box;
+}
+
+.lightbox-thumbs-swiper .lightbox-thumb-slide {
+  width: 60px;
+  height: 60px;
+  opacity: 0.6;
+  transition: opacity 0.3s ease, border-color 0.3s ease;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid transparent;
+}
+
+.lightbox-thumbs-swiper .lightbox-thumb-slide:hover {
+  opacity: 0.9;
+}
+
+/* [기존] .swiper-slide-thumb-active 만 사용
+  ✅ [변경] 수동으로 추가한 .is-active 클래스에도 동일한 스타일을 적용합니다.
+         Swiper의 자체 클래스(.swiper-slide-thumb-active)도 안정성을 위해 남겨둡니다.
+*/
+.lightbox-thumbs-swiper .swiper-slide-thumb-active,
+.lightbox-thumbs-swiper .lightbox-thumb-slide.is-active {
+  opacity: 1;
+  border-color: var(--color-primary, #fff);
+}
+
+.lightbox-thumbs-swiper .lightbox-thumb-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

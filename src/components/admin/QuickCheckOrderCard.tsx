@@ -12,7 +12,7 @@ interface OrderCardProps {
   onSelect: (groupKey: string) => void;
   isSelected: boolean;
   onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
-  isFuture: boolean; // ✅ [추가] 미래 입고 상품 여부를 받는 prop
+  isFuture: boolean;
 }
 
 // 개별 품목 행: 수량 편집 UX/에러 처리 강화
@@ -145,11 +145,9 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
   };
 
   return (
-    // ✅ [수정] isFuture 값에 따라 'is-future' 클래스를 동적으로 추가합니다.
+    // [수정] 'is-future' 클래스는 유지하되, 내부에 있던 '입고 예정' 배지 엘리먼트는 삭제했습니다.
     <div className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)} ${isFuture ? 'is-future' : ''}`} onClick={() => onSelect(groupKey)}>
-      {/* ✅ [추가] isFuture가 true일 때만 '입고 예정' 배지를 표시합니다. */}
-      {isFuture && <div className="qco-future-badge">입고 예정</div>}
-
+      
       {isSelected && (
         <div className="qco-checkmark">
           <CheckSquare size={24} />

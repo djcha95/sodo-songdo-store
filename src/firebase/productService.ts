@@ -1,6 +1,9 @@
 // src/firebase/productService.ts
 
 import { db, storage } from './firebaseConfig';
+// ✅ [수정] Firebase App 및 Functions SDK import 추가
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
   collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
   writeBatch, increment, arrayUnion, where, orderBy, Timestamp,
@@ -14,7 +17,6 @@ import type {
   ProductItem, CartItem, WaitlistInfo, PaginatedProductsResponse
 } from '@/types';
 
-// ✅ [추가] 박스→실개수 기준 예약량 맵
 import { getReservedQuantitiesMap } from './orderService';
 import { getUserDocById } from './userService';
 
@@ -50,12 +52,6 @@ export const updateProductsStatus = async (productIds: string[], isArchived: boo
   await batch.commit();
 };
 
-/**
- * ✅ [신규 추가] Vercel 빌드 오류를 해결하기 위한 함수입니다.
- * 여러 상품을 지정된 카테고리로 한 번에 이동시킵니다.
- * @param productIds 이동할 상품 ID 배열
- * @param newCategoryName 새 카테고리 이름. '' 또는 null로 지정하면 '분류 없음'이 됩니다.
- */
 export const moveProductsToCategory = async (productIds: string[], newCategoryName: string): Promise<void> => {
   if (!productIds || productIds.length === 0) {
     return;
@@ -722,4 +718,38 @@ export const getLiveStockForItems = async (
     }
   });
   return stockInfo;
+};
+
+// ✅ [신규 추가] Cloud Functions 호출을 위한 코드
+// ========================================================
+// Cloud Functions 호출 (Callable Functions)
+// ========================================================
+
+/**
+ * Cloud Function 'getProductsWithStock'의 응답 데이터 구조 정의
+ */
+interface GetProductsWithStockResponse {
+  products: Product[];
+  lastVisible: any;
+}
+
+// 아시아-서울 리전의 Firebase Functions 인스턴스를 가져옵니다.
+const functions = getFunctions(getApp(), 'asia-northeast3');
+
+// 'getProductsWithStock' Callable Function에 대한 참조를 생성합니다.
+const getProductsWithStockCallable = httpsCallable<void, GetProductsWithStockResponse>(functions, 'getProductsWithStock');
+
+/**
+ * 재고 및 예약 수량이 모두 계산된 상품 목록을 가져옵니다.
+ * 백엔드의 'getProductsWithStock' Cloud Function을 호출하여 복잡한 집계 작업을 서버에서 처리합니다.
+ * @returns {Promise<GetProductsWithStockResponse>} 상품 목록과 페이지네이션 정보를 포함하는 객체
+ */
+export const getProductsWithStock = async (): Promise<GetProductsWithStockResponse> => {
+    try {
+        const result = await getProductsWithStockCallable();
+        return result.data;
+    } catch (error) {
+        console.error("Error calling getProductsWithStock:", error);
+        throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
+    }
 };

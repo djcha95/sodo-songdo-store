@@ -118,6 +118,10 @@
   background-color: var(--danger-color-light); 
   color: var(--danger-color-dark);
 }
+.storage-badge.storage-FRESH { 
+  background-color: #dcfce7; /* 연한 녹색 배경 */
+  color: #166534;      /* 진한 녹색 텍스트 */
+}
 
 /* === 상태 배지 색상 개선 (요청사항 반영) === */
 .status-badge {
@@ -225,4 +229,13 @@
 
 .copyable-id-cell:hover .copy-icon {
     opacity: 1;
+}
+
+.settings-option-btn.storage-btn-fresh {
+  --storage-color: #2a9d8f; /* 신선 - 녹색 계열 */
+}
+.settings-option-btn.storage-btn-fresh.active {
+  background-color: var(--storage-color);
+  color: #fff;
+  border-color: var(--storage-color);
 }

@@ -264,6 +264,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => {
     switch (type) {
       case 'FROZEN': return { label: '냉동', style: { backgroundColor: '#5c7cfa', color: '#fff' } };
       case 'COLD': return { label: '냉장', style: { backgroundColor: '#e63946', color: '#fff' } };
+      case 'FRESH': return { label: '신선', style: { backgroundColor: '#2a9d8f', color: '#fff' } };
       case 'ROOM': return { label: '실온', style: { backgroundColor: '#212529', color: '#fff' } };
       default: return null;
     }

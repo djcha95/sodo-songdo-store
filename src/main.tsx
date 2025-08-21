@@ -51,6 +51,7 @@ const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManageme
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage')); // 페이지 import 추가
+const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
 const Root = () => {
   const { user, loading } = useAuth();
   // ✅ useLocation 훅을 사용하여 현재 경로 정보를 가져옵니다.
@@ -103,6 +104,7 @@ const router = createBrowserRouter([
                   { path: 'users', element: <UserListPage /> },
                   { path: 'users/:userId', element: <UserDetailPage /> },
                   { path: 'banners', element: <BannerAdminPage /> },
+                  { path: 'data-tools', element: <DataAdminPage /> }
                 ]
               }
             ]

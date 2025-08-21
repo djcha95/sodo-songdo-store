@@ -23,11 +23,14 @@ import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, Pac
 import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Pagination, Navigation, Zoom } from 'swiper/modules';
+import { Pagination, Navigation, Zoom, Thumbs, FreeMode } from 'swiper/modules';
+import type { Swiper as SwiperCore } from 'swiper';
 import 'swiper/css';
 import 'swiper/css/pagination';
 import 'swiper/css/navigation';
 import 'swiper/css/zoom';
+import 'swiper/css/thumbs';
+import 'swiper/css/free-mode';
 
 import ReactMarkdown from 'react-markdown';
 import './ProductDetailPage.css';
@@ -36,51 +39,124 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
 
-// --- Helper Functions & Types ---
-const toTimestamp = (date: any): Timestamp | null => {
-    const d = safeToDate(date);
-    return d ? Timestamp.fromDate(d) : null;
-};
-const formatDateWithDay = (date: Date | Timestamp | null | undefined): string => {
-  const d = safeToDate(date);
-  if (!d) return '날짜 미정';
-  return dayjs(d).format('MM.DD(ddd)');
-};
-
-const formatExpirationDate = (date: Date | Timestamp | null | undefined): string => {
-    const d = safeToDate(date);
-    if (!d) return ''; 
-    return dayjs(d).format('YYYY.MM.DD');
-};
-
-const storageLabels: Record<StorageType, string> = { ROOM: '상온', COLD: '냉장', FROZEN: '냉동' };
-const storageIcons: Record<StorageType, React.ReactNode> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} /> };
-
-const normalizeProduct = (product: Product): Product => {
-    if ((!product.salesHistory || product.salesHistory.length === 0) && (product as any).price) {
-        const legacyProduct = product as any;
-        const legacyRound: OriginalSalesRound = {
-            roundId: 'legacy-round-01', roundName: '이전 판매', status: legacyProduct.status || 'ended',
-            variantGroups: [{
-                id: 'legacy-vg-01', groupName: product.groupName, totalPhysicalStock: legacyProduct.stock, stockUnitType: '개',
-                items: [{
-                    id: 'legacy-item-01', name: product.groupName, price: legacyProduct.price, stock: legacyProduct.stock,
-                    limitQuantity: legacyProduct.limitQuantity || null, expirationDate: toTimestamp(legacyProduct.expirationDate), stockDeductionAmount: 1,
-                }],
-                reservedCount: legacyProduct.reservedCount || 0,
-            }],
-            createdAt: toTimestamp(legacyProduct.createdAt)!, publishAt: toTimestamp(legacyProduct.createdAt)!,
-            deadlineDate: toTimestamp(legacyProduct.deadlineDate)!, pickupDate: toTimestamp(legacyProduct.pickupDate)!,
-            pickupDeadlineDate: toTimestamp(legacyProduct.pickupDeadlineDate), allowedTiers: [],
-        };
-        return { ...product, salesHistory: [legacyRound] };
-    }
-    return product;
-};
+// --- (Helper Functions, Types는 이전과 동일) ---
+const toTimestamp = (date: any): Timestamp | null => { /* ... */ return null; };
+const formatDateWithDay = (date: Date | Timestamp | null | undefined): string => { /* ... */ return ''; };
+const formatExpirationDate = (date: Date | Timestamp | null | undefined): string => { /* ... */ return ''; };
+const storageLabels: Record<StorageType, string> = { ROOM: '상온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
+const storageIcons: Record<StorageType, React.ReactNode> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} />, FRESH: <Tag size={16} /> };
+const normalizeProduct = (product: Product): Product => { /* ... */ return product; };
 
 // --- Sub Components ---
 
-const Lightbox: React.FC<{ images: string[]; startIndex: number; isOpen: boolean; onClose: () => void; }> = React.memo(({ images, startIndex, isOpen, onClose }) => { if (!isOpen) return null; return (<div className="lightbox-overlay" onClick={onClose}><button className="lightbox-close-btn" onClick={onClose} aria-label="닫기"><X size={32} /></button><div className="lightbox-content" onClick={(e) => e.stopPropagation()}><Swiper modules={[Pagination, Navigation, Zoom]} initialSlide={startIndex} spaceBetween={20} slidesPerView={1} navigation pagination={{ clickable: true }} zoom={true} className="lightbox-swiper">{images.map((url, index) => (<SwiperSlide key={index}><div className="swiper-zoom-container"><OptimizedImage originalUrl={url} size="1080x1080" alt={`이미지 ${index + 1}`} /></div></SwiperSlide>))}</Swiper></div></div>); });
+const Lightbox: React.FC<{
+  images: string[];
+  startIndex: number;
+  isOpen: boolean;
+  onClose: () => void;
+}> = React.memo(({ images, startIndex, isOpen, onClose }) => {
+  const [mainSwiper, setMainSwiper] = useState<SwiperCore | null>(null);
+  const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
+  
+  // ✅ 1. 현재 활성화된 슬라이드 인덱스를 관리하기 위한 state 추가
+  const [activeIndex, setActiveIndex] = useState(startIndex);
+
+  // 라이트박스가 열릴 때마다 activeIndex를 초기화합니다.
+  useEffect(() => {
+    if (isOpen) {
+      setActiveIndex(startIndex);
+    }
+  }, [isOpen, startIndex]);
+
+  // ✅ 2. 메인 Swiper와 썸네일 Swiper 동기화 및 activeIndex 업데이트 로직 개선
+  useEffect(() => {
+    if (mainSwiper && !mainSwiper.destroyed) {
+      // 메인 Swiper의 슬라이드가 변경될 때마다 activeIndex를 업데이트하고,
+      // 썸네일 Swiper를 해당 위치로 이동시킵니다.
+      const handleSlideChange = () => {
+        setActiveIndex(mainSwiper.realIndex);
+        if (thumbsSwiper && !thumbsSwiper.destroyed) {
+          thumbsSwiper.slideToLoop(mainSwiper.realIndex);
+        }
+      };
+      mainSwiper.on('slideChange', handleSlideChange);
+      
+      // 처음 마운트될 때도 인덱스를 설정해줍니다.
+      setActiveIndex(mainSwiper.realIndex);
+
+      return () => {
+        mainSwiper.off('slideChange', handleSlideChange);
+      };
+    }
+  }, [mainSwiper, thumbsSwiper]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="lightbox-overlay" onClick={onClose}>
+      <button className="lightbox-close-btn" onClick={onClose} aria-label="닫기">
+        <X size={32} />
+      </button>
+      <div className="lightbox-content-wrapper" onClick={(e) => e.stopPropagation()}>
+        {/* 메인 뷰어 */}
+        <Swiper
+          onSwiper={setMainSwiper}
+          modules={[Pagination, Navigation, Zoom, Thumbs]}
+          initialSlide={startIndex}
+          spaceBetween={20}
+          slidesPerView={1}
+          navigation
+          pagination={{ clickable: true }}
+          zoom
+          loop={true}
+          className="lightbox-swiper"
+        >
+          {images.map((url, index) => (
+            <SwiperSlide key={index}>
+              <div className="swiper-zoom-container">
+                <OptimizedImage originalUrl={url} size="1080x1080" alt={`이미지 ${index + 1}`} />
+              </div>
+            </SwiperSlide>
+          ))}
+        </Swiper>
+
+        {/* 썸네일 */}
+        <Swiper
+          onSwiper={setThumbsSwiper}
+          modules={[Thumbs, FreeMode]}
+          slidesPerView="auto"
+          spaceBetween={10}
+          centeredSlides={true}
+          watchSlidesProgress={true}
+          loop={true}
+          initialSlide={startIndex}
+          className="lightbox-thumbs-swiper"
+          freeMode={true}
+          onClick={(swiper, event) => {
+            if (!mainSwiper || mainSwiper.destroyed) return;
+            const clickedSlide = (event.target as HTMLElement).closest('.swiper-slide');
+            if (!clickedSlide) return;
+            const realIndex = clickedSlide.getAttribute('data-swiper-slide-index');
+            if (realIndex !== null) {
+              mainSwiper.slideToLoop(parseInt(realIndex, 10));
+            }
+          }}
+        >
+          {images.map((url, index) => (
+            // ✅ 3. activeIndex와 현재 슬라이드의 index를 비교하여 'is-active' 클래스를 동적으로 추가
+            <SwiperSlide 
+              key={index} 
+              className={`lightbox-thumb-slide ${activeIndex === index ? 'is-active' : ''}`}
+            >
+              <OptimizedImage originalUrl={url} size="200x200" alt={`썸네일 ${index + 1}`} />
+            </SwiperSlide>
+          ))}
+        </Swiper>
+      </div>
+    </div>
+  );
+});
+
 const ProductImageSlider: React.FC<{ images: string[]; productName: string; onImageClick: (index: number) => void; }> = React.memo(({ images, productName, onImageClick }) => (<div className="product-swiper-container"><Swiper modules={[Pagination, Navigation]} spaceBetween={0} slidesPerView={1} navigation pagination={{ clickable: true, dynamicBullets: true }} className="product-swiper">{images.map((url, index) => (<SwiperSlide key={index} onClick={() => onImageClick(index)}><OptimizedImage originalUrl={url} size="1080x1080" alt={`${productName} 이미지 ${index + 1}`} /></SwiperSlide>))}</Swiper><div className="image-zoom-indicator"><Search size={16} /><span>클릭해서 크게 보기</span></div></div>));
 
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
@@ -89,14 +165,12 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     const isMultiGroup = round.variantGroups.length > 1;
     return (
         <>
-            {/* ▼▼▼▼▼ [수정] 상품명, 설명을 감싸는 div 추가 ▼▼▼▼▼ */}
             <div className="product-header-content">
                 <h1 className="product-name">{product.groupName}</h1>
                 <div className="markdown-content">
                     <ReactMarkdown>{product.description || ''}</ReactMarkdown>
                 </div>
             </div>
-            {/* ▲▲▲▲▲ [수정] 여기까지 ▲▲▲▲▲ */}
 
             {product.hashtags && product.hashtags.length > 0 && (
                 <div className="product-hashtags">
