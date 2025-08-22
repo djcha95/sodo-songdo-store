@@ -20,8 +20,9 @@ import { formatKRW } from '@/utils/number';
 import { reportError, reportInfo } from '@/utils/logger';
 
 import { getProductsWithStock } from '@/firebase/productService'; 
-// ✅ [수정] 'Timestamp'를 값으로 사용하기 위해 'import type'이 아닌 일반 'import'로 변경합니다.
 import { Timestamp } from 'firebase/firestore';
+// ✅ [수정] productUtils에서 safeToDate와 getDeadlines를 가져옵니다.
+import { safeToDate, getDeadlines } from '@/utils/productUtils';
 
 
 // =================================================================
@@ -70,79 +71,71 @@ interface WaitlistProcessResult {
 }
 
 
-const safeToDate = (date: any): Date | null => {
-    if (!date) return null;
-    if (date instanceof Date) { if (isNaN(date.getTime())) return null; return date; }
-    if (typeof date.toDate === 'function') return date.toDate();
-    // ✅ 'new Timestamp'가 이제 정상적으로 동작합니다.
-    if (typeof date === 'object' && date.seconds !== undefined) { return new Timestamp(date.seconds, date.nanoseconds || 0).toDate(); }
-    if (typeof date === 'string') { const parsedDate = new Date(date); if (!isNaN(parsedDate.getTime())) return parsedDate; }
-    if (typeof date === 'number' && isFinite(date)) { return new Date(date); }
-    return null;
-};
-
-const getDeadlines = (round: SalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
+// ✅ [수정] getDynamicStatus: 요청하신 비즈니스 로직에 따라 상태를 정확히 계산합니다.
+const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicStatus => {
+  const now = dayjs();
   const publishAt = safeToDate(round.publishAt);
   const pickupDate = safeToDate(round.pickupDate);
-  const primaryEnd = publishAt 
-    ? dayjs(publishAt).add(1, 'day').hour(13).minute(0).second(0)
-    : round.deadlineDate ? dayjs(safeToDate(round.deadlineDate)) : null;
-  const secondaryEnd = pickupDate 
-    ? dayjs(pickupDate).hour(13).minute(0).second(0)
-    : null;
-  return { primaryEnd, secondaryEnd };
-};
-
-const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicStatus => {
-  const isUnlimited = remainingStock === Infinity;
-  if (!isUnlimited && remainingStock <= 0) {
-    return { text: "매진", className: "sold-out" };
-  }
-
-  const now = dayjs();
-  const { primaryEnd, secondaryEnd } = getDeadlines(round);
-  const publishAtDate = safeToDate(round.publishAt);
-  const pickupDate = safeToDate(round.pickupDate);
   const pickupDeadlineDate = safeToDate(round.pickupDeadlineDate);
-
-  if (publishAtDate && now.isBefore(publishAtDate)) {
+  
+  const { primaryEnd, secondaryEnd } = getDeadlines(round);
+  const isUnlimited = remainingStock === Infinity;
+  
+  // 1. 발행 전
+  if (publishAt && now.isBefore(publishAt)) {
     return { text: "판매예정", className: "scheduled" };
   }
+
+  // 2. 1차 공구 기간
   if (primaryEnd && now.isBefore(primaryEnd)) {
-    return { text: "공구예약중", className: "selling" };
-  }
-  if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '[]')) {
-    return { text: "추가예약중", className: "late-reservation" };
-  }
-  if(pickupDate && pickupDeadlineDate && now.isBetween(pickupDate, pickupDeadlineDate, null, '[]')) {
-    return { text: "픽업중/현장판매", className: "pickup" };
-  }
-  if ((secondaryEnd && now.isAfter(secondaryEnd)) || (pickupDeadlineDate && now.isAfter(pickupDeadlineDate))) {
-    return { text: "판매종료", className: "ended" };
+    if (!isUnlimited && remainingStock <= 0) {
+      return { text: "대기접수중", className: "late-reservation" }; // '대기' 상태
+    }
+    return { text: "1차 공구중", className: "selling" };
   }
 
-  switch (round.status) {
-    case 'selling':
-      return { text: "공구예약중", className: "selling" };
-    case 'scheduled':
-      return { text: "판매예정", className: "scheduled" };
-    case 'ended':
-      return { text: "판매종료", className: "ended" };
-    default:
-      return { text: "판매종료", className: "ended" };
+  // 3. 2차 공구 기간
+  if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
+    if (remainingStock <= 0) {
+      return { text: "매진", className: "sold-out" }; // 2차에선 대기 없음
+    }
+    return { text: "2차 공구중", className: "late-reservation" };
   }
+
+  // 4. 픽업 기간
+  if (pickupDate && pickupDeadlineDate && now.isBetween(pickupDate, pickupDeadlineDate, null, '[]')) {
+    return { text: "픽업중/현장판매", className: "pickup" };
+  }
+  
+  // 5. 모든 기간 종료 후
+  if (secondaryEnd && now.isAfter(secondaryEnd)) {
+     if (remainingStock <= 0) {
+      return { text: "매진", className: "sold-out" };
+    }
+    return { text: "판매종료", className: "ended" };
+  }
+  
+  // 6. 데이터베이스의 원본 상태를 fallback으로 사용
+  if (round.status === 'sold_out') return { text: "매진", className: "sold-out" };
+  if (round.status === 'ended') return { text: "판매종료", className: "ended" };
+  if (round.status === 'scheduled') return { text: "판매예정", className: "scheduled" };
+  
+  return { text: "판매종료", className: "ended" };
 };
+
 
 const formatDate = (dateInput: any) => {
     const date = safeToDate(dateInput);
-    if (!date || !isFinite(date.getTime())) return '–';
-    return date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\.$/, '');
+    if (!date) return '–';
+    // ✅ [수정] 날짜 형식을 'YY.MM.DD'로 변경하여 가독성을 높입니다.
+    return dayjs(date).format('YY.MM.DD');
 };
 
 const formatDateShort = (dateInput: any) => {
     const date = safeToDate(dateInput);
-    if (!date || !isFinite(date.getTime())) return '–';
-    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+    if (!date) return '–';
+    // ✅ [수정] 요일을 추가하여 가독성을 높입니다.
+    return dayjs(date).format('MM/DD(ddd)');
 };
 
 const formatTimestamp = (timestamp: Timestamp) => {
@@ -463,10 +456,20 @@ const ProductListPageAdmin: React.FC = () => {
     if (searchQuery) flatRounds = flatRounds.filter(item => item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || item.round.roundName.toLowerCase().includes(searchQuery.toLowerCase()));
     if (filterCategory !== 'all') flatRounds = flatRounds.filter(item => item.category === filterCategory);
     if (filterStatus !== 'all') {
-      flatRounds = flatRounds.filter(item => 
-          item.dynamicStatus.className === filterStatus || 
-          item.enrichedVariantGroups.some(vg => vg.dynamicStatus.className === filterStatus)
-      );
+      const statusMap: Record<string, string> = {
+            "1차 공구중": "selling",
+            "2차 공구중": "late-reservation",
+            "대기접수중": "late-reservation",
+            "픽업중/현장판매": "pickup",
+            "매진": "sold-out",
+            "판매종료": "ended",
+            "판매예정": "scheduled",
+        };
+        const targetClassName = statusMap[filterStatus] || filterStatus;
+        flatRounds = flatRounds.filter(item => 
+            item.dynamicStatus.text === filterStatus || 
+            item.enrichedVariantGroups.some(vg => vg.dynamicStatus.text === filterStatus)
+        );
     }
 
     return flatRounds.sort((a, b) => {
@@ -646,12 +649,13 @@ const ProductListPageAdmin: React.FC = () => {
                     <div className="control-group"><Filter size={16} /><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="control-select"><option value="all">모든 카테고리</option>{pageData.categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select>
                     <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select">
                         <option value="all">모든 상태</option>
-                        <option value="selling">공구예약중</option>
-                        <option value="late-reservation">추가예약중</option>
-                        <option value="pickup">픽업중/현장판매</option>
-                        <option value="sold-out">매진</option>
-                        <option value="ended">판매종료</option>
-                        <option value="scheduled">판매예정</option>
+                        <option value="1차 공구중">1차 공구중</option>
+                        <option value="2차 공구중">2차 공구중</option>
+                        <option value="대기접수중">대기접수중</option>
+                        <option value="픽업중/현장판매">픽업중/현장판매</option>
+                        <option value="매진">매진</option>
+                        <option value="판매종료">판매종료</option>
+                        <option value="판매예정">판매예정</option>
                     </select>
                     </div>
                 </div>
@@ -666,6 +670,7 @@ const ProductListPageAdmin: React.FC = () => {
                   <tr>
                     <th><input type="checkbox" checked={isAllSelected} onChange={handleSelectAll} title="전체 선택/해제"/></th>
                     <th>No.</th>
+                    {/* ✅ [신규] 상품 ID 컬럼 추가 */}
                     <th>상품 ID</th>
                     <th className="sortable-header" onClick={() => handleSortChange('roundCreatedAt')}>등록일 {sortConfig.key === 'roundCreatedAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                     <th className="sortable-header" onClick={() => handleSortChange('pickupDate')}>픽업일 {sortConfig.key === 'pickupDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
@@ -675,7 +680,7 @@ const ProductListPageAdmin: React.FC = () => {
                     <th>상태</th>
                     <th>가격</th>
                     <th className="sortable-header" onClick={() => handleSortChange('expirationDate')}>유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
-                    <th title="전체 판매(예약+픽업) 수량 / 전체 대기자 수">판매/대기</th>
+                    <th title="예약된 수량 / 대기자 수">예약/대기</th>
                     <th title="픽업 완료된 수량">픽업</th>
                     <th>재고</th>
                     <th>관리</th>

@@ -188,7 +188,7 @@ Firebase와의 모든 통신을 담당하는 중앙 허브 역할을 하는 폴�
 
 ### `src/types/react-html.d.ts`
 
--   TypeScript 환경에서 `<img>` 태그의 `fetchPriority`와 같은 **새로운 HTML 속성을 올바르게 인식하도록 확장**하는 타입 정의 파일입니다.
+-   TypeScript 환경에서 `<img>` 태그의 `fetchpriority`와 같은 **새로운 HTML 속성을 올바르게 인식하도록 확장**하는 타입 정의 파일입니다.
 -   React의 기본 타입 정의에 포함되지 않은 웹 표준 속성을 안전하게 사용할 수 있도록 돕습니다.
 
 ### `src/utils/imageUtils.ts`

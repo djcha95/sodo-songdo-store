@@ -13,6 +13,7 @@ import type {
   OrderItem,
   SalesRound,
   VariantGroup,
+  UserDocument 
 } from "../types.js";
 
 import { analyzeProductTextWithAI } from "../utils/gemini.js";
@@ -435,3 +436,93 @@ export const notifyUsersOfProductUpdate = onCall(
     }
   }
 );
+
+/**
+ * =================================================================
+ * ✅ 7) 장바구니 유효성 검사: validateCart (신규 추가)
+ * =================================================================
+ * 프론트엔드에서 주문 직전 호출하여 재고, 등급 등을 최종 확인합니다.
+ */
+export const validateCart = onCall({
+  region: "asia-northeast3",
+  cors: allowedOrigins, // 👈 CORS 오류를 해결하는 핵심 설정입니다.
+}, async (request) => {
+  const itemsToValidate = request.data.items as any[];
+  const userId = request.auth?.uid;
+
+  if (!itemsToValidate || !Array.isArray(itemsToValidate) || itemsToValidate.length === 0) {
+    throw new HttpsError("invalid-argument", "검증할 상품 정보가 없습니다.");
+  }
+  
+  if (!userId) {
+    // 비로그인 사용자는 검증 없이 통과 (또는 에러 처리)
+    return {
+      validatedItems: itemsToValidate.map(item => ({ ...item, status: "OK" })),
+      summary: { sufficient: true, reason: "OK" },
+    };
+  }
+  
+  try {
+    const userDocRef = db.collection("users").doc(userId);
+    const productIds = [...new Set(itemsToValidate.map(item => item.productId))];
+
+    // 트랜잭션 안에서 사용자 정보와 모든 관련 상품 정보를 한 번에 읽습니다.
+    const validationResult = await db.runTransaction(async (transaction) => {
+      const userDoc = (await transaction.get(userDocRef)).data() as UserDocument | undefined;
+      const productDocs = await Promise.all(productIds.map(id => transaction.get(db.collection("products").doc(id))));
+      const productsMap = new Map(productDocs.map(doc => [doc.id, doc.data() as Product]));
+      
+      const validatedItems: any[] = [];
+      const removalReasons = new Set<string>();
+      let isSufficient = true;
+
+      for (const item of itemsToValidate) {
+        const product = productsMap.get(item.productId);
+        if (!product) {
+          validatedItems.push({ ...item, status: "REMOVED", reason: "상품 정보 없음" });
+          removalReasons.add("상품 정보 없음");
+          continue;
+        }
+
+        const round = product.salesHistory.find(r => r.roundId === item.roundId);
+        if (!round) {
+          validatedItems.push({ ...item, status: "REMOVED", reason: "판매 회차 정보 없음" });
+          removalReasons.add("판매 회차 정보 없음");
+          continue;
+        }
+        
+        // TODO: 사용자 등급(Tier) 검증 로직 추가
+        // 예: if (round.allowedTiers && !round.allowedTiers.includes(userDoc.loyaltyTier)) { ... }
+        if (userDoc && round.allowedTiers && !round.allowedTiers.includes(userDoc.loyaltyTier)) {
+           validatedItems.push({ ...item, status: "INELIGIBLE", reason: "사용자 등급 제한" });
+           continue; // 등급 미달 상품은 총액 계산에서 제외
+        }
+
+        // TODO: 재고 검증 로직 추가
+        // 이 부분은 프로젝트의 재고 관리 방식에 따라 상세 구현이 필요합니다.
+        // (예: reservedCount와 totalPhysicalStock 비교)
+        
+        // 검증 통과
+        validatedItems.push({ ...item, status: "OK" });
+      }
+      
+      // 'REMOVED'나 'UPDATED' 상태가 하나라도 있으면 insufficient로 판단
+      isSufficient = validatedItems.every(item => item.status === "OK" || item.status === "INELIGIBLE");
+
+      return {
+        validatedItems,
+        summary: {
+          sufficient: isSufficient,
+          reason: [...removalReasons].join(', ') || "OK",
+        },
+      };
+    });
+
+    return validationResult;
+
+  } catch (error) {
+    logger.error("`validateCart` 함수 실행 중 오류 발생:", error);
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", "장바구니 검증 중 서버 오류가 발생했습니다.");
+  }
+});

@@ -14,7 +14,7 @@ const tutorialSteps = [
   {
     icon: <Flame size={32} />,
     title: '오늘의 공동구매',
-    description: '매일 오후 1시에 새로운 상품이 올라와요. 마감 시간 전까지 자유롭게 예약하고, 맛있는 상품을 가장 먼저 만나보세요!',
+    description: '매일 오후 2시에 새로운 상품이 올라와요. 마감 시간 전까지 자유롭게 예약하고, 맛있는 상품을 가장 먼저 만나보세요!',
   },
   {
     icon: <Clock size={32} />,

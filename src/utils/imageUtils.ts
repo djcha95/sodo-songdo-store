@@ -7,7 +7,8 @@
  */
 export const getOptimizedImageUrl = (
   originalUrl: string,
-  size: '200x200' | '1080x1080'
+  // ✅ [수정] '150x150' 사이즈를 허용 타입에 추가합니다.
+  size: '150x150' | '200x200' | '1080x1080'
 ): string => {
   // 이중 안전장치: 이미 리사이즈된 URL이면, 더 이상 처리하지 않고 즉시 반환합니다.
   if (originalUrl.includes(`_${size}.webp`)) {

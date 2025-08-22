@@ -74,7 +74,7 @@ const SafeThumb: React.FC<{
       alt={alt}
       className={`${className} ${errorState !== 'none' ? 'image-error-fallback' : ''}`}
       loading={eager ? 'eager' : 'lazy'}
-      fetchPriority={eager ? 'high' : 'auto'}
+      fetchpriority={eager ? 'high' : 'auto'}
       onError={handleError}
     />
   );

@@ -2,10 +2,10 @@
 
 .customer-page-container {
   position: relative;
-  background-color: #f8f9fa; /* 배경색 추가 */
+  background-color: #f8f9fa;
 }
 
-/* --- 당겨서 새로고침 스타일 --- */
+/* --- 당겨서 새로고침 스타일 (수정됨) --- */
 .pull-to-refresh-indicator {
   position: absolute;
   top: 0;
@@ -15,7 +15,8 @@
   justify-content: center;
   align-items: center;
   overflow: hidden;
-  z-index: 1; /* 콘텐츠보다 아래에 있도록 */
+  z-index: 2; /* 콘텐츠 위에 표시되도록 z-index 조정 */
+  pointer-events: none; /* 인디케이터가 클릭 이벤트를 방해하지 않도록 설정 */
 }
 
 .indicator-content {
@@ -25,6 +26,10 @@
   gap: 8px;
   color: #868e96;
   font-size: 14px;
+  padding: 10px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .arrow-icon {
@@ -40,11 +45,11 @@
   to { transform: rotate(360deg); }
 }
 
+/* ✅ [제거] 콘텐츠를 움직이는 스타일 제거 */
 .pull-to-refresh-content {
   background-color: var(--color-background);
   position: relative;
-  z-index: 2; /* 인디케이터보다 위에 있도록 */
-  transition: transform 0.3s ease-out; /* 놓았을 때 되돌아오는 효과 */
+  z-index: 1; /* 인디케이터보다 아래에 있도록 z-index 조정 */
 }
 
 /* --- 기존 스타일 --- */

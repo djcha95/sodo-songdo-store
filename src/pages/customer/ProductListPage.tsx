@@ -179,7 +179,10 @@ const ProductListPage: React.FC = () => {
       const productWithState: ProductWithUIState = { 
         ...product, 
         phase: finalPhase,
-        deadlines: { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate }, 
+        deadlines: { 
+          primaryEnd: primaryEndDate ? primaryEndDate.toDate() : null, 
+          secondaryEnd: secondaryEndDate ? secondaryEndDate.toDate() : null 
+        }, 
         displayRound: round as SalesRound,
         actionState,
       };
@@ -213,17 +216,16 @@ const ProductListPage: React.FC = () => {
       ? (tempPrimary.find(p => p.actionState !== 'WAITLISTABLE')?.deadlines.primaryEnd || tempPrimary[0].deadlines.primaryEnd)
       : null;
 
-    // [수정] 1차 공구 상품 정렬 로직 변경
     const sortedPrimaryProducts = tempPrimary.sort((a, b) => {
       const getStatePriority = (state: ProductActionState): number => {
         switch (state) {
           case 'PURCHASABLE':
           case 'REQUIRE_OPTION':
-            return 1; // 구매 가능 상품이 최우선
+            return 1;
           case 'WAITLISTABLE':
-            return 2; // '대기' 상태 상품이 그 다음
+            return 2;
           default:
-            return 3; // 나머지
+            return 3;
         }
       };
 
@@ -231,10 +233,9 @@ const ProductListPage: React.FC = () => {
       const priorityB = getStatePriority(b.actionState);
 
       if (priorityA !== priorityB) {
-        return priorityA - priorityB; // 상태 우선순위에 따라 정렬
+        return priorityA - priorityB;
       }
 
-      // 상태가 같을 경우, 기존 정렬 로직(재고, 가격 등)을 따름
       return sortProductsForDisplay(a as any, b as any);
     });
     
@@ -273,7 +274,12 @@ const ProductListPage: React.FC = () => {
 
   return (
     <div className="customer-page-container">
-      <div className="pull-to-refresh-indicator" style={{ height: `${pullDistance}px` }}>
+      <div className="pull-to-refresh-indicator" style={{ 
+          height: `60px`, // 고정 높이
+          opacity: isRefreshing ? 1 : Math.min(pullDistance / 80, 1), // 당기는 거리에 따라 부드럽게 표시
+          transform: `translateY(${isRefreshing ? 0 : Math.max(-60, -60 + pullDistance)}px)`, // 위에서 내려오도록
+          transition: 'opacity 0.2s, transform 0.2s'
+        }}>
         <div className="indicator-content">
           {isRefreshing ? (
             <RefreshCw size={24} className="refreshing-icon" />
@@ -285,7 +291,9 @@ const ProductListPage: React.FC = () => {
           )}
         </div>
       </div>
-      <div className="pull-to-refresh-content" style={{ transform: `translateY(${pullDistance}px)` }}>
+      
+      {/* ✅ [수정] style 속성을 제거하여 transform 효과를 없애고 Sticky 헤더와의 충돌을 방지합니다. */}
+      <div className="pull-to-refresh-content">
         <div className="page-section banner-section" data-tutorial-id="main-banner">
           <BannerSlider banners={banners} />
         </div>

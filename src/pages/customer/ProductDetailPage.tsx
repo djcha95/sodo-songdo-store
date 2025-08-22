@@ -1,25 +1,29 @@
 // src/pages/customer/ProductDetailPage.tsx
 
-import React, { useState, useEffect, useMemo, useCallback, Suspense, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Suspense, useRef, useLayoutEffect, startTransition } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
 import { useAuth } from '@/context/AuthContext';
-import { useCart } from '@/context/CartContext';
+// useCart는 이제 사용되지 않으므로 제거하거나, 다른 기능에 필요하면 유지합니다.
+// import { useCart } from '@/context/CartContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { useLaunch } from '@/context/LaunchContext';
 import { detailPageTourSteps } from '@/components/customer/AppTour';
 
-import { functions } from '@/firebase'; 
-import { Timestamp } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/firebase';
+import { getApp } from 'firebase/app';
 
-import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRound as OriginalSalesRound } from '@/types';
+import { Timestamp } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRound as OriginalSalesRound, OrderItem } from '@/types';
 import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getStockInfo } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 
-import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame } from 'lucide-react';
+// ✅ [수정] Box 아이콘 import
+import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -39,15 +43,50 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
 
-// --- (Helper Functions, Types는 이전과 동일) ---
-const toTimestamp = (date: any): Timestamp | null => { /* ... */ return null; };
-const formatDateWithDay = (date: Date | Timestamp | null | undefined): string => { /* ... */ return ''; };
-const formatExpirationDate = (date: Date | Timestamp | null | undefined): string => { /* ... */ return ''; };
+// --- Helper Functions (변경 없음) ---
+const toTimestamp = (date: any): Timestamp | null => {
+    if (!date) return null;
+    if (date instanceof Timestamp) return date;
+    if (date instanceof Date) return Timestamp.fromDate(date);
+    return null;
+};
+
+// ✅ [수정] 픽업일 형식을 '8.28(목)' 형태로 변경
+const formatDateWithDay = (dateInput: Date | Timestamp | null | undefined): string => {
+    if (!dateInput) return '미정';
+    const date = dayjs(safeToDate(dateInput));
+    if (!date.isValid()) return '날짜 오류';
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${date.format('M.D')}(${days[date.day()]})`;
+};
+
+// ✅ [수정] 유통기한 형식을 '25.09.08' 형태로 변경
+const formatExpirationDate = (dateInput: Date | Timestamp | null | undefined): string => {
+    if (!dateInput) return '';
+    const date = dayjs(safeToDate(dateInput));
+    if (!date.isValid()) return '날짜 오류';
+    if (date.year() > 2098) return '상시';
+    return `${date.format('YY.MM.DD')}`;
+};
+
 const storageLabels: Record<StorageType, string> = { ROOM: '상온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
 const storageIcons: Record<StorageType, React.ReactNode> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} />, FRESH: <Tag size={16} /> };
-const normalizeProduct = (product: Product): Product => { /* ... */ return product; };
+const normalizeProduct = (product: Product): Product => {
+    if (product && product.salesHistory) {
+        product.salesHistory = product.salesHistory.map(round => {
+            if (round.variantGroups) {
+                round.variantGroups = round.variantGroups.map(vg => {
+                    const totalPhysicalStock = vg.totalPhysicalStock === null ? -1 : vg.totalPhysicalStock;
+                    return { ...vg, totalPhysicalStock };
+                });
+            }
+            return round;
+        });
+    }
+    return product;
+};
 
-// --- Sub Components ---
+// --- Sub Components (변경 없음) ---
 
 const Lightbox: React.FC<{
   images: string[];
@@ -57,22 +96,17 @@ const Lightbox: React.FC<{
 }> = React.memo(({ images, startIndex, isOpen, onClose }) => {
   const [mainSwiper, setMainSwiper] = useState<SwiperCore | null>(null);
   const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
-  
-  // ✅ 1. 현재 활성화된 슬라이드 인덱스를 관리하기 위한 state 추가
+
   const [activeIndex, setActiveIndex] = useState(startIndex);
 
-  // 라이트박스가 열릴 때마다 activeIndex를 초기화합니다.
   useEffect(() => {
     if (isOpen) {
       setActiveIndex(startIndex);
     }
   }, [isOpen, startIndex]);
 
-  // ✅ 2. 메인 Swiper와 썸네일 Swiper 동기화 및 activeIndex 업데이트 로직 개선
   useEffect(() => {
     if (mainSwiper && !mainSwiper.destroyed) {
-      // 메인 Swiper의 슬라이드가 변경될 때마다 activeIndex를 업데이트하고,
-      // 썸네일 Swiper를 해당 위치로 이동시킵니다.
       const handleSlideChange = () => {
         setActiveIndex(mainSwiper.realIndex);
         if (thumbsSwiper && !thumbsSwiper.destroyed) {
@@ -80,8 +114,7 @@ const Lightbox: React.FC<{
         }
       };
       mainSwiper.on('slideChange', handleSlideChange);
-      
-      // 처음 마운트될 때도 인덱스를 설정해줍니다.
+
       setActiveIndex(mainSwiper.realIndex);
 
       return () => {
@@ -98,7 +131,6 @@ const Lightbox: React.FC<{
         <X size={32} />
       </button>
       <div className="lightbox-content-wrapper" onClick={(e) => e.stopPropagation()}>
-        {/* 메인 뷰어 */}
         <Swiper
           onSwiper={setMainSwiper}
           modules={[Pagination, Navigation, Zoom, Thumbs]}
@@ -120,7 +152,6 @@ const Lightbox: React.FC<{
           ))}
         </Swiper>
 
-        {/* 썸네일 */}
         <Swiper
           onSwiper={setThumbsSwiper}
           modules={[Thumbs, FreeMode]}
@@ -143,9 +174,8 @@ const Lightbox: React.FC<{
           }}
         >
           {images.map((url, index) => (
-            // ✅ 3. activeIndex와 현재 슬라이드의 index를 비교하여 'is-active' 클래스를 동적으로 추가
-            <SwiperSlide 
-              key={index} 
+            <SwiperSlide
+              key={index}
               className={`lightbox-thumb-slide ${activeIndex === index ? 'is-active' : ''}`}
             >
               <OptimizedImage originalUrl={url} size="200x200" alt={`썸네일 ${index + 1}`} />
@@ -162,6 +192,7 @@ const ProductImageSlider: React.FC<{ images: string[]; productName: string; onIm
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
 const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState; expirationDateInfo: ExpirationDateInfo; }> = React.memo(({ product, round, actionState, expirationDateInfo }) => {
     const pickupDate = safeToDate(round.pickupDate);
+    const arrivalDate = safeToDate(round.arrivalDate);
     const isMultiGroup = round.variantGroups.length > 1;
     return (
         <>
@@ -175,11 +206,11 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
             {product.hashtags && product.hashtags.length > 0 && (
                 <div className="product-hashtags">
                     {product.hashtags.map(tag => (
-                        <span key={tag} className="hashtag">{`${tag.replace(/#/g, '')}`}</span>
+                        <span key={tag} className="hashtag">{`#${tag.replace(/#/g, '')}`}</span>
                     ))}
                 </div>
             )}
-            
+
             <div className="product-key-info" data-tutorial-id="detail-key-info">
                 {expirationDateInfo.type === 'single' && (
                     <div className="info-row">
@@ -189,7 +220,7 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                 )}
                 {expirationDateInfo.type === 'multiple' && (
                     <div className="info-row expiration-info-row">
-                        <div className="info-label"><Hourglass size={16} />옵션별 유통기한</div>
+                        <div className="info-label"><Hourglass size={16} />유통기한</div>
                         <div className="info-value">
                             <div className="expiration-list">
                                 {expirationDateInfo.details.map((item, index) => (
@@ -201,13 +232,21 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                         </div>
                     </div>
                 )}
-                
+
+                {arrivalDate && (
+                    <div className="info-row">
+                        <div className="info-label"><Inbox size={16} />입고일</div>
+                        <div className="info-value">{formatDateWithDay(arrivalDate)}</div>
+                    </div>
+                )}
+
                 <div className="info-row">
                     <div className="info-label"><Calendar size={16} />픽업일</div>
                     <div className="info-value">{pickupDate ? formatDateWithDay(pickupDate) : '미정'}</div>
                 </div>
                 <div className="info-row">
                     <div className="info-label">{storageIcons[product.storageType]}보관 방법</div>
+                    {/* ✅ [수정] CSS 스타일링을 위해 동적 클래스 적용 */}
                     <div className={`info-value storage-type-${product.storageType}`}>{storageLabels[product.storageType]}</div>
                 </div>
                 {(() => {
@@ -226,10 +265,10 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                             let stockElement: React.ReactNode;
 
                             if (!stockInfo.isLimited) {
-                                stockElement = <span className="unlimited-stock">수량 제한 없음</span>;
+                                stockElement = <span className="unlimited-stock">무제한</span>;
                             } else if (stockInfo.remainingUnits > 0) {
                                 const pretty = <>{stockInfo.remainingUnits}개 남음</>;
-                                
+
                                 if (stockInfo.remainingUnits <= 10) {
                                     stockElement = <span className="low-stock"><Flame size={14} /> {pretty} <Flame size={14} /></span>;
                                 } else {
@@ -250,8 +289,41 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     );
 });
 
-const OptionSelector: React.FC<{ round: SalesRound; selectedVariantGroup: VariantGroup | null; onVariantGroupChange: (vg: VariantGroup) => void; }> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange }) => { if (!round.variantGroups || round.variantGroups.length <= 1) return null; return (<div className="select-wrapper" data-tutorial-id="detail-options"><select className="price-select" value={selectedVariantGroup?.id || ''} onChange={(e) => { const selectedId = e.target.value; const newVg = round.variantGroups.find(vg => vg.id === selectedId); if (newVg) onVariantGroupChange(newVg); }}><option value="" disabled>옵션을 선택해주세요.</option>{round.variantGroups.map(vg => (<option key={vg.id} value={vg.id}>{vg.groupName}</option>))}</select></div>); });
+// ✅ [수정] 옵션에 대표 가격 표시
+const OptionSelector: React.FC<{
+    round: SalesRound;
+    selectedVariantGroup: VariantGroup | null;
+    onVariantGroupChange: (vg: VariantGroup) => void;
+}> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange }) => {
+    if (!round.variantGroups || round.variantGroups.length <= 1) return null;
+    return (
+        <div className="select-wrapper" data-tutorial-id="detail-options">
+            <select
+                className="price-select"
+                value={selectedVariantGroup?.id || ''}
+                onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const newVg = round.variantGroups.find(vg => vg.id === selectedId);
+                    if (newVg) onVariantGroupChange(newVg);
+                }}
+            >
+                <option value="" disabled>옵션을 선택해주세요.</option>
+                {round.variantGroups.map(vg => {
+                    const representativePrice = vg.items?.[0]?.price;
+                    const priceText = typeof representativePrice === 'number'
+                        ? ` (${representativePrice.toLocaleString()}원)`
+                        : '';
+                    return (
+                        <option key={vg.id} value={vg.id}>{`${vg.groupName}${priceText}`}</option>
+                    );
+                })}
+            </select>
+        </div>
+    );
+});
 
+
+// ✅ [수정] 세부 항목에 가격 차이 표시
 const ItemSelector: React.FC<{
   selectedVariantGroup: VariantGroup;
   selectedItem: ProductItem | null;
@@ -270,6 +342,8 @@ const ItemSelector: React.FC<{
       remainingStock = Math.max(0, totalStock - reserved);
   }
 
+  const basePrice = selectedVariantGroup.items?.[0]?.price ?? 0;
+
   return (
     <div className="select-wrapper item-selector-wrapper" data-tutorial-id="detail-items">
       <select
@@ -286,9 +360,12 @@ const ItemSelector: React.FC<{
         <option value="" disabled>세부 옵션을 선택해주세요.</option>
         {selectedVariantGroup.items.map(item => {
           const isAvailable = actionState === 'WAITLISTABLE' || (item.stockDeductionAmount || 1) <= remainingStock;
+          const priceDiff = item.price - basePrice;
+          const priceText = priceDiff > 0 ? ` (+${priceDiff.toLocaleString()}원)` : '';
+
           return (
             <option key={item.id} value={item.id} disabled={!isAvailable}>
-              {item.name} (+{item.price.toLocaleString()}원) {!isAvailable ? '(재고 부족)' : ''}
+              {item.name}{priceText} {!isAvailable ? '(재고 부족)' : ''}
             </option>
           );
         })}
@@ -299,7 +376,19 @@ const ItemSelector: React.FC<{
 
 const QuantityInput: React.FC<{ quantity: number; setQuantity: (fn: (q: number) => number) => void; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => { const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]); const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]); const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 }); const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 }); return (<div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls"><button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1}><Minus /></button><span className="quantity-display-fixed">{quantity}</span><button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}><Plus /></button></div>); });
 
-const PurchasePanel: React.FC<{ actionState: ProductActionState; round: SalesRound; selectedVariantGroup: VariantGroup | null; selectedItem: ProductItem | null; quantity: number; setQuantity: (fn: (q: number) => number) => void; onCartAction: (status: 'RESERVATION' | 'WAITLIST') => void; onEncore: () => void; isEncoreRequested: boolean; isEncoreLoading: boolean; }> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onCartAction, onEncore, isEncoreRequested, isEncoreLoading }) => {
+const PurchasePanel: React.FC<{
+    actionState: ProductActionState;
+    round: SalesRound;
+    selectedVariantGroup: VariantGroup | null;
+    selectedItem: ProductItem | null;
+    quantity: number;
+    setQuantity: (fn: (q: number) => number) => void;
+    onPurchaseAction: (status: 'RESERVATION' | 'WAITLIST') => void;
+    onEncore: () => void;
+    isEncoreRequested: boolean;
+    isEncoreLoading: boolean;
+    isProcessing: boolean;
+}> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onPurchaseAction, onEncore, isEncoreRequested, isEncoreLoading, isProcessing }) => {
     const renderContent = () => {
         switch (actionState) {
             case 'PURCHASABLE':
@@ -308,10 +397,10 @@ const PurchasePanel: React.FC<{ actionState: ProductActionState; round: SalesRou
                 const stockValue = (typeof stock === 'number' && stock !== -1) ? stock : null, limitValue = (typeof limit === 'number') ? limit : null;
                 const effectiveStock = stockValue === null ? Infinity : stockValue - reserved, effectiveLimit = limitValue === null ? Infinity : limitValue;
                 const max = Math.floor(Math.min(effectiveStock / (selectedItem.stockDeductionAmount || 1), effectiveLimit)), maxQuantity = isFinite(max) ? max : null;
-                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={() => onCartAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button"><ShoppingCart size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 담기` : ''}</span></button></div> );
+                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={() => onPurchaseAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button" disabled={isProcessing}>{isProcessing ? '처리 중...' : '예약하기'}</button></div> );
             case 'WAITLISTABLE':
                 const waitlistMax = selectedItem?.limitQuantity ?? 99;
-                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} /><button onClick={() => onCartAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button" disabled={!selectedItem}><Hourglass size={20} /><span>{selectedItem ? `${(selectedItem.price * quantity).toLocaleString()}원 대기` : '대기 신청'}</span></button></div> );
+                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} /><button onClick={() => onPurchaseAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button" disabled={!selectedItem || isProcessing}>{isProcessing ? '처리 중...' : <><Hourglass size={20} /><span>대기 신청하기</span></>}</button></div> );
             case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" onClick={() => toast('페이지 하단에서 옵션을 먼저 선택해주세요!')}><Box size={20} /><span>옵션을 선택해주세요</span></button>;
             case 'ENDED': case 'ENCORE_REQUESTABLE':
                 if (isEncoreLoading) return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>;
@@ -334,9 +423,9 @@ const ProductDetailSkeleton: React.FC = () => (<div className="product-detail-mo
 const ProductDetailPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
-    const location = useLocation(); 
-    const { userDocument } = useAuth();
-    const { addToCart } = useCart();
+    const location = useLocation();
+    const { user, userDocument, isSuspendedUser } = useAuth(); // ✅ user, isSuspendedUser 추가
+    // const { addToCart } = useCart(); // ✅ 직접 주문하므로 addToCart는 사용하지 않음
     const { runPageTourIfFirstTime } = useTutorial();
     const { isPreLaunch, launchDate } = useLaunch();
 
@@ -350,12 +439,18 @@ const ProductDetailPage: React.FC = () => {
     const [isEncoreLoading, setIsEncoreLoading] = useState(false);
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
+    const [isProcessing, setIsProcessing] = useState(false); // ✅ 처리 중 상태 추가
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
 
-    const getProductByIdWithStock = useMemo(() => httpsCallable(functions, 'getProductByIdWithStock'), []);
-    const requestEncoreCallable = useMemo(() => httpsCallable(functions, 'requestEncore'), []);
+    // ✅ Firebase Cloud Functions 호출자 초기화
+    const functionsInstance = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
+    const getProductByIdWithStock = useMemo(() => httpsCallable(functionsInstance, 'getProductByIdWithStock'), [functionsInstance]);
+    const requestEncoreCallable = useMemo(() => httpsCallable(functionsInstance, 'requestEncore'), [functionsInstance]);
+    const validateCartCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'validateCart'), [functionsInstance]);
+    const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'submitOrder'), [functionsInstance]);
+    const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'addWaitlistEntry'), [functionsInstance]);
 
     const handleClose = useCallback(() => {
         if (location.key === 'default') {
@@ -457,7 +552,7 @@ const ProductDetailPage: React.FC = () => {
         }
         return baseState;
     }, [displayRound, userDocument, selectedItem]);
-    
+
     const selectInitialItemForVg = useCallback((vg: VariantGroup) => {
         const findFirstAvailableItem = (variantGroup: VariantGroup) => {
             const totalStock = variantGroup.totalPhysicalStock;
@@ -483,18 +578,160 @@ const ProductDetailPage: React.FC = () => {
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
-    const handleCartAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
-        if (isPreLaunch) { toast(`상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!\n 그 전까지는 카카오톡으로 예약주세요!`, { icon: '🗓️', position: "top-center", duration: 4000 }); return; }
+    // ✅ [신규] 즉시 예약 처리 함수
+    const handleImmediateOrder = async () => {
+        if (!userDocument || !user) { toast.error('로그인이 필요합니다.'); navigate('/login'); return; }
+        if (isSuspendedUser) { toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
+        if (isProcessing || !product || !displayRound || !selectedVariantGroup || !selectedItem) return;
+
+        setIsProcessing(true);
+        const toastId = toast.loading('예약 처리 중...');
+
+        let showPrepaymentModal = false;
+        try {
+          const validationResult = await validateCartCallable({
+            items: [{ productId: product.id, roundId: displayRound.roundId, itemId: selectedItem.id, quantity: quantity, ...selectedItem }]
+          });
+          if (!validationResult.data.summary.sufficient) {
+            throw new Error(validationResult.data.summary.reason || '재고가 부족하거나 예약할 수 없는 상품입니다.');
+          }
+
+          // ✅ [수정] 선입금 로직 변경: 한정수량 여부(isLimitedStock)는 제외
+          const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
+          const prepaymentRequired = isWarningUser || displayRound.isPrepaymentRequired;
+          const totalPrice = selectedItem.price * quantity;
+
+          const orderItem: OrderItem = {
+            id: `order-item-${selectedItem.id}-${Date.now()}`,
+            productId: product.id, productName: product.groupName, imageUrl: product.imageUrls?.[0] || '',
+            roundId: displayRound.roundId, roundName: displayRound.roundName,
+            variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName,
+            itemId: selectedItem.id, itemName: selectedItem.name,
+            quantity: quantity, unitPrice: selectedItem.price, stock: selectedItem.stock,
+            stockDeductionAmount: selectedItem.stockDeductionAmount,
+            arrivalDate: displayRound.arrivalDate || null, pickupDate: displayRound.pickupDate,
+            deadlineDate: displayRound.deadlineDate,
+            isPrepaymentRequired: displayRound.isPrepaymentRequired ?? false,
+          };
+
+          const orderPayload = {
+            userId: user.uid, items: [orderItem], totalPrice,
+            customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
+            pickupDate: displayRound.pickupDate, wasPrepaymentRequired: prepaymentRequired,
+            notes: '상세페이지 즉시 예약'
+          };
+
+          await submitOrderCallable(orderPayload);
+
+          if (prepaymentRequired) {
+            showPrepaymentModal = true;
+            toast.dismiss(toastId);
+            const customToastId = 'prepayment-toast-detail';
+            const performNavigation = () => { toast.dismiss(customToastId); startTransition(() => { navigate('/mypage/history'); }); };
+            toast.custom((t) => (
+              <div className="prepayment-modal-overlay">
+                <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
+                  <div className="toast-icon-wrapper"><Banknote size={48} /></div>
+                  <h4>⚠️ 선입금 후 예약이 확정됩니다</h4>
+                  {/* ✅ [수정] 선입금 안내 문구에서 '한정 수량' 부분 제거 */}
+                  <p>'주의 요망' 등급이시거나 해당 상품이 선입금 필수 상품입니다.<br/>마감 시간 전까지 입금 후 채널톡으로 내역을 보내주세요.</p>
+                  <div className="bank-info"><strong>카카오뱅크 3333-12-3456789 (소도몰)</strong><div className="price-to-pay">입금할 금액: <strong>{totalPrice.toLocaleString()}원</strong></div></div>
+                  <small>관리자가 확인 후 예약을 확정 처리해 드립니다.<br/>미입금 시 예약은 자동 취소될 수 있습니다.</small>
+                  <button className="modal-confirm-button" onClick={performNavigation}>확인 및 주문내역으로 이동</button>
+                </div>
+              </div>
+            ), { id: customToastId, duration: Infinity });
+          } else {
+            toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 2500 });
+            navigate('/mypage/history');
+          }
+
+        } catch (error: any) {
+          toast.error(error.message || '예약 처리 중 오류가 발생했습니다.', { id: toastId });
+        } finally {
+            if (!showPrepaymentModal) {
+              setIsProcessing(false);
+            }
+        }
+    };
+
+    // ✅ [신규] 즉시 대기 신청 처리 함수
+    const handleWaitlistRequest = async () => {
+        if (!userDocument || !user) { toast.error('로그인이 필요합니다.'); navigate('/login'); return; }
+        if (isSuspendedUser) { toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
+        if (isProcessing || !product || !displayRound || !selectedVariantGroup || !selectedItem) return;
+
+        setIsProcessing(true);
+        const toastId = toast.loading('대기 신청 처리 중...');
+
+        const waitlistPayload = {
+          productId: product.id, roundId: displayRound.roundId,
+          variantGroupId: selectedVariantGroup.id, itemId: selectedItem.id,
+          quantity: quantity,
+        };
+
+        try {
+          await addWaitlistEntryCallable(waitlistPayload);
+          toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId });
+          navigate('/mypage/history');
+        } catch (error: any) {
+          toast.error(error.message || '대기 신청 중 오류가 발생했습니다.', { id: toastId });
+        } finally {
+          setIsProcessing(false);
+        }
+    };
+
+    // ✅ [수정] 장바구니 대신 즉시 주문/대기 로직을 호출하는 핸들러
+    const handlePurchaseAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
+        if (isPreLaunch) { toast(`상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️' }); return; }
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
             toast.error('옵션을 선택해주세요.');
             return;
         }
-        const cartItem: CartItem = { id: `${product.id}-${displayRound.roundId}-${selectedVariantGroup.id}-${selectedItem.id}`, productId: product.id, productName: product.groupName, roundId: displayRound.roundId, roundName: displayRound.roundName, variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName, itemId: selectedItem.id, itemName: selectedItem.name, quantity, unitPrice: selectedItem.price, stock: selectedItem.stock, imageUrl: product.imageUrls?.[0] || '', status: status, stockDeductionAmount: selectedItem.stockDeductionAmount, deadlineDate: displayRound.deadlineDate, pickupDate: displayRound.pickupDate, isPrepaymentRequired: displayRound.isPrepaymentRequired || false };
-        addToCart(cartItem);
-        if (status === 'RESERVATION') toast.success(`${quantity}개를 담았어요!`);
-        else toast.success(`대기 상품으로 ${quantity}개를 담았어요.`);
-        handleClose();
-     }, [isPreLaunch, launchDate, product, displayRound, selectedVariantGroup, selectedItem, quantity, addToCart, handleClose]);
+
+        if (status === 'WAITLIST') {
+            toast((t) => (
+                <div className="confirmation-toast-content">
+                  <Hourglass size={44} className="toast-icon" /><h4>대기 신청</h4>
+                  <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개에 대해 대기 신청하시겠습니까?`}</p>
+                  <div className="toast-warning-box"><AlertTriangle size={16} /> 재고 확보 시 알림이 발송되며, 선착순으로 예약이 진행됩니다.</div>
+                  <div className="toast-buttons">
+                    <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
+                    <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleWaitlistRequest(); }}>신청</button>
+                  </div>
+                </div>
+              ), { id: `waitlist-confirm-${product.id}`, duration: Infinity });
+            return;
+        }
+
+        // 예약(RESERVATION) 처리
+        const { primaryEnd } = getDeadlines(displayRound);
+        const isSecondarySale = primaryEnd ? dayjs().isAfter(primaryEnd) : false;
+
+        if (isSecondarySale) {
+            toast((t) => (
+                <div className="confirmation-toast-content">
+                    <Info size={44} className="toast-icon" />
+                    <h4>2차 예약 확정</h4>
+                    <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개를 예약하시겠습니까?`}</p>
+                    <div className="toast-warning-box">
+                        <AlertTriangle size={16} />
+                        2차 예약 기간에는 확정 후 취소 시 페널티가 부과될 수 있습니다.
+                    </div>
+                    <div className="toast-buttons">
+                        <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
+                        <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleImmediateOrder(); }}>확인</button>
+                    </div>
+                </div>
+            ), { id: `order-confirm-secondary-${product.id}`, duration: Infinity });
+        } else {
+            // 1차 공구 기간에는 확인 없이 바로 주문
+            handleImmediateOrder();
+        }
+     }, [
+        isPreLaunch, launchDate, product, displayRound, selectedVariantGroup,
+        selectedItem, quantity, handleImmediateOrder, handleWaitlistRequest
+    ]);
 
     const handleEncore = useCallback(async () => {
         if (isEncoreLoading || isEncoreRequested) return;
@@ -533,15 +770,15 @@ const ProductDetailPage: React.FC = () => {
                         </div>
                     </div>
                     <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
-                        <OptionSelector 
-                            round={displayRound} 
-                            selectedVariantGroup={selectedVariantGroup} 
-                            onVariantGroupChange={(vg) => { 
+                        <OptionSelector
+                            round={displayRound}
+                            selectedVariantGroup={selectedVariantGroup}
+                            onVariantGroupChange={(vg) => {
                                 setSelectedVariantGroup(vg);
                                 selectInitialItemForVg(vg);
-                                setQuantity(1); 
-                                toast.success(`'${vg.groupName}' 옵션을 선택했어요.`); 
-                            }} 
+                                setQuantity(1);
+                                toast.success(`'${vg.groupName}' 옵션을 선택했어요.`);
+                            }}
                         />
                         {selectedVariantGroup && (
                             <ItemSelector
@@ -555,17 +792,18 @@ const ProductDetailPage: React.FC = () => {
                                 actionState={actionState}
                             />
                         )}
-                        <PurchasePanel 
-                            actionState={actionState} 
-                            round={displayRound} 
-                            selectedVariantGroup={selectedVariantGroup} 
-                            selectedItem={selectedItem} 
-                            quantity={quantity} 
-                            setQuantity={setQuantity} 
-                            onCartAction={handleCartAction} 
-                            onEncore={handleEncore} 
-                            isEncoreRequested={isEncoreRequested} 
+                        <PurchasePanel
+                            actionState={actionState}
+                            round={displayRound}
+                            selectedVariantGroup={selectedVariantGroup}
+                            selectedItem={selectedItem}
+                            quantity={quantity}
+                            setQuantity={setQuantity}
+                            onPurchaseAction={handlePurchaseAction}
+                            onEncore={handleEncore}
+                            isEncoreRequested={isEncoreRequested}
                             isEncoreLoading={isEncoreLoading}
+                            isProcessing={isProcessing}
                         />
                     </div>
                 </div>

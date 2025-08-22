@@ -5,7 +5,7 @@ import { getOptimizedImageUrl } from '@/utils/imageUtils';
 
 interface OptimizedImageProps {
   originalUrl: string;
-  size: '200x200' | '1080x1080';
+  size: '150x150' | '200x200' | '1080x1080';
   alt: string;
   className?: string;
   loading?: 'lazy' | 'eager';

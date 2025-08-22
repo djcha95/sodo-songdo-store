@@ -168,7 +168,9 @@
   cursor: not-allowed;
 }
 
-.quantity-display, .quantity-input {
+/* ✅ [변경] .product-card-final 선택자를 추가하여 CSS 우선순위를 높입니다. */
+.product-card-final .quantity-display, 
+.product-card-final .quantity-input {
   flex-grow: 1;
   text-align: center;
   font-size: 0.9rem;
@@ -177,11 +179,13 @@
   background-color: transparent;
   padding: 0;
   margin: 0;
-  width: 100%;
   height: 100%;
   line-height: 36px;
   color: var(--text-color-dark);
+  /* ✅ [추가] input이 flex 컨테이너 안에서 제대로 줄어들 수 있도록 min-width를 설정합니다. */
+  min-width: 0; 
 }
+
 .quantity-input:focus {
   outline: none;
   background-color: var(--primary-color-lightest);

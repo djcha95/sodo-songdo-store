@@ -26,7 +26,9 @@ import { LaunchProvider } from './context/LaunchContext';
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
-const ProductListPage = React.lazy(() => import('./pages/customer/ProductListPage'));
+// ✅ [제거] ProductListPage는 더 이상 사용되지 않으므로 제거합니다.
+// const ProductListPage = React.lazy(() => import('./pages/customer/ProductListPage'));
+const SimpleOrderPage = React.lazy(() => import('./pages/customer/SimpleOrderPage'));
 const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetailPage'));
 const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
 const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
@@ -50,7 +52,6 @@ const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManageme
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage'));
-// [추가] 선입금 관리 페이지 컴포넌트 import
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
 
 const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
@@ -94,7 +95,6 @@ const router = createBrowserRouter([
                   { index: true, element: <DashboardPage /> },
                   { path: 'dashboard', element: <DashboardPage /> },
                   { path: 'quick-check', element: <QuickCheckPage /> },
-                  // [추가] 선입금 관리 페이지 라우트
                   { path: 'prepaid-check', element: <PrepaidCheckPage /> },
                   { path: 'products', element: <ProductListPageAdmin /> },
                   { path: 'products/add', element: <ProductAddAdminPage /> },
@@ -117,7 +117,10 @@ const router = createBrowserRouter([
               {
                 element: <Suspense fallback={<SodomallLoader />}><CustomerLayout /></Suspense>,
                 children: [
-                  { index: true, element: <ProductListPage /> },
+                  // ✅ [수정] 기본 경로 ('/')를 SimpleOrderPage로 변경합니다.
+                  { index: true, element: <SimpleOrderPage /> },
+                  // ✅ [제거] '/' 가 SimpleOrderPage를 렌더링하므로 중복되는 경로는 제거합니다.
+                  // { path: "simple-order", element: <SimpleOrderPage /> },
                   { path: "cart", element: <CartPage /> },
                   { path: "onsite-sale", element: <OnsiteSalePage /> },
                   { path: "customer-center", element: <CustomerCenterPage /> },

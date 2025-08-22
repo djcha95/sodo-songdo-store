@@ -3,22 +3,18 @@
 a { color: var(--primary-color); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-.main-content {
- flex-grow: 1;
- /* sticky 헤더를 사용하므로 더 이상 불필요한 padding-top 제거 */
- padding-bottom: 90px;
-}
-
 .customer-page-container {
   width: 100%;
   max-width: 1280px;
   margin: 0 auto;
-  padding: 5px 12px 100px;
+  /* ✅ [수정] BottomNav가 사라졌으므로 하단 패딩 제거 */
+  padding: 5px 12px 20px;
   box-sizing: border-box;
 }
 
 @media (min-width: 1024px) {
   .customer-page-container {
-    padding: 32px 40px 100px;
+    /* ✅ [수정] BottomNav가 사라졌으므로 하단 패딩 제거 */
+    padding: 32px 40px 40px;
   }
 }

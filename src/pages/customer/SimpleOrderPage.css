@@ -1,0 +1,79 @@
+/* src/pages/customer/SimpleOrderPage.css */
+
+.simple-order-page {
+    padding-bottom: 80px;
+    background-color: #f8f9fa;
+}
+
+.tab-container {
+    display: flex;
+    justify-content: space-around;
+    background-color: #fff;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 0.9rem 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    background-color: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.tab-btn.active {
+    color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
+    border-bottom-color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
+}
+
+.simple-product-list {
+    display: flex;
+    flex-direction: column;
+    padding-top: 0.5rem;
+    gap: 0;
+}
+
+.list-countdown-timer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 0 0.0rem 0.0rem;
+    padding: 0.6rem;
+    background-color: var(--danger-color-light);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color-border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.product-list-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  color: var(--text-color-light);
+  text-align: center;
+}
+
+.product-list-placeholder svg {
+  margin-bottom: 1rem;
+  color: var(--border-color-dark);
+}
+
+.product-list-placeholder p {
+  font-size: 1.1rem;
+  font-weight: 500;
+}

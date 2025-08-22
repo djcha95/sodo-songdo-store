@@ -101,78 +101,47 @@
   background-color: var(--color-primary);
 }
 
+/* ✅ [수정] 좌우 여백을 줄임 */
 .product-info-area {
-  padding: 0 1.5rem 1.5rem 1.5rem;
+  padding: 0 1rem 1.5rem 1rem;
 }
 
+/* ✅ [수정] 하단 여백을 줄여 해시태그와의 간격을 좁힘 */
 .product-header-content {
-  padding: 1.5rem 0;
+  padding: 1.5rem 0 0.5rem 0;
 }
 
+/* ✅ [수정] 글자 크기 조정 */
 .product-name {
   text-align: center;
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   font-weight: 800;
-  margin-bottom: 1rem;
+  margin-bottom: 0.8rem;
   line-height: 1.4;
   word-break: keep-all;
 }
 
-.product-hashtags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 0.6rem;
-  margin-top: 1rem;
-  padding: 0 0.5rem;
-}
-
-.hashtag {
-  background-color: var(--color-primary-light, #e0eaff);
-  color: var(--color-primary, #3366ff);
-  padding: 0.4rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
+/* ✅ [수정] 글자 크기 조정 및 여백 수정 */
 .markdown-content {
-  font-size: 1rem;
-  line-height: 1.8;
+  font-size: 0.95rem;
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: keep-all;
   text-align: center;
-  color: #333;
+  color: #444;
 }
-
 
 .markdown-content p {
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.8rem 0;
 }
-
 .markdown-content ul,
 .markdown-content ol {
-  list-style: none;
-  margin: 0.5rem 0;
-  padding: 0;
+  list-style: none; margin: 0.5rem 0; padding: 0;
 }
-
-.markdown-content li {
-  margin-bottom: 0.5rem;
-}
-.markdown-content strong {
-  font-weight: 700;
-  color: #000;
-}
-
-.markdown-content em {
-    font-style: italic;
-}
-
-.markdown-content a {
-    color: var(--color-primary, #2563eb);
-    text-decoration: underline;
-}
+.markdown-content li { margin-bottom: 0.5rem; }
+.markdown-content strong { font-weight: 700; color: #000; }
+.markdown-content em { font-style: italic; }
+.markdown-content a { color: var(--color-primary, #2563eb); text-decoration: underline; }
 
 .product-key-info {
   margin-top: 1.5rem;
@@ -183,11 +152,12 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
+/* ✅ [수정] 글자 크기 조정 */
 .info-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   margin-bottom: 1rem;
 }
 .info-row:last-child {
@@ -207,13 +177,28 @@
   text-align: right;
 }
 
+/* ✅ [신규] 보관 방법 스타일 */
+.info-value[class*="storage-type-"] {
+  color: white;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.storage-type-FROZEN { background-color: #3b82f6; /* 파란색 */ }
+.storage-type-COLD { background-color: #ef4444; /* 빨간색 */ }
+.storage-type-ROOM { background-color: #6b7280; /* 회색 */ }
+.storage-type-FRESH { background-color: #22c55e; /* 녹색 */ }
+
+
 .stock-list {
   text-align: right;
 }
 
 .stock-list-item {
   margin-top: 0.2rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 .stock-list .unlimited-stock {
   color: #2a9d8f;
@@ -243,7 +228,7 @@
 }
 .expiration-list-item {
   margin-top: 0.2rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .product-purchase-footer {
@@ -527,10 +512,6 @@
   opacity: 0.9;
 }
 
-/* [기존] .swiper-slide-thumb-active 만 사용
-  ✅ [변경] 수동으로 추가한 .is-active 클래스에도 동일한 스타일을 적용합니다.
-         Swiper의 자체 클래스(.swiper-slide-thumb-active)도 안정성을 위해 남겨둡니다.
-*/
 .lightbox-thumbs-swiper .swiper-slide-thumb-active,
 .lightbox-thumbs-swiper .lightbox-thumb-slide.is-active {
   opacity: 1;
@@ -541,4 +522,35 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* ✅ [수정] 해시태그 컨테이너 스타일 */
+.product-hashtags {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px; /* 태그 사이 간격 */
+  padding: 12px 20px; /* 상하좌우 여백 */
+  border-bottom: 1px solid #f0f0f0; /* 구분선 */
+}
+
+/* ✅ [수정] 해시태그 버튼 스타일 */
+.hashtag {
+  background-color: #ffffff;
+  color: var(--color-primary, #2563eb);
+  font-weight: 600;
+  font-size: 0.9rem; /* 크기 키움 */
+  padding: 8px 16px; /* 패딩 키움 */
+  border-radius: 20px; /* 둥근 모서리 */
+  border: 1px solid var(--color-primary-light, #dbeafe);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); /* 그림자 효과 */
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.hashtag:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.15);
+  background-color: var(--color-primary-light, #f0f5ff);
 }
