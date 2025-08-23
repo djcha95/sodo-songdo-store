@@ -521,8 +521,10 @@
   background-color: #dc2626; /* red-600 */
 }
 
-/* ✅ [추가] 수량 조절 컨트롤 스타일 */
-.quantity-controls {
+/* ✅ [수정] 수량 조절 컨트롤 스타일 
+  OrderHistoryPage 컴포넌트 내에서만 적용되도록 .order-history-page 선택자 추가
+*/
+.order-history-page .quantity-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -531,7 +533,7 @@
   padding: 4px;
 }
 
-.quantity-controls button {
+.order-history-page .quantity-controls button {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -549,21 +551,21 @@
   transition: background-color 0.2s, transform 0.1s;
 }
 
-.quantity-controls button:hover {
+.order-history-page .quantity-controls button:hover {
   background-color: #eef2ff; /* indigo-50 */
 }
 
-.quantity-controls button:active {
+.order-history-page .quantity-controls button:active {
   transform: scale(0.95);
 }
 
-.quantity-controls button:disabled {
+.order-history-page .quantity-controls button:disabled {
   background-color: #e5e7eb; /* gray-200 */
   color: #9ca3af; /* gray-400 */
   cursor: not-allowed;
 }
 
-.quantity-value {
+.order-history-page .quantity-controls .quantity-value {
   font-size: 1rem;
   font-weight: 700;
   min-width: 24px;

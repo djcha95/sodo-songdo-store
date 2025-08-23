@@ -10,7 +10,7 @@ import { getUserWaitlist, cancelWaitlistEntry } from '@/firebase/productService'
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import useLongPress from '@/hooks/useLongPress';
-import type { Order, OrderItem, OrderStatus, WaitlistInfo } from '@/types';
+import type { Order, OrderItem, OrderStatus } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
@@ -30,6 +30,21 @@ const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity
 
 const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
+
+// ✅ [수정] WaitlistInfo 타입을 여기서 직접 정의하고 primaryReservationEndAt 필드를 선택적으로 변경합니다.
+interface WaitlistInfo {
+  productId: string;
+  roundId: string;
+  itemId: string;
+  productName: string;
+  itemName: string;
+  imageUrl: string;
+  quantity: number;
+  timestamp: Timestamp;
+  waitlistOrder?: number;
+  primaryReservationEndAt?: Timestamp; // 1차 예약 마감 시간 (선택적 프로퍼티로 변경)
+}
+
 
 type ThumbSize = '200x200' | '1080x1080';
 
@@ -240,7 +255,6 @@ const usePaginatedData = <T,>(
       }
     } catch (err: any) {
       console.error('데이터 로딩 오류:', err);
-      // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
       toast.error(err.message || '데이터를 불러오는 데 실패했습니다.', { duration: 2000 });
     } finally {
       setLoading(false);
@@ -318,7 +332,6 @@ const QuantityControls: React.FC<{
         setIsUpdating(true);
         const promise = updateOrderQuantityCallable({ orderId, newQuantity });
         
-        // ✅ [수정] toast.promise의 세 번째 인자로 옵션을 전달하여 duration 설정
         toast.promise(promise, {
             loading: '수량 변경 중...',
             success: (result) => {
@@ -565,10 +578,19 @@ const OrderHistoryPage: React.FC = () => {
       if (user && viewMode === 'waitlist') {
         setLoadingWaitlist(true);
         try {
-          const fetchedWaitlist = await getUserWaitlist(user.uid);
-          setWaitlist(fetchedWaitlist);
+          const fetchedWaitlist: WaitlistInfo[] = await getUserWaitlist(user.uid);
+          
+          const activeWaitlist = fetchedWaitlist.filter(item => {
+            if (!item.primaryReservationEndAt) {
+              console.warn('Waitlist item is missing primaryReservationEndAt:', item);
+              return true;
+            }
+            return dayjs().isBefore(safeToDate(item.primaryReservationEndAt));
+          });
+
+          setWaitlist(activeWaitlist);
+
         } catch (error) {
-           // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
           toast.error("대기 목록을 불러오는 데 실패했습니다.", { duration: 2000 });
         } finally {
           setLoadingWaitlist(false);
@@ -682,7 +704,6 @@ const OrderHistoryPage: React.FC = () => {
       });
       
       if (ordersToCancel.length === 0) {
-        // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
         toast('취소할 수 있는 항목이 선택되지 않았습니다.', { icon: 'ℹ️', duration: 2000 });
         return;
       }
@@ -692,7 +713,6 @@ const OrderHistoryPage: React.FC = () => {
       const message = `선택한 ${ordersToCancel.length}개의 예약을 정말 취소하시겠습니까?` + 
                       (containsPenalty ? "\n'노쇼' 처리되는 항목이 포함되어 있습니다." : "");
 
-      // ✅ [유지] 확인/취소 토스트는 사용자가 직접 닫아야 하므로 duration: Infinity 유지
       toast((t) => (
         <div className="confirmation-toast-content">
           <AlertCircle size={44} className="toast-icon" style={{ color: 'var(--danger-color, #ef4444)' }} />
@@ -715,7 +735,6 @@ const OrderHistoryPage: React.FC = () => {
                   return `${ordersToCancel.length}개 항목이 취소되었습니다.`;
                 },
                 error: (err: any) => err?.message || '일부 항목 취소 중 오류가 발생했습니다.'
-              // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
               }, { success: { duration: 2000 }, error: { duration: 2000 } });
             }}>모두 취소</button>
           </div>
@@ -731,12 +750,10 @@ const OrderHistoryPage: React.FC = () => {
       });
 
       if (itemsToCancel.length === 0) {
-        // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
         toast('취소할 대기 항목이 선택되지 않았습니다.', { icon: 'ℹ️', duration: 2000 });
         return;
       }
 
-      // ✅ [유지] 확인/취소 토스트는 사용자가 직접 닫아야 하므로 duration: Infinity 유지
       toast((t) => (
         <div className="confirmation-toast-content">
           <AlertCircle size={44} className="toast-icon" style={{ color: 'var(--danger-color, #ef4444)' }} />
@@ -757,7 +774,6 @@ const OrderHistoryPage: React.FC = () => {
                   return `${itemsToCancel.length}개 대기 신청이 취소되었습니다.`;
                 },
                 error: () => '대기 취소 중 오류가 발생했습니다.'
-              // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
               }, { success: { duration: 2000 }, error: { duration: 2000 } });
             }}>모두 취소</button>
           </div>
