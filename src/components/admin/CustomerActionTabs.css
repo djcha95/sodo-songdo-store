@@ -133,58 +133,11 @@
 .cat-footer-actions .button-dark { background-color: var(--text-color-medium); color: white; }
 
 /* --- 테이블 관련 스타일 --- */
-.order-table-container {
-    overflow-x: auto; 
-}
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.data-table th, .data-table td {
-    padding: var(--spacing-md);
-    text-align: left;
-    border-bottom: 1px solid var(--border-color-lighter);
-}
-.data-table th {
-    background-color: var(--bg-color-soft);
-    font-size: var(--font-size-sm);
-    color: var(--text-color-secondary);
-}
-.data-table td {
-    font-size: var(--font-size-default);
-    word-break: keep-all;
-}
-.status-select-wrapper {
-    position: relative;
-    display: inline-block;
-}
-.status-select {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    border: none;
-    padding: 6px 24px 6px 12px;
-    border-radius: var(--border-radius-full);
-    font-size: 0.8rem;
-    font-weight: 700;
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 6px center;
-    background-size: 12px;
-    transition: all 0.2s;
-}
-.status-select:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--primary-color-softer);
-}
-.status-reserved { background-color: #e6f7ff; color: #096dd9; }
-.status-prepaid { background-color: #f9f0ff; color: #531dab; }
-.status-picked-up { background-color: #f6ffed; color: #389e0d; }
-.status-canceled { background-color: #fff1f0; color: #cf1322; }
-.status-no-show { background-color: #fffbe6; color: #d46b08; }
-
-/* 🎨 [모바일 UI/UX 고도화] 상태별 테이블 행 배경색 */
+.order-table-container { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td { padding: var(--spacing-md); text-align: left; border-bottom: 1px solid var(--border-color-lighter); }
+.data-table th { background-color: var(--bg-color-soft); font-size: var(--font-size-sm); color: var(--text-color-secondary); }
+.data-table td { font-size: var(--font-size-default); word-break: keep-all; }
 tr.status-row-RESERVED { background-color: #f0faff; }
 tr.status-row-PREPAID { background-color: #faf7ff; }
 tr.status-row-PICKED_UP { background-color: #fcfffb; }
@@ -192,68 +145,43 @@ tr.status-row-CANCELED { background-color: #fff8f8; }
 tr.status-row-NO_SHOW { background-color: #fffdf5; }
 tr.status-row-COMPLETED { background-color: #fafff5; }
 
-
 /* --- 신뢰도 관리 탭 스타일 --- */
-.trust-management-container {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xl);
-}
-.management-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-}
+.trust-management-container { display: flex; flex-direction: column; gap: var(--spacing-xl); }
+.management-section { display: flex; flex-direction: column; gap: var(--spacing-md); }
 .management-section h3, .management-section h4 { margin: 0; }
-.management-section .description {
-    font-size: var(--font-size-sm);
-    color: var(--text-color-muted);
-    margin: 0;
-}
-.role-form, .counts-form {
-    display: flex;
-    gap: var(--spacing-md);
-    align-items: center;
-    flex-wrap: wrap;
-}
-.counts-form .form-group-inline {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-}
-.role-form select, .counts-form input {
-    padding: var(--spacing-sm);
-    border-radius: var(--border-radius-md);
-    border: 1px solid var(--border-color);
-}
-.divider {
-    border: none;
-    border-top: 1px solid var(--border-color-lighter);
-}
-.warning-box {
-    background-color: var(--warning-color-soft);
-    border: 1px solid var(--warning-color-border);
-    color: var(--warning-color-text);
-    padding: var(--spacing-md);
-    border-radius: var(--border-radius-md);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    font-size: var(--font-size-sm);
-}
+.management-section .description { font-size: var(--font-size-sm); color: var(--text-color-muted); margin: 0; }
+.role-form, .counts-form { display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap; }
+.counts-form .form-group-inline { display: flex; align-items: center; gap: var(--spacing-sm); }
+.role-form select, .counts-form input { padding: var(--spacing-sm); border-radius: var(--border-radius-md); border: 1px solid var(--border-color); }
+.divider { border: none; border-top: 1px solid var(--border-color-lighter); }
+.warning-box { background-color: var(--warning-color-soft); border: 1px solid var(--warning-color-border); color: var(--warning-color-text); padding: var(--spacing-md); border-radius: var(--border-radius-md); display: flex; align-items: center; gap: var(--spacing-sm); font-size: var(--font-size-sm); }
+
+/* --- 되돌리기 버튼 등 액션 버튼 스타일 --- */
+.status-cell-content { display: flex; align-items: center; justify-content: space-between; min-height: 38px; width: 100%; }
+.status-badge { padding: 4px 10px; border-radius: var(--border-radius-full); font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+.revert-button, .split-button { background-color: var(--background-color-secondary); border: 1px solid var(--border-color-light); color: var(--text-color-secondary); border-radius: var(--border-radius-sm); display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+.revert-button:hover, .split-button:hover { background-color: var(--border-color-light); color: var(--text-color-dark); }
+.action-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 
 
-/* 🎨 [모바일 UI/UX 고도화] 768px 이하 화면에 대한 미디어 쿼리 */
+/* --- ✅ 모바일 최적화 --- */
 @media (max-width: 768px) {
-    /* 탭 네비게이션을 'Pill' 형태로 변경 */
+    .cat-container {
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        box-shadow: none;
+    }
     .cat-tab-navigation {
         padding: var(--spacing-sm);
         gap: var(--spacing-sm);
     }
     .cat-tab-navigation button {
-        flex: 1; /* 탭 버튼이 공간을 균등하게 차지 */
+        flex: 1;
         border-radius: var(--border-radius-full);
-        padding: var(--spacing-sm) var(--spacing-md);
+        padding: 8px 4px; /* 탭 버튼 패딩 축소 */
+        font-size: 0.85rem; /* 탭 버튼 폰트 축소 */
         border-bottom: none;
         border-top: none;
     }
@@ -262,11 +190,7 @@ tr.status-row-COMPLETED { background-color: #fafff5; }
         color: white;
         margin-bottom: 0;
     }
-    
-    .cat-tab-content {
-        padding: var(--spacing-md);
-    }
-
+    .cat-tab-content { padding: var(--spacing-md); }
     .is-grid-view .qcp-results-grid {
         padding: var(--spacing-md);
         flex-direction: column;
@@ -281,45 +205,36 @@ tr.status-row-COMPLETED { background-color: #fafff5; }
         flex-direction: column;
         align-items: stretch; 
         padding: var(--spacing-md);
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
     }
     .cat-footer-summary {
         text-align: center;
         padding-left: 0;
         margin-bottom: var(--spacing-sm);
-    }
-    .cat-footer-actions {
-        flex-direction: column;
-        width: 100%;
-    }
-    .cat-footer-actions > .common-button {
-        height: 50px;
         font-size: 1rem;
     }
+    .cat-footer-actions { flex-direction: column; width: 100%; }
+    .cat-footer-actions > .common-button {
+        height: 48px;
+        font-size: 0.95rem; /* 하단 액션 버튼 폰트 축소 */
+    }
 
-    /* 컴팩트 테이블 스타일 */
-    .order-table-container {
-      overflow-x: hidden;
-    }
-    .data-table {
-        font-size: 0.8rem;
-    }
+    .order-table-container { overflow-x: hidden; }
+    .data-table { font-size: 0.75rem; } /* 테이블 폰트 축소 */
     .data-table th, .data-table td {
-        padding: var(--spacing-sm) 4px;
-        text-align: center; /* 모바일에서는 중앙 정렬 */
+        padding: 6px 4px; /* 테이블 셀 패딩 축소 */
+        text-align: center;
     }
     .data-table th:first-child, .data-table td:first-child { text-align: left; padding-left: 8px;}
     .data-table th:last-child, .data-table td:last-child { text-align: right; padding-right: 8px;}
-
-    .data-table th:nth-child(2), .data-table td:nth-child(2) {
-        width: 45%; 
-        text-align: left;
+    .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 45%; text-align: left; }
+    .action-cell {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
     }
 
-    /* 신뢰도 관리 탭 스타일 */
-    .trust-management-container {
-        gap: var(--spacing-lg);
-    }
-    /* 각 섹션을 카드로 감싸기 */
+    .trust-management-container { gap: var(--spacing-lg); }
     .management-section {
         background: #fff;
         border: 1px solid var(--border-color-lighter);
@@ -327,97 +242,8 @@ tr.status-row-COMPLETED { background-color: #fafff5; }
         padding: var(--spacing-lg);
         box-shadow: var(--shadow-sm);
     }
-
-    .role-form, .counts-form {
-        flex-direction: column;
-        align-items: stretch; 
-    }
-    .counts-form .form-group-inline {
-        justify-content: space-between;
-    }
-    .role-form select, .role-form button, .counts-form .form-group-inline, .counts-form button {
-        width: 100%;
-    }
-    .counts-form input {
-        max-width: 80px;
-    }
-}
-
-/* ... 기존 CSS 코드 ... */
-
-/* 실행 취소(되돌리기) 버튼을 위한 스타일 */
-.status-display-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center; /* 모바일 중앙 정렬 대비 */
-  gap: 8px;
-}
-
-.status-badge {
-  padding: 4px 10px;
-  border-radius: var(--border-radius-full);
-  font-size: 0.8rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.revert-button {
-  background-color: transparent;
-  border: 1px solid var(--text-color-light);
-  color: var(--text-color-secondary);
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.2s ease;
-}
-
-.revert-button:hover {
-  background-color: var(--text-color-light);
-  color: #fff;
-  border-color: var(--text-color-secondary);
-  transform: rotate(-90deg);
-}
-
-/* 모바일 뷰에서 버튼과 배지가 잘 보이도록 정렬 */
-@media (max-width: 768px) {
-    .status-display-wrapper {
-        justify-content: space-between;
-    }
-}
-
-/* ... 기존 CSS ... */
-
-/* ✅ [UI 개선] 상태 셀 스타일 추가 */
-.status-cell-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between; /* 중요: 요소들을 양 끝으로 분산 */
-  min-height: 38px; /* select 태그와 높이를 맞추기 위함 */
-  width: 100%;
-}
-
-.revert-button {
-  background-color: var(--background-color-secondary);
-  border: 1px solid var(--border-color-light);
-  color: var(--text-color-secondary);
-  border-radius: var(--border-radius-sm);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.revert-button:hover {
-  background-color: var(--border-color-light);
-  color: var(--text-color-dark);
+    .role-form, .counts-form { flex-direction: column; align-items: stretch; }
+    .counts-form .form-group-inline { justify-content: space-between; }
+    .role-form select, .role-form button, .counts-form .form-group-inline, .counts-form button { width: 100%; }
+    .counts-form input { max-width: 80px; }
 }

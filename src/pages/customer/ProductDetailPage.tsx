@@ -51,7 +51,6 @@ const toTimestamp = (date: any): Timestamp | null => {
     return null;
 };
 
-// ✅ [수정] 픽업일 형식을 '8.28(목)' 형태로 변경
 const formatDateWithDay = (dateInput: Date | Timestamp | null | undefined): string => {
     if (!dateInput) return '미정';
     const date = dayjs(safeToDate(dateInput));
@@ -60,7 +59,6 @@ const formatDateWithDay = (dateInput: Date | Timestamp | null | undefined): stri
     return `${date.format('M.D')}(${days[date.day()]})`;
 };
 
-// ✅ [수정] 유통기한 형식을 '25.09.08' 형태로 변경
 const formatExpirationDate = (dateInput: Date | Timestamp | null | undefined): string => {
     if (!dateInput) return '';
     const date = dayjs(safeToDate(dateInput));
@@ -86,7 +84,7 @@ const normalizeProduct = (product: Product): Product => {
     return product;
 };
 
-// --- Sub Components (변경 없음) ---
+// --- Sub Components ---
 
 const Lightbox: React.FC<{
   images: string[];
@@ -96,14 +94,19 @@ const Lightbox: React.FC<{
 }> = React.memo(({ images, startIndex, isOpen, onClose }) => {
   const [mainSwiper, setMainSwiper] = useState<SwiperCore | null>(null);
   const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
-
   const [activeIndex, setActiveIndex] = useState(startIndex);
 
   useEffect(() => {
     if (isOpen) {
       setActiveIndex(startIndex);
+      if (mainSwiper && !mainSwiper.destroyed) {
+        mainSwiper.slideToLoop(startIndex, 0);
+      }
+      if (thumbsSwiper && !thumbsSwiper.destroyed) {
+        thumbsSwiper.slideToLoop(startIndex, 0);
+      }
     }
-  }, [isOpen, startIndex]);
+  }, [isOpen, startIndex, mainSwiper, thumbsSwiper]);
 
   useEffect(() => {
     if (mainSwiper && !mainSwiper.destroyed) {
@@ -114,14 +117,26 @@ const Lightbox: React.FC<{
         }
       };
       mainSwiper.on('slideChange', handleSlideChange);
-
-      setActiveIndex(mainSwiper.realIndex);
-
       return () => {
         mainSwiper.off('slideChange', handleSlideChange);
       };
     }
   }, [mainSwiper, thumbsSwiper]);
+
+  useEffect(() => {
+    if (thumbsSwiper && !thumbsSwiper.destroyed && mainSwiper && !mainSwiper.destroyed) {
+      const handleThumbsSlideChange = () => {
+        if (mainSwiper.realIndex !== thumbsSwiper.realIndex) {
+          mainSwiper.slideToLoop(thumbsSwiper.realIndex);
+        }
+      };
+      thumbsSwiper.on('slideChange', handleThumbsSlideChange);
+      return () => {
+        thumbsSwiper.off('slideChange', handleThumbsSlideChange);
+      };
+    }
+  }, [mainSwiper, thumbsSwiper]);
+
 
   if (!isOpen) return null;
 
@@ -156,27 +171,23 @@ const Lightbox: React.FC<{
           onSwiper={setThumbsSwiper}
           modules={[Thumbs, FreeMode]}
           slidesPerView="auto"
-          spaceBetween={10}
+          spaceBetween={5} // ✅ [수정] 썸네일 간격을 10에서 5로 줄임
           centeredSlides={true}
           watchSlidesProgress={true}
           loop={true}
           initialSlide={startIndex}
           className="lightbox-thumbs-swiper"
           freeMode={true}
-          onClick={(swiper, event) => {
-            if (!mainSwiper || mainSwiper.destroyed) return;
-            const clickedSlide = (event.target as HTMLElement).closest('.swiper-slide');
-            if (!clickedSlide) return;
-            const realIndex = clickedSlide.getAttribute('data-swiper-slide-index');
-            if (realIndex !== null) {
-              mainSwiper.slideToLoop(parseInt(realIndex, 10));
-            }
-          }}
         >
           {images.map((url, index) => (
             <SwiperSlide
               key={index}
               className={`lightbox-thumb-slide ${activeIndex === index ? 'is-active' : ''}`}
+              onClick={() => {
+                if (mainSwiper && !mainSwiper.destroyed) {
+                    mainSwiper.slideToLoop(index);
+                }
+              }}
             >
               <OptimizedImage originalUrl={url} size="200x200" alt={`썸네일 ${index + 1}`} />
             </SwiperSlide>
@@ -186,6 +197,7 @@ const Lightbox: React.FC<{
     </div>
   );
 });
+
 
 const ProductImageSlider: React.FC<{ images: string[]; productName: string; onImageClick: (index: number) => void; }> = React.memo(({ images, productName, onImageClick }) => (<div className="product-swiper-container"><Swiper modules={[Pagination, Navigation]} spaceBetween={0} slidesPerView={1} navigation pagination={{ clickable: true, dynamicBullets: true }} className="product-swiper">{images.map((url, index) => (<SwiperSlide key={index} onClick={() => onImageClick(index)}><OptimizedImage originalUrl={url} size="1080x1080" alt={`${productName} 이미지 ${index + 1}`} /></SwiperSlide>))}</Swiper><div className="image-zoom-indicator"><Search size={16} /><span>클릭해서 크게 보기</span></div></div>));
 
@@ -246,7 +258,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                 </div>
                 <div className="info-row">
                     <div className="info-label">{storageIcons[product.storageType]}보관 방법</div>
-                    {/* ✅ [수정] CSS 스타일링을 위해 동적 클래스 적용 */}
                     <div className={`info-value storage-type-${product.storageType}`}>{storageLabels[product.storageType]}</div>
                 </div>
                 {(() => {
@@ -289,7 +300,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     );
 });
 
-// ✅ [수정] 옵션에 대표 가격 표시
 const OptionSelector: React.FC<{
     round: SalesRound;
     selectedVariantGroup: VariantGroup | null;
@@ -323,7 +333,6 @@ const OptionSelector: React.FC<{
 });
 
 
-// ✅ [수정] 세부 항목에 가격 차이 표시
 const ItemSelector: React.FC<{
   selectedVariantGroup: VariantGroup;
   selectedItem: ProductItem | null;
@@ -424,8 +433,7 @@ const ProductDetailPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
     const location = useLocation();
-    const { user, userDocument, isSuspendedUser } = useAuth(); // ✅ user, isSuspendedUser 추가
-    // const { addToCart } = useCart(); // ✅ 직접 주문하므로 addToCart는 사용하지 않음
+    const { user, userDocument, isSuspendedUser } = useAuth();
     const { runPageTourIfFirstTime } = useTutorial();
     const { isPreLaunch, launchDate } = useLaunch();
 
@@ -439,12 +447,11 @@ const ProductDetailPage: React.FC = () => {
     const [isEncoreLoading, setIsEncoreLoading] = useState(false);
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
-    const [isProcessing, setIsProcessing] = useState(false); // ✅ 처리 중 상태 추가
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
 
-    // ✅ Firebase Cloud Functions 호출자 초기화
     const functionsInstance = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
     const getProductByIdWithStock = useMemo(() => httpsCallable(functionsInstance, 'getProductByIdWithStock'), [functionsInstance]);
     const requestEncoreCallable = useMemo(() => httpsCallable(functionsInstance, 'requestEncore'), [functionsInstance]);
@@ -578,7 +585,6 @@ const ProductDetailPage: React.FC = () => {
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
-    // ✅ [신규] 즉시 예약 처리 함수
     const handleImmediateOrder = async () => {
         if (!userDocument || !user) { toast.error('로그인이 필요합니다.'); navigate('/login'); return; }
         if (isSuspendedUser) { toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
@@ -596,7 +602,6 @@ const ProductDetailPage: React.FC = () => {
             throw new Error(validationResult.data.summary.reason || '재고가 부족하거나 예약할 수 없는 상품입니다.');
           }
 
-          // ✅ [수정] 선입금 로직 변경: 한정수량 여부(isLimitedStock)는 제외
           const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
           const prepaymentRequired = isWarningUser || displayRound.isPrepaymentRequired;
           const totalPrice = selectedItem.price * quantity;
@@ -633,7 +638,6 @@ const ProductDetailPage: React.FC = () => {
                 <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
                   <div className="toast-icon-wrapper"><Banknote size={48} /></div>
                   <h4>⚠️ 선입금 후 예약이 확정됩니다</h4>
-                  {/* ✅ [수정] 선입금 안내 문구에서 '한정 수량' 부분 제거 */}
                   <p>'주의 요망' 등급이시거나 해당 상품이 선입금 필수 상품입니다.<br/>마감 시간 전까지 입금 후 채널톡으로 내역을 보내주세요.</p>
                   <div className="bank-info"><strong>카카오뱅크 3333-12-3456789 (소도몰)</strong><div className="price-to-pay">입금할 금액: <strong>{totalPrice.toLocaleString()}원</strong></div></div>
                   <small>관리자가 확인 후 예약을 확정 처리해 드립니다.<br/>미입금 시 예약은 자동 취소될 수 있습니다.</small>
@@ -655,7 +659,6 @@ const ProductDetailPage: React.FC = () => {
         }
     };
 
-    // ✅ [신규] 즉시 대기 신청 처리 함수
     const handleWaitlistRequest = async () => {
         if (!userDocument || !user) { toast.error('로그인이 필요합니다.'); navigate('/login'); return; }
         if (isSuspendedUser) { toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
@@ -681,7 +684,6 @@ const ProductDetailPage: React.FC = () => {
         }
     };
 
-    // ✅ [수정] 장바구니 대신 즉시 주문/대기 로직을 호출하는 핸들러
     const handlePurchaseAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
         if (isPreLaunch) { toast(`상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️' }); return; }
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
@@ -704,7 +706,6 @@ const ProductDetailPage: React.FC = () => {
             return;
         }
 
-        // 예약(RESERVATION) 처리
         const { primaryEnd } = getDeadlines(displayRound);
         const isSecondarySale = primaryEnd ? dayjs().isAfter(primaryEnd) : false;
 
@@ -725,7 +726,6 @@ const ProductDetailPage: React.FC = () => {
                 </div>
             ), { id: `order-confirm-secondary-${product.id}`, duration: Infinity });
         } else {
-            // 1차 공구 기간에는 확인 없이 바로 주문
             handleImmediateOrder();
         }
      }, [

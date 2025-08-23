@@ -57,12 +57,22 @@
     }
 }
 
+/* --- ✅ 모바일 최적화 --- */
 @media (max-width: 768px) {
     .cfv-container {
-        /* 🦎 [모바일 개선] 상하, 좌우 여백 축소 */
-        padding: var(--spacing-md) var(--spacing-sm);
+        /* 좌우 여백을 제거하여 콘텐츠가 화면 가장자리에 붙도록 합니다. */
+        padding: var(--spacing-sm) 0;
+        gap: 0;
+    }
+    .cfv-header {
+      /* 뒤로가기 버튼 영역에는 내부 여백을 줍니다. */
+      padding: 0 var(--spacing-md);
+      margin-bottom: var(--spacing-sm);
+    }
+    .cfv-back-button {
+      font-size: 0.9rem; /* 뒤로가기 버튼 폰트 축소 */
     }
     .cfv-body {
-        gap: var(--spacing-lg);
+        gap: var(--spacing-md); /* 프로필과 액션탭 사이 간격 조정 */
     }
 }

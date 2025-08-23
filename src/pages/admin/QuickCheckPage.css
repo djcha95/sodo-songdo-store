@@ -6,12 +6,6 @@
   margin: 0 auto;
 }
 
-@media (min-width: 768px) {
-  .quick-check-page {
-    padding: 2rem;
-  }
-}
-
 .qcp-header h1 {
   font-size: 2.25rem;
   font-weight: 700;
@@ -37,7 +31,6 @@
 }
 
 .qcp-input-wrapper {
-  /* 🦎 [모바일 최적화] flex-grow: 1을 추가하여 가능한 공간을 모두 차지하도록 함 */
   flex-grow: 1;
   max-width: 450px;
   min-width: 250px; /* 최소 너비 설정 */
@@ -95,7 +88,6 @@
   align-items: center;
   gap: var(--spacing-xs);
   transition: background-color 0.2s;
-  /* 🦎 [모바일 최적화] 줄바꿈 시 버튼 너비 확보 */
   flex-grow: 1;
   max-width: 120px;
   justify-content: center;
@@ -108,22 +100,6 @@
 .qcp-search-button:disabled {
     background-color: var(--border-color);
     cursor: not-allowed;
-}
-
-
-@media (min-width: 768px) {
-  .qcp-search-form {
-    flex-wrap: nowrap;
-    justify-content: center;
-  }
-  .qcp-input-wrapper {
-    width: auto;
-    min-width: 350px;
-    flex-grow: 0; /* 데스크탑에서는 늘어나지 않도록 */
-  }
-  .qcp-search-button {
-      flex-grow: 0; /* 데스크탑에서는 늘어나지 않도록 */
-  }
 }
 
 .disambiguation-box {
@@ -160,7 +136,8 @@
 }
 
 .qcp-initial-prompt .prompt-icon {
-  color: var(--border-color);
+  color: var(--primary-color); /* 강조색 사용 */
+  margin-bottom: var(--spacing-md);
 }
 
 .qcp-initial-prompt p {
@@ -168,108 +145,60 @@
   font-size: 1.1rem;
   font-weight: 500;
   line-height: 1.6;
+  color: var(--text-color-secondary); /* 좀 더 부드러운 색상 */
 }
 
-/* src/pages/admin/QuickCheckPage.css 파일 맨 아래에 추가 또는 기존 스타일 수정 */
-
-/* ... 기존 CSS 코드 ... */
-
-.qcp-initial-prompt p {
-margin: 0;
-font-size: 1.1rem;
-font-weight: 500;
-line-height: 1.6;
-color: var(--text-color-secondary); /* 좀 더 부드러운 색상 */
+/* --- ✅ 모바일 최적화 --- */
+@media (max-width: 768px) {
+    .quick-check-page {
+        padding: 0.5rem;
+    }
+    .qcp-header h1 {
+        font-size: 1.75rem; /* 제목 폰트 축소 */
+        margin-bottom: var(--spacing-md);
+    }
+    .qcp-search-form {
+        gap: var(--spacing-sm); /* 검색창 간격 축소 */
+    }
+    .qcp-input, .qcp-search-button {
+        font-size: 0.95rem; /* 입력창, 버튼 폰트 축소 */
+    }
+    .qcp-initial-prompt {
+        padding: 2rem 0.5rem;
+    }
+    .qcp-initial-prompt p {
+        font-size: 0.95rem; /* 안내 문구 폰트 축소 */
+    }
 }
 
-.qcp-initial-prompt .prompt-icon {
-color: var(--primary-color); /* 강조색 사용 */
-margin-bottom: var(--spacing-md);
-}
-/* src/pages/admin/QuickCheckPage.css */
-
-/* 기존 CSS 코드 ... */
-
-/* 추가된 관리자 도구 섹션 스타일 */
-.qcp-admin-actions {
-  padding: 10px 20px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.qcp-delete-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background-color: #ef4444; /* 빨간색 배경 */
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
+@media (min-width: 768px) {
+  .quick-check-page {
+    padding: 2rem;
+  }
+  .qcp-search-form {
+    flex-wrap: nowrap;
+    justify-content: center;
+  }
+  .qcp-input-wrapper {
+    width: auto;
+    min-width: 350px;
+    flex-grow: 0; /* 데스크탑에서는 늘어나지 않도록 */
+  }
+  .qcp-search-button {
+      flex-grow: 0; /* 데스크탑에서는 늘어나지 않도록 */
+  }
 }
 
-.qcp-delete-button:hover {
-  background-color: #dc2626; /* 호버 시 더 진한 빨간색 */
-}
-
-/* 추가된 react-hot-toast 확인 창 스타일 */
-.confirmation-toast {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 8px;
-  font-size: 14px;
-}
-
-.confirmation-toast h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.confirmation-toast p {
-  margin: 0;
-  line-height: 1.5;
-  color: #4b5563;
-}
-
-.confirmation-buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.confirmation-buttons button {
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.confirm-btn-cancel {
-  background-color: white;
-  color: #374151;
-}
-
-.confirm-btn-cancel:hover {
-  background-color: #f3f4f6;
-}
-
-.confirm-btn-delete {
-  background-color: #ef4444;
-  color: white;
-  border-color: #ef4444;
-}
-
-.confirm-btn-delete:hover {
-  background-color: #dc2626;
-  border-color: #dc2626;
-}
+/* ... 기존 기타 스타일들 ... */
+.qcp-admin-actions { padding: 10px 20px; margin-bottom: 20px; border-bottom: 1px solid #e5e7eb; }
+.qcp-delete-button { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background-color: #ef4444; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; }
+.qcp-delete-button:hover { background-color: #dc2626; }
+.confirmation-toast { display: flex; flex-direction: column; gap: 12px; padding: 8px; font-size: 14px; }
+.confirmation-toast h4 { margin: 0; font-size: 16px; font-weight: 600; color: #111827; }
+.confirmation-toast p { margin: 0; line-height: 1.5; color: #4b5563; }
+.confirmation-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.confirmation-buttons button { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; }
+.confirm-btn-cancel { background-color: white; color: #374151; }
+.confirm-btn-cancel:hover { background-color: #f3f4f6; }
+.confirm-btn-delete { background-color: #ef4444; color: white; border-color: #ef4444; }
+.confirm-btn-delete:hover { background-color: #dc2626; border-color: #dc2626; }

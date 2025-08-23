@@ -2,8 +2,12 @@
 
 .dashboard-container {
     padding: 24px 32px;
-    background-color: #f8f9fa;
-    min-height: 100vh;
+    /* ❗ [제거] min-height와 background-color는 이제 AdminLayout에서 관리합니다. */
+    
+    /* ✅ [개선] 콘텐츠 가독성을 위해 최대 너비 설정 및 중앙 정렬 */
+    max-width: 1600px; /* 데스크탑에서 콘텐츠가 너무 넓어지는 것을 방지 */
+    margin: 0 auto; /* 중앙 정렬 */
+    box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -174,6 +178,8 @@
 @media (max-width: 768px) {
     .dashboard-container {
         padding: 16px;
+        /* ✅ [개선] 모바일에서는 최대 너비 제한 없이 꽉 채웁니다. */
+        max-width: 100%;
     }
     .dashboard-header {
         flex-direction: column;

@@ -73,11 +73,8 @@ export async function executePickupReminders(targetUserPhone: string | null = nu
 
       const templateCode = "STANDARD_PICKUP_STAR";
       
-      // ✅ [최종 수정] 고객명에서 특수문자를 제거합니다.
-      const sanitizedDisplayName = userData.displayName.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s]/g, '');
-      
+      // ✅ [수정] 새 템플릿에 맞게 '고객명' 변수를 제거합니다.
       const templateVariables = {
-          고객명: sanitizedDisplayName,
           오늘픽업상품목록: productListText,
       };
 
@@ -164,7 +161,6 @@ export const sendPrepaymentReminders = onSchedule(
 
             const templateCode = "PREPAYMENT_GUIDE_URG";
             
-            // ✅ [최종 수정] 고객명에서 특수문자를 제거합니다.
             const sanitizedDisplayName = userData.displayName.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s]/g, '');
 
             const templateVariables = {

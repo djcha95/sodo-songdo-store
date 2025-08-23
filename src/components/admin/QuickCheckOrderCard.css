@@ -18,9 +18,16 @@
     flex-direction: column;
     gap: 8px;
     animation: fadeIn 0.4s ease-out;
-    width: 300px;
-    height: 170px;
+    /* ✅ [개선] 너비는 부모 컨테이너에 맞추고, 높이는 내용에 따라 유연하게 변하도록 수정 */
+    width: 100%;
+    min-height: 160px;
+    height: auto; 
     position: relative;
+}
+@media (min-width: 769px) {
+    .qc-order-card {
+        width: 300px; /* 데스크탑에서는 고정 너비 유지 */
+    }
 }
 
 .qco-checkmark {
@@ -38,6 +45,7 @@
     border-bottom-left-radius: var(--border-radius-lg);
     box-shadow: -2px 2px 5px rgba(0,0,0,0.1);
     animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 1;
 }
 
 @keyframes popIn {
@@ -115,100 +123,38 @@
     background-color: var(--primary-color-light);
 }
 
-.qco-qty-editor {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.qco-qty-editor button {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    color: var(--text-color-light);
-    display: flex;
-    align-items: center;
-}
-.qco-qty-editor button:hover {
-    color: var(--primary-color);
-}
+.qco-qty-editor { display: flex; align-items: center; gap: 6px; }
+.qco-qty-editor button { background: none; border: none; padding: 0; cursor: pointer; color: var(--text-color-light); display: flex; align-items: center; }
+.qco-qty-editor button:hover { color: var(--primary-color); }
+.qco-qty-input { width: 45px; padding: 2px 6px; border: 1px solid var(--border-color-light); border-radius: var(--border-radius-sm); text-align: center; font-size: 0.95rem; font-weight: var(--font-weight-semibold); -moz-appearance: textfield; appearance: textfield; }
+.qco-qty-input::-webkit-outer-spin-button, .qco-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-.qco-qty-input {
-    width: 45px;
-    padding: 2px 6px;
-    border: 1px solid var(--border-color-light);
-    border-radius: var(--border-radius-sm);
-    text-align: center;
-    font-size: 0.95rem;
-    font-weight: var(--font-weight-semibold);
-    -moz-appearance: textfield;
-    appearance: textfield;
-}
+.qco-bottom-row { display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid var(--border-color-extralight); padding-top: 8px; margin-top: 4px; }
+.qco-customer-name { font-size: 1rem; font-weight: var(--font-weight-semibold); }
+.qco-total-price { font-size: 1.15rem; font-weight: var(--font-weight-bold); color: var(--primary-color-dark); }
+.qc-order-card.is-future { border: 2px dashed var(--primary-color); }
 
-.qco-qty-input::-webkit-outer-spin-button,
-.qco-qty-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.qco-bottom-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    border-top: 1px solid var(--border-color-extralight);
-    padding-top: 8px;
-    margin-top: 4px;
-}
-
-.qco-customer-name {
-    font-size: 1rem;
-    font-weight: var(--font-weight-semibold);
-}
-
-.qco-total-price {
-    font-size: 1.15rem;
-    font-weight: var(--font-weight-bold);
-    color: var(--primary-color-dark);
-}
-
-/* 🎨 [모바일 UI/UX 고도화] 768px 이하 */
+/* --- ✅ 모바일 최적화 --- */
 @media (max-width: 768px) {
     .qc-order-card.selected {
         transform: scale(1.02);
         box-shadow: var(--shadow-lg);
     }
-}
-
-/* ✅ [추가] 미래 입고 상품 카드 스타일 */
-.qc-order-card.is-future {
-    border: 2px dashed var(--primary-color);
-}
-
-/* ✅ [추가] '입고 예정' 배지 스타일 */
-.qco-future-badge {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background-color: var(--primary-color);
-    color: white;
-    padding: 3px 8px;
-    border-radius: var(--border-radius-pill);
-    font-size: 0.75rem;
-    font-weight: var(--font-weight-bold);
-    z-index: 2; /* 체크마크 위에 표시될 수 있도록 z-index 추가 */
-}
-
-/* ✅ [수정] 체크마크가 배지 위에 올라오지 않도록 z-index 조정 */
-.qco-checkmark {
-    z-index: 1;
-}
-
-/* ✅ [추가] 선택되었을 때 '입고 예정' 배지가 체크마크에 가려지지 않도록 조정 */
-.qc-order-card.selected .qco-future-badge {
-    top: -1px;
-    right: 30px;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    border-top-left-radius: var(--border-radius-pill);
-    border-bottom-left-radius: var(--border-radius-pill);
+    .qc-order-card {
+        padding: 10px;
+        min-height: 150px;
+        gap: 6px;
+    }
+   .qco-top-row {
+       font-size: 0.75rem;
+       padding-bottom: 4px;
+   }
+   .qco-item-name { font-size: 0.9rem; }
+   .qco-item-qty, .qco-qty-input { font-size: 0.9rem; }
+   .qco-bottom-row {
+       padding-top: 6px;
+       margin-top: 2px;
+   }
+   .qco-customer-name { font-size: 0.9rem; }
+   .qco-total-price { font-size: 1.05rem; }
 }

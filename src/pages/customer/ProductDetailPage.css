@@ -101,17 +101,14 @@
   background-color: var(--color-primary);
 }
 
-/* ✅ [수정] 좌우 여백을 줄임 */
 .product-info-area {
   padding: 0 1rem 1.5rem 1rem;
 }
 
-/* ✅ [수정] 하단 여백을 줄여 해시태그와의 간격을 좁힘 */
 .product-header-content {
   padding: 1.5rem 0 0.5rem 0;
 }
 
-/* ✅ [수정] 글자 크기 조정 */
 .product-name {
   text-align: center;
   font-size: 1.6rem;
@@ -121,7 +118,6 @@
   word-break: keep-all;
 }
 
-/* ✅ [수정] 글자 크기 조정 및 여백 수정 */
 .markdown-content {
   font-size: 0.95rem;
   line-height: 1.7;
@@ -152,7 +148,6 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
-/* ✅ [수정] 글자 크기 조정 */
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -177,7 +172,6 @@
   text-align: right;
 }
 
-/* ✅ [신규] 보관 방법 스타일 */
 .info-value[class*="storage-type-"] {
   color: white;
   padding: 4px 10px;
@@ -186,10 +180,10 @@
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
-.storage-type-FROZEN { background-color: #3b82f6; /* 파란색 */ }
-.storage-type-COLD { background-color: #ef4444; /* 빨간색 */ }
-.storage-type-ROOM { background-color: #6b7280; /* 회색 */ }
-.storage-type-FRESH { background-color: #22c55e; /* 녹색 */ }
+.storage-type-FROZEN { background-color: #3b82f6; }
+.storage-type-COLD { background-color: #ef4444; }
+.storage-type-ROOM { background-color: #6b7280; }
+.storage-type-FRESH { background-color: #22c55e; }
 
 
 .stock-list {
@@ -429,9 +423,10 @@
   box-sizing: border-box;
 }
 
+/* ✅ [수정] 썸네일 영역이 작아진 만큼 메인 이미지 영역 높이 재조정 */
 .lightbox-swiper {
   width: 100%;
-  height: calc(100% - 80px);
+  height: calc(100% - 80px); 
 }
 
 .lightbox-swiper .swiper-button-next,
@@ -489,23 +484,25 @@
   object-fit: contain;
 }
 
+/* ✅ [수정] 썸네일 컨테이너 높이 축소 */
 .lightbox-thumbs-swiper {
-  height: 80px;
+  height: 60px;
   width: 100%;
   max-width: 90vw;
-  padding: 10px 0;
+  padding: 5px 0; /* 상하 패딩도 줄임 */
   box-sizing: border-box;
 }
 
+/* ✅ [수정] 썸네일 슬라이드 크기 축소 및 테두리 두께 조정 */
 .lightbox-thumbs-swiper .lightbox-thumb-slide {
-  width: 60px;
-  height: 60px;
+  width: 50px;
+  height: 50px;
   opacity: 0.6;
   transition: opacity 0.3s ease, border-color 0.3s ease;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 6px; /* 크기에 맞춰 모서리 둥글기도 줄임 */
   overflow: hidden;
-  border: 2px solid transparent;
+  border: 2px solid transparent; /* 테두리 얇게 */
 }
 
 .lightbox-thumbs-swiper .lightbox-thumb-slide:hover {
@@ -524,27 +521,25 @@
   object-fit: cover;
 }
 
-/* ✅ [수정] 해시태그 컨테이너 스타일 */
 .product-hashtags {
   display: flex;
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px; /* 태그 사이 간격 */
-  padding: 12px 20px; /* 상하좌우 여백 */
-  border-bottom: 1px solid #f0f0f0; /* 구분선 */
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-/* ✅ [수정] 해시태그 버튼 스타일 */
 .hashtag {
   background-color: #ffffff;
   color: var(--color-primary, #2563eb);
   font-weight: 600;
-  font-size: 0.9rem; /* 크기 키움 */
-  padding: 8px 16px; /* 패딩 키움 */
-  border-radius: 20px; /* 둥근 모서리 */
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  border-radius: 20px;
   border: 1px solid var(--color-primary-light, #dbeafe);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); /* 그림자 효과 */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
 }

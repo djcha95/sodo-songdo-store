@@ -1,26 +1,24 @@
-/* src/layouts/AdminLayout.css */
+/* src/components/admin/AdminLayout.css */
 
 .admin-layout {
   display: flex;
   min-height: 100vh;
-  background-color: var(--bg-color-gray-soft, #f8f9fa);
 }
 
 .admin-main-content {
   flex-grow: 1;
-  overflow-y: auto;
-  padding: 2rem;
-  box-sizing: border-box;
+  width: 100%; /* Safari flexbox 버그 방지를 위해 추가 */
+  background-color: #f8f9fa; /* 페이지의 기본 배경색 */
+  overflow-x: hidden; /* 의도치 않은 가로 스크롤 방지 */
 }
 
-/* --- 반응형 디자인 (모바일/태블릿 최적화) --- */
+/* --- ✅ 모바일 뷰 최적화 --- */
 @media (max-width: 768px) {
-  /* ✅ [모바일] 레이아웃 방향을 세로로 변경하여 상단바와 콘텐츠를 수직으로 쌓습니다. */
   .admin-layout {
+    /* 모바일에서는 사이드바가 상단 바로 변하므로, 
+      레이아웃을 수직으로 쌓도록 변경합니다. 
+      이것이 모바일 최적화의 가장 핵심적인 부분입니다.
+    */
     flex-direction: column;
-  }
-
-  .admin-main-content {
-    padding: 1rem;
   }
 }

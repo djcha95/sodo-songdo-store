@@ -151,17 +151,20 @@
     color: var(--primary-color-dark);
 }
 
-/* 🎨 [모바일 UI/UX 고도화] 768px 이하 */
+/* --- ✅ 모바일 최적화 --- */
 @media (max-width: 768px) {
     .cps-card {
         padding: var(--spacing-lg);
         gap: var(--spacing-lg);
+        /* 화면 가장자리에 붙을 때를 대비해 radius와 좌우 border 제거 */
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        box-shadow: none;
     }
     .cps-user-name {
-        font-size: 1.8rem; /* 이름 강조 */
+        font-size: 1.5rem; /* 이름 폰트 크기 축소 */
     }
-
-    /* 섹션 제목을 더 명확한 헤더로 변경 */
     .cps-section-title {
         background-color: var(--bg-color-soft);
         padding: var(--spacing-xs) var(--spacing-md);
@@ -170,9 +173,8 @@
         color: var(--text-color-primary);
     }
     .cps-stats-grid {
-        gap: var(--spacing-md); /* 통계 아이템 간격 확대 */
+        gap: var(--spacing-md);
     }
-    /* 통계 아이템을 미니 카드로 */
     .cps-grid-item {
         text-align: center;
         padding: var(--spacing-md);
@@ -181,13 +183,16 @@
         background-color: #fff;
     }
     .cps-grid-item strong {
-        font-size: 1.3rem;
+        font-size: 1.15rem; /* 통계 숫자 폰트 크기 축소 */
     }
-    /* 연락처 정보 가독성 향상 */
     .cps-info-item {
         padding: var(--spacing-md) var(--spacing-sm);
     }
     .cps-info-value {
-        font-size: 1.05rem;
+        font-size: 0.9rem; /* 연락처 정보 폰트 크기 축소 */
+    }
+    .cps-detail-link {
+        padding: var(--spacing-sm);
+        font-size: 0.9rem;
     }
 }
