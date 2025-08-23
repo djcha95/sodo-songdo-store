@@ -35,7 +35,7 @@ interface EnrichedGroupItem {
 const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     const [copied, setCopied] = useState(false);
     // TODO: 실제 운영 도메인으로 변경해야 합니다.
-    const productUrl = `https://www.sodomall.com/product/${productId}`;
+    const productUrl = `https://www.sodo-songdo.store/product/${productId}`;
 
     const handleCopy = (e: React.MouseEvent) => {
         e.preventDefault();

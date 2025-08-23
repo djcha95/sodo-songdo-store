@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, ListOrdered, Truck, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, Inbox, Info, Bolt, XCircle
+  PackageX, Hourglass, CreditCard, Inbox, Info, Bolt, XCircle, Plus, Minus
 } from 'lucide-react';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
@@ -24,7 +24,10 @@ import toast from 'react-hot-toast';
 
 import './OrderHistoryPage.css';
 
-// ... (SafeThumb, 타입 정의, 헬퍼 함수들은 변경 없이 그대로 유지)
+const functions = getFunctions(getApp(), 'asia-northeast3');
+const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity: number }, { success: boolean, message: string }>(functions, 'updateOrderQuantity');
+
+
 const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
 
@@ -237,6 +240,7 @@ const usePaginatedData = <T,>(
       }
     } catch (err: any) {
       console.error('데이터 로딩 오류:', err);
+      // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
       toast.error(err.message || '데이터를 불러오는 데 실패했습니다.', { duration: 2000 });
     } finally {
       setLoading(false);
@@ -282,12 +286,88 @@ const EmptyHistory: React.FC<{ type?: 'order' | 'waitlist' | 'pickup' }> = React
   );
 });
 
+const QuantityControls: React.FC<{
+  value: number;
+  onUpdate: (newQuantity: number) => void;
+  orderId: string;
+  max?: number;
+  onStockLimitDiscovered: (orderId: string, max: number) => void;
+}> = ({ value, onUpdate, orderId, max, onStockLimitDiscovered }) => {
+  const [currentQuantity, setCurrentQuantity] = useState(value);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (max !== undefined && currentQuantity > max) {
+      setCurrentQuantity(max);
+    }
+  }, [max, currentQuantity]);
+
+  const handleQuantityChange = (newQuantity: number) => {
+    if (newQuantity < 1) return;
+    
+    setCurrentQuantity(newQuantity);
+
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+
+    debounceTimeout.current = setTimeout(() => {
+      if (newQuantity !== value) {
+        setIsUpdating(true);
+        const promise = updateOrderQuantityCallable({ orderId, newQuantity });
+        
+        // ✅ [수정] toast.promise의 세 번째 인자로 옵션을 전달하여 duration 설정
+        toast.promise(promise, {
+            loading: '수량 변경 중...',
+            success: (result) => {
+                onUpdate(newQuantity);
+                setIsUpdating(false);
+                return result.data.message;
+            },
+            error: (err: any) => {
+                setCurrentQuantity(value);
+                setIsUpdating(false);
+                const message = err.message || '수량 변경에 실패했습니다.';
+                const match = message.match(/최대 (\d+)개/);
+                if (match && match[1]) {
+                    const maxQuantity = parseInt(match[1], 10);
+                    onStockLimitDiscovered(orderId, maxQuantity);
+                }
+                return message;
+            }
+        }, {
+          success: { duration: 2000 },
+          error: { duration: 2000 }
+        });
+      }
+    }, 800);
+  };
+  
+  return (
+    <div className="quantity-controls">
+      <button onClick={() => handleQuantityChange(currentQuantity - 1)} disabled={isUpdating || currentQuantity <= 1}>
+        <Minus size={20} />
+      </button>
+      <span className="quantity-value">{isUpdating ? '...' : currentQuantity}</span>
+      <button onClick={() => handleQuantityChange(currentQuantity + 1)} disabled={isUpdating || (max !== undefined && currentQuantity >= max)}>
+        <Plus size={20} />
+      </button>
+    </div>
+  );
+};
+
+
 const AggregatedItemCard: React.FC<{
   item: AggregatedItem;
   displayDateInfo?: { type: 'pickup' | 'order'; date: Date };
   isSelected: boolean;
   onSelect: (id: string) => void;
-}> = React.memo(({ item, displayDateInfo, isSelected, onSelect }) => {
+  onQuantityUpdate: (orderId: string, newQuantity: number) => void;
+  maxQuantity?: number;
+  onStockLimitDiscovered: (orderId: string, max: number) => void;
+}> = React.memo(({ item, displayDateInfo, isSelected, onSelect, onQuantityUpdate, maxQuantity, onStockLimitDiscovered }) => {
   const navigate = useNavigate();
 
   const { statusText, StatusIcon, statusClass } = useMemo(() => {
@@ -304,6 +384,7 @@ const AggregatedItemCard: React.FC<{
   }, [item.status, item.wasPrepaymentRequired]);
 
   const { cancellable, isEvent } = useMemo(() => getCancellationDetails(item), [item]);
+  const isQuantityEditable = (item.status === 'RESERVED' || item.status === 'PREPAID') && item.originalOrders.length === 1;
 
   const topText = useMemo(
     () => isEvent ? item.productName : item.variantGroupName,
@@ -321,19 +402,19 @@ const AggregatedItemCard: React.FC<{
   }, [isEvent, item.productId, navigate]);
   
   const handleClick = useCallback(() => {
-    if (cancellable) {
+    if (cancellable || (item.status === 'RESERVED' || item.status === 'PREPAID')) {
       onSelect(item.id);
     } else {
       handleNavigate();
     }
-  }, [cancellable, item.id, onSelect, handleNavigate]);
+  }, [cancellable, item.id, onSelect, handleNavigate, item.status]);
 
   const handlers = useLongPress(handleNavigate, handleClick, { initialDelay: 500 });
 
   let displayDateText = '';
   if (displayDateInfo?.date) {
     const formattedDate = formatPickupDateShort(displayDateInfo.date);
-    displayDateText = displayDateInfo.type === 'pickup' ? `픽업 ${formattedDate}` : `주문 ${formattedDate}`;
+    displayDateText = displayDateInfo.type === 'pickup' ? `픽업 ${formattedDate}` : ``;
   }
 
   return (
@@ -366,9 +447,22 @@ const AggregatedItemCard: React.FC<{
           <div className="info-bottom-row">
             <span className="item-options-quantity">
               <span className="item-option-name">{bottomText}</span>
-              <span className="item-quantity">({item.totalQuantity}개)</span>
+              {!isQuantityEditable && <span className="item-quantity">({item.totalQuantity}개)</span>}
             </span>
-            {displayDateText && <span className="date-info-badge">{displayDateText}</span>}
+            
+            {isQuantityEditable ? (
+              <div className="quantity-control-container" onClick={(e) => e.stopPropagation()}>
+                <QuantityControls
+                  value={item.totalQuantity}
+                  onUpdate={(newQuantity) => onQuantityUpdate(item.originalOrders[0].id, newQuantity)}
+                  orderId={item.originalOrders[0].id}
+                  max={maxQuantity}
+                  onStockLimitDiscovered={onStockLimitDiscovered}
+                />
+              </div>
+            ) : (
+              displayDateText && <span className="date-info-badge">{displayDateText}</span>
+            )}
           </div>
         </div>
       </div>
@@ -436,6 +530,8 @@ const OrderHistoryPage: React.FC = () => {
   
   const [selectedOrderKeys, setSelectedOrderKeys] = useState<Set<string>>(new Set());
   const [selectedWaitlistKeys, setSelectedWaitlistKeys] = useState<Set<string>>(new Set());
+  
+  const [maxQuantities, setMaxQuantities] = useState<Record<string, number>>({});
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
@@ -472,6 +568,7 @@ const OrderHistoryPage: React.FC = () => {
           const fetchedWaitlist = await getUserWaitlist(user.uid);
           setWaitlist(fetchedWaitlist);
         } catch (error) {
+           // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
           toast.error("대기 목록을 불러오는 데 실패했습니다.", { duration: 2000 });
         } finally {
           setLoadingWaitlist(false);
@@ -482,8 +579,12 @@ const OrderHistoryPage: React.FC = () => {
   }, [user, viewMode]);
 
   const aggregatedItems = useMemo(() => {
+    const activeOrders = orders.filter(o => 
+      o.status !== 'CANCELED' && o.status !== 'LATE_CANCELED' && o.status !== 'NO_SHOW'
+    );
+
     const aggregated: { [key: string]: AggregatedItem } = {};
-    orders.forEach(order => {
+    activeOrders.forEach(order => {
       const date = viewMode === 'orders' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
       if (!date) return;
       const dateStr = dayjs(date).format('YYYY-MM-DD');
@@ -546,6 +647,24 @@ const OrderHistoryPage: React.FC = () => {
         return newSet;
     });
   }, []);
+
+  const handleQuantityUpdate = useCallback((orderId: string, newQuantity: number) => {
+    setOrders(prevOrders => prevOrders.map(order => {
+        if (order.id === orderId) {
+            const updatedItem = { ...order.items[0], quantity: newQuantity };
+            return {
+                ...order,
+                items: [updatedItem],
+                totalPrice: updatedItem.unitPrice * newQuantity,
+            };
+        }
+        return order;
+    }));
+  }, [setOrders]);
+  
+  const handleStockLimitDiscovered = useCallback((orderId: string, max: number) => {
+    setMaxQuantities(prev => ({ ...prev, [orderId]: max }));
+  }, []);
   
   const handleBulkCancel = useCallback((type: 'order' | 'waitlist') => {
     if (type === 'order') {
@@ -563,7 +682,8 @@ const OrderHistoryPage: React.FC = () => {
       });
       
       if (ordersToCancel.length === 0) {
-        toast('취소할 수 있는 항목이 선택되지 않았습니다.', { icon: 'ℹ️' });
+        // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
+        toast('취소할 수 있는 항목이 선택되지 않았습니다.', { icon: 'ℹ️', duration: 2000 });
         return;
       }
       
@@ -572,6 +692,7 @@ const OrderHistoryPage: React.FC = () => {
       const message = `선택한 ${ordersToCancel.length}개의 예약을 정말 취소하시겠습니까?` + 
                       (containsPenalty ? "\n'노쇼' 처리되는 항목이 포함되어 있습니다." : "");
 
+      // ✅ [유지] 확인/취소 토스트는 사용자가 직접 닫아야 하므로 duration: Infinity 유지
       toast((t) => (
         <div className="confirmation-toast-content">
           <AlertCircle size={44} className="toast-icon" style={{ color: 'var(--danger-color, #ef4444)' }} />
@@ -581,7 +702,6 @@ const OrderHistoryPage: React.FC = () => {
             <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>유지</button>
             <button className="common-button button-danger button-medium" onClick={() => {
               toast.dismiss(t.id);
-              // ✅ [수정] cancelOrder 호출 시 orderId와 penaltyType을 올바르게 전달
               const cancelPromises = ordersToCancel.map(item => 
                 cancelOrder(item.order.id, { penaltyType: item.isPenalty ? 'late' : 'none' })
               );
@@ -590,12 +710,13 @@ const OrderHistoryPage: React.FC = () => {
                 loading: `${ordersToCancel.length}개 항목 취소 중...`,
                 success: () => {
                   const canceledOrderIds = new Set(ordersToCancel.map(i => i.order.id));
-                  setOrders(prev => prev.map(o => canceledOrderIds.has(o.id) ? { ...o, status: 'CANCELED' } : o));
+                  setOrders(prev => prev.filter(o => !canceledOrderIds.has(o.id)));
                   setSelectedOrderKeys(new Set());
                   return `${ordersToCancel.length}개 항목이 취소되었습니다.`;
                 },
-                error: (err) => err?.message || '일부 항목 취소 중 오류가 발생했습니다.'
-              }, { success: { duration: 2000 }, error: { duration: 2500 } });
+                error: (err: any) => err?.message || '일부 항목 취소 중 오류가 발생했습니다.'
+              // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
+              }, { success: { duration: 2000 }, error: { duration: 2000 } });
             }}>모두 취소</button>
           </div>
         </div>
@@ -610,10 +731,12 @@ const OrderHistoryPage: React.FC = () => {
       });
 
       if (itemsToCancel.length === 0) {
-        toast('취소할 대기 항목이 선택되지 않았습니다.', { icon: 'ℹ️' });
+        // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
+        toast('취소할 대기 항목이 선택되지 않았습니다.', { icon: 'ℹ️', duration: 2000 });
         return;
       }
 
+      // ✅ [유지] 확인/취소 토스트는 사용자가 직접 닫아야 하므로 duration: Infinity 유지
       toast((t) => (
         <div className="confirmation-toast-content">
           <AlertCircle size={44} className="toast-icon" style={{ color: 'var(--danger-color, #ef4444)' }} />
@@ -634,7 +757,8 @@ const OrderHistoryPage: React.FC = () => {
                   return `${itemsToCancel.length}개 대기 신청이 취소되었습니다.`;
                 },
                 error: () => '대기 취소 중 오류가 발생했습니다.'
-              }, { success: { duration: 2000 }, error: { duration: 2500 } });
+              // ✅ [수정] 모든 토스트 알림은 2초 뒤에 꺼지도록 duration 설정
+              }, { success: { duration: 2000 }, error: { duration: 2000 } });
             }}>모두 취소</button>
           </div>
         </div>
@@ -645,39 +769,49 @@ const OrderHistoryPage: React.FC = () => {
   const renderOrderContent = () => {
     const isFirstLoading = ordersLoading && orders.length === 0;
     if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
-    if (orders.length === 0 && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
+
+    const activeOrdersExist = Object.keys(aggregatedItems).length > 0 && Object.values(aggregatedItems).some(arr => arr.length > 0);
+    if (!activeOrdersExist && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
+
     const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
       const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
       return viewMode === 'orders' ? dateB - dateA : dateA - dateB;
     });
+
     return (
       <div className="orders-list">
         <AnimatePresence>
-          {sortedDates.map((dateStr, index) => (
-            <motion.div key={dateStr} layout>
-              <div className="date-header-container">
-                <DateHeader date={new Date(dateStr)} />
-                {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
-                  <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
-                    <Info size={14} /><span>카드를 클릭하여 선택, 길게 눌러 상세페이지로 이동하세요.</span>
-                  </div>
-                )}
-              </div>
-              <div className="order-cards-grid">
-                {aggregatedItems[dateStr].map(item => (
-                  <AggregatedItemCard
-                    key={item.id}
-                    item={item}
-                    isSelected={selectedOrderKeys.has(item.id)}
-                    onSelect={(id) => handleItemSelect(id, 'order')}
-                    displayDateInfo={viewMode === 'orders'
-                      ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! }
-                      : { type: 'order', date: safeToDate(item.originalOrders[0]?.createdAt)! }}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          ))}
+          {sortedDates.map((dateStr, index) => {
+            if (aggregatedItems[dateStr].length === 0) return null; // 빈 날짜 그룹은 렌더링하지 않음
+            return (
+              <motion.div key={dateStr} layout>
+                <div className="date-header-container">
+                  <DateHeader date={new Date(dateStr)} />
+                  {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
+                    <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
+                      <Info size={14} /><span>카드를 클릭하여 선택, 길게 눌러 상세페이지로 이동하세요.</span>
+                    </div>
+                  )}
+                </div>
+                <div className="order-cards-grid">
+                  {aggregatedItems[dateStr].map(item => (
+                    <AggregatedItemCard
+                      key={item.id}
+                      item={item}
+                      isSelected={selectedOrderKeys.has(item.id)}
+                      onSelect={(id) => handleItemSelect(id, 'order')}
+                      displayDateInfo={viewMode === 'orders'
+                        ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! }
+                        : undefined}
+                      onQuantityUpdate={handleQuantityUpdate}
+                      maxQuantity={maxQuantities[item.originalOrders[0]?.id]}
+                      onStockLimitDiscovered={handleStockLimitDiscovered}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
       </div>
     );

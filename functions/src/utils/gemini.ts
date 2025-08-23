@@ -74,7 +74,7 @@ OUTPUT: ONE raw JSON object ONLY (no markdown fences, no prose). It must conform
 Schema:
 {
   "productType": "'single' or 'group'",
-  "storageType": "'ROOM' | 'FROZEN' | 'COLD'",
+  "storageType": "'ROOM' | 'FROZEN' | 'COLD' | 'FRESH'",
   "categoryName": "string (MUST be one of these: [${safeCategories.join(", ")}])",
   "groupName": "string | null",
   "cleanedDescription": "string | null",
@@ -111,7 +111,7 @@ IMPORTANT INSTRUCTIONS:
     - You MUST choose ONE category from this exact list: [${safeCategories.join(", ")}].
     - Analyze the text carefully. Never return null or a category not on the list.
 
-4) Storage type: Infer from '냉장', '냉동', '실온'. Default to 'ROOM'.
+4) Storage type: Infer from '냉장', '냉동', '실온'. For products like eggs, fruits, or vegetables that are stored at room temperature but are fresh and require quick pickup, use 'FRESH'. Default to 'ROOM' for other cases.
 
 5) Product Type Rules (CRITICAL):
     - **'single'**: Use when there is ONLY ONE KIND of product, but it's sold in different quantities or packages. For example, "Narangd Cider 5-pack" and "Narangd Cider 30-pack" are quantity variations of the SAME product, so the type must be 'single'. In this case, the 'variantGroups' array should usually contain only one object.
@@ -120,19 +120,19 @@ IMPORTANT INSTRUCTIONS:
 
 6) variantGroups / items:
     - Extract prices as pure numbers. Parse expirationDate and pickupDate.
-    - **Item Name Rule (CRITICAL)**: The 'name' for each item MUST be a single unit. For example: "1개", "1팩", "1마리", "1곽". **NEVER** include weights or extra details in parentheses like "1개 (500g)". Just the single unit.
+    - **Item Name Rule (CRITICAL)**: The 'name' for each item must be clean and simple, representing the sales unit. For example: "구운계란 1판", "하늘보리 1박스". **NEVER** include descriptive details in parentheses like "(30구)" or "(500g)" in the final 'name' field. This information should be used for the 'cleanedDescription' or to determine 'stockDeductionAmount', but not be part of the item 'name' itself.
 
 7) Pickup Date Rule (매우 중요): Today is ${today}. Resolve all pickup dates to be in the future. If a year is missing (e.g., 8/15), find the next future occurrence. If a date is in the past, add years until it is in the future.
 
 8) Nulls: Use null for genuinely missing values, but be aggressive in parsing what's there. The 'hashtags' field is an exception and must not be null.
 
 9) Stock Deduction Unit (차감 단위) Rules (CRITICAL):
-    - For each item in the 'items' array, determine the 'stockDeductionAmount'.
-    - This is the number of base units deducted from inventory for one purchase of that item.
-    - Example: If the options are "하늘보리 1병" and "하늘보리 1박스(20병)":
-      - For the "1병" item, 'stockDeductionAmount' MUST be 1.
-      - For the "1박스(20병)" item, 'stockDeductionAmount' MUST be 20.
-    - Infer this number from the item name (e.g., '20병', '30캔', '5개입'). If it's a single item, the value is 1.
+    - This determines how many base units are removed from stock when an item is purchased.
+    - **If multiple options are different quantities of the SAME product** (e.g., "1병" and "1박스(20병)"), find the smallest unit ("1병").
+      - For "1병", 'stockDeductionAmount' MUST be 1.
+      - For "1박스(20병)", 'stockDeductionAmount' MUST be 20.
+    - **If there is only ONE option, or options are for different products** (e.g., different flavors), the 'stockDeductionAmount' for each item is ALWAYS 1.
+      - Example: The only option is "구운 계란 1판 (30구)". The unit being sold is "1판". Therefore, 'stockDeductionAmount' MUST be 1. The "(30구)" is just a description.
 
 원문:
 ${text}

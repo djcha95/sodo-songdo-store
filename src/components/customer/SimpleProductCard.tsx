@@ -302,8 +302,8 @@ const handleImmediateOrder = async () => {
         return (
             <div className="single-option-controls">
                 <div className="quantity-controls compact">
-                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, q-1))}} className="quantity-btn" disabled={quantity <= 1}><Minus size={16} /></button>
-                    {/* ✅ 5. 수량 입력창 수정 */}
+                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
+                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity <= 1}><Minus size={16} /></button>
                     <input 
                       type="number" 
                       className="quantity-input" 
@@ -312,7 +312,8 @@ const handleImmediateOrder = async () => {
                       onBlur={handleQuantityBlur}
                       onClick={(e) => { e.stopPropagation(); e.currentTarget.select(); }}
                     />
-                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, q+1))}} className="quantity-btn" disabled={quantity >= maxQty}><Plus size={16} /></button>
+                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
+                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity >= maxQty}><Plus size={16} /></button>
                 </div>
                 <button className="simple-card-action-btn waitlist" onClick={showWaitlistConfirmation} disabled={isProcessing}>
                     {isProcessing ? '처리중...' : <><Hourglass size={16} /> 대기 신청</>}
@@ -326,8 +327,8 @@ const handleImmediateOrder = async () => {
         return (
             <div className="single-option-controls">
                 <div className="quantity-controls compact">
-                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, q-1))}} className="quantity-btn" disabled={quantity <= 1}><Minus size={16} /></button>
-                    {/* ✅ 5. 수량 입력창 수정 */}
+                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
+                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity <= 1}><Minus size={16} /></button>
                     <input
                       type="number"
                       className="quantity-input"
@@ -336,7 +337,8 @@ const handleImmediateOrder = async () => {
                       onBlur={handleQuantityBlur}
                       onClick={(e) => { e.stopPropagation(); e.currentTarget.select(); }}
                     />
-                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, q+1))}} className="quantity-btn" disabled={quantity >= maxQty}><Plus size={16} /></button>
+                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
+                    <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity >= maxQty}><Plus size={16} /></button>
                 </div>
                 <button className="simple-card-action-btn confirm" onClick={showConfirmation} disabled={isProcessing}>
                     {isProcessing ? '처리중...' : '예약하기'}

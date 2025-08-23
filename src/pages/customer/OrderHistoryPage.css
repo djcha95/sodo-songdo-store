@@ -267,10 +267,6 @@
   margin-top: 8px;
 }
 
-/* ✅ [삭제] 더 이상 사용하지 않는 스타일
-.cancel-instruction-waitlist { ... }
-*/
-
 .priority-ticket-btn {
   display: inline-flex;
   align-items: center;
@@ -481,7 +477,7 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-/* ✅ [추가] 선택된 카드 스타일 */
+/* ✅ [수정] 선택된 카드 스타일 */
 .order-card-v3.selected,
 .waitlist-card.selected {
   border-color: #3b82f6; /* Tailwind blue-500 */
@@ -523,4 +519,54 @@
 
 .bulk-cancel-btn:hover {
   background-color: #dc2626; /* red-600 */
+}
+
+/* ✅ [추가] 수량 조절 컨트롤 스타일 */
+.quantity-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #f3f4f6; /* gray-100 */
+  border-radius: 16px;
+  padding: 4px;
+}
+
+.quantity-controls button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background-color: #fff;
+  color: #1d4ed8; /* indigo-700 */
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.quantity-controls button:hover {
+  background-color: #eef2ff; /* indigo-50 */
+}
+
+.quantity-controls button:active {
+  transform: scale(0.95);
+}
+
+.quantity-controls button:disabled {
+  background-color: #e5e7eb; /* gray-200 */
+  color: #9ca3af; /* gray-400 */
+  cursor: not-allowed;
+}
+
+.quantity-value {
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 24px;
+  text-align: center;
+  color: #1f2937; /* gray-800 */
 }

@@ -10,12 +10,16 @@
     justify-content: space-around;
     background-color: #fff;
     border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 50px;
+    z-index: 10;
+    padding: 0 4px;
 }
 
 .tab-btn {
     flex: 1;
-    padding: 0.9rem 0.5rem;
-    font-size: 0.95rem;
+    padding: 12px 2px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-color-light);
     background-color: transparent;
@@ -26,20 +30,57 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.2rem;
+    text-align: center;
     line-height: 1.2;
-    white-space: nowrap;
 }
 
 .tab-btn.active {
-    color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
-    border-bottom-color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
+    color: #5A8DEE;
+    border-bottom-color: #5A8DEE;
+}
+
+.tab-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0 4px;
+}
+
+.tab-icon {
+    font-size: 1.1em;
+}
+
+.tab-count {
+    font-weight: 500;
+}
+
+.tab-btn.active .tab-count {
+    color: #5A8DEE;
+}
+
+@media (min-width: 360px) {
+    .tab-btn {
+       font-size: 14px;
+    }
+}
+
+@media (min-width: 400px) {
+    .tab-btn {
+       font-size: 15px;
+    }
+    .tab-title {
+        flex-wrap: nowrap;
+    }
+}
+
+.tab-content-area {
+    padding-top: 0.5rem;
 }
 
 .simple-product-list {
     display: flex;
     flex-direction: column;
-    padding-top: 0.5rem;
     gap: 0;
 }
 
@@ -48,7 +89,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    margin: 0 0.0rem 0.0rem;
+    margin: 0.25rem 0.5rem;
     padding: 0.6rem;
     background-color: var(--danger-color-light);
     color: var(--danger-color);
@@ -76,4 +117,44 @@
 .product-list-placeholder p {
   font-size: 1.1rem;
   font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.product-list-placeholder span {
+    font-size: 0.9rem;
+    color: #909090;
+}
+
+.onsite-product-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/* ✅ [추가] 불타오르는 효과를 위한 키프레임 애니메이션 */
+@keyframes flameEffect {
+  0%, 100% {
+    text-shadow: 0 0 4px #fff, 0 0 6px #ffc107, 0 0 8px #ff9800;
+  }
+  50% {
+    text-shadow: 0 0 6px #fff, 0 0 8px #ffc107, 0 0 12px #ff5722;
+  }
+}
+
+/* ✅ [추가] 활성화된 '공동구매' 탭에만 애니메이션 적용 */
+.tab-btn.primary-tab.active .tab-text {
+    color: #E65100; /* 텍스트 색상을 진한 주황색으로 변경 */
+    animation: flameEffect 1.5s ease-in-out infinite; /* 애니메이션 적용 */
+}
+
+/* ✅ [추가] 활성화된 '공동구매' 탭의 아이콘과 카운트 색상도 통일 */
+.tab-btn.primary-tab.active,
+.tab-btn.primary-tab.active .tab-count {
+    color: #E65100;
+}
+
+/* ✅ [추가] 활성화된 '공동구매' 탭의 하단 보더 색상도 통일 */
+.tab-btn.primary-tab.active {
+    border-bottom-color: #FF9800;
 }

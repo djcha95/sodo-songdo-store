@@ -8,10 +8,10 @@ import {
     updateMultipleOrderStatuses,
     revertOrderStatus,
     deleteMultipleOrders,
-    splitAndUpdateOrderStatus,
+    processPartialPickup, // [수정] splitAndUpdateOrderStatus 대신 processPartialPickup 사용
     splitBundledOrder,
     cancelOrder,
-    revertFinalizedOrder // [추가] 취소 복구 함수 import
+    revertFinalizedOrder
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import toast from 'react-hot-toast';
@@ -240,18 +240,24 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     );
 
     const handleSelectGroup = (groupKey: string) => {
-        if(splitInfo) { toast.error('수량 변경 후에는 먼저 분할 처리를 완료해주세요.'); return; }
+        if(splitInfo) { toast.error('수량 변경 후에는 먼저 부분 픽업 처리를 완료해주세요.'); return; }
         setSelectedGroupKeys(prev => prev.includes(groupKey) ? prev.filter(key => key !== groupKey) : [...prev, groupKey]);
     };
 
     const handleQuantityChange = (group: AggregatedOrderGroup, newQuantity: number) => {
-        if (newQuantity !== group.totalQuantity) {
-            if(group.originalOrders.length > 1) { toast.error("묶인 그룹의 수량은 변경할 수 없습니다."); return; }
+        if (newQuantity < group.totalQuantity) {
+            if(group.originalOrders.length > 1) { 
+                toast.error("여러 주문이 묶인 그룹의 수량은 변경할 수 없습니다. '전체 주문 내역' 탭에서 주문을 분할한 후 시도해주세요."); 
+                return; 
+            }
             setSplitInfo({ group, newQuantity });
-            setSelectedGroupKeys([group.groupKey]);
+            setSelectedGroupKeys([group.groupKey]); // 수량 변경 시 해당 카드만 자동 선택
         } else {
             setSplitInfo(null);
-            setSelectedGroupKeys([]);
+            // 수량이 원래대로 돌아오면 선택 해제
+            if (selectedGroupKeys.includes(group.groupKey)) {
+               setSelectedGroupKeys(prev => prev.filter(key => key !== group.groupKey));
+            }
         }
     };
 
@@ -288,27 +294,20 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     const handleCancelOrder = () => {
         if (selectedGroupKeys.length === 0) return;
 
-        const firstOrder = orders.find(o => o.id === selectedGroups[0].originalOrders[0].orderId);
-        if (!firstOrder) return;
+        const firstOrderInGroup = selectedGroups[0];
+        const orderToGetDate = orders.find(o => o.id === firstOrderInGroup.originalOrders[0].orderId);
+        if (!orderToGetDate) return;
 
-        // [핵심 수정] 새로운 페널티 규칙 로직
         const now = new Date();
-        const pickupJsDate = convertToDate(firstOrder.pickupDate);
+        const pickupJsDate = convertToDate(orderToGetDate.pickupDate);
         let isPenaltyCancellation = false;
+        
+        const pickupDayStart = pickupJsDate ? new Date(pickupJsDate.setHours(0, 0, 0, 0)) : null;
+        const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
 
-        if (pickupJsDate) {
-            const pickupDay = new Date(pickupJsDate);
-            pickupDay.setHours(0, 0, 0, 0);
-            
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            // 픽업일이 오늘이고,
-            if (pickupDay.getTime() === today.getTime()) {
-                // 현재 시간이 오후 1시(13시) 이전이라면 페널티 대상
-                if (now.getHours() < 13) {
-                    isPenaltyCancellation = true;
-                }
+        if (pickupDayStart && pickupDayStart.getTime() === todayStart.getTime()) {
+            if (now.getHours() < 13) {
+                isPenaltyCancellation = true;
             }
         }
         
@@ -316,15 +315,12 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         
         const updates = { 
             noshow: penaltyType === 'late' ? 0.5 * selectedGroupKeys.length : 0,
-            // 백엔드 callable/orders.ts의 POINT_POLICIES.LATE_CANCEL_PENALTY.points 값과 일치시켜야 합니다.
             points: penaltyType === 'late' ? -50 * selectedGroupKeys.length : 0 
         };
         const orderIdsToCancel = selectedGroups.flatMap(g => g.originalOrders.map(o => o.orderId));
 
-        const cancelPromises = orderIdsToCancel.map(orderId => cancelOrder(orderId, { penaltyType }));
-        
         performAction(
-            () => Promise.all(cancelPromises),
+            () => Promise.all(orderIdsToCancel.map(orderId => cancelOrder(orderId, { penaltyType }))),
             () => onStatUpdate(updates),
             () => onStatUpdate({ noshow: -(updates.noshow || 0), points: -(updates.points || 0) }),
             () => { setSelectedGroupKeys([]); onActionSuccess(); },
@@ -349,13 +345,11 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             updates.noshow = -1;
             updates.points = pointChange;
         } else if (originalStatus === 'LATE_CANCELED') {
-            // [추가] 페널티 취소 복구 로직
             updates.noshow = -0.5;
-            updates.points = 50; // 페널티로 차감된 50포인트 복구
+            updates.points = 50;
         }
 
         performAction(
-            // [수정] 새로운 백엔드 함수 호출
             () => revertFinalizedOrder(order.id, originalStatus),
             () => onStatUpdate(updates),
             () => onStatUpdate({
@@ -380,36 +374,50 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         );
     };
 
-    const handleSplit = () => {
+    // [수정] 기존 handleSplit을 부분 픽업 로직으로 전면 교체
+    const handlePartialPickup = () => {
         if (!splitInfo) return;
-        const performSplitAction = (remainingStatus: OrderStatus) => {
-            const orderIdToSplit = splitInfo.group.originalOrders[0].orderId;
-            const pointChange = Math.round(splitInfo.group.item.unitPrice * splitInfo.newQuantity * 0.01);
 
-            const updates: { pickup?: number; noshow?: number; points?: number } = { pickup: 1, points: pointChange };
-            if (remainingStatus === 'NO_SHOW') {
-                updates.noshow = 1;
-            }
+        const { group, newQuantity } = splitInfo;
+        const orderIdToProcess = group.originalOrders[0].orderId;
 
-            performAction(
-                () => splitAndUpdateOrderStatus(orderIdToSplit, splitInfo.newQuantity, remainingStatus),
-                () => onStatUpdate(updates),
-                () => onStatUpdate({ pickup: -(updates.pickup || 0), noshow: -(updates.noshow || 0), points: -(updates.points || 0) }),
-                onActionSuccess,
-                { loading: '분할 처리 중...', success: '분할 처리가 완료되었습니다.', error: '분할 처리 실패' }
-            );
-        };
-        toast.custom((t) => (
-            <div className="confirmation-toast">
-                <h4>분할 처리 확인</h4>
-                <p><strong>{splitInfo.newQuantity}개</strong>를 픽업 처리하고,<br/>남은 <strong>{splitInfo.group.totalQuantity - splitInfo.newQuantity}개</strong>는 어떻게 할까요?</p>
-                <div className="toast-buttons">
-                    <button className="common-button button-danger button-medium" onClick={() => { toast.dismiss(t.id); performSplitAction('NO_SHOW'); }}>노쇼 처리</button>
-                    <button className="common-button button-secondary button-medium" onClick={() => { toast.dismiss(t.id); performSplitAction('RESERVED'); }}>예약 유지</button>
-                    <button className="common-button button-light button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
+        const confirmationPromise = new Promise((resolve, reject) => {
+            toast.custom((t) => (
+                <div className="confirmation-toast">
+                    <AlertTriangle size={44} className="toast-icon" style={{ color: 'var(--accent-color)' }}/>
+                    <h4>부분 픽업 확인</h4>
+                    <p>
+                        <strong>{group.totalQuantity}개</strong> 중 <strong>{newQuantity}개</strong>만 픽업 처리하고, <br/>
+                        차감된 수량에 대해 <strong>0.5 노쇼 페널티</strong>를 적용할까요?
+                    </p>
+                    <div className="toast-buttons">
+                        <button className="common-button button-secondary button-medium" onClick={() => {toast.dismiss(t.id); reject();}}>아니오, 취소</button>
+                        <button className="common-button button-primary button-medium" onClick={() => {toast.dismiss(t.id); resolve(true);}}>네, 적용합니다</button>
+                    </div>
                 </div>
-            </div>
-        ), { duration: Infinity, position: 'top-center' });
+            ), { id: 'partial-pickup-confirm', duration: Infinity });
+        });
+        
+        confirmationPromise.then(() => {
+            // 백엔드 정책과 일치: 부분 픽업 시 -50점
+            const PENALTY_POINTS = -50; 
+            const pointsForPickedUpItems = Math.round(group.item.unitPrice * newQuantity * 0.01);
+            const totalPointChange = pointsForPickedUpItems + PENALTY_POINTS;
+
+            const optimisticUpdates = { noshow: 0.5, points: totalPointChange };
+            const revertUpdates = { noshow: -0.5, points: -totalPointChange };
+            
+            performAction(
+                () => processPartialPickup(orderIdToProcess, newQuantity),
+                () => onStatUpdate(optimisticUpdates),
+                () => onStatUpdate(revertUpdates),
+                () => { setSplitInfo(null); setSelectedGroupKeys([]); onActionSuccess(); },
+                { loading: '부분 픽업 처리 중...', success: '부분 픽업 및 페널티가 적용되었습니다.', error: '부분 픽업 처리 실패' }
+            );
+        }).catch(() => {
+           // 사용자가 확인 창에서 '아니오'를 누르면 아무 작업도 하지 않음
+           console.log("Partial pickup was canceled by the user.");
+        });
     };
 
     const handleSplitOrder = (orderId: string) => {
@@ -473,21 +481,28 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
     };
 
     const renderFooter = () => {
-        if (activeTab !== 'pickup' || selectedGroupKeys.length === 0) return null;
-
-        const totalSelectedPrice = selectedGroups.reduce((sum, g) => sum + g.totalPrice, 0);
+        if (activeTab !== 'pickup') return null;
 
         if (splitInfo) {
+            const newPrice = splitInfo.group.item.unitPrice * splitInfo.newQuantity;
             return (
                 <div className="cat-action-footer">
-                    <span className="cat-footer-summary">{splitInfo.group.item.productName}: {splitInfo.group.totalQuantity}개 중 {splitInfo.newQuantity}개</span>
+                    <span className="cat-footer-summary" title={`원래 ${splitInfo.group.totalQuantity}개`}>
+                        {splitInfo.group.item.productName}: <strong>{splitInfo.newQuantity}개</strong> ({(newPrice).toLocaleString()}원)
+                    </span>
                     <div className="cat-footer-actions">
-                         <button onClick={handleSplit} className="common-button button-pickup"><GitCommit size={16} /> 분할 픽업</button>
+                         {/* [수정] 버튼 텍스트와 핸들러 변경 */}
+                         <button onClick={handlePartialPickup} className="common-button button-pickup">
+                            <GitCommit size={16} /> 부분 픽업 처리
+                         </button>
                     </div>
                 </div>
             )
         }
-
+        
+        if (selectedGroupKeys.length === 0) return null;
+        
+        const totalSelectedPrice = selectedGroups.reduce((sum, g) => sum + g.totalPrice, 0);
         const allSelectedArePrepaid = selectedGroups.length > 0 && selectedGroups.every(g => g.status === 'PREPAID');
 
         const prepaymentButton = allSelectedArePrepaid ? (

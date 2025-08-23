@@ -2,8 +2,7 @@
 
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-// ✅ [수정] 'Package' 아이콘을 추가로 import 합니다.
-import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Package } from 'lucide-react';
+import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Package, ListOrdered } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 import './SideMenu.css';
@@ -60,15 +59,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="sidemenu-links">
-          {/* ✅ [추가] SimpleOrderPage로 이동하는 '오늘의 공구' 링크를 추가합니다. */}
           <NavLink to="/" className={getNavLinkClass} onClick={onClose} end>
             <Package size={20} />
             <span>오늘의 공구</span>
           </NavLink>
-          <NavLink to="/onsite-sale" className={getNavLinkClass} onClick={onClose}>
-            <ShoppingBag size={20} />
-            <span>현장 판매</span>
+          <NavLink to="/mypage/history" className={getNavLinkClass} onClick={onClose}>
+            <ListOrdered size={20} />
+            <span>예약내역 확인하기</span>
           </NavLink>
+          {/* ✅ [제거] '현장 판매' NavLink를 제거합니다. */}
           <NavLink to="/customer-center" className={getNavLinkClass} onClick={onClose}>
             <MessageSquare size={20} />
             <span>고객센터</span>

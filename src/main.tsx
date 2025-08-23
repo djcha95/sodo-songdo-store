@@ -26,8 +26,6 @@ import { LaunchProvider } from './context/LaunchContext';
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
-// ✅ [제거] ProductListPage는 더 이상 사용되지 않으므로 제거합니다.
-// const ProductListPage = React.lazy(() => import('./pages/customer/ProductListPage'));
 const SimpleOrderPage = React.lazy(() => import('./pages/customer/SimpleOrderPage'));
 const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetailPage'));
 const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
@@ -35,7 +33,8 @@ const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
 const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
 const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryPage'));
-const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
+// ✅ [제거] OnsiteSalePage import를 제거합니다.
+// const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
 const OrderCalendarPage = React.lazy(() => import('@/components/customer/OrderCalendar'));
@@ -65,7 +64,7 @@ const Root = () => {
   
   if (!user) {
     const allowedPaths = ['/login', '/terms', '/privacy'];
-    if (!allowedPaths.includes(location.pathname)) {
+    if (!allowedPaths.includes(location.pathname.split('/')[1])) {
       return <Navigate to="/login" replace />;
     }
   }
@@ -117,12 +116,9 @@ const router = createBrowserRouter([
               {
                 element: <Suspense fallback={<SodomallLoader />}><CustomerLayout /></Suspense>,
                 children: [
-                  // ✅ [수정] 기본 경로 ('/')를 SimpleOrderPage로 변경합니다.
                   { index: true, element: <SimpleOrderPage /> },
-                  // ✅ [제거] '/' 가 SimpleOrderPage를 렌더링하므로 중복되는 경로는 제거합니다.
-                  // { path: "simple-order", element: <SimpleOrderPage /> },
                   { path: "cart", element: <CartPage /> },
-                  { path: "onsite-sale", element: <OnsiteSalePage /> },
+                  // ✅ [제거] /onsite-sale 라우트를 제거합니다.
                   { path: "customer-center", element: <CustomerCenterPage /> },
                   { path: "encore", element: <EncorePage /> },
                   {
@@ -136,14 +132,14 @@ const router = createBrowserRouter([
                   },
                 ]
               },
-              {
-                path: "product/:productId",
-                element: <Suspense fallback={<SodomallLoader />}><ProductDetailPage /></Suspense>,
-              },
             ]
           },
         ]
-      }
+      },
+      {
+        path: "product/:productId",
+        element: <Suspense fallback={<SodomallLoader />}><ProductDetailPage /></Suspense>,
+      },
     ]
   },
   {

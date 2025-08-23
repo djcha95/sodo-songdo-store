@@ -51,8 +51,6 @@
 
 ## 🚀 앞으로의 개선 방향
 
-## 🚀 앞으로의 개선 방향
-
 ### 1. 테스트 코드 작성: "미래의 버그를 예방하는 보험" (진행 중)
 -   **내용**: **Vitest**와 **React Testing Library**를 도입하여 자동화된 테스트를 구축하고 있습니다. 현재 유틸리티 함수(유닛 테스트)와 일부 UI 컴포넌트(컴포넌트 테스트)에 대한 테스트를 완료했으며, 점차 테스트 커버리지를 넓혀나갈 예정입니다.
 -   **기대 효과**: 코드 변경에 대한 자신감을 높이고, 장기적으로 훨씬 안정적인 서비스를 운영할 수 있습니다.
@@ -64,3 +62,72 @@
 ### ✅ [신규] 3. 게이미피케이션 시스템 고도화: "매일 방문하고 싶은 즐거운 경험"
 -   **내용**: 현재의 달성형 미션 시스템을 기반으로, 매일 과제가 변경되는 **'오늘의 미션'**, 특정 기간에만 참여할 수 있는 **'이벤트 미션'** 등 다채로운 게이미피케이션 요소를 도입합니다.
 -   **기대 효과**: 사용자의 재방문율과 참여도를 극대화하고, 단순한 쇼핑몰을 넘어 사용자와 함께 성장하는 커뮤니티형 서비스로 발전시킬 수 있습니다.
+
+---
+
+## 🔧 배포 & 로컬 개발
+
+-   **로컬 에뮬레이터**:
+    ```bash
+    firebase emulators:start --only functions,firestore,auth
+    ```
+-   **Functions 배포**:
+    ```bash
+    firebase deploy --only functions
+    ```
+-   **프론트 배포**: Vercel 연결 (환경변수 동기화 필수)
+
+---
+
+### 🔐 시크릿 & 환경 변수
+
+| 키 | 위치 | 설명 |
+|---|---|---|
+| `GEMINI_API_KEY` | GCP Secret Manager | AI 상품정보 추출용 (utils/gemini) |
+| `NHN_API_KEY`, `NHN_APP_ID` | Secret Manager | 알림톡 전송용 |
+| `KAKAO_REST_KEY` | Secret Manager | 카카오 로그인/토큰 검증 |
+| `기타 API 키` | Secret Manager | 필요 시 추가 |
+
+### 🌐 CORS 허용 도메인
+
+-   `https://sodo-songdo.store`
+-   `https://www.sodo-songdo.store`
+-   `https://sodomall.vercel.app`
+-   `http://localhost:5173`
+
+### 📚 Functions 개요
+
+#### Callable
+
+| 이름 | 파일 | 설명 |
+|---|---|---|
+| `validateCart` | `callable/orders.ts` | 장바구니 서버 검증 및 수량 보정 |
+| `submitOrder` | `callable/orders.ts` | 주문 확정 |
+| `addStockAndProcessWaitlist` | `callable/stock.ts` | 대기자 처리 |
+| `processReferralCode` | `callable/referrals.ts` | 추천인 코드 처리 |
+| ... | ... | 기타 포인트/미션/유저 관련 |
+
+#### HTTP
+
+| 함수명 | 파일 | 설명 |
+|---|---|---|
+| `kakaoLogin` | `http/auth.ts` | 카카오 로그인 검증 |
+| `testNotifications` | `http/testNotifications.ts` | 알림톡 전송 점검 |
+| ... | ... | 마이그레이션/수동 트리거 |
+
+#### Scheduled
+
+| 스케줄 | 파일 | 설명 |
+|---|---|---|
+| 매일 09:00 | `scheduled/notifications.ts` | 픽업 알림 |
+| 매일 19:00 | `scheduled/notifications.ts` | 선입금 알림 |
+| 매일 00:00 | `scheduled/points.ts` | 포인트 소멸 |
+
+#### Triggers
+
+| 컬렉션 | 파일 | 설명 |
+|---|---|---|
+| `orders/*` | `triggers/orders.ts` | 생성/업데이트 집계 |
+| `users/*` | `triggers/users.ts` | 가입/등급 변경 처리 |
+| `products/*` | `triggers/products.ts` | 재고/회차 집계 |
+| `points/*` | `triggers/points.ts` | 포인트 로그 처리 |

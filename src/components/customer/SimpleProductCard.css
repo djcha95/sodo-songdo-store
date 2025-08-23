@@ -71,7 +71,7 @@
 .simple-card-price {
     font-size: 1.1rem;
     font-weight: 700;
-    color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
+    color: #5A8DEE;
     margin: 0 0 0.1rem;
 }
 
@@ -109,11 +109,11 @@
 }
 
 .simple-card-action-btn.confirm {
-    background-color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
+    background-color: #5A8DEE;
     color: white;
 }
 .simple-card-action-btn.confirm:hover {
-    background-color: #436fb9; /* ✅ [수정] 더 어두운 톤의 파란색으로 변경 */
+    background-color: #436fb9;
 }
 
 .simple-card-action-btn.waitlist {
@@ -187,8 +187,10 @@
     cursor: not-allowed;
 }
 
+/* ✅ [수정] width: 100% 대신 flex: 1을 사용하여 남는 공간을 채우도록 변경 */
 .simple-product-card .quantity-input {
-    width: 100%; 
+    flex: 1; /* 핵심: 남는 공간을 모두 차지 */
+    min-width: 30px; /* 너무 작아지지 않도록 최소 너비 설정 */
     text-align: center;
     border: none;
     font-size: 1rem;
@@ -204,10 +206,10 @@
 }
 
 .confirmation-toast-content .button-accent {
-    background-color: #5A8DEE; /* ✅ [수정] 부드러운 파란색으로 변경 */
+    background-color: #5A8DEE;
     color: white;
 }
 
 .confirmation-toast-content .button-accent:hover {
-    background-color: #436fb9; /* ✅ [수정] 더 어두운 톤의 파란색으로 변경 */
+    background-color: #436fb9;
 }

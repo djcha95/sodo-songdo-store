@@ -186,6 +186,39 @@ export const splitAndUpdateOrderStatus = async (
   });
 };
 
+/**
+ * @description [신규 추가] 부분 픽업 처리를 위한 Callable Function 호출
+ * @param orderId - 처리할 주문의 ID
+ * @param pickedUpQuantity - 고객이 실제로 픽업한 수량
+ */
+export const processPartialPickup = async (
+  orderId: string,
+  pickedUpQuantity: number
+): Promise<{ success: boolean; message: string }> => {
+  if (!orderId || !pickedUpQuantity) {
+    throw new Error("주문 ID와 픽업 수량이 모두 필요합니다.");
+  }
+
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const partialPickupCallable = httpsCallable<
+      { orderId: string; pickedUpQuantity: number },
+      { success: boolean; message: string }
+    >(functions, 'processPartialPickup');
+
+    const result = await partialPickupCallable({ orderId, pickedUpQuantity });
+
+    return result.data;
+
+  } catch (error: any) {
+    console.error("Callable function 'processPartialPickup' failed:", error);
+    if (error.code && error.message) {
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
+    }
+    throw new Error('부분 픽업 처리 중 예상치 못한 오류가 발생했습니다.');
+  }
+};
 
 /**
  * @description 주문 분할을 위한 Callable Function 호출

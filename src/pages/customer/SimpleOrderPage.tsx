@@ -4,14 +4,15 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, startTransiti
 import { useAuth } from '@/context/AuthContext';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import type { Product, SalesRound } from '@/types';
+import type { Product, SalesRound, VariantGroup } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import SimpleProductCard from '@/components/customer/SimpleProductCard';
+import OnsiteProductCard from '@/components/customer/OnsiteProductCard';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PackageSearch, Clock } from 'lucide-react';
+import { PackageSearch, Clock, PackageOpen } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { getDisplayRound, getDeadlines, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
@@ -23,7 +24,7 @@ dayjs.extend(isBetween);
 dayjs.locale('ko');
 
 interface ProductWithUIState extends Product {
-  phase: 'primary' | 'secondary' | 'past';
+  phase: 'primary' | 'secondary' | 'onsite' | 'past';
   displayRound: SalesRound;
   actionState: ProductActionState;
 }
@@ -34,7 +35,7 @@ const SimpleOrderPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'primary' | 'secondary'>('primary');
+  const [activeTab, setActiveTab] = useState<'primary' | 'secondary' | 'onsite'>('primary');
   const [countdown, setCountdown] = useState<string | null>(null);
 
   const PAGE_SIZE = 10;
@@ -101,30 +102,40 @@ const SimpleOrderPage: React.FC = () => {
     }
   }, [isLoadMoreVisible, loading, loadingMore, fetchData]);
 
-  const { primarySaleProducts, secondarySaleProducts, primarySaleEndDate } = useMemo(() => {
+  const { primarySaleProducts, secondarySaleProducts, onsiteSaleProducts, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const tempPrimary: ProductWithUIState[] = [];
     const tempSecondary: ProductWithUIState[] = [];
+    const tempOnsite: ProductWithUIState[] = [];
     
     products.forEach(product => {
       const round = getDisplayRound(product);
       if (!round || round.status === 'draft') return;
 
-      const actionState = determineActionState(round as SalesRound, userDocument);
-      const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
-      if (!isDisplayableState) return;
-
-      const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
-      
-      let finalPhase: 'primary' | 'secondary';
-      if (primaryEndDate && now.isBefore(primaryEndDate)) {
-          finalPhase = 'primary';
-      } else if (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '[]')) {
-          finalPhase = 'secondary';
-      } else {
-          return;
+      if (round.manualStatus === 'sold_out' || round.manualStatus === 'ended') {
+        return;
       }
 
+      const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
+      const pickupDeadlineDate = round.pickupDeadlineDate ? dayjs(safeToDate(round.pickupDeadlineDate)) : null;
+
+      let finalPhase: 'primary' | 'secondary' | 'onsite' | 'past';
+
+      if (round.isManuallyOnsite) {
+        finalPhase = 'onsite';
+      } else if (primaryEndDate && now.isBefore(primaryEndDate)) {
+          finalPhase = 'primary';
+      } else if (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '(]')) {
+          finalPhase = 'secondary';
+      } else if (pickupDeadlineDate && now.isAfter(pickupDeadlineDate, 'day')) {
+          finalPhase = 'onsite';
+      } else {
+          finalPhase = 'past';
+      }
+
+      if (finalPhase === 'past') return;
+      
+      const actionState = determineActionState(round as SalesRound, userDocument);
       const productWithState: ProductWithUIState = { 
         ...product, 
         phase: finalPhase,
@@ -132,8 +143,27 @@ const SimpleOrderPage: React.FC = () => {
         actionState,
       };
       
-      if (finalPhase === 'primary') tempPrimary.push(productWithState);
-      else if (finalPhase === 'secondary') tempSecondary.push(productWithState);
+      if (finalPhase === 'primary') {
+        const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
+        if(isDisplayableState) tempPrimary.push(productWithState);
+      }
+      else if (finalPhase === 'secondary') {
+        const isDisplayableState = ['PURCHASABLE', 'REQUIRE_OPTION'].includes(actionState);
+         if(isDisplayableState) tempSecondary.push(productWithState);
+      }
+      else if (finalPhase === 'onsite') {
+        const remainingStock = round.variantGroups?.reduce((total, vg) => {
+            const stock = vg.totalPhysicalStock ?? -1;
+            if (stock === -1) return Infinity;
+            if (total === Infinity) return Infinity;
+            const reserved = vg.reservedCount ?? 0;
+            return total + (stock - reserved);
+        }, 0);
+
+        if (remainingStock === Infinity || (remainingStock && remainingStock > 0)) {
+            tempOnsite.push(productWithState);
+        }
+      }
     });
     
     const firstPrimarySaleEndDate = tempPrimary.length > 0
@@ -142,14 +172,10 @@ const SimpleOrderPage: React.FC = () => {
 
     return {
       primarySaleProducts: tempPrimary.sort((a, b) => {
-        // ✅ 1. '대기' 상품을 맨 아래로 보내는 정렬 로직
         const isAWaitlist = a.actionState === 'WAITLISTABLE';
         const isBWaitlist = b.actionState === 'WAITLISTABLE';
-
-        if (isAWaitlist && !isBWaitlist) return 1; // a가 대기면 뒤로
-        if (!isAWaitlist && isBWaitlist) return -1; // b가 대기면 앞으로 (a가 앞으로)
-
-        // 둘 다 대기이거나 둘 다 예약 가능이면 가격순으로 정렬
+        if (isAWaitlist && !isBWaitlist) return 1;
+        if (!isAWaitlist && isBWaitlist) return -1;
         const priceA = a.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
         const priceB = b.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
         return priceB - priceA;
@@ -158,6 +184,11 @@ const SimpleOrderPage: React.FC = () => {
         const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() ?? Infinity;
         const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() ?? Infinity;
         return dateA - dateB;
+      }),
+      onsiteSaleProducts: tempOnsite.sort((a, b) => {
+        const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() ?? 0;
+        const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() ?? 0;
+        return dateB - dateA;
       }),
       primarySaleEndDate: firstPrimarySaleEndDate,
     };
@@ -186,35 +217,94 @@ const SimpleOrderPage: React.FC = () => {
   if (loading && products.length === 0) return <SodomallLoader />;
   if (error) return <div className="error-message-container">{error}</div>;
 
-  const productsToShow = activeTab === 'primary' ? primarySaleProducts : secondarySaleProducts;
-
-  return (
-    <div className="customer-page-container simple-order-page">
-        <div className="tab-container">
-            <button className={`tab-btn ${activeTab === 'primary' ? 'active' : ''}`} onClick={() => setActiveTab('primary')}>
-                <span className="tab-title">🔥 오늘의 공동구매 ({primarySaleProducts.length})</span>
-            </button>
-            <button className={`tab-btn ${activeTab === 'secondary' ? 'active' : ''}`} onClick={() => setActiveTab('secondary')}>
-                <span className="tab-title">⏰ 추가 예약 ({secondarySaleProducts.length})</span>
-            </button>
-        </div>
-
-        <div className="simple-product-list">
-            {activeTab === 'primary' && countdown && productsToShow.length > 0 && (
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'primary':
+        return (
+          <>
+            {countdown && primarySaleProducts.length > 0 && (
               <div className="list-countdown-timer">
                 <Clock size={16} />
                 <span>마감까지 {countdown}</span>
               </div>
             )}
-
-            {productsToShow.length > 0 ? (
-                productsToShow.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)
-            ) : !loading && (
-                <div className="product-list-placeholder">
-                    <PackageSearch size={48} />
-                    <p>현재 예약 가능한 상품이 없습니다.</p>
-                </div>
+            {primarySaleProducts.length > 0 ? (
+              <div className="simple-product-list">
+                {primarySaleProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+              </div>
+            ) : (
+              <div className="product-list-placeholder">
+                <PackageSearch size={48} />
+                <p>현재 예약 가능한 상품이 없습니다.</p>
+              </div>
             )}
+          </>
+        );
+      case 'secondary':
+        return (
+          <>
+            {secondarySaleProducts.length > 0 ? (
+              <div className="simple-product-list">
+                {secondarySaleProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+              </div>
+            ) : (
+              <div className="product-list-placeholder">
+                <PackageSearch size={48} />
+                <p>현재 추가 예약 가능한 상품이 없습니다.</p>
+              </div>
+            )}
+          </>
+        );
+      case 'onsite':
+        return (
+            <>
+              {onsiteSaleProducts.length > 0 ? (
+                <div className="onsite-product-grid">
+                  {onsiteSaleProducts.map(p => <OnsiteProductCard key={p.id} product={p as Product} />)}
+                </div>
+              ) : (
+                <div className="product-list-placeholder">
+                  <PackageOpen size={48} />
+                  <p>현재 현장 구매 가능한 상품이 없습니다.</p>
+                  <span>예약이 끝난 상품 중 재고가 남으면 여기에 표시됩니다.</span>
+                </div>
+              )}
+            </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="customer-page-container simple-order-page">
+        <div className="tab-container">
+            {/* ✅ [수정] '공동구매' 탭에만 primary-tab 클래스 추가 */}
+            <button className={`tab-btn primary-tab ${activeTab === 'primary' ? 'active' : ''}`} onClick={() => setActiveTab('primary')}>
+                <span className="tab-title">
+                    <span className="tab-icon">🔥</span>
+                    <span className="tab-text">공동구매</span>
+                    <span className="tab-count">({primarySaleProducts.length})</span>
+                </span>
+            </button>
+            <button className={`tab-btn ${activeTab === 'secondary' ? 'active' : ''}`} onClick={() => setActiveTab('secondary')}>
+                <span className="tab-title">
+                    <span className="tab-icon">⏰</span>
+                    <span className="tab-text">추가예약</span>
+                    <span className="tab-count">({secondarySaleProducts.length})</span>
+                </span>
+            </button>
+            <button className={`tab-btn ${activeTab === 'onsite' ? 'active' : ''}`} onClick={() => setActiveTab('onsite')}>
+                <span className="tab-title">
+                    <span className="tab-icon">🛒</span>
+                    <span className="tab-text">현장판매</span>
+                    <span className="tab-count">({onsiteSaleProducts.length})</span>
+                </span>
+            </button>
+        </div>
+
+        <div className="tab-content-area">
+            {renderContent()}
         </div>
 
         <div ref={loadMoreRef} className="infinite-scroll-loader">
