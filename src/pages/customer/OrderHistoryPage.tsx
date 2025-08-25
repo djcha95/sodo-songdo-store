@@ -31,7 +31,6 @@ const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity
 const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 const DEFAULT_EVENT_IMAGE = '/event-snack-default.png';
 
-// ✅ [수정] WaitlistInfo 타입을 여기서 직접 정의하고 primaryReservationEndAt 필드를 선택적으로 변경합니다.
 interface WaitlistInfo {
   productId: string;
   roundId: string;
@@ -42,7 +41,7 @@ interface WaitlistInfo {
   quantity: number;
   timestamp: Timestamp;
   waitlistOrder?: number;
-  primaryReservationEndAt?: Timestamp; // 1차 예약 마감 시간 (선택적 프로퍼티로 변경)
+  primaryReservationEndAt?: Timestamp; 
 }
 
 
@@ -417,10 +416,8 @@ const AggregatedItemCard: React.FC<{
   const handleClick = useCallback(() => {
     if (cancellable || (item.status === 'RESERVED' || item.status === 'PREPAID')) {
       onSelect(item.id);
-    } else {
-      handleNavigate();
     }
-  }, [cancellable, item.id, onSelect, handleNavigate, item.status]);
+  }, [cancellable, item.status, item.id, onSelect]);
 
   const handlers = useLongPress(handleNavigate, handleClick, { initialDelay: 500 });
 
@@ -558,8 +555,12 @@ const OrderHistoryPage: React.FC = () => {
   const basePayload = useMemo(() => {
     const payload = { userId: user?.uid };
     if (viewMode === 'pickup') {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      return { ...payload, orderByField: 'pickupDate', orderDirection: 'asc', startDate: today.toISOString() };
+      return { 
+        ...payload, 
+        orderByField: 'pickupDate', 
+        orderDirection: 'asc',
+        filterStatuses: ['RESERVED', 'PREPAID'] 
+      };
     }
     return { ...payload, orderByField: 'createdAt', orderDirection: 'desc' };
   }, [viewMode, user]);
@@ -798,7 +799,7 @@ const OrderHistoryPage: React.FC = () => {
       <div className="orders-list">
         <AnimatePresence>
           {sortedDates.map((dateStr, index) => {
-            if (aggregatedItems[dateStr].length === 0) return null; // 빈 날짜 그룹은 렌더링하지 않음
+            if (aggregatedItems[dateStr].length === 0) return null;
             return (
               <motion.div key={dateStr} layout>
                 <div className="date-header-container">
@@ -810,20 +811,25 @@ const OrderHistoryPage: React.FC = () => {
                   )}
                 </div>
                 <div className="order-cards-grid">
-                  {aggregatedItems[dateStr].map(item => (
-                    <AggregatedItemCard
-                      key={item.id}
-                      item={item}
-                      isSelected={selectedOrderKeys.has(item.id)}
-                      onSelect={(id) => handleItemSelect(id, 'order')}
-                      displayDateInfo={viewMode === 'orders'
-                        ? { type: 'pickup', date: safeToDate(item.originalOrders[0]?.pickupDate)! }
-                        : undefined}
-                      onQuantityUpdate={handleQuantityUpdate}
-                      maxQuantity={maxQuantities[item.originalOrders[0]?.id]}
-                      onStockLimitDiscovered={handleStockLimitDiscovered}
-                    />
-                  ))}
+                  {aggregatedItems[dateStr].map(item => {
+                    const pickupDate = safeToDate(item.originalOrders[0]?.pickupDate);
+                    return (
+                      <AggregatedItemCard
+                        key={item.id}
+                        item={item}
+                        isSelected={selectedOrderKeys.has(item.id)}
+                        onSelect={(id) => handleItemSelect(id, 'order')}
+                        displayDateInfo={
+                          viewMode === 'orders' && pickupDate
+                            ? { type: 'pickup', date: pickupDate }
+                            : undefined
+                        }
+                        onQuantityUpdate={handleQuantityUpdate}
+                        maxQuantity={maxQuantities[item.originalOrders[0]?.id]}
+                        onStockLimitDiscovered={handleStockLimitDiscovered}
+                      />
+                    );
+                  })}
                 </div>
               </motion.div>
             )
@@ -867,29 +873,6 @@ const OrderHistoryPage: React.FC = () => {
           <button className={`toggle-btn ${viewMode === 'waitlist' ? 'active' : ''}`} onClick={() => handleViewChange('waitlist')}> <Hourglass size={18} /> 대기목록 </button>
         </div>
         
-        <AnimatePresence>
-          {((viewMode === 'orders' || viewMode === 'pickup') && selectedOrderKeys.size > 0) && (
-            <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -20, opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="bulk-action-bar">
-                <span>{selectedOrderKeys.size}개 예약 선택됨</span>
-                <button className="bulk-cancel-btn" onClick={() => handleBulkCancel('order')}>
-                  <XCircle size={16} /> 선택 항목 취소
-                </button>
-              </div>
-            </motion.div>
-          )}
-          {(viewMode === 'waitlist' && selectedWaitlistKeys.size > 0) && (
-            <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -20, opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="bulk-action-bar">
-                <span>{selectedWaitlistKeys.size}개 대기 선택됨</span>
-                <button className="bulk-cancel-btn" onClick={() => handleBulkCancel('waitlist')}>
-                  <XCircle size={16} /> 선택 대기 취소
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <AnimatePresence mode="wait">
           <motion.div key={viewMode} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} >
             {viewMode === 'waitlist' ? renderWaitlistContent() : renderOrderContent()}
@@ -897,6 +880,31 @@ const OrderHistoryPage: React.FC = () => {
         </AnimatePresence>
         {(viewMode === 'orders' || viewMode === 'pickup') && ordersLoading && orders.length > 0 && (<div className="loading-more-spinner"><InlineSodomallLoader /></div>)}
         {(viewMode === 'orders' || viewMode === 'pickup') && !hasMoreOrders && orders.length > 0 && (<div className="end-of-list-message">모든 내역을 불러왔습니다.</div>)}
+        
+        <AnimatePresence>
+          {((viewMode === 'orders' || viewMode === 'pickup') && selectedOrderKeys.size > 0) ||
+           ((viewMode === 'waitlist' && selectedWaitlistKeys.size > 0)) && (
+            <motion.div
+              className="fab-container"
+              initial={{ y: 100, opacity: 0, scale: 0.8 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 100, opacity: 0, scale: 0.8 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+            >
+              <button 
+                className="fab-cancel-btn" 
+                onClick={() => handleBulkCancel(viewMode === 'waitlist' ? 'waitlist' : 'order')}
+              >
+                <XCircle size={20} />
+                <span>
+                  {viewMode === 'waitlist' 
+                    ? `${selectedWaitlistKeys.size}개 대기 취소` 
+                    : `${selectedOrderKeys.size}개 예약 취소`}
+                </span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -128,6 +128,8 @@ export interface SalesRound {
   isPrepaymentRequired?: boolean;
   allowedTiers?: LoyaltyTier[];
   preOrderTiers?: LoyaltyTier[];
+  manualStatus?: SalesRoundStatus | null; // 관리자가 수동으로 설정한 상태
+  isManuallyOnsite?: boolean;
 }
 
 export interface Product {

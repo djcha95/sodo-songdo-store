@@ -93,7 +93,6 @@
   cursor: pointer;
 }
 
-/* ✅ [수정] 선택되지 않은 카드에만 hover 효과 적용 */
 .order-card-v3.cancellable:not(.selected):hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
@@ -166,7 +165,7 @@
 }
 
 /* =================================================================
-   📌 상태 배지
+   📌 상태 배지 (색상 재점검 완료)
    ================================================================= */
 .status-badge, .waitlist-order-badge, .date-info-badge {
   display: inline-flex;
@@ -184,13 +183,19 @@
   flex-shrink: 0;
 }
 
-.status-prepayment_required { background-color: #ff9923; color: #ffffff; }
-.status-reserved { background-color: #1c82ff; color: #ffffff; }
-.status-prepaid { background-color: #234fff; color: #ffffff; }
+/* 🟠 선입금 필요: 주황색 */
+.status-prepayment_required { background-color: #f97316; color: #ffffff; }
+/* 💎 예약 완료: 청록색 */
+.status-reserved { background-color: #14b8a6; color: #ffffff; }
+/* 🟡 선입금 완료: 호박색 */
+.status-prepaid { background-color: #f59e0b; color: #ffffff; }
+/* 🔵 픽업/처리 완료: 파란색 */
 .status-picked_up,
-.status-completed { background-color: #2aff9c; color: #ffffff; }
-.status-canceled { background-color: #ff2f2f; color: #ffffff; }
-.status-no_show { background-color: #ff2727; color: #ffffff; }
+.status-completed { background-color: #3b82f6; color: #ffffff; }
+/* 🔴 취소됨 */
+.status-canceled, .status-late_canceled { background-color: #ef4444; color: #ffffff; }
+/* 🚨 노쇼: 진한 빨간색 */
+.status-no_show { background-color: #d90429; color: #ffffff; }
 
 .date-info-badge {
   background-color: #e5e7eb;
@@ -250,53 +255,12 @@
   align-items: center;
   position: relative;
   cursor: pointer;
-  user-select: none; /* 텍스트 선택 방지 */
+  user-select: none;
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .waitlist-card .item-aggregated-info {
   gap: 4px;
-}
-
-.waitlist-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-.priority-ticket-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background-color: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.priority-ticket-btn:not(:disabled):hover {
-  background-color: #e5e7eb;
-  border-color: #9ca3af;
-}
-
-.priority-ticket-btn:disabled:not(.used) {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.priority-ticket-btn.used {
-  background-color: #ecfdf5;
-  color: #065f46;
-  border-color: #a7f3d0;
-  cursor: default;
 }
 
 /* =================================================================
@@ -339,20 +303,6 @@
   }
 }
 
-@media (max-width: 420px) {
-  .waitlist-actions {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .priority-ticket-btn {
-    width: 100%;
-    justify-content: center;
-    padding: 10px 12px;
-  }
-}
-
 /* =================================================================
    📌 react-hot-toast 커스텀 모달
    ================================================================= */
@@ -388,51 +338,12 @@
 .toast-buttons {
   display: flex;
   gap: 12px;
-  justify-content: center; /* 버튼 중앙 정렬 */
-}
-
-.common-button {
-  border: 1px solid transparent;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
-}
-.button-medium {
-  padding: 10px 20px;
-  font-size: 0.9rem;
-  border-radius: 8px;
-}
-.button-secondary {
-  background-color: #fff;
-  border-color: #d1d5db;
-  color: #374151;
-}
-.button-secondary:hover { background-color: #f9fafb; }
-.button-danger {
-  background-color: #ef4444;
-  color: white;
-  border-color: #ef4444;
-}
-.button-danger:hover {
-  background-color: #dc2626;
-  border-color: #dc2626;
-}
-.button-accent {
-  background-color: #1d4ed8;
-  color: white;
-  border-color: #1d4ed8;
-}
-.button-accent:hover {
-  background-color: #1e40af;
-  border-color: #1e40af;
+  justify-content: center;
 }
 
 /* =================================================================
    📌 기타 스타일
    ================================================================= */
-
 .status-and-event-wrapper {
   display: flex;
   align-items: center;
@@ -441,7 +352,7 @@
 }
 
 .event-badge {
-  background-color: #6a3dff; /* 시그니처 보라색 */
+  background-color: #6a3dff;
   color: white;
   padding: 3px 8px;
   border-radius: 12px;
@@ -453,21 +364,6 @@
   line-height: 1;
 }
 
-.info-top-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  gap: 8px;
-}
-
-.product-name-top {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-grow: 1;
-}
-
 .order-card-v3.event-item {
   cursor: default;
 }
@@ -477,58 +373,18 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-/* ✅ [수정] 선택된 카드 스타일 */
 .order-card-v3.selected,
 .waitlist-card.selected {
-  border-color: #3b82f6; /* Tailwind blue-500 */
-  background-color: #eff6ff; /* Tailwind blue-50 */
+  border-color: #3b82f6;
+  background-color: #eff6ff;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
-/* ✅ [추가] 일괄 작업 바 스타일 */
-.bulk-action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  background-color: #374151; /* gray-700 */
-  color: white;
-  border-radius: 10px;
-  margin-top: 4px;
-  margin-bottom: 8px;
-}
-
-.bulk-action-bar span {
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-
-.bulk-cancel-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background-color: #ef4444; /* red-500 */
-  color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.bulk-cancel-btn:hover {
-  background-color: #dc2626; /* red-600 */
-}
-
-/* ✅ [수정] 수량 조절 컨트롤 스타일 
-  OrderHistoryPage 컴포넌트 내에서만 적용되도록 .order-history-page 선택자 추가
-*/
 .order-history-page .quantity-controls {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: #f3f4f6; /* gray-100 */
+  background-color: #f3f4f6;
   border-radius: 16px;
   padding: 4px;
 }
@@ -539,7 +395,7 @@
   border-radius: 50%;
   border: none;
   background-color: #fff;
-  color: #1d4ed8; /* indigo-700 */
+  color: #1d4ed8;
   font-size: 1.2rem;
   font-weight: 600;
   cursor: pointer;
@@ -552,7 +408,7 @@
 }
 
 .order-history-page .quantity-controls button:hover {
-  background-color: #eef2ff; /* indigo-50 */
+  background-color: #eef2ff;
 }
 
 .order-history-page .quantity-controls button:active {
@@ -560,8 +416,8 @@
 }
 
 .order-history-page .quantity-controls button:disabled {
-  background-color: #e5e7eb; /* gray-200 */
-  color: #9ca3af; /* gray-400 */
+  background-color: #e5e7eb;
+  color: #9ca3af;
   cursor: not-allowed;
 }
 
@@ -570,5 +426,44 @@
   font-weight: 700;
   min-width: 24px;
   text-align: center;
-  color: #1f2937; /* gray-800 */
+  color: #1f2937;
+}
+
+/* =================================================================
+   📌 플로팅 액션 버튼 (FAB) - 신규 추가
+   ================================================================= */
+.fab-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 1.5rem;
+  z-index: 1050;
+}
+
+.fab-cancel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.25rem;
+  background-color: #ef4444; /* var(--danger-color) */
+  color: white;
+  border: none;
+  border-radius: 9999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fab-cancel-btn:hover,
+.fab-cancel-btn:focus {
+  transform: scale(1.05);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+  outline: none;
+}
+
+.fab-cancel-btn:active {
+  transform: scale(0.98);
 }

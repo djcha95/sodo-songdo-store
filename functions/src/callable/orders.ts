@@ -291,7 +291,6 @@ export const submitOrder = onCall(
   }
 );
 
-// ✅ [신규 추가] 프론트엔드에서 호출할 주문 수량 변경 함수
 export const updateOrderQuantity = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
@@ -506,14 +505,17 @@ export const getUserOrders = onCall(
           lastVisible: lastVisibleDocData,
           orderByField,
           orderDirection = 'desc',
-          startDate,
+          // [수정] filterStatuses 파라미터를 추가로 받습니다.
+          filterStatuses,
         } = request.data as {
           userId: string;
           pageSize?: number;
           lastVisible?: any;
           orderByField: 'createdAt' | 'pickupDate';
           orderDirection?: 'asc' | 'desc';
-          startDate?: string;
+          startDate?: string; // startDate는 더 이상 사용되지 않지만 호환성을 위해 남겨둡니다.
+          // [수정] filterStatuses의 타입을 명시합니다.
+          filterStatuses?: OrderStatus[];
         };
 
         const userClaims = (await getAuth().getUser(requesterId)).customClaims;
@@ -525,11 +527,16 @@ export const getUserOrders = onCall(
     
         try {
           let queryBuilder = db.collection('orders').withConverter(orderConverter).where('userId', '==', targetUserId);
+          
+          // [수정] '픽업일순' 보기의 필터링 로직을 백엔드에서 처리합니다.
+          // 프론트엔드에서 filterStatuses 배열을 보내면, 해당 상태의 주문들만 필터링합니다.
+          if (Array.isArray(filterStatuses) && filterStatuses.length > 0) {
+            queryBuilder = queryBuilder.where('status', 'in', filterStatuses);
+          }
     
           if (orderByField === 'pickupDate') {
-            if (startDate) {
-              queryBuilder = queryBuilder.where('pickupDate', '>=', new Date(startDate));
-            }
+            // [수정] 기존의 startDate 필터링 로직은 제거합니다.
+            // 이제 '픽업일순' 보기는 filterStatuses 조건에 따라 모든 미수령 주문을 가져옵니다.
             queryBuilder = queryBuilder.orderBy('pickupDate', orderDirection);
           } else {
             queryBuilder = queryBuilder.orderBy('createdAt', orderDirection);
