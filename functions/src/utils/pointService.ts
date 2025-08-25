@@ -1,4 +1,4 @@
-// functions/src/pointService.ts
+// functions/src/utils/pointService.ts
 
 /**
  * @description 미션 완료 보상 정책

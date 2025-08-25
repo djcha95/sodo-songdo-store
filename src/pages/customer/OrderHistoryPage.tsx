@@ -21,6 +21,7 @@ import {
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import toast from 'react-hot-toast';
+import { showToast, showPromiseToast } from '@/utils/toastUtils';
 
 import './OrderHistoryPage.css';
 
@@ -41,7 +42,7 @@ interface WaitlistInfo {
   quantity: number;
   timestamp: Timestamp;
   waitlistOrder?: number;
-  primaryReservationEndAt?: Timestamp; 
+  primaryReservationEndAt?: Timestamp;
 }
 
 
@@ -254,7 +255,7 @@ const usePaginatedData = <T,>(
       }
     } catch (err: any) {
       console.error('데이터 로딩 오류:', err);
-      toast.error(err.message || '데이터를 불러오는 데 실패했습니다.', { duration: 2000 });
+      showToast('error', err.message || '데이터를 불러오는 데 실패했습니다.');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -331,7 +332,7 @@ const QuantityControls: React.FC<{
         setIsUpdating(true);
         const promise = updateOrderQuantityCallable({ orderId, newQuantity });
         
-        toast.promise(promise, {
+        showPromiseToast(promise, {
             loading: '수량 변경 중...',
             success: (result) => {
                 onUpdate(newQuantity);
@@ -349,9 +350,6 @@ const QuantityControls: React.FC<{
                 }
                 return message;
             }
-        }, {
-          success: { duration: 2000 },
-          error: { duration: 2000 }
         });
       }
     }, 800);
@@ -592,7 +590,7 @@ const OrderHistoryPage: React.FC = () => {
           setWaitlist(activeWaitlist);
 
         } catch (error) {
-          toast.error("대기 목록을 불러오는 데 실패했습니다.", { duration: 2000 });
+          showToast('error', "대기 목록을 불러오는 데 실패했습니다.");
         } finally {
           setLoadingWaitlist(false);
         }
@@ -602,12 +600,8 @@ const OrderHistoryPage: React.FC = () => {
   }, [user, viewMode]);
 
   const aggregatedItems = useMemo(() => {
-    const activeOrders = orders.filter(o => 
-      o.status !== 'CANCELED' && o.status !== 'LATE_CANCELED' && o.status !== 'NO_SHOW'
-    );
-
     const aggregated: { [key: string]: AggregatedItem } = {};
-    activeOrders.forEach(order => {
+    orders.forEach(order => {
       const date = viewMode === 'orders' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
       if (!date) return;
       const dateStr = dayjs(date).format('YYYY-MM-DD');
@@ -705,7 +699,7 @@ const OrderHistoryPage: React.FC = () => {
       });
       
       if (ordersToCancel.length === 0) {
-        toast('취소할 수 있는 항목이 선택되지 않았습니다.', { icon: 'ℹ️', duration: 2000 });
+        showToast('info', '취소할 수 있는 항목이 선택되지 않았습니다.');
         return;
       }
       
@@ -728,15 +722,30 @@ const OrderHistoryPage: React.FC = () => {
               );
               
               toast.promise(Promise.all(cancelPromises), {
-                loading: `${ordersToCancel.length}개 항목 취소 중...`,
-                success: () => {
-                  const canceledOrderIds = new Set(ordersToCancel.map(i => i.order.id));
-                  setOrders(prev => prev.filter(o => !canceledOrderIds.has(o.id)));
-                  setSelectedOrderKeys(new Set());
-                  return `${ordersToCancel.length}개 항목이 취소되었습니다.`;
-                },
-                error: (err: any) => err?.message || '일부 항목 취소 중 오류가 발생했습니다.'
-              }, { success: { duration: 2000 }, error: { duration: 2000 } });
+  loading: `${ordersToCancel.length}개 항목 취소 중...`,
+  success: () => {
+    // ✅ 토스트가 사라진 뒤(2.0s) 약간 여유를 두고 UI 갱신(2.4s)
+    setTimeout(() => {
+      const canceledOrderIds = new Set(ordersToCancel.map(i => i.order.id));
+      setOrders(prev => prev.map(o => {
+        if (canceledOrderIds.has(o.id)) {
+          const canceledItemInfo = ordersToCancel.find(i => i.order.id === o.id);
+          const newStatus: OrderStatus = canceledItemInfo?.isPenalty ? 'LATE_CANCELED' : 'CANCELED';
+          return { ...o, status: newStatus };
+        }
+        return o;
+      }));
+      setSelectedOrderKeys(new Set());
+    }, 2400);
+    return `${ordersToCancel.length}개 항목이 취소되었습니다.`;
+  },
+  error: (err: any) => err?.message || '일부 항목 취소 중 오류가 발생했습니다.'
+}, {
+  // ✅ 성공/실패 안내 토스트 모두 2초로 통일
+  success: { duration: 2000 },
+  error:   { duration: 2000 },
+});
+
             }}>모두 취소</button>
           </div>
         </div>
@@ -751,7 +760,7 @@ const OrderHistoryPage: React.FC = () => {
       });
 
       if (itemsToCancel.length === 0) {
-        toast('취소할 대기 항목이 선택되지 않았습니다.', { icon: 'ℹ️', duration: 2000 });
+        showToast('info', '취소할 대기 항목이 선택되지 않았습니다.');
         return;
       }
 
@@ -767,28 +776,36 @@ const OrderHistoryPage: React.FC = () => {
               const cancelPromises = itemsToCancel.map(item => cancelWaitlistEntry(item.productId, item.roundId, user.uid, item.itemId));
               
               toast.promise(Promise.all(cancelPromises), {
-                loading: `${itemsToCancel.length}개 항목 취소 중...`,
-                success: () => {
-                  const canceledKeys = new Set(itemsToCancel.map(i => i.timestamp.toMillis().toString()));
-                  setWaitlist(prev => prev.filter(w => !canceledKeys.has(w.timestamp.toMillis().toString())));
-                  setSelectedWaitlistKeys(new Set());
-                  return `${itemsToCancel.length}개 대기 신청이 취소되었습니다.`;
-                },
-                error: () => '대기 취소 중 오류가 발생했습니다.'
-              }, { success: { duration: 2000 }, error: { duration: 2000 } });
+  loading: `${itemsToCancel.length}개 항목 취소 중...`,
+  success: () => {
+    // ✅ 토스트가 사라진 뒤(2.0s) 약간 여유를 두고 UI 갱신(2.4s)
+    setTimeout(() => {
+      const canceledKeys = new Set(itemsToCancel.map(i => i.timestamp.toMillis().toString()));
+      setWaitlist(prev => prev.filter(w => !canceledKeys.has(w.timestamp.toMillis().toString())));
+      setSelectedWaitlistKeys(new Set());
+    }, 2400);
+    return `${itemsToCancel.length}개 대기 신청이 취소되었습니다.`;
+  },
+  error: () => '대기 취소 중 오류가 발생했습니다.'
+}, {
+  // ✅ 성공/실패 안내 토스트 모두 2초로 통일
+  success: { duration: 2000 },
+  error:   { duration: 2000 },
+});
+
             }}>모두 취소</button>
           </div>
         </div>
       ), { id: 'bulk-cancel-waitlist', duration: Infinity, style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } });
     }
-  }, [aggregatedItems, selectedOrderKeys, selectedWaitlistKeys, waitlist, user, setOrders]);
+  }, [aggregatedItems, selectedOrderKeys, selectedWaitlistKeys, waitlist, user, setOrders, setWaitlist]);
 
   const renderOrderContent = () => {
     const isFirstLoading = ordersLoading && orders.length === 0;
     if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
 
-    const activeOrdersExist = Object.keys(aggregatedItems).length > 0 && Object.values(aggregatedItems).some(arr => arr.length > 0);
-    if (!activeOrdersExist && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
+    const ordersExist = orders.length > 0;
+    if (!ordersExist && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
 
     const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
       const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
@@ -882,8 +899,8 @@ const OrderHistoryPage: React.FC = () => {
         {(viewMode === 'orders' || viewMode === 'pickup') && !hasMoreOrders && orders.length > 0 && (<div className="end-of-list-message">모든 내역을 불러왔습니다.</div>)}
         
         <AnimatePresence>
-          {((viewMode === 'orders' || viewMode === 'pickup') && selectedOrderKeys.size > 0) ||
-           ((viewMode === 'waitlist' && selectedWaitlistKeys.size > 0)) && (
+          {(((viewMode === 'orders' || viewMode === 'pickup') && selectedOrderKeys.size > 0) ||
+           (viewMode === 'waitlist' && selectedWaitlistKeys.size > 0)) && (
             <motion.div
               className="fab-container"
               initial={{ y: 100, opacity: 0, scale: 0.8 }}

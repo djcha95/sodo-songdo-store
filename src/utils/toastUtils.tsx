@@ -1,4 +1,5 @@
 // src/utils/toastUtils.tsx
+
 import toast from 'react-hot-toast';
 import type { Toast } from 'react-hot-toast';
 import React from 'react';
@@ -6,9 +7,9 @@ import { AlertCircle, Info, Zap } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'loading';
 
-// ✅ [추가] 커스텀 토스트의 기본 스타일을 제거하기 위한 공용 옵션
+// ✅ [수정] 커스텀 토스트의 기본 스타일을 제거하기 위한 공용 옵션
 const customToastOptions = {
-  duration: Infinity, // 자동 닫힘 방지
+  duration: Infinity, // ✅ FIX: 사용자가 직접 닫아야 하므로 무한 지속되도록 변경
   style: {
     background: 'transparent',
     boxShadow: 'none',
@@ -18,12 +19,12 @@ const customToastOptions = {
 };
 
 /**
- * @description 일반 정보성 토스트를 표시합니다. (3초 후 자동 닫힘)
+ * @description 일반 정보성 토스트를 표시합니다. (2초 후 자동 닫힘)
  * @param type 토스트 타입 (success, error, info, loading)
  * @param message 표시할 메시지
- * @param duration 표시 시간 (기본값: 3000ms)
+ * @param duration 표시 시간 (기본값: 2000ms)
  */
-export const showToast = (type: ToastType, message: string, duration: number = 3000) => {
+export const showToast = (type: ToastType, message: string, duration: number = 2000) => {
   switch (type) {
     case 'success':
       toast.success(message, { duration });
@@ -44,22 +45,40 @@ export const showToast = (type: ToastType, message: string, duration: number = 3
 };
 
 /**
- * @description Promise 기반의 토스트를 표시합니다.
+ * @description Promise 기반의 토스트를 표시합니다. (성공/실패 시 2초 후 자동 닫힘)
  * @param promise 처리할 Promise 객체
- * @param messages 상태별 메시지 (loading, success, error)
+ * @param handlers 상태별 콜백 함수 (loading, success, error). success/error 함수는 메시지(string)를 반환해야 합니다.
  */
-export const showPromiseToast = (
-  promise: Promise<any>,
-  messages: { loading: string; success: string | ((data: any) => string); error: string | ((err: any) => string) }
+export const showPromiseToast = <T, E = Error>(
+  promise: Promise<T>,
+  handlers: {
+    loading: string;
+    success: (data: T) => string;
+    error: (err: E) => string;
+  }
 ) => {
-  return toast.promise(promise, messages, {
-      success: {
-          duration: 3000,
-      },
-      error: {
-          duration: 4000,
-      }
-  });
+  // ✅ [수정] 각 Promise마다 고유 ID를 생성하여 토스트가 겹치거나 사라지지 않는 문제를 해결합니다.
+  const toastId = toast.loading(handlers.loading);
+
+  promise
+    .then((data) => {
+      const message = handlers.success(data);
+      // ✅ 생성된 ID를 사용하여 해당 토스트를 성공 상태로 업데이트합니다.
+      toast.success(message, {
+        id: toastId,
+        duration: 2000,
+      });
+    })
+    .catch((err) => {
+      const message = handlers.error(err);
+      // ✅ 생성된 ID를 사용하여 해당 토스트를 실패 상태로 업데이트합니다.
+      toast.error(message, {
+        id: toastId,
+        duration: 2000,
+      });
+    });
+
+  return promise;
 };
 
 
@@ -129,7 +148,7 @@ export const showCancelOrderToast = (onConfirm: () => void) => {
     confirmButtonText: '취소 확정',
     cancelButtonText: '유지',
     onConfirm,
-  }), customToastOptions); // ✅ 옵션 적용
+  }), customToastOptions);
 };
 
 export const showCancelWaitlistToast = (itemName: string, quantity: number, onConfirm: () => void) => {
@@ -145,7 +164,7 @@ export const showCancelWaitlistToast = (itemName: string, quantity: number, onCo
     confirmButtonText: '취소 확정',
     cancelButtonText: '유지',
     onConfirm,
-  }), customToastOptions); // ✅ 옵션 적용
+  }), customToastOptions);
 };
 
 export const showUseTicketToast = (onConfirm: () => void) => {
@@ -158,5 +177,5 @@ export const showUseTicketToast = (onConfirm: () => void) => {
     cancelButtonText: '취소',
     onConfirm,
     confirmButtonClass: 'button-accent',
-  }), customToastOptions); // ✅ 옵션 적용
+  }), customToastOptions);
 }

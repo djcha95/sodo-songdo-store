@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
+import { MotionConfig } from 'framer-motion'; // ✅ [추가] framer-motion 설정 import
 
 import './index.css';
 import './styles/variables.css';
@@ -192,25 +193,28 @@ const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   // 배열을 순회하며 Provider들을 중첩시킴
   return (
     <>
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000, 
-          style: {
-            background: '#fff',
-            color: 'var(--text-color-dark, #343a40)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-            borderRadius: '10px',
-            border: '1px solid #f0f0f0',
-            padding: '12px 16px',
-            fontSize: '1rem',
-            fontWeight: '500',
-          },
-          success: { iconTheme: { primary: 'var(--accent-color, #28a745)', secondary: '#fff' } },
-          error: { iconTheme: { primary: 'var(--danger-color, #dc3545)', secondary: '#fff' } },
-        }}
-        containerStyle={{ zIndex: 9999, transform: 'translateZ(0)' }}
-      />
+      {/* ✅ [수정] Toaster를 MotionConfig로 감싸서 애니메이션 충돌을 방지합니다. */}
+      <MotionConfig reducedMotion="always">
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: '#fff',
+              color: 'var(--text-color-dark, #343a40)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              borderRadius: '10px',
+              border: '1px solid #f0f0f0',
+              padding: '12px 16px',
+              fontSize: '1rem',
+              fontWeight: '500',
+            },
+            success: { iconTheme: { primary: 'var(--accent-color, #28a745)', secondary: '#fff' } },
+            error: { iconTheme: { primary: 'var(--danger-color, #dc3545)', secondary: '#fff' } },
+          }}
+          containerStyle={{ zIndex: 9999 }}
+        />
+      </MotionConfig>
+
       {providers.reduceRight((acc, Provider) => {
         return <Provider>{acc}</Provider>;
       }, children)}
@@ -221,7 +225,6 @@ const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // 최종 렌더링
 createRoot(document.getElementById('root')!).render(
-  // ✅ [개선] React.StrictMode를 사용하여 잠재적인 문제를 감지합니다.
   <React.StrictMode>
     <AppProviders>
       <Suspense fallback={<SodomallLoader />}>
