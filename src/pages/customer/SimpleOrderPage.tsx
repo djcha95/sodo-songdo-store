@@ -135,12 +135,31 @@ const SimpleOrderPage: React.FC = () => {
 
       if (finalPhase === 'past') return;
       
-      const actionState = determineActionState(round as SalesRound, userDocument);
+      let actionState = determineActionState(round as SalesRound, userDocument);
+      
+      // ✅ [수정] 일부 옵션만 품절된 그룹 상품이 대기 목록 최하단으로 정렬되는 문제 수정
+      // 그룹 상품(여러 옵션)이고, 기본 상태가 '대기'일 경우, 구매 가능한 옵션이 남았는지 재확인
+      const isMultiOption = (round.variantGroups?.length ?? 0) > 1 || (round.variantGroups?.[0]?.items?.length ?? 0) > 1;
+      if (isMultiOption && actionState === 'WAITLISTABLE') {
+        const hasPurchasableOption = round.variantGroups.some(vg => 
+          (vg.items as any[]).some(item => {
+            // 재고가 무제한(-1)이거나, 0보다 큰 경우 구매 가능으로 간주
+            const stock = item.stock ?? 0;
+            return stock === -1 || stock > 0;
+          })
+        );
+        
+        // 구매 가능한 옵션이 하나라도 남아있다면, 정렬을 위해 상태를 '상세보기 필요'로 변경
+        if (hasPurchasableOption) {
+          actionState = 'REQUIRE_OPTION';
+        }
+      }
+
       const productWithState: ProductWithUIState = { 
         ...product, 
         phase: finalPhase,
         displayRound: round as SalesRound,
-        actionState,
+        actionState, // 수정된 actionState 사용
       };
       
       if (finalPhase === 'primary') {
@@ -279,7 +298,6 @@ const SimpleOrderPage: React.FC = () => {
   return (
     <div className="customer-page-container simple-order-page">
         <div className="tab-container">
-            {/* ✅ [수정] '공동구매' 탭에만 primary-tab 클래스 추가 */}
             <button className={`tab-btn primary-tab ${activeTab === 'primary' ? 'active' : ''}`} onClick={() => setActiveTab('primary')}>
                 <span className="tab-title">
                     <span className="tab-icon">🔥</span>

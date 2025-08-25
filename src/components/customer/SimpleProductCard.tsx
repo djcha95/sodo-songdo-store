@@ -11,7 +11,6 @@ import toast from 'react-hot-toast';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, OrderItem, VariantGroup as OriginalVariantGroup } from '@/types'; 
-// ✅ [추가] getDeadlines 유틸리티 함수 import
 import { getStockInfo, getMaxPurchasableQuantity, safeToDate, getDeadlines } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
@@ -37,7 +36,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const validateCartCallable = useMemo(() => httpsCallable<any, any>(functions, 'validateCart'), [functions]);
   const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functions, 'submitOrder'), [functions]);
-  // ✅ [추가] 실제 대기 신청을 위한 서버 함수 호출자
   const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functions, 'addWaitlistEntry'), [functions]);
 
   const cardData = useMemo(() => {
@@ -76,8 +74,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     if (isNaN(quantity) || quantity < 1) { setQuantity(1); }
   };
 
-  // ✅ [수정] 상세 페이지와 로직 통일 (선입금 모달 추가, 네비게이션)
-const handleImmediateOrder = async () => {
+  const handleImmediateOrder = async () => {
     if (!user || !userDocument) {
       toast.error('로그인이 필요합니다.', { duration: 2000 });
       navigate('/login');
@@ -190,7 +187,6 @@ const handleImmediateOrder = async () => {
     }
   };
 
-  // ✅ [수정] 임시 코드를 실제 서버 함수 호출로 변경
   const handleWaitlistRequest = async () => {
     if (!user) { toast.error('로그인이 필요합니다.', { duration: 2000 }); navigate('/login'); return; }
     if (isSuspendedUser) { toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.', { duration: 2000 }); return; }
@@ -219,7 +215,6 @@ const handleImmediateOrder = async () => {
     }
   };
 
-  // ✅ [수정] 1차/2차 공구 기간에 따라 다른 로직을 타도록 수정
   const showConfirmation = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isPreLaunch) { toast(`🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️', duration: 2000 }); return; }
@@ -241,7 +236,6 @@ const handleImmediateOrder = async () => {
             </div>
           ), { id: `order-confirm-secondary-${product.id}`, duration: Infinity });
     } else {
-        // 1차 공구 기간에는 확인 없이 바로 주문
         handleImmediateOrder();
     }
   };
@@ -269,7 +263,32 @@ const handleImmediateOrder = async () => {
   if (!cardData) return null;
 
   const renderStockBadge = () => {
+    const { isMultiOption, displayRound } = cardData;
+
+    // ✅ [수정] 그룹 상품(여러 옵션)인 경우, '한정수량 예약중!'으로 표시
+    if (isMultiOption) {
+        // 표시 가능한 상태인지 먼저 확인 (품절/종료가 아닌 경우)
+        const isDisplayable = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
+        if (!isDisplayable) return null;
+
+        // 여러 옵션 중 하나라도 재고가 한정적인 경우 뱃지 표시
+        const hasAnyLimitedStock = displayRound.variantGroups.some(vg => 
+            vg.items.some(item => item.stock != null && item.stock !== -1)
+        );
+
+        if (hasAnyLimitedStock) {
+            return (
+                <span className="stock-badge">
+                    <Flame size={12} /> 한정수량 예약중!
+                </span>
+            );
+        }
+        return null;
+    }
+
+    // --- 기존 단일 상품 로직 ---
     if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
+    
     const totalStockInfo = cardData.displayRound.variantGroups.map(getStockInfo).reduce((acc, current) => {
         if (!current.isLimited) return { isLimited: false, remainingUnits: Infinity };
         if (acc.isLimited === false) return { isLimited: false, remainingUnits: Infinity };
@@ -293,16 +312,18 @@ const handleImmediateOrder = async () => {
         return <button className="simple-card-action-btn disabled" disabled><Calendar size={16} /> {dayjs(launchDate).format('M/D')} 오픈</button>;
     }
     
-    if (actionState === 'REQUIRE_OPTION') {
+    // ✅ [수정] 그룹 상품(여러 옵션)이거나, actionState가 상세보기를 요구하는 경우 '상세보기' 버튼 표시
+    if (cardData.isMultiOption || actionState === 'REQUIRE_OPTION') {
         return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
     }
+
+    // --- 이하 단일 상품에 대한 로직 ---
 
     if (actionState === 'WAITLISTABLE') {
         const maxQty = cardData.singleOptionItem?.limitQuantity || 10;
         return (
             <div className="single-option-controls">
                 <div className="quantity-controls compact">
-                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
                     <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity <= 1}><Minus size={16} /></button>
                     <input 
                       type="number" 
@@ -312,7 +333,6 @@ const handleImmediateOrder = async () => {
                       onBlur={handleQuantityBlur}
                       onClick={(e) => { e.stopPropagation(); e.currentTarget.select(); }}
                     />
-                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
                     <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity >= maxQty}><Plus size={16} /></button>
                 </div>
                 <button className="simple-card-action-btn waitlist" onClick={showWaitlistConfirmation} disabled={isProcessing}>
@@ -327,7 +347,6 @@ const handleImmediateOrder = async () => {
         return (
             <div className="single-option-controls">
                 <div className="quantity-controls compact">
-                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
                     <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity <= 1}><Minus size={16} /></button>
                     <input
                       type="number"
@@ -337,7 +356,6 @@ const handleImmediateOrder = async () => {
                       onBlur={handleQuantityBlur}
                       onClick={(e) => { e.stopPropagation(); e.currentTarget.select(); }}
                     />
-                    {/* ✅ [수정] NaN 상태에서도 버튼이 올바르게 동작하도록 수정 */}
                     <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity >= maxQty}><Plus size={16} /></button>
                 </div>
                 <button className="simple-card-action-btn confirm" onClick={showConfirmation} disabled={isProcessing}>
