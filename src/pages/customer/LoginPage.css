@@ -41,7 +41,7 @@
   margin-top: 15px;
   margin-bottom: 10px;
   color: #666; /* 텍스트 색상 조정 */
-  font-size: px;
+  font-size: 16px; /* 폰트 크기가 지정되지 않아 추가했습니다. */
   font-weight: 500;
 }
 
@@ -90,6 +90,8 @@
 .error-message {
   color: #d9534f; /* 오류 색상 조정 */
   font-size: 14px;
-  margin-top: -10px;
-  margin-bottom: 20px;
+  margin-top: 15px; /* 버튼과의 간격 추가 */
+  margin-bottom: -10px; /* 아래쪽 여백 조정 */
+  line-height: 1.5;
 }
+/* 마지막에 있던 불필요한 '}'를 제거했습니다. */

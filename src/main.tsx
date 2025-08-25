@@ -22,7 +22,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { LaunchProvider } from './context/LaunchContext';
 
-// --- 페이지 컴포넌트 lazy loading ---
+// --- 페이지 컴포넌트 lazy loading (기존과 동일) ---
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
@@ -33,8 +33,6 @@ const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
 const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
 const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryPage'));
-// ✅ [제거] OnsiteSalePage import를 제거합니다.
-// const OnsiteSalePage = React.lazy(() => import('./pages/customer/OnsiteSalePage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
 const OrderCalendarPage = React.lazy(() => import('@/components/customer/OrderCalendar'));
@@ -52,96 +50,118 @@ const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductC
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage'));
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
-
 const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
-const Root = () => {
+
+
+/**
+ * ✅ [개선] 인증 상태에 따라 라우팅을 결정하는 컴포넌트
+ * useAuth 훅의 로딩 상태를 처리하고, 사용자가 없으면 로그인 페이지로 리디렉션합니다.
+ */
+const AuthLayout = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return <SodomallLoader />;
   }
-  
+
   if (!user) {
-    const allowedPaths = ['/login', '/terms', '/privacy'];
-    if (!allowedPaths.includes(location.pathname.split('/')[1])) {
-      return <Navigate to="/login" replace />;
-    }
+    // 로그인 페이지로 리디렉션하되, 현재 경로를 state에 저장하여 로그인 후 돌아올 수 있도록 함
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
   
+  // 인증된 사용자는 요청한 페이지를 보여줍니다.
   return <Outlet />;
-}
+};
 
+/**
+ * ✅ [개선] Public 페이지들을 위한 레이아웃
+ * 이미 로그인한 사용자가 /login, /terms, /privacy 등에 접근하면 메인 페이지로 보냅니다.
+ */
+const PublicLayout = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <SodomallLoader />;
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
+// 라우터 설정을 더 명확하게 변경
 const router = createBrowserRouter([
+  // 1. 인증이 필요 없는 Public 라우트 (로그인, 약관 등)
+  {
+    element: <PublicLayout />,
+    children: [
+      { path: "/login", element: <LoginPage /> },
+      { path: "/terms", element: <TermsPage /> },
+      { path: "/privacy", element: <PrivacyPolicyPage /> },
+    ]
+  },
+  // 2. 인증이 필요한 모든 Private 라우트
   {
     path: "/",
-    element: <Root />,
+    element: <AuthLayout />,
     children: [
-      { path: "login", element: <Suspense fallback={<SodomallLoader />}><LoginPage /></Suspense> },
-      { path: "terms", element: <Suspense fallback={<SodomallLoader />}><TermsPage /></Suspense> },
-      { path: "privacy", element: <Suspense fallback={<SodomallLoader />}><PrivacyPolicyPage /></Suspense> },
       {
-        path: "/",
-        element: <App />,
+        element: <App />, // App 컴포넌트가 공통 레이아웃 역할을 할 수 있음
         children: [
+          // 2-1. 관리자 전용 라우트
           {
-            element: <ProtectedRoute adminOnly={true} />,
+            path: "admin",
+            element: <ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>,
             children: [
-              {
-                path: "admin",
-                element: <Suspense fallback={<SodomallLoader />}><AdminLayout /></Suspense>,
-                children: [
-                  { index: true, element: <DashboardPage /> },
-                  { path: 'dashboard', element: <DashboardPage /> },
-                  { path: 'quick-check', element: <QuickCheckPage /> },
-                  { path: 'prepaid-check', element: <PrepaidCheckPage /> },
-                  { path: 'products', element: <ProductListPageAdmin /> },
-                  { path: 'products/add', element: <ProductAddAdminPage /> },
-                  { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
-                  { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
-                  { path: 'categories', element: <CategoryManagementPage /> },
-                  { path: 'orders', element: <OrderManagementPage /> },
-                  { path: 'create-order', element: <CreateOrderPage /> },
-                  { path: 'users', element: <UserListPage /> },
-                  { path: 'users/:userId', element: <UserDetailPage /> },
-                  { path: 'banners', element: <BannerAdminPage /> },
-                  { path: 'data-tools', element: <DataAdminPage /> }
-                ]
-              }
-            ]
+              { index: true, element: <DashboardPage /> },
+              { path: 'dashboard', element: <DashboardPage /> },
+              { path: 'quick-check', element: <QuickCheckPage /> },
+              { path: 'prepaid-check', element: <PrepaidCheckPage /> },
+              { path: 'products', element: <ProductListPageAdmin /> },
+              { path: 'products/add', element: <ProductAddAdminPage /> },
+              { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
+              { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
+              { path: 'categories', element: <CategoryManagementPage /> },
+              { path: 'orders', element: <OrderManagementPage /> },
+              { path: 'create-order', element: <CreateOrderPage /> },
+              { path: 'users', element: <UserListPage /> },
+              { path: 'users/:userId', element: <UserDetailPage /> },
+              { path: 'banners', element: <BannerAdminPage /> },
+              { path: 'data-tools', element: <DataAdminPage /> }
+            ],
           },
+          // 2-2. 일반 사용자 라우트
           {
-            element: <ProtectedRoute />,
+            element: <ProtectedRoute><CustomerLayout /></ProtectedRoute>,
             children: [
+              { index: true, element: <SimpleOrderPage /> },
+              { path: "cart", element: <CartPage /> },
+              { path: "customer-center", element: <CustomerCenterPage /> },
+              { path: "encore", element: <EncorePage /> },
               {
-                element: <Suspense fallback={<SodomallLoader />}><CustomerLayout /></Suspense>,
+                path: "mypage",
                 children: [
-                  { index: true, element: <SimpleOrderPage /> },
-                  { path: "cart", element: <CartPage /> },
-                  // ✅ [제거] /onsite-sale 라우트를 제거합니다.
-                  { path: "customer-center", element: <CustomerCenterPage /> },
-                  { path: "encore", element: <EncorePage /> },
-                  {
-                    path: "mypage",
-                    children: [
-                      { index: true, element: <MyPage /> },
-                      { path: "history", element: <OrderHistoryPage /> },
-                      { path: "points", element: <PointHistoryPage /> },
-                      { path: "orders", element: <OrderCalendarPage /> },
-                    ]
-                  },
+                  { index: true, element: <MyPage /> },
+                  { path: "history", element: <OrderHistoryPage /> },
+                  { path: "points", element: <PointHistoryPage /> },
+                  { path: "orders", element: <OrderCalendarPage /> },
                 ]
               },
             ]
           },
+          // 2-3. 상품 상세 페이지 (CustomerLayout 외부에 있으므로 별도 정의)
+          {
+            path: "product/:productId",
+            element: <ProtectedRoute><ProductDetailPage /></ProtectedRoute>,
+          },
         ]
-      },
-      {
-        path: "product/:productId",
-        element: <Suspense fallback={<SodomallLoader />}><ProductDetailPage /></Suspense>,
       },
     ]
   },
+  // 3. 404 페이지
   {
     path: "*",
     element: (
@@ -152,9 +172,26 @@ const router = createBrowserRouter([
   },
 ]);
 
-const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+/**
+ * ✅ [개선] Context Provider 중첩을 깔끔하게 처리하는 컴포넌트
+ * 복잡한 중첩 구조를 배열과 reduce를 사용하여 가독성 및 유지보수성을 높입니다.
+ */
+const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Provider들을 배열로 정의
+  const providers = [
+    HelmetProvider,
+    AuthProvider,
+    LaunchProvider,
+    TutorialProvider,
+    NotificationProvider,
+    CartProvider,
+    SelectionProvider,
+    EncoreRequestProvider,
+  ];
+
+  // 배열을 순회하며 Provider들을 중첩시킴
   return (
-    <HelmetProvider>
+    <>
       <Toaster
         position="top-center"
         toastOptions={{
@@ -174,31 +211,22 @@ const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         }}
         containerStyle={{ zIndex: 9999, transform: 'translateZ(0)' }}
       />
-      <AuthProvider>
-        <LaunchProvider>
-          <TutorialProvider>
-            <NotificationProvider>
-              <CartProvider>
-                <SelectionProvider>
-                  <EncoreRequestProvider>
-                    <Suspense fallback={<SodomallLoader />}>
-                      {children}
-                    </Suspense>
-                  </EncoreRequestProvider>
-                </SelectionProvider>
-              </CartProvider>
-            </NotificationProvider>
-          </TutorialProvider>
-        </LaunchProvider>
-      </AuthProvider>
-    </HelmetProvider>
+      {providers.reduceRight((acc, Provider) => {
+        return <Provider>{acc}</Provider>;
+      }, children)}
+    </>
   );
 };
 
+
+// 최종 렌더링
 createRoot(document.getElementById('root')!).render(
-  <React.Fragment>
-    <Providers>
-      <RouterProvider router={router} />
-    </Providers>
-  </React.Fragment>
+  // ✅ [개선] React.StrictMode를 사용하여 잠재적인 문제를 감지합니다.
+  <React.StrictMode>
+    <AppProviders>
+      <Suspense fallback={<SodomallLoader />}>
+        <RouterProvider router={router} />
+      </Suspense>
+    </AppProviders>
+  </React.StrictMode>
 );
