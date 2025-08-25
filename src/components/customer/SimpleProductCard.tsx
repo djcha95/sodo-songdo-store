@@ -265,40 +265,37 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
   const renderStockBadge = () => {
     const { isMultiOption, displayRound } = cardData;
 
-    // ✅ [수정] 그룹 상품(여러 옵션)인 경우, '한정수량 예약중!'으로 표시
+    // ✅ [수정] 그룹 상품(여러 옵션)인 경우, '한정수량 공구중!'으로 통일하여 표시
     if (isMultiOption) {
-        // 표시 가능한 상태인지 먼저 확인 (품절/종료가 아닌 경우)
-        const isDisplayable = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
-        if (!isDisplayable) return null;
+        const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
+        if (!isDisplayableState) return null;
 
-        // 여러 옵션 중 하나라도 재고가 한정적인 경우 뱃지 표시
-        const hasAnyLimitedStock = displayRound.variantGroups.some(vg => 
-            vg.items.some(item => item.stock != null && item.stock !== -1)
-        );
+        // 옵션 중 하나라도 한정 수량이면 뱃지 표시
+        const hasAnyLimitedStock = displayRound.variantGroups.some(vg => {
+            const stockInfo = getStockInfo(vg as OriginalVariantGroup & { reservedCount?: number });
+            return stockInfo.isLimited;
+        });
 
         if (hasAnyLimitedStock) {
             return (
                 <span className="stock-badge">
-                    <Flame size={12} /> 한정수량 예약중!
+                    <Flame size={12} /> 한정수량 공구중!
                 </span>
             );
         }
-        return null;
+        return null; // 모든 옵션이 무제한이면 뱃지 미표시
     }
 
-    // --- 기존 단일 상품 로직 ---
-    if (actionState !== 'PURCHASABLE' && actionState !== 'REQUIRE_OPTION') return null;
+    // --- 기존 단일 상품 재고 표시 로직 ---
+    if (actionState !== 'PURCHASABLE') return null;
     
-    const totalStockInfo = cardData.displayRound.variantGroups.map(getStockInfo).reduce((acc, current) => {
-        if (!current.isLimited) return { isLimited: false, remainingUnits: Infinity };
-        if (acc.isLimited === false) return { isLimited: false, remainingUnits: Infinity };
-        return { isLimited: true, remainingUnits: acc.remainingUnits + current.remainingUnits };
-    }, { isLimited: true, remainingUnits: 0 });
+    const stockInfo = getStockInfo(displayRound.variantGroups[0] as OriginalVariantGroup & { reservedCount?: number });
 
-    if (!totalStockInfo.isLimited || totalStockInfo.remainingUnits <= 0) return null;
+    if (!stockInfo.isLimited || stockInfo.remainingUnits <= 0) return null;
+    
     return (
       <span className="stock-badge">
-        <Flame size={12} /> {totalStockInfo.remainingUnits}개 남음
+        <Flame size={12} /> {stockInfo.remainingUnits}개 남음
       </span>
     );
   };
@@ -312,15 +309,14 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         return <button className="simple-card-action-btn disabled" disabled><Calendar size={16} /> {dayjs(launchDate).format('M/D')} 오픈</button>;
     }
     
-    // ✅ [수정] 그룹 상품(여러 옵션)이거나, actionState가 상세보기를 요구하는 경우 '상세보기' 버튼 표시
+    // ✅ [수정] 그룹 상품(여러 옵션)이거나, actionState가 상세보기를 요구하는 경우 항상 '상세보기' 버튼 표시
     if (cardData.isMultiOption || actionState === 'REQUIRE_OPTION') {
         return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
     }
 
-    // --- 이하 단일 상품에 대한 로직 ---
-
+    // --- 이하 단일 상품에 대한 액션 로직 ---
     if (actionState === 'WAITLISTABLE') {
-        const maxQty = cardData.singleOptionItem?.limitQuantity || 10;
+        const maxQty = cardData.singleOptionItem?.limitQuantity || 99; // 대기는 넉넉하게
         return (
             <div className="single-option-controls">
                 <div className="quantity-controls compact">
@@ -365,7 +361,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         );
     }
     
-    return <button className="simple-card-action-btn disabled" disabled>예약 불가</button>;
+    // INELIGIBLE, ENDED, ENCORE_REQUESTABLE 등은 클릭해서 상세 페이지에서 확인
+    return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
   };
   
   const pickupDateFormatted = dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');

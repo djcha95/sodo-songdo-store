@@ -135,31 +135,15 @@ const SimpleOrderPage: React.FC = () => {
 
       if (finalPhase === 'past') return;
       
-      let actionState = determineActionState(round as SalesRound, userDocument);
-      
-      // ✅ [수정] 일부 옵션만 품절된 그룹 상품이 대기 목록 최하단으로 정렬되는 문제 수정
-      // 그룹 상품(여러 옵션)이고, 기본 상태가 '대기'일 경우, 구매 가능한 옵션이 남았는지 재확인
-      const isMultiOption = (round.variantGroups?.length ?? 0) > 1 || (round.variantGroups?.[0]?.items?.length ?? 0) > 1;
-      if (isMultiOption && actionState === 'WAITLISTABLE') {
-        const hasPurchasableOption = round.variantGroups.some(vg => 
-          (vg.items as any[]).some(item => {
-            // 재고가 무제한(-1)이거나, 0보다 큰 경우 구매 가능으로 간주
-            const stock = item.stock ?? 0;
-            return stock === -1 || stock > 0;
-          })
-        );
-        
-        // 구매 가능한 옵션이 하나라도 남아있다면, 정렬을 위해 상태를 '상세보기 필요'로 변경
-        if (hasPurchasableOption) {
-          actionState = 'REQUIRE_OPTION';
-        }
-      }
+      // ✅ [수정] productUtils에서 수정된 로직을 그대로 사용하므로, 여기서 actionState를 재정의할 필요가 없음.
+      // 이로써 코드가 더 간결해지고 정렬 문제가 근본적으로 해결됨.
+      const actionState = determineActionState(round as SalesRound, userDocument);
 
       const productWithState: ProductWithUIState = { 
         ...product, 
         phase: finalPhase,
         displayRound: round as SalesRound,
-        actionState, // 수정된 actionState 사용
+        actionState,
       };
       
       if (finalPhase === 'primary') {
@@ -191,10 +175,13 @@ const SimpleOrderPage: React.FC = () => {
 
     return {
       primarySaleProducts: tempPrimary.sort((a, b) => {
+        // '대기 가능' 상태인 상품을 목록 하단으로 정렬
         const isAWaitlist = a.actionState === 'WAITLISTABLE';
         const isBWaitlist = b.actionState === 'WAITLISTABLE';
         if (isAWaitlist && !isBWaitlist) return 1;
         if (!isAWaitlist && isBWaitlist) return -1;
+        
+        // 나머지는 기존 정렬 로직 유지 (가격 순)
         const priceA = a.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
         const priceB = b.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
         return priceB - priceA;

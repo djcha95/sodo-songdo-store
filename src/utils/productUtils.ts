@@ -54,16 +54,13 @@ export type ProductActionState =
   | 'INELIGIBLE'
   | 'AWAITING_STOCK';
 
-// ✅ [수정] Firestore의 다양한 Timestamp 형식을 안정적으로 Date 객체로 변환합니다.
 export const safeToDate = (date: any): Date | null => {
   if (!date) return null;
   if (date instanceof Date) return date;
   if (typeof date.toDate === 'function') return date.toDate();
-  // Firestore v9 or admin SDK Timestamp
   if (typeof date === 'object' && typeof date.seconds === 'number' && typeof date.nanoseconds === 'number') {
     return new Timestamp(date.seconds, date.nanoseconds).toDate();
   }
-  // Firestore v8 legacy Timestamp
   if (typeof date === 'object' && typeof date._seconds === 'number' && typeof date._nanoseconds === 'number') {
     return new Timestamp(date._seconds, date._nanoseconds).toDate();
   }
@@ -75,15 +72,10 @@ export const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// ✅ [수정] 1차/2차 공구 마감 시간을 명확하게 계산합니다.
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
-    // 1차 마감일은 데이터베이스에 저장된 deadlineDate를 사용합니다. ProductForm에서 이미 계산된 값입니다.
     const primaryEnd = safeToDate(round.deadlineDate) ? dayjs(safeToDate(round.deadlineDate)) : null;
-    
-    // 2차 마감일은 픽업일 오후 1시입니다.
     const pickupDate = safeToDate(round.pickupDate);
     const secondaryEnd = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0) : null;
-    
     return { primaryEnd, secondaryEnd };
 };
 
@@ -114,8 +106,9 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
     return sortedHistory[0] || null;
 };
 
-// ✅ [수정] determineActionState: 1차/2차 공구 로직을 반영하여 상태를 결정합니다.
+// ✅ [수정] 1차/2차 공구 비즈니스 로직을 완벽하게 반영하여 상태 결정 로직을 전면 재구성
 export const determineActionState = (round: SalesRound, userDocument: UserDocument | null): ProductActionState => {
+  // 0. 참여 등급 확인
   const userTier = userDocument?.loyaltyTier;
   const allowedTiers = round.allowedTiers || [];
   if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier as LoyaltyTier))) {
@@ -126,50 +119,50 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   const publishAt = safeToDate(round.publishAt);
   const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
-  // 1. 발행 전 (오후 2시 전)
+  // 1. 판매 예정 (게시 시간 전)
   if (publishAt && now.isBefore(publishAt)) {
     return 'SCHEDULED';
   }
 
-  const isAllVariantsSoldOut = round.variantGroups.length > 0 && round.variantGroups.every(vg => {
-      const totalStock = vg.totalPhysicalStock;
-      if (totalStock === null || totalStock === -1) return false; // 무제한 재고는 품절이 아님
-      const reserved = vg.reservedCount || 0;
-      return totalStock - reserved <= 0;
-  });
-  
-  // 2. 전체 품절 상태 확인
-  if (isAllVariantsSoldOut) {
-      // 1차 공구 기간 중 품절이면 '대기 가능'
-      if (primaryEnd && now.isBefore(primaryEnd)) {
-          return 'WAITLISTABLE';
-      }
-      // 2차 공구 기간 중 품절이거나 기간이 지나면 '앵콜 요청'
-      return 'ENCORE_REQUESTABLE';
-  }
+  // ℹ️ [설명] 상품의 모든 옵션이 품절되었는지 확인하는 헬퍼 함수
+  const isAllOptionsSoldOut = () => {
+    if (!round.variantGroups || round.variantGroups.length === 0) return true;
+    return round.variantGroups.every(vg => {
+      const stockInfo = getStockInfo(vg);
+      // isLimited가 false(무제한)이면 품절이 아님
+      return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
+    });
+  };
 
-  // 3. 판매 기간 확인 (1차 또는 2차)
-  const salesEnd = secondaryEnd || primaryEnd;
-  if (salesEnd && now.isAfter(salesEnd)) {
-      return 'ENCORE_REQUESTABLE';
-  }
-  
-  // 4. 판매중 상태
-  if ((primaryEnd && now.isBefore(primaryEnd)) || (secondaryEnd && now.isBetween(primaryEnd!, secondaryEnd, null, '()'))) {
-    // 1차 공구 기간 중 일부 품절 시에도 대기 가능 상태를 우선으로 표시
-    if (primaryEnd && now.isBefore(primaryEnd)) {
-      const isAnyVgSoldOut = round.variantGroups.some(vg => {
-          const stockInfo = getStockInfo(vg);
-          return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
-      });
-      if (isAnyVgSoldOut) return 'WAITLISTABLE';
+  const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
+
+  // 2. 1차 공구 기간 ( ~ 1차 마감 시간 전)
+  if (primaryEnd && now.isBefore(primaryEnd)) {
+    if (isAllOptionsSoldOut()) {
+      // 모든 옵션이 품절된 경우에만 '대기 가능'
+      return 'WAITLISTABLE';
     }
-      
-    const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
+    // 하나라도 구매 가능한 옵션이 있다면 '구매 가능' 또는 '옵션 선택 필요'
     return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
   }
+
+  // 3. 2차 공구 기간 (1차 마감 이후 ~ 2차 마감 시간 전)
+  if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
+    if (isAllOptionsSoldOut()) {
+      // 2차 공구에서는 품절 시 '대기' 없음. 즉시 '앵콜 요청'
+      return 'ENCORE_REQUESTABLE';
+    }
+    // 재고가 남아있으면 '구매 가능' 또는 '옵션 선택 필요'
+    return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
+  }
+
+  // 4. 모든 판매 기간 종료 후
+  const salesEnd = secondaryEnd || primaryEnd;
+  if (salesEnd && now.isAfter(salesEnd)) {
+    return 'ENCORE_REQUESTABLE';
+  }
   
-  // 모든 조건에 해당하지 않으면 종료
+  // 5. 위 모든 조건에 해당하지 않는 경우 (데이터 오류 등)
   return 'ENDED';
 };
 
