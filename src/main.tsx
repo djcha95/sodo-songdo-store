@@ -5,7 +5,9 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
-import { MotionConfig } from 'framer-motion'; // ✅ [추가] framer-motion 설정 import
+import { MotionConfig } from 'framer-motion';
+// ✅ [추가] TanStack Query 관련 모듈 import
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import './index.css';
 import './styles/variables.css';
@@ -53,11 +55,21 @@ const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage')
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
 const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
 
-
 /**
- * ✅ [개선] 인증 상태에 따라 라우팅을 결정하는 컴포넌트
- * useAuth 훅의 로딩 상태를 처리하고, 사용자가 없으면 로그인 페이지로 리디렉션합니다.
+ * ✅ [추가] QueryClient 인스턴스 생성
+ * 앱 전역에서 사용할 쿼리 클라이언트를 만듭니다.
+ * defaultOptions로 캐시 시간 등을 설정할 수 있습니다.
  */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,      // 5분 동안 데이터를 '신선함'으로 간주 (재요청 X)
+      gcTime: 1000 * 60 * 30,       // 30분 동안 사용되지 않으면 캐시에서 제거
+      retry: 1,                     // API 요청 실패 시 1번 재시도
+    },
+  },
+});
+
 const AuthLayout = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -67,18 +79,12 @@ const AuthLayout = () => {
   }
 
   if (!user) {
-    // 로그인 페이지로 리디렉션하되, 현재 경로를 state에 저장하여 로그인 후 돌아올 수 있도록 함
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   
-  // 인증된 사용자는 요청한 페이지를 보여줍니다.
   return <Outlet />;
 };
 
-/**
- * ✅ [개선] Public 페이지들을 위한 레이아웃
- * 이미 로그인한 사용자가 /login, /terms, /privacy 등에 접근하면 메인 페이지로 보냅니다.
- */
 const PublicLayout = () => {
   const { user, loading } = useAuth();
 
@@ -93,9 +99,7 @@ const PublicLayout = () => {
   return <Outlet />;
 };
 
-// 라우터 설정을 더 명확하게 변경
 const router = createBrowserRouter([
-  // 1. 인증이 필요 없는 Public 라우트 (로그인, 약관 등)
   {
     element: <PublicLayout />,
     children: [
@@ -104,15 +108,13 @@ const router = createBrowserRouter([
       { path: "/privacy", element: <PrivacyPolicyPage /> },
     ]
   },
-  // 2. 인증이 필요한 모든 Private 라우트
   {
     path: "/",
     element: <AuthLayout />,
     children: [
       {
-        element: <App />, // App 컴포넌트가 공통 레이아웃 역할을 할 수 있음
+        element: <App />,
         children: [
-          // 2-1. 관리자 전용 라우트
           {
             path: "admin",
             element: <ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>,
@@ -134,7 +136,6 @@ const router = createBrowserRouter([
               { path: 'data-tools', element: <DataAdminPage /> }
             ],
           },
-          // 2-2. 일반 사용자 라우트
           {
             element: <ProtectedRoute><CustomerLayout /></ProtectedRoute>,
             children: [
@@ -153,7 +154,6 @@ const router = createBrowserRouter([
               },
             ]
           },
-          // 2-3. 상품 상세 페이지 (CustomerLayout 외부에 있으므로 별도 정의)
           {
             path: "product/:productId",
             element: <ProtectedRoute><ProductDetailPage /></ProtectedRoute>,
@@ -162,7 +162,6 @@ const router = createBrowserRouter([
       },
     ]
   },
-  // 3. 404 페이지
   {
     path: "*",
     element: (
@@ -173,13 +172,10 @@ const router = createBrowserRouter([
   },
 ]);
 
-/**
- * ✅ [개선] Context Provider 중첩을 깔끔하게 처리하는 컴포넌트
- * 복잡한 중첩 구조를 배열과 reduce를 사용하여 가독성 및 유지보수성을 높입니다.
- */
 const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Provider들을 배열로 정의
   const providers = [
+    // ✅ [추가] QueryClientProvider를 Context Provider 목록에 추가합니다.
+    (props: { children: React.ReactNode }) => <QueryClientProvider client={queryClient} {...props} />,
     HelmetProvider,
     AuthProvider,
     LaunchProvider,
@@ -190,10 +186,8 @@ const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     EncoreRequestProvider,
   ];
 
-  // 배열을 순회하며 Provider들을 중첩시킴
   return (
     <>
-      {/* ✅ [수정] Toaster를 MotionConfig로 감싸서 애니메이션 충돌을 방지합니다. */}
       <MotionConfig reducedMotion="always">
         <Toaster
           position="top-center"
@@ -223,7 +217,6 @@ const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 };
 
 
-// 최종 렌더링
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppProviders>
