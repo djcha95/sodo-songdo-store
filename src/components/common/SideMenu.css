@@ -105,6 +105,13 @@
     font-size: 1rem;
     font-weight: 500;
     transition: background-color 0.2s, color 0.2s;
+    /* ✅ [추가] button 요소와 a 요소가 동일하게 보이도록 스타일 리셋 */
+    background: none;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit; /* 폰트 상속 */
 }
 
 .sidemenu-link:hover {
@@ -115,6 +122,23 @@
     color: var(--accent-color);
     font-weight: 700;
     background-color: var(--accent-color-light);
+}
+
+/* ✅ [추가] 사이드 메뉴 내 알림 뱃지 스타일 */
+.sidemenu-notification-badge {
+    margin-left: auto;
+    background-color: var(--accent-color);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    min-width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .sidemenu-footer {

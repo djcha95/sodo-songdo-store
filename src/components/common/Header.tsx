@@ -1,7 +1,7 @@
 // src/components/common/Header.tsx
 
 import React from 'react';
-import { NavLink, useNavigate, Link } from 'react-router-dom';
+import { NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
 import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Bell, Menu } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
@@ -40,7 +40,7 @@ const notificationIcons: { [key in NotificationType | 'default']: React.ReactNod
 };
 
 const getNotificationIcon = (type: NotificationType) => {
-    return notificationIcons[type] || notificationIcons.default;
+    return notificationIcons [type] || notificationIcons.default;
 }
 
 const NotificationModal: React.FC<{
@@ -61,7 +61,7 @@ const NotificationModal: React.FC<{
         if (notification.link) navigate(notification.link);
         onClose();
     };
-    
+
     if(!isOpen) return null;
 
     return (
@@ -82,11 +82,14 @@ const NotificationModal: React.FC<{
 // --- 메인 헤더 컴포넌트 ---
 const Header: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [isMenuOpen, setIsMenuOpen] = React.useState(false); 
-
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const { user } = useAuth();
-  const { unreadCount } = useNotifications();
-  
+  const location = useLocation();
+  const isOnHistoryPage = location.pathname === '/mypage/history';
+
+  // ✅ [추가] 페이지 위치에 따라 버튼에 적용할 클래스를 결정합니다.
+  const buttonModeClass = isOnHistoryPage ? 'order-now' : 'view-history';
+
   React.useEffect(() => {
     if (isModalOpen || isMenuOpen) {
         document.body.style.overflow = 'hidden';
@@ -98,21 +101,19 @@ const Header: React.FC = () => {
     };
   }, [isModalOpen, isMenuOpen]);
 
-
   return (
     <>
         <header className="main-header customer-header-sticky">
             <div className="header-left">
-                <button 
-                    onClick={() => setIsMenuOpen(true)} 
-                    className="header-action-btn" 
+                <button
+                    onClick={() => setIsMenuOpen(true)}
+                    className="header-action-btn"
                     aria-label="메뉴 열기"
                 >
                     <Menu size={24} />
                 </button>
             </div>
             <div className="header-center">
-                {/* ✅ [확인] 이 링크를 누르면 '/' 경로로 이동하여 '오늘의 공구' 페이지가 열립니다. */}
                 <Link to="/" className="brand-text-logo-container">
                     <span className="brand-name">소도몰</span>
                     <span className="store-name">송도랜드마크점</span>
@@ -120,21 +121,36 @@ const Header: React.FC = () => {
             </div>
             <div className="header-right">
                 {user && (
-                    <button 
-                        className="header-action-btn" 
-                        onClick={() => setIsModalOpen(true)} 
-                        aria-label={`알림 ${unreadCount}개`}
-                    >
-                        <Bell size={24} />
-                        {unreadCount > 0 && <span className="notification-badge-header">{unreadCount}</span>}
-                    </button>
+                    isOnHistoryPage ? (
+                        <NavLink
+                            to="/"
+                            // ✅ [수정] 동적으로 클래스를 적용합니다.
+                            className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
+                            aria-label="예약하러 가기"
+                        >
+                            <span className="order-history-badge">예약하기</span>
+                        </NavLink>
+                    ) : (
+                        <NavLink
+                            to="/mypage/history"
+                             // ✅ [수정] 동적으로 클래스를 적용합니다.
+                            className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
+                            aria-label="예약내역 확인"
+                        >
+                            <span className="order-history-badge">예약내역</span>
+                        </NavLink>
+                    )
                 )}
             </div>
         </header>
-        
+
         <NotificationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-        
-        <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+
+        <SideMenu
+            isOpen={isMenuOpen}
+            onClose={() => setIsMenuOpen(false)}
+            onOpenNotifications={() => setIsModalOpen(true)}
+        />
     </>
   );
 };

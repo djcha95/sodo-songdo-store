@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate } from 'react-router-dom';
 import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, deleteSalesRounds, updateSalesRound } from '../../firebase';
-import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType } from '../../types';
+import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType, WaitlistEntry } from '../../types';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Store, MoreVertical } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
@@ -62,6 +62,7 @@ interface WaitlistInfo {
   userName: string;
   quantity: number;
   timestamp: Timestamp;
+  variantGroupId: string; // ✅ [추가] 필터링을 위해 variantGroupId 추가
 }
 
 interface WaitlistProcessResult {
@@ -159,12 +160,14 @@ const translateStorageType = (storageType: StorageType): string => {
     return typeMap[storageType] || storageType;
 };
 
+// ✅ [수정] 옵션별 대기자 수를 저장할 waitlistCount 추가
 interface EnrichedVariantGroup extends VariantGroup {
     reservedCount: number;
     pickedUpCount: number;
     configuredStock: number;
     remainingStock: number;
     dynamicStatus: DynamicStatus;
+    waitlistCount: number;
 }
 
 interface EnrichedRoundItem {
@@ -250,7 +253,7 @@ const StatusDropdown: React.FC<{
 };
 
 
-interface ProductAdminRowProps { item: EnrichedRoundItem; index: number; isExpanded: boolean; isSelected: boolean; editingStockId: string | null; stockInputs: Record<string, string>; onToggleExpansion: (id: string) => void; onSelectionChange: (id: string, checked: boolean) => void; onStockEditStart: (id: string, stock: number) => void; onStockEditSave: (id: string, currentItem: EnrichedRoundItem) => void; onSetStockInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>; onOpenWaitlistModal: (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string) => void; onStatusChange: (productId: string, roundId: string, newStatus: Partial<SalesRound>) => void; }
+interface ProductAdminRowProps { item: EnrichedRoundItem; index: number; isExpanded: boolean; isSelected: boolean; editingStockId: string | null; stockInputs: Record<string, string>; onToggleExpansion: (id: string) => void; onSelectionChange: (id: string, checked: boolean) => void; onStockEditStart: (id: string, stock: number) => void; onStockEditSave: (id: string, currentItem: EnrichedRoundItem) => void; onSetStockInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>; onOpenWaitlistModal: (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string, variantGroupName: string) => void; onStatusChange: (productId: string, roundId: string, newStatus: Partial<SalesRound>) => void; }
 const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpanded, isSelected, editingStockId, stockInputs, onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs, onOpenWaitlistModal, onStatusChange }) => {
     const navigate = useNavigate();
     const handleAddNewRound = () => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } });
@@ -276,7 +279,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
             <td><StatusDropdown item={item} onStatusChange={onStatusChange} /></td>
             <td style={{textAlign: 'right'}}>{vg.items[0]?.price != null ? `${formatKRW(vg.items[0].price)} 원` : '–'}</td>
             <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
-            <td className="quantity-cell">{`${vg.reservedCount} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
+            {/* ✅ [수정] item.round.waitlistCount 대신, 옵션 그룹에 맞게 계산된 vg.waitlistCount를 사용합니다. */}
+            <td className="quantity-cell">{`${vg.reservedCount} / `}{(vg.waitlistCount > 0) ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName, vg.groupName)}>{vg.waitlistCount}</button>) : (vg.waitlistCount)}</td>
             <td className="quantity-cell">{vg.pickedUpCount}</td>
             <td className="stock-cell">
               {editingStockId === vgUniqueId ? (
@@ -299,6 +303,9 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
 
     // 다중 옵션 상품 렌더링 (마스터 행)
     const earliestOverallExpiration = useMemo(() => { const allDates = item.enrichedVariantGroups.flatMap(vg => vg.items.map(i => i.expirationDate ? safeToDate(i.expirationDate)?.getTime() : undefined).filter(Boolean) as number[]); return allDates.length > 0 ? Math.min(...allDates) : Infinity; }, [item.enrichedVariantGroups]);
+    // ✅ [추가] 마스터 행에 표시할 전체 대기자 수를 계산합니다.
+    const totalWaitlistCount = useMemo(() => item.enrichedVariantGroups.reduce((sum, vg) => sum + vg.waitlistCount, 0), [item.enrichedVariantGroups]);
+
     return (
       <React.Fragment>
         <tr className="master-row expandable">
@@ -313,7 +320,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
           <td><StatusDropdown item={item} onStatusChange={onStatusChange} /></td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>{formatDate(earliestOverallExpiration)}</td>
-          <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
+          {/* ✅ [수정] 마스터 행에는 계산된 전체 대기자 수를 표시합니다. */}
+          <td className="quantity-cell" style={{textAlign: 'center'}}>{totalWaitlistCount > 0 ? totalWaitlistCount : '–'}</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>
@@ -340,7 +348,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                   <td><span className={`status-badge ${subStatus.className}`} title={`Status: ${subStatus.text}`}>{subStatus.text}</span></td>
                   <td style={{textAlign: 'right'}}>{subVg.items[0]?.price != null ? `${formatKRW(subVg.items[0].price)} 원` : '–'}</td>
                   <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
-                  <td className="quantity-cell">{`${subVg.reservedCount} / `}{(item.round.waitlistCount ?? 0) > 0 ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName)}>{item.round.waitlistCount ?? 0}</button>) : (item.round.waitlistCount ?? 0)}</td>
+                  {/* ✅ [수정] 서브 행에는 각 옵션 그룹의 대기자 수(subVg.waitlistCount)를 정확히 표시합니다. */}
+                  <td className="quantity-cell">{`${subVg.reservedCount} / `}{(subVg.waitlistCount > 0) ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, subVg.id, item.productName, item.round.roundName, subVg.groupName)}>{subVg.waitlistCount}</button>) : (subVg.waitlistCount)}</td>
                   <td className="quantity-cell">{subVg.pickedUpCount}</td>
                   <td className="stock-cell">
                       {editingStockId === subVgUniqueId ? (
@@ -359,7 +368,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
     );
 };
 
-const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; } | null; onSuccess: () => void; }> = ({ isOpen, onClose, data, onSuccess }) => {
+// ✅ [수정] 모달 데이터 타입에 옵션 그룹 이름(variantGroupName) 추가
+const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; variantGroupName: string; } | null; onSuccess: () => void; }> = ({ isOpen, onClose, data, onSuccess }) => {
     const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -372,14 +382,27 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
         if (isOpen && data) {
             setLoading(true); setError('');
             getWaitlistForRound(data.productId, data.roundId)
-                .then((fetchedWaitlist: any[]) => {
-                    const processedWaitlist: WaitlistInfo[] = fetchedWaitlist.map((item, index) => ({ userId: item.userId || `${item.userName}-${index}`, userName: item.userName, quantity: item.quantity, timestamp: item.timestamp, }));
+                .then((fetchedWaitlist) => {
+                    // 💡 [수정] 아래 한 줄을 변경해주세요.
+                    // 'as unknown as'를 사용하여 타입을 강제로 변환합니다.
+                    const typedFetchedWaitlist = fetchedWaitlist as unknown as WaitlistEntry[];
+
+                    const filteredWaitlist = typedFetchedWaitlist.filter(item => item.variantGroupId === data.variantGroupId);
+
+                    const processedWaitlist: WaitlistInfo[] = filteredWaitlist.map((item, index) => ({
+                      userId: item.userId || `${index}`, 
+                      userName: '사용자',
+                      quantity: item.quantity, 
+                      timestamp: item.timestamp,
+                      variantGroupId: item.variantGroupId,
+                    }));
                     setWaitlist(processedWaitlist);
                 })
                 .catch(() => setError('대기자 명단을 불러오는데 실패했습니다.'))
                 .finally(() => setLoading(false));
         }
     }, [isOpen, data]);
+
 
     const handleConfirm = async () => {
         const stock = parseInt(stockToAdd, 10);
@@ -406,7 +429,18 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
     };
     if (!isOpen || !data) return null;
     return (
-        <div className="waitlist-modal-overlay" onClick={onClose}><div className="waitlist-modal-content" onClick={e => e.stopPropagation()}><div className="waitlist-modal-header"><h3>"{data.productName}" 대기자 명단</h3><span>({data.roundName})</span><button onClick={onClose} className="modal-close-button">&times;</button></div><div className="waitlist-modal-body">{loading && <div className="modal-inline-loader"><InlineSodomallLoader /></div>}{error && <p className="error-text">{error}</p>}{!loading && !error && (waitlist.length > 0 ? (<table><thead><tr><th>순번</th><th>신청자</th><th>신청수량</th><th>신청일시</th></tr></thead><tbody>{waitlist.map((entry, index) => (<tr key={entry.userId}><td>{index + 1}</td><td>{entry.userName}</td><td>{entry.quantity}</td><td>{formatTimestamp(entry.timestamp)}</td></tr>))}</tbody></table>) : <p>이 판매 회차의 대기자가 없습니다.</p>)}</div><div className="waitlist-modal-footer"><input type="number" value={stockToAdd} onChange={e => setStockToAdd(e.target.value)} placeholder="추가할 재고 수량" className="stock-add-input"/><button onClick={handleConfirm} className="stock-add-confirm-btn" disabled={!stockToAdd || parseInt(stockToAdd, 10) <= 0}>재고 추가 및 자동 전환</button></div></div></div>
+        // ✅ [수정] 모달 헤더에 옵션 그룹 이름을 표시하여 어떤 옵션의 대기 명단인지 명확히 합니다.
+        <div className="waitlist-modal-overlay" onClick={onClose}>
+            <div className="waitlist-modal-content" onClick={e => e.stopPropagation()}>
+                <div className="waitlist-modal-header">
+                    <h3>"{data.productName}" 대기자 명단</h3>
+                    <span>({data.roundName} / <strong>{data.variantGroupName}</strong>)</span>
+                    <button onClick={onClose} className="modal-close-button">&times;</button>
+                </div>
+                <div className="waitlist-modal-body">{loading && <div className="modal-inline-loader"><InlineSodomallLoader /></div>}{error && <p className="error-text">{error}</p>}{!loading && !error && (waitlist.length > 0 ? (<table><thead><tr><th>순번</th><th>신청자</th><th>신청수량</th><th>신청일시</th></tr></thead><tbody>{waitlist.map((entry, index) => (<tr key={entry.userId + entry.timestamp.seconds}><td>{index + 1}</td><td>{entry.userName}</td><td>{entry.quantity}</td><td>{formatTimestamp(entry.timestamp)}</td></tr>))}</tbody></table>) : <p>이 옵션의 대기자가 없습니다.</p>)}</div>
+                <div className="waitlist-modal-footer"><input type="number" value={stockToAdd} onChange={e => setStockToAdd(e.target.value)} placeholder="추가할 재고 수량" className="stock-add-input"/><button onClick={handleConfirm} className="stock-add-confirm-btn" disabled={!stockToAdd || parseInt(stockToAdd, 10) <= 0}>재고 추가 및 자동 전환</button></div>
+            </div>
+        </div>
     );
 };
 
@@ -439,7 +473,8 @@ const ProductListPageAdmin: React.FC = () => {
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
-  const [currentWaitlistData, setCurrentWaitlistData] = useState<{ productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; } | null>(null);
+  // ✅ [수정] 모달 데이터 타입에 variantGroupName 추가
+  const [currentWaitlistData, setCurrentWaitlistData] = useState<{ productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; variantGroupName: string; } | null>(null);
   const navigate = useNavigate();
 
   const functions = getFunctions(getApp(), 'asia-northeast3');
@@ -495,7 +530,11 @@ const ProductListPageAdmin: React.FC = () => {
                 const configuredStock = vg.totalPhysicalStock ?? -1;
                 const remainingStock = configuredStock === -1 ? Infinity : configuredStock - reservedCount;
                 const dynamicStatus = getDynamicStatus(r, remainingStock);
-                return { ...vg, reservedCount, pickedUpCount, configuredStock, remainingStock, dynamicStatus };
+
+                // ✅ [추가] 각 옵션 그룹(vg)에 대한 대기자 수를 'round.waitlist' 배열을 필터링하여 정확하게 계산합니다.
+                const waitlistCountForGroup = r.waitlist?.filter(w => w.variantGroupId === vg.id).reduce((sum, w) => sum + w.quantity, 0) || 0;
+
+                return { ...vg, reservedCount, pickedUpCount, configuredStock, remainingStock, dynamicStatus, waitlistCount: waitlistCountForGroup };
             });
 
             const isAllSoldOut = enrichedVariantGroups.every(vg => vg.dynamicStatus.className === 'sold-out');
@@ -684,7 +723,11 @@ const ProductListPageAdmin: React.FC = () => {
     ), { id: 'bulk-delete-confirm', duration: Infinity, position: 'top-center' });
   };
 
-  const handleOpenWaitlistModal = (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string) => { setCurrentWaitlistData({ productId, roundId, variantGroupId, productName, roundName }); setIsWaitlistModalOpen(true); };
+  // ✅ [수정] 모달을 열 때 옵션 그룹 이름(variantGroupName)도 함께 전달합니다.
+  const handleOpenWaitlistModal = (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string, variantGroupName: string) => { 
+    setCurrentWaitlistData({ productId, roundId, variantGroupId, productName, roundName, variantGroupName }); 
+    setIsWaitlistModalOpen(true); 
+  };
   const handleCloseWaitlistModal = () => { setIsWaitlistModalOpen(false); setCurrentWaitlistData(null); };
   const handleWaitlistSuccess = () => { fetchData(); };
   

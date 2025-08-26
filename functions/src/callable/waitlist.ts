@@ -40,8 +40,6 @@ export const addWaitlistEntry = onCall({
 
       const round = newSalesHistory[roundIndex];
 
-      // ✅ [로직 수정] 모든 대기 신청을 항상 새로운 항목으로 추가합니다.
-      // 기존 대기를 찾아 수량을 합치는 로직을 제거하여, 엄격한 선착순(FIFO)을 보장합니다.
       const newWaitlistEntry: WaitlistEntry = {
         userId,
         quantity,
@@ -51,7 +49,10 @@ export const addWaitlistEntry = onCall({
       };
 
       round.waitlist = [...(round.waitlist || []), newWaitlistEntry];
-      round.waitlistCount = (round.waitlistCount || 0) + quantity;
+      
+      // ✅ [수정] 불필요하고 혼란을 야기하는 통합 waitlistCount 업데이트 로직을 제거합니다.
+      // 이제 각 옵션별 대기자 수는 프론트엔드에서 waitlist 배열을 직접 필터링하여 계산합니다.
+      // round.waitlistCount = (round.waitlistCount || 0) + quantity;
       
       newSalesHistory[roundIndex] = round;
       transaction.update(productRef, { salesHistory: newSalesHistory });

@@ -646,8 +646,8 @@ const ProductDetailPage: React.FC = () => {
               </div>
             ), { id: customToastId, duration: Infinity });
           } else {
-            toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 2500 });
-            navigate('/mypage/history');
+            // ✅ [수정] 예약 완료 후 페이지 이동 대신, 성공 토스트 메시지만 띄웁니다.
+            toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 3000 });
           }
 
         } catch (error: any) {
@@ -675,8 +675,8 @@ const ProductDetailPage: React.FC = () => {
 
         try {
           await addWaitlistEntryCallable(waitlistPayload);
-          toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId });
-          navigate('/mypage/history');
+          // ✅ [수정] 대기 신청 완료 후 페이지 이동 대신, 성공 토스트 메시지만 띄웁니다.
+          toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId, duration: 3000 });
         } catch (error: any) {
           toast.error(error.message || '대기 신청 중 오류가 발생했습니다.', { id: toastId });
         } finally {

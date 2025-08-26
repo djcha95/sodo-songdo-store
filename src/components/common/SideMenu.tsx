@@ -2,19 +2,22 @@
 
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Package, ListOrdered } from 'lucide-react';
+import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Package, ListOrdered, Bell } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/context/NotificationContext';
 import toast from 'react-hot-toast';
 import './SideMenu.css';
 
 interface SideMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenNotifications: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, onOpenNotifications }) => {
   const navigate = useNavigate();
   const { user, userDocument, isAdmin, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const loyaltyTier = userDocument?.loyaltyTier || '등급 정보 없음';
 
   const handleLogout = async () => {
@@ -27,6 +30,11 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
     } finally {
       onClose();
     }
+  };
+
+  const handleNotificationClick = () => {
+    onClose();
+    onOpenNotifications();
   };
 
   const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
@@ -67,7 +75,20 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
             <ListOrdered size={20} />
             <span>예약내역 확인하기</span>
           </NavLink>
-          {/* ✅ [제거] '현장 판매' NavLink를 제거합니다. */}
+          
+          {/* ✅ [추가] 알림 버튼을 사이드 메뉴에 추가합니다. */}
+          {user && (
+            <button className="sidemenu-link" onClick={handleNotificationClick}>
+              <Bell size={20} />
+              <span>알림</span>
+              {unreadCount > 0 && (
+                <span className="sidemenu-notification-badge">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          )}
+
           <NavLink to="/customer-center" className={getNavLinkClass} onClick={onClose}>
             <MessageSquare size={20} />
             <span>고객센터</span>

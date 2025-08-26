@@ -173,8 +173,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         ), { id: customToastId, duration: Infinity });
         
       } else {
-        toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 2000 });
-        navigate('/mypage/history');
+        // ✅ [수정] 예약 완료 후 페이지 이동 대신, 성공 토스트 메시지만 3초간 띄웁니다.
+        toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 3000 });
       }
 
     } catch (error: any) {
@@ -205,8 +205,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     try {
       await addWaitlistEntryCallable(waitlistPayload);
-      toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId, duration: 2000 });
-      navigate('/mypage/history');
+      // ✅ [수정] 대기 신청 완료 후 페이지 이동 대신, 성공 토스트 메시지만 3초간 띄웁니다.
+      toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId, duration: 3000 });
     } catch (error: any) {
       toast.error(error.message || '대기 신청 중 오류가 발생했습니다.', { id: toastId, duration: 2000 });
     } finally {
@@ -265,12 +265,10 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
   const renderStockBadge = () => {
     const { isMultiOption, displayRound } = cardData;
 
-    // ✅ [수정] 그룹 상품(여러 옵션)인 경우, '한정수량 공구중!'으로 통일하여 표시
     if (isMultiOption) {
         const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
         if (!isDisplayableState) return null;
 
-        // 옵션 중 하나라도 한정 수량이면 뱃지 표시
         const hasAnyLimitedStock = displayRound.variantGroups.some(vg => {
             const stockInfo = getStockInfo(vg as OriginalVariantGroup & { reservedCount?: number });
             return stockInfo.isLimited;
@@ -283,10 +281,9 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 </span>
             );
         }
-        return null; // 모든 옵션이 무제한이면 뱃지 미표시
+        return null;
     }
 
-    // --- 기존 단일 상품 재고 표시 로직 ---
     if (actionState !== 'PURCHASABLE') return null;
     
     const stockInfo = getStockInfo(displayRound.variantGroups[0] as OriginalVariantGroup & { reservedCount?: number });
@@ -309,14 +306,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         return <button className="simple-card-action-btn disabled" disabled><Calendar size={16} /> {dayjs(launchDate).format('M/D')} 오픈</button>;
     }
     
-    // ✅ [수정] 그룹 상품(여러 옵션)이거나, actionState가 상세보기를 요구하는 경우 항상 '상세보기' 버튼 표시
     if (cardData.isMultiOption || actionState === 'REQUIRE_OPTION') {
         return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
     }
 
-    // --- 이하 단일 상품에 대한 액션 로직 ---
     if (actionState === 'WAITLISTABLE') {
-        const maxQty = cardData.singleOptionItem?.limitQuantity || 99; // 대기는 넉넉하게
+        const maxQty = cardData.singleOptionItem?.limitQuantity || 99;
         return (
             <div className="single-option-controls">
                 <div className="quantity-controls compact">
@@ -361,7 +356,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         );
     }
     
-    // INELIGIBLE, ENDED, ENCORE_REQUESTABLE 등은 클릭해서 상세 페이지에서 확인
     return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
   };
   
