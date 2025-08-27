@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, startTransiti
 import { useAuth } from '@/context/AuthContext';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
+import { Timestamp } from 'firebase/firestore'; // ✅ [추가] Timestamp를 올바르게 복원하기 위해 import
 import type { Product, SalesRound } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
@@ -29,21 +30,36 @@ interface ProductWithUIState extends Product {
   actionState: ProductActionState;
 }
 
-// ✅ [개선] sessionStorage를 사용한 캐시 키
 const CACHE_KEY = 'simpleOrderPageCache';
 
-// ✅ [개선] sessionStorage에서 캐시를 읽어오는 함수
+// ✅ [개선] Firestore Timestamp 객체를 되살리는 reviver 함수 추가
+// JSON으로 변환된 Timestamp 객체({seconds: ..., nanoseconds: ...})를
+// 다시 Timestamp 인스턴스로 복원해주는 역할을 합니다.
+const jsonReviver = (key: string, value: any) => {
+    if (
+        typeof value === 'object' &&
+        value !== null &&
+        'seconds' in value &&
+        'nanoseconds' in value &&
+        Object.keys(value).length === 2
+    ) {
+        return new Timestamp(value.seconds, value.nanoseconds);
+    }
+    return value;
+};
+
+
 const readCache = () => {
     try {
         const cachedData = sessionStorage.getItem(CACHE_KEY);
         if (cachedData) {
-            // 캐시를 읽은 후 즉시 삭제하여, 페이지를 새로고침할 때는 캐시가 적용되지 않도록 함
             sessionStorage.removeItem(CACHE_KEY);
-            return JSON.parse(cachedData);
+            // ✅ [개선] reviver를 사용하여 캐시를 파싱, 날짜 데이터를 복원합니다.
+            return JSON.parse(cachedData, jsonReviver);
         }
     } catch (error) {
         console.error("캐시를 읽는 데 실패했습니다:", error);
-        sessionStorage.removeItem(CACHE_KEY); // 파싱 오류 시에도 캐시 제거
+        sessionStorage.removeItem(CACHE_KEY);
     }
     return null;
 };
@@ -51,7 +67,6 @@ const readCache = () => {
 const SimpleOrderPage: React.FC = () => {
   const { userDocument } = useAuth();
 
-  // ✅ [개선] 컴포넌트가 처음 마운트될 때만 캐시를 읽음
   const initialCache = useMemo(() => readCache(), []);
 
   const [products, setProducts] = useState<Product[]>(initialCache?.products || []);
@@ -129,7 +144,6 @@ const SimpleOrderPage: React.FC = () => {
     }
   }, [isLoadMoreVisible, loading, loadingMore, fetchData]);
     
-  // ✅ [개선] 페이지를 벗어날 때 sessionStorage에 상태 저장
   useEffect(() => {
     return () => {
       if (products.length > 0) {

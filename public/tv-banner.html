@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>소도몰 디지털 배너</title>
+    <style>
+        /* 기본 스타일 초기화 */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        /* 슬라이드쇼 컨테이너 */
+        #slideshow-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* 개별 슬라이드 */
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+        }
+
+        .slide.active {
+            opacity: 1;
+        }
+
+        /* Ken Burns 효과를 위한 이미지 스타일 */
+        .slide .background-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scale(1.1); /* 시작 시 약간 확대 */
+            transition: transform 15s ease-out; /* 15초 동안 줌 아웃 */
+        }
+
+        .slide.active .background-image {
+            transform: scale(1.0); /* 활성화되면 원래 크기로 천천히 줌 아웃 */
+        }
+        
+        /* 정보 오버레이 */
+        .overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 40px 50px;
+            box-sizing: border-box;
+            background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .product-info {
+            max-width: 65%;
+        }
+
+        .product-status {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .product-status.primary { /* 공동구매 */
+            background-color: rgba(255, 82, 82, 0.8);
+            box-shadow: 0 0 15px rgba(255, 82, 82, 0.5);
+        }
+
+        .product-status.secondary { /* 추가예약 */
+            background-color: rgba(255, 167, 38, 0.8);
+             box-shadow: 0 0 15px rgba(255, 167, 38, 0.5);
+        }
+
+        .product-name {
+            font-size: 52px;
+            font-weight: 800;
+            line-height: 1.2;
+            margin: 0 0 10px 0;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+        }
+
+        .product-price {
+            font-size: 36px;
+            font-weight: 500;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+        }
+        
+        /* QR 코드 */
+        .qr-code {
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        .qr-code canvas,
+        .qr-code img {
+            display: block;
+            width: 200px;
+            height: 200px;
+        }
+        .qr-code p {
+            font-size: 16px;
+            font-weight: bold;
+            color: #000;
+            text-align: center;
+            margin: 10px 0 0 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="slideshow-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
+    <script>
+        // ===============================================================
+        // ✅ 여기에 홍보할 상품 목록을 수정하세요!
+        // ===============================================================
+        const productsToShow = [
+            {
+                id: 'product_001',
+                status: 'primary', // 'primary' (공동구매) 또는 'secondary' (추가예약)
+                name: '프리미엄 샤인머스캣 2kg (3~4수)',
+                price: 25900,
+                imageUrl: 'https://images.unsplash.com/photo-1620706857370-e1b9724a4074?q=80&w=1920&auto=format&fit=crop',
+            },
+            {
+                id: 'product_002',
+                status: 'primary',
+                name: '새벽 수확 유기농 딸기 1kg',
+                price: 18000,
+                imageUrl: 'https://images.unsplash.com/photo-1587393855524-h29f1973b3a6?q=80&w=1920&auto=format&fit=crop',
+            },
+            {
+                id: 'product_003',
+                status: 'secondary',
+                name: '제주 자연산 통통 갈치 (특대)',
+                price: 32000,
+                imageUrl: 'https://images.unsplash.com/photo-1596821303121-9a2879658a8a?q=80&w=1920&auto=format&fit=crop',
+            },
+            {
+                id: 'product_004',
+                status: 'secondary',
+                name: '산지직송 무항생제 한우 등심 500g',
+                price: 45000,
+                imageUrl: 'https://images.unsplash.com/photo-1603048200590-45272a293910?q=80&w=1920&auto=format&fit=crop',
+            },
+        ];
+        // ===============================================================
+
+        const container = document.getElementById('slideshow-container');
+        let currentIndex = 0;
+        const slideInterval = 12000; // 12초마다 슬라이드 변경
+
+        function createSlides() {
+            productsToShow.forEach((product, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'slide';
+                slide.id = `slide-${index}`;
+
+                const statusMap = {
+                    primary: { text: '🔥 공동구매 진행중', className: 'primary' },
+                    secondary: { text: '⏰ 추가예약 OPEN', className: 'secondary' }
+                };
+                const currentStatus = statusMap[product.status] || { text: '', className: '' };
+
+                const productUrl = `https://www.sodo-songdo.store/product/${product.id}`;
+
+                slide.innerHTML = `
+                    <img src="${product.imageUrl}" class="background-image" alt="${product.name}" />
+                    <div class="overlay">
+                        <div class="product-info">
+                            <span class="product-status ${currentStatus.className}">${currentStatus.text}</span>
+                            <h1 class="product-name">${product.name}</h1>
+                            <p class="product-price">${product.price.toLocaleString()}원</p>
+                        </div>
+                        <div class="qr-code">
+                            <canvas id="qr-${index}"></canvas>
+                            <p>스캔하여 바로 예약!</p>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(slide);
+
+                // QR 코드 생성
+                new QRious({
+                    element: document.getElementById(`qr-${index}`),
+                    value: productUrl,
+                    size: 200,
+                    level: 'H',
+                });
+            });
+        }
+
+        function showNextSlide() {
+            const slides = document.querySelectorAll('.slide');
+            if (slides.length === 0) return;
+
+            slides[currentIndex].classList.remove('active');
+            currentIndex = (currentIndex + 1) % slides.length;
+            slides[currentIndex].classList.add('active');
+        }
+
+        // 초기화
+        createSlides();
+        if (productsToShow.length > 0) {
+            document.getElementById('slide-0')?.classList.add('active');
+            if (productsToShow.length > 1) {
+                setInterval(showNextSlide, slideInterval);
+            }
+        }
+    </script>
+
+</body>
+</html>
