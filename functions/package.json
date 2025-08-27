@@ -21,6 +21,7 @@
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
+    "dayjs": "^1.11.14",
     "express": "^4.21.2",
     "firebase-admin": "^13.4.0",
     "firebase-functions": "^6.4.0"

@@ -7,6 +7,9 @@ import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, admin, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp, DocumentData, DocumentSnapshot, FieldValue } from "firebase-admin/firestore";
 
+import dayjs from "dayjs"; // ✅ 이렇게 수정해주세요.
+import isBetween from "dayjs/plugin/isBetween";
+
 import type {
   Product,
   Order,
@@ -526,3 +529,104 @@ export const validateCart = onCall({
     throw new HttpsError("internal", "장바구니 검증 중 서버 오류가 발생했습니다.");
   }
 });
+
+// --- 헬퍼 함수들 (TV 배너 로직용) ---
+const safeToDate = (dateInput: any): Date | null => {
+    if (!dateInput) return null;
+    if (dateInput instanceof Timestamp) return dateInput.toDate();
+    if (dateInput instanceof Date) return dateInput;
+    const parsed = dayjs(dateInput);
+    return parsed.isValid() ? parsed.toDate() : null;
+};
+
+const getDisplayRound = (product: any) => {
+    if (!product || !product.salesHistory) return null;
+    const now = dayjs();
+    const sortedRounds = [...product.salesHistory]
+        .filter((r: any) => r.status !== 'draft')
+        .sort((a: any, b: any) => {
+            const dateA = safeToDate(a.publishAt)?.getTime() || 0;
+            const dateB = safeToDate(b.publishAt)?.getTime() || 0;
+            return dateB - dateA;
+        });
+    
+    return sortedRounds.find((r: any) => dayjs(safeToDate(r.publishAt)).isBefore(now)) || sortedRounds[0] || null;
+};
+
+const getDeadlines = (round: any) => {
+    const primaryEnd = safeToDate(round.deadlineDate);
+    const secondaryEnd = safeToDate(round.pickupDate);
+    return { primaryEnd, secondaryEnd };
+};
+
+/**
+ * =================================================================
+ * ✅ 8) TV 디지털 배너용 상품 목록 조회: getBannerProducts (신규 추가)
+ * =================================================================
+ * TV 화면에 표시할 '공동구매' 및 '추가예약' 상태의 상품 목록을 자동으로 필터링하여 반환합니다.
+ */
+export const getBannerProducts = onCall(
+  {
+    region: "asia-northeast3",
+    cors: allowedOrigins,
+    memory: "1GiB",
+  },
+  async (request) => {
+    try {
+        dayjs.extend(isBetween);
+        const productsSnapshot = await db.collection("products").where("isVisible", "==", true).get();
+
+        const now = dayjs();
+        const bannerProducts: any[] = [];
+
+        productsSnapshot.forEach(doc => {
+            const product = doc.data() as Product;
+            if (!product) return;
+
+            const displayRound = getDisplayRound(product);
+            if (!displayRound || displayRound.manualStatus === 'sold_out' || displayRound.manualStatus === 'ended') {
+                return;
+            }
+
+            const { primaryEnd, secondaryEnd } = getDeadlines(displayRound);
+            let phase = 'past';
+            
+            if (displayRound.isManuallyOnsite) {
+                 phase = 'past';
+            } else if (primaryEnd && now.isBefore(primaryEnd)) {
+                phase = 'primary';
+            } else if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
+                phase = 'secondary';
+            }
+
+            if (phase === 'primary' || phase === 'secondary') {
+                const representativePrice = displayRound.variantGroups?.[0]?.items?.[0]?.price || 0;
+                
+                const isWaitlistOnly = (displayRound.variantGroups || []).every((vg: VariantGroup) => {
+                    const stock = vg.totalPhysicalStock ?? -1;
+                    if (stock === -1) return false;
+                    return stock - (vg.reservedCount || 0) <= 0;
+                });
+                
+                const status = isWaitlistOnly ? 'primary' : phase;
+                
+                bannerProducts.push({
+                    id: doc.id,
+                    status: status,
+                    name: product.groupName,
+                    price: representativePrice,
+                    imageUrl: product.imageUrls?.[0] || '',
+                });
+            }
+        });
+
+        const sortedProducts = bannerProducts.sort((a, b) => b.price - a.price);
+        return { products: sortedProducts };
+
+    } catch (error) {
+        logger.error("getBannerProducts error:", error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", "배너 상품 목록을 불러오는 중 오류가 발생했습니다.");
+    }
+  }
+);
