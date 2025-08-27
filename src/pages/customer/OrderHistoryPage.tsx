@@ -398,6 +398,8 @@ const AggregatedItemCard: React.FC<{
   const { cancellable, isEvent } = useMemo(() => getCancellationDetails(item), [item]);
   const isQuantityEditable = (item.status === 'RESERVED' || item.status === 'PREPAID') && item.originalOrders.length === 1;
 
+  const isCanceled = useMemo(() => item.status === 'CANCELED' || item.status === 'LATE_CANCELED', [item.status]);
+
   const topText = useMemo(
     () => isEvent ? item.productName : item.variantGroupName,
     [isEvent, item.productName, item.variantGroupName]
@@ -409,10 +411,11 @@ const AggregatedItemCard: React.FC<{
   );
     
   const handleClick = useCallback(() => {
+    if (isCanceled) return; // 취소된 항목은 선택 불가
     if (cancellable || (item.status === 'RESERVED' || item.status === 'PREPAID')) {
       onSelect(item.id);
     }
-  }, [cancellable, item.status, item.id, onSelect]);
+  }, [cancellable, item.status, item.id, onSelect, isCanceled]);
 
   const handlers = useLongPress(() => {}, handleClick, { initialDelay: 500 });
 
@@ -424,11 +427,11 @@ const AggregatedItemCard: React.FC<{
 
   return (
     <motion.div
-      className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''}`}
+      className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''} ${isCanceled ? 'canceled-order' : ''}`}
       layoutId={item.stableId}
       key={item.id}
       {...handlers}
-      whileTap={cancellable ? { scale: 0.98 } : (isEvent ? {} : { scale: 0.97 })}
+      whileTap={cancellable && !isCanceled ? { scale: 0.98 } : {}}
       transition={{ duration: 0.2, ease: "easeInOut" }}
     >
       <div className="card-v3-body">

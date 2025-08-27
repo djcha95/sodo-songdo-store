@@ -173,7 +173,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         ), { id: customToastId, duration: Infinity });
         
       } else {
-        // ✅ [수정] 예약 완료 후 페이지 이동 대신, 성공 토스트 메시지만 3초간 띄웁니다.
         toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 3000 });
       }
 
@@ -205,7 +204,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     try {
       await addWaitlistEntryCallable(waitlistPayload);
-      // ✅ [수정] 대기 신청 완료 후 페이지 이동 대신, 성공 토스트 메시지만 3초간 띄웁니다.
       toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId, duration: 3000 });
     } catch (error: any) {
       toast.error(error.message || '대기 신청 중 오류가 발생했습니다.', { id: toastId, duration: 2000 });
@@ -225,7 +223,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     if (isSecondarySale) {
         toast((t) => (
-            <div className="confirmation-toast-content">
+            <div className="confirmation-toast-content secondary-sale-toast">
               <Info size={44} className="toast-icon" /><h4>2차 예약 확정</h4>
               <p>{`${product.groupName} (${cardData.singleOptionItem?.name}) ${quantity}개를 예약하시겠습니까?`}</p>
               <div className="toast-warning-box"><AlertTriangle size={16} /> 2차 예약 기간에는 확정 후 취소 시 페널티가 부과될 수 있습니다.</div>
@@ -234,9 +232,28 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleImmediateOrder(); }}>확인</button>
               </div>
             </div>
-          ), { id: `order-confirm-secondary-${product.id}`, duration: Infinity });
+          ), { 
+            id: `order-confirm-secondary-${product.id}`, 
+            duration: Infinity,
+            // ✅ [추가] 토스트 컨테이너의 기본 스타일을 없애기 위한 클래스
+            className: 'transparent-toast',
+           });
     } else {
-        handleImmediateOrder();
+        toast((t) => (
+            <div className="confirmation-toast-content primary-sale-toast">
+              <Info size={44} className="toast-icon" /><h4>예약 확인</h4>
+              <p>{`${product.groupName} (${cardData.singleOptionItem?.name}) ${quantity}개를 예약하시겠습니까?`}</p>
+              <div className="toast-buttons">
+                <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
+                <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleImmediateOrder(); }}>예약하기</button>
+              </div>
+            </div>
+        ), { 
+            id: `order-confirm-primary-${product.id}`, 
+            duration: Infinity,
+            // ✅ [추가] 토스트 컨테이너의 기본 스타일을 없애기 위한 클래스
+            className: 'transparent-toast',
+        });
     }
   };
   
@@ -257,7 +274,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
           <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleWaitlistRequest(); }}>신청</button>
         </div>
       </div>
-    ), { id: `waitlist-confirm-${product.id}`, duration: Infinity });
+    ), { 
+        id: `waitlist-confirm-${product.id}`, 
+        duration: Infinity,
+        // ✅ [추가] 토스트 컨테이너의 기본 스타일을 없애기 위한 클래스
+        className: 'transparent-toast',
+    });
   };
 
   if (!cardData) return null;

@@ -467,3 +467,24 @@
 .fab-cancel-btn:active {
   transform: scale(0.98);
 }
+
+/* src/pages/customer/OrderHistoryPage.css 에 추가 */
+
+.order-card-v3.canceled-order {
+  background-color: #f8f9fa; /* 옅은 회색 배경 */
+  opacity: 0.7;
+  cursor: default;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.order-card-v3.canceled-order .item-image {
+  filter: grayscale(100%); /* 이미지 흑백 처리 */
+}
+
+/* 취소된 항목은 호버 효과나 선택 효과를 제거 */
+.order-card-v3.canceled-order:hover,
+.order-card-v3.canceled-order.selected {
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-color: #e9ecef;
+}

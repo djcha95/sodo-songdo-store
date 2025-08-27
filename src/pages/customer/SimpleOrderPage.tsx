@@ -1,10 +1,10 @@
 // src/pages/customer/SimpleOrderPage.tsx
 
-import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition, useLayoutEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import type { Product, SalesRound, VariantGroup } from '@/types';
+import type { Product, SalesRound } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import SimpleProductCard from '@/components/customer/SimpleProductCard';
@@ -29,18 +29,41 @@ interface ProductWithUIState extends Product {
   actionState: ProductActionState;
 }
 
+// ✅ [개선] sessionStorage를 사용한 캐시 키
+const CACHE_KEY = 'simpleOrderPageCache';
+
+// ✅ [개선] sessionStorage에서 캐시를 읽어오는 함수
+const readCache = () => {
+    try {
+        const cachedData = sessionStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+            // 캐시를 읽은 후 즉시 삭제하여, 페이지를 새로고침할 때는 캐시가 적용되지 않도록 함
+            sessionStorage.removeItem(CACHE_KEY);
+            return JSON.parse(cachedData);
+        }
+    } catch (error) {
+        console.error("캐시를 읽는 데 실패했습니다:", error);
+        sessionStorage.removeItem(CACHE_KEY); // 파싱 오류 시에도 캐시 제거
+    }
+    return null;
+};
+
 const SimpleOrderPage: React.FC = () => {
   const { userDocument } = useAuth();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // ✅ [개선] 컴포넌트가 처음 마운트될 때만 캐시를 읽음
+  const initialCache = useMemo(() => readCache(), []);
+
+  const [products, setProducts] = useState<Product[]>(initialCache?.products || []);
+  const [loading, setLoading] = useState(!initialCache); 
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'primary' | 'secondary' | 'onsite'>('primary');
+  const [activeTab, setActiveTab] = useState<'primary' | 'secondary' | 'onsite'>(initialCache?.activeTab || 'primary');
   const [countdown, setCountdown] = useState<string | null>(null);
 
   const PAGE_SIZE = 10;
-  const lastVisibleRef = useRef<number | null>(null);
-  const hasMoreRef = useRef<boolean>(true);
+  const lastVisibleRef = useRef<number | null>(initialCache?.lastVisible || null);
+  const hasMoreRef = useRef<boolean>(initialCache?.hasMore ?? true);
   const isFetchingRef = useRef<boolean>(false);
 
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
@@ -93,14 +116,44 @@ const SimpleOrderPage: React.FC = () => {
       isFetchingRef.current = false;
     }
   }, [getProductsWithStockCallable]);
-
-  useEffect(() => { fetchData(true); }, [fetchData]);
+  
+  useEffect(() => {
+    if (!initialCache) {
+      fetchData(true);
+    }
+  }, [fetchData, initialCache]);
 
   useEffect(() => {
     if (isLoadMoreVisible && !loading && !loadingMore && hasMoreRef.current) {
       fetchData(false);
     }
   }, [isLoadMoreVisible, loading, loadingMore, fetchData]);
+    
+  // ✅ [개선] 페이지를 벗어날 때 sessionStorage에 상태 저장
+  useEffect(() => {
+    return () => {
+      if (products.length > 0) {
+        const cacheData = {
+          products: products,
+          lastVisible: lastVisibleRef.current,
+          hasMore: hasMoreRef.current,
+          scrollPos: window.scrollY,
+          activeTab: activeTab,
+        };
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+        } catch (error) {
+          console.error("캐시를 저장하는 데 실패했습니다:", error);
+        }
+      }
+    };
+  }, [products, activeTab]);
+
+  useLayoutEffect(() => {
+    if (initialCache) {
+      window.scrollTo(0, initialCache.scrollPos);
+    }
+  }, [initialCache]);
 
   const { primarySaleProducts, secondarySaleProducts, onsiteSaleProducts, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
@@ -135,8 +188,6 @@ const SimpleOrderPage: React.FC = () => {
 
       if (finalPhase === 'past') return;
       
-      // ✅ [수정] productUtils에서 수정된 로직을 그대로 사용하므로, 여기서 actionState를 재정의할 필요가 없음.
-      // 이로써 코드가 더 간결해지고 정렬 문제가 근본적으로 해결됨.
       const actionState = determineActionState(round as SalesRound, userDocument);
 
       const productWithState: ProductWithUIState = { 
@@ -175,13 +226,11 @@ const SimpleOrderPage: React.FC = () => {
 
     return {
       primarySaleProducts: tempPrimary.sort((a, b) => {
-        // '대기 가능' 상태인 상품을 목록 하단으로 정렬
         const isAWaitlist = a.actionState === 'WAITLISTABLE';
         const isBWaitlist = b.actionState === 'WAITLISTABLE';
         if (isAWaitlist && !isBWaitlist) return 1;
         if (!isAWaitlist && isBWaitlist) return -1;
         
-        // 나머지는 기존 정렬 로직 유지 (가격 순)
         const priceA = a.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
         const priceB = b.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
         return priceB - priceA;
@@ -198,7 +247,7 @@ const SimpleOrderPage: React.FC = () => {
       }),
       primarySaleEndDate: firstPrimarySaleEndDate,
     };
-  }, [products, userDocument]); 
+  }, [products, userDocument]);
 
   useEffect(() => {
     if (!primarySaleEndDate) {
