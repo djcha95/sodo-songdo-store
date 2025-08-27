@@ -8,8 +8,8 @@
     { "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
 
     { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
-    { "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|woff2?)$", "dest": "/$1.$2" },
 
+{ "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|html|woff2?)$", "dest": "/$1.$2" },
     {
       "src": "^/product/([A-Za-z0-9_-]+)$",
       "has": [
