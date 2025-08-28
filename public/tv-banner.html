@@ -37,16 +37,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 
     <script>
-        // ✅ [수정] 이 부분을 전부 교체합니다.
-
         // ===============================================================
         // ⚙️ 설정: 자신의 Firebase 프로젝트 정보를 입력하세요.
         // ===============================================================
-        const FIREBASE_PROJECT_ID = "sodomall"; // 예: "my-cool-project"
+        // ✅ [수정] 프로젝트 ID를 'sodomall'에서 'sso-do'로 변경했습니다.
+        const FIREBASE_PROJECT_ID = "sso-do"; 
         const FIREBASE_REGION = "asia-northeast3";
         // ===============================================================
 
-        const API_URL = `https://${FIREBASE_REGION}-${FIREBASE_PROJECT_ID}.cloudfunctions.net/getBannerProducts`;
+        const API_URL = `https://${FIREBASE_REGION}-${FIREBASE_PROJECT_ID}.cloudfunctions.net/getBannerProductsHttp`;
 
         const container = document.getElementById('slideshow-container');
         const loadingMessage = document.getElementById('loading-message');
@@ -58,18 +57,20 @@
         // API를 호출하여 상품 데이터를 가져오는 함수
         async function fetchBannerProducts() {
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: {} }) // ✅ 이렇게 수정해주세요.
-            });
+                // API_URL이 이제 올바른 주소를 가리킵니다.
+                // https://asia-northeast3-sso-do.cloudfunctions.net/getBannerProductsHttp
+                const response = await fetch(API_URL);
 
                 if (!response.ok) {
                     throw new Error(`서버 응답 오류: ${response.status}`);
                 }
                 const result = await response.json();
-                // callable function은 'result' 키 안에 실제 데이터를 담아 보냅니다.
-                productsToShow = result.result.products;
+                
+                // HTTP 함수는 callable과 달리 'result' 키로 한번 더 감싸져 있지 않을 수 있습니다.
+                // 서버 응답 구조에 맞춰 데이터를 바로 사용하도록 수정합니다.
+                // 이전 코드: productsToShow = result.result.products;
+                // 수정 코드:
+                productsToShow = result.products || (result.result ? result.result.products : []);
                 
                 if (productsToShow && productsToShow.length > 0) {
                     loadingMessage.style.display = 'none';
@@ -93,6 +94,8 @@
             if (productsToShow.length > 0) {
                 document.getElementById('slide-0')?.classList.add('active');
                 if (productsToShow.length > 1) {
+                    // 이전에 실행중인 타이머가 있다면 중지
+                    if(slideshowTimer) clearInterval(slideshowTimer); 
                     slideshowTimer = setInterval(showNextSlide, slideInterval);
                 }
             }

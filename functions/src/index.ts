@@ -26,12 +26,12 @@ export { testAlimtalk, testAlimtalk as testSendAlimtalk } from "./callable/testA
  */
 export * from "./http/auth.js";
 export * from "./http/product.js";
-// ✅ [수정] 아래 라인을 추가하여 테스트 함수를 포함시킵니다.
 export * from "./http/testNotifications.js";
 export * from "./http/migration.js";
 export * from "./http/manualTrigger.js";
 export * from "./http/manualTriggerRecent.js";
-
+// ✅ [추가] 새로 만든 배너 함수 파일을 export 목록에 추가합니다.
+export * from "./http/banner.js";
 
 
 /**
