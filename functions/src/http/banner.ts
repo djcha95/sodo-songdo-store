@@ -130,7 +130,7 @@ export const getBannerProductsHttp = onRequest(
                 return remainingStock <= 0;
               }
               logger.debug(` -> [${vg.groupName}] 옵션: 무제한 재고`);
-              return false; // 무제한 재고는 품절이 아님
+              return false;
             }
           );
           
@@ -143,15 +143,19 @@ export const getBannerProductsHttp = onRequest(
           }
 
           logger.info(`[${product.groupName}] ✅ SUCCESS: 배너 상품 목록에 추가됨!`);
-          // ✅ [수정] 응답 객체에 pickupDate와 deadlineDate를 추가합니다.
+
+          // ✅ [수정] Timestamp를 웹 표준 ISO 문자열로 변환하여 전달
+          const pickupDate = safeToDate(displayRound.pickupDate);
+          const deadlineDate = safeToDate(displayRound.deadlineDate);
+
           bannerProducts.push({
             id: doc.id,
             status: phase,
             name: product.groupName,
             price: displayRound.variantGroups?.[0]?.items?.[0]?.price || 0,
             imageUrl: product.imageUrls?.[0] || "",
-            pickupDate: displayRound.pickupDate,
-            deadlineDate: displayRound.deadlineDate,
+            pickupDate: pickupDate ? pickupDate.toISOString() : null,
+            deadlineDate: deadlineDate ? deadlineDate.toISOString() : null,
           });
         } else {
             logger.debug(`[${product.groupName}] SKIPPING: 판매 기간이 아님 (phase: ${phase})`);

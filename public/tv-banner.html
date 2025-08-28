@@ -22,17 +22,21 @@
         .product-status { display: inline-block; padding: 10px 20px; font-size: 24px; font-weight: bold; border-radius: 15px; margin-bottom: 15px; color: #fff; }
         .product-status.primary { background-color: rgba(255, 82, 82, 0.8); box-shadow: 0 0 15px rgba(255, 82, 82, 0.5); }
         .product-status.secondary { background-color: rgba(255, 167, 38, 0.8); box-shadow: 0 0 15px rgba(255, 167, 38, 0.5); }
-        .product-name { font-size: 52px; font-weight: 800; line-height: 1.2; margin: 0 0 10px 0; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); }
-        .product-price { font-size: 36px; font-weight: 500; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); margin-bottom: 5px; }
+        /* ✅ [수정] 상품명 글자 크기 확대 */
+        .product-name { font-size: 56px; font-weight: 800; line-height: 1.2; margin: 0 0 10px 0; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); }
+        /* ✅ [수정] 가격 글자 크기 확대 */
+        .product-price { font-size: 44px; font-weight: 500; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); margin-bottom: 5px; }
+        /* ✅ [수정] 픽업일 글자 크기 확대 */
         .product-pickup {
-            font-size: 32px;
+            font-size: 38px;
             font-weight: 500;
             color: #ffdd80;
             text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
             margin-top: 10px;
         }
         .qr-code { padding: 15px; background-color: #fff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-        .qr-code canvas, .qr-code img { display: block; width: 200px; height: 200px; }
+        /* ✅ [수정] QR 코드 이미지 크기 확대 */
+        .qr-code canvas, .qr-code img { display: block; width: 350px; height: 350px; }
         .qr-code p { font-size: 16px; font-weight: bold; color: #000; text-align: center; margin: 10px 0 0 0; }
         #loading-message { font-size: 40px; text-align: center; padding-top: 40vh; }
     </style>
@@ -68,16 +72,13 @@
 
         function formatDateWithDay(dateInput) {
             if (!dateInput) return '미정';
-            const date = dayjs(dateInput);
+            // 백엔드에서 ISO 문자열로 보내주므로 dayjs가 바로 파싱 가능
+            const date = dayjs(dateInput); 
             if (!date.isValid()) return '날짜 오류';
             const days = ['일', '월', '화', '수', '목', '금', '토'];
             return `${date.format('M.D')}(${days[date.day()]})`;
         }
 
-        /**
-         * ✅ [추가] 마감일 포맷 함수
-         * 마감일에 따라 동적으로 텍스트를 생성합니다.
-         */
         function formatDeadline(dateInput) {
             if (!dateInput) return '';
             const deadline = dayjs(dateInput);
@@ -140,7 +141,6 @@
                 const currentStatus = statusMap[product.status] || { text: '', className: '' };
                 const productUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
-                // ✅ [수정] 백엔드에서 받은 deadlineDate로 동적 마감 시간 생성
                 const deadlineText = product.status === 'primary' ? formatDeadline(product.deadlineDate) : '';
                 const pickupDateFormatted = formatDateWithDay(product.pickupDate);
 
@@ -164,7 +164,8 @@
                 new QRious({
                     element: document.getElementById(`qr-${index}`),
                     value: productUrl,
-                    size: 200,
+                    // ✅ [수정] QR 코드 생성 크기를 CSS와 동일하게 맞춤
+                    size: 240,
                     level: 'H',
                 });
             });
