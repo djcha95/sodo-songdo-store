@@ -77,17 +77,14 @@ export const getBannerProductsHttp = onRequest(
           claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
         });
       });
-      // ✅ [디버깅] 계산된 예약 현황 맵을 로그로 출력
       logger.debug("계산된 전체 예약 현황:", Object.fromEntries(claimedMap));
 
 
       const now = dayjs();
       const bannerProducts: any[] = [];
 
-      // ✅ [디버깅] forEach 대신 for...of 루프를 사용하여 비동기 로깅이 용이하도록 변경
       for (const doc of productsSnapshot.docs) {
         const product = doc.data() as Product;
-        // ✅ [디버깅] 현재 확인 중인 상품명 로그 출력
         logger.debug(`[${product.groupName}] 상품 확인 시작...`);
 
         if (!product || !product.groupName) {
@@ -129,7 +126,6 @@ export const getBannerProductsHttp = onRequest(
                 const key = `${doc.id}-${displayRound.roundId}-${vg.id}`;
                 const reservedCount = claimedMap.get(key) || 0;
                 const remainingStock = stock - reservedCount;
-                // ✅ [디버깅] 각 옵션의 재고 계산 결과 로그 출력
                 logger.debug(` -> [${vg.groupName}] 옵션: 총재고=${stock}, 예약=${reservedCount}, 남은재고=${remainingStock}`);
                 return remainingStock <= 0;
               }
@@ -147,12 +143,15 @@ export const getBannerProductsHttp = onRequest(
           }
 
           logger.info(`[${product.groupName}] ✅ SUCCESS: 배너 상품 목록에 추가됨!`);
+          // ✅ [수정] 응답 객체에 pickupDate와 deadlineDate를 추가합니다.
           bannerProducts.push({
             id: doc.id,
             status: phase,
             name: product.groupName,
             price: displayRound.variantGroups?.[0]?.items?.[0]?.price || 0,
             imageUrl: product.imageUrls?.[0] || "",
+            pickupDate: displayRound.pickupDate,
+            deadlineDate: displayRound.deadlineDate,
           });
         } else {
             logger.debug(`[${product.groupName}] SKIPPING: 판매 기간이 아님 (phase: ${phase})`);

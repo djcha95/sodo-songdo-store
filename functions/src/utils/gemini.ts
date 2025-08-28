@@ -120,7 +120,8 @@ IMPORTANT INSTRUCTIONS:
 
 6) variantGroups / items:
     - Extract prices as pure numbers. Parse expirationDate and pickupDate.
-    - **Item Name Rule (아주 중요!)**: 'items' 배열의 각 'name' 값은 판매 단위를 나타내는 가장 깨끗하고 단순한 형태여야 합니다. 예를 들어 "구운계란 1판", "하늘보리 1박스"와 같이, 제품명과 "1개", "1판", "1묶음" 같은 판매 단위로만 구성되어야 합니다. **절대로** "(30구)"나 "(500g)"과 같이 괄호로 묶인 부가 설명을 포함해서는 안 됩니다. 이러한 정보는 'cleanedDescription'을 생성하는 데 사용될 수 있지만, 'name' 필드 자체에서는 반드시 제외되어야 합니다.
+    - **Item Name Rule (아주 중요!)**: 'items' 배열의 각 'name' 값은 판매 단위를 나타내는 가장 깨끗하고 단순한 형태여야 합니다. **모든 경우에** 'name' 값은 **'1'로 시작**해야 하며, 그 뒤에 **1~3글자 이내**의 판매 단위만 포함해야 합니다. (예: "1개", "1팩", "1곽")
+      - **절대로** 제품명("하늘보리")이나 괄호로 묶인 부가 설명("(30구)")을 포함해서는 안 됩니다.
 
 7) Pickup Date Rule (매우 중요): Today is ${today}. Resolve all pickup dates to be in the future. If a year is missing (e.g., 8/15), find the next future occurrence. If a date is in the past, add years until it is in the future.
 

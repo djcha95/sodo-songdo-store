@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>소도몰 디지털 배너</title>
     <style>
-        /* CSS 스타일은 이전과 동일하게 유지 */
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
         #slideshow-container { width: 100%; height: 100%; position: relative; }
         .slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 1.5s ease-in-out; }
         .slide.active { opacity: 1; }
-        .slide .background-image { width: 100%; height: 100%; object-fit: cover; transform: scale(1.1); transition: transform 15s ease-out; }
+        .slide .background-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform: scale(1.1);
+            transition: transform 15s ease-out;
+        }
         .slide.active .background-image { transform: scale(1.0); }
         .overlay { position: absolute; bottom: 0; left: 0; width: 100%; padding: 40px 50px; box-sizing: border-box; background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%); display: flex; justify-content: space-between; align-items: flex-end; }
         .product-info { max-width: 65%; }
@@ -18,11 +23,17 @@
         .product-status.primary { background-color: rgba(255, 82, 82, 0.8); box-shadow: 0 0 15px rgba(255, 82, 82, 0.5); }
         .product-status.secondary { background-color: rgba(255, 167, 38, 0.8); box-shadow: 0 0 15px rgba(255, 167, 38, 0.5); }
         .product-name { font-size: 52px; font-weight: 800; line-height: 1.2; margin: 0 0 10px 0; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); }
-        .product-price { font-size: 36px; font-weight: 500; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); }
+        .product-price { font-size: 36px; font-weight: 500; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); margin-bottom: 5px; }
+        .product-pickup {
+            font-size: 32px;
+            font-weight: 500;
+            color: #ffdd80;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+            margin-top: 10px;
+        }
         .qr-code { padding: 15px; background-color: #fff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
         .qr-code canvas, .qr-code img { display: block; width: 200px; height: 200px; }
         .qr-code p { font-size: 16px; font-weight: bold; color: #000; text-align: center; margin: 10px 0 0 0; }
-        /* 로딩 메시지 스타일 */
         #loading-message { font-size: 40px; text-align: center; padding-top: 40vh; }
     </style>
 </head>
@@ -35,44 +46,62 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/isToday.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/isTomorrow.js"></script>
+    <script>
+        dayjs.extend(dayjs_plugin_isToday);
+        dayjs.extend(dayjs_plugin_isTomorrow);
+    </script>
 
     <script>
-        // ===============================================================
-        // ⚙️ 설정: 자신의 Firebase 프로젝트 정보를 입력하세요.
-        // ===============================================================
-        // ✅ [수정] 프로젝트 ID를 'sodomall'에서 'sso-do'로 변경했습니다.
         const FIREBASE_PROJECT_ID = "sso-do"; 
         const FIREBASE_REGION = "asia-northeast3";
-        // ===============================================================
-
         const API_URL = `https://${FIREBASE_REGION}-${FIREBASE_PROJECT_ID}.cloudfunctions.net/getBannerProductsHttp`;
 
         const container = document.getElementById('slideshow-container');
         const loadingMessage = document.getElementById('loading-message');
         let currentIndex = 0;
         let productsToShow = [];
-        const slideInterval = 12000; // 12초
+        const slideInterval = 12000;
         let slideshowTimer = null;
 
-        // API를 호출하여 상품 데이터를 가져오는 함수
+        function formatDateWithDay(dateInput) {
+            if (!dateInput) return '미정';
+            const date = dayjs(dateInput);
+            if (!date.isValid()) return '날짜 오류';
+            const days = ['일', '월', '화', '수', '목', '금', '토'];
+            return `${date.format('M.D')}(${days[date.day()]})`;
+        }
+
+        /**
+         * ✅ [추가] 마감일 포맷 함수
+         * 마감일에 따라 동적으로 텍스트를 생성합니다.
+         */
+        function formatDeadline(dateInput) {
+            if (!dateInput) return '';
+            const deadline = dayjs(dateInput);
+            if (!deadline.isValid()) return '';
+            
+            const time = deadline.format('HH:mm');
+            if (deadline.isToday()) {
+                return `(오늘 ${time} 마감)`;
+            }
+            if (deadline.isTomorrow()) {
+                return `(내일 ${time} 마감)`;
+            }
+            return `(${deadline.format('M/D')} 마감)`;
+        }
+
         async function fetchBannerProducts() {
             try {
-                // API_URL이 이제 올바른 주소를 가리킵니다.
-                // https://asia-northeast3-sso-do.cloudfunctions.net/getBannerProductsHttp
                 const response = await fetch(API_URL);
-
-                if (!response.ok) {
-                    throw new Error(`서버 응답 오류: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`서버 응답 오류: ${response.status}`);
+                
                 const result = await response.json();
+                productsToShow = result.products || [];
                 
-                // HTTP 함수는 callable과 달리 'result' 키로 한번 더 감싸져 있지 않을 수 있습니다.
-                // 서버 응답 구조에 맞춰 데이터를 바로 사용하도록 수정합니다.
-                // 이전 코드: productsToShow = result.result.products;
-                // 수정 코드:
-                productsToShow = result.products || (result.result ? result.result.products : []);
-                
-                if (productsToShow && productsToShow.length > 0) {
+                if (productsToShow.length > 0) {
                     loadingMessage.style.display = 'none';
                     initSlideshow();
                 } else {
@@ -82,19 +111,16 @@
             } catch (error) {
                 console.error("상품 정보를 가져오는 데 실패했습니다:", error);
                 loadingMessage.innerHTML = '<p>정보를 불러오는 데<br>실패했습니다. 잠시 후 새로고침 됩니다.</p>';
-                // 5초 후 페이지 새로고침
                 setTimeout(() => location.reload(), 5000);
             }
         }
 
-        // 슬라이드쇼를 초기화하고 시작하는 함수
         function initSlideshow() {
-            container.innerHTML = ''; // 기존 로딩 메시지 제거
+            container.innerHTML = '';
             createSlides();
             if (productsToShow.length > 0) {
                 document.getElementById('slide-0')?.classList.add('active');
                 if (productsToShow.length > 1) {
-                    // 이전에 실행중인 타이머가 있다면 중지
                     if(slideshowTimer) clearInterval(slideshowTimer); 
                     slideshowTimer = setInterval(showNextSlide, slideInterval);
                 }
@@ -109,18 +135,23 @@
 
                 const statusMap = {
                     primary: { text: '🔥 공동구매 진행중', className: 'primary' },
-                    secondary: { text: '⏰ 추가예약 OPEN', className: 'secondary' }
+                    secondary: { text: '⏰ 추가예약 진행중', className: 'secondary' }
                 };
                 const currentStatus = statusMap[product.status] || { text: '', className: '' };
                 const productUrl = `https://www.sodo-songdo.store/product/${product.id}`;
+
+                // ✅ [수정] 백엔드에서 받은 deadlineDate로 동적 마감 시간 생성
+                const deadlineText = product.status === 'primary' ? formatDeadline(product.deadlineDate) : '';
+                const pickupDateFormatted = formatDateWithDay(product.pickupDate);
 
                 slide.innerHTML = `
                     <img src="${product.imageUrl}" class="background-image" alt="${product.name}" />
                     <div class="overlay">
                         <div class="product-info">
-                            <span class="product-status ${currentStatus.className}">${currentStatus.text}</span>
+                            <span class="product-status ${currentStatus.className}">${currentStatus.text} ${deadlineText}</span>
                             <h1 class="product-name">${product.name}</h1>
                             <p class="product-price">${product.price.toLocaleString()}원</p>
+                            <p class="product-pickup">픽업일: ${pickupDateFormatted}</p>
                         </div>
                         <div class="qr-code">
                             <canvas id="qr-${index}"></canvas>
@@ -147,13 +178,9 @@
             slides[currentIndex].classList.add('active');
         }
 
-        // 페이지 로드 시 상품 데이터 가져오기 시작
         fetchBannerProducts();
-        
-        // 10분마다 데이터 자동 갱신
         setInterval(fetchBannerProducts, 1000 * 60 * 10);
 
     </script>
-
 </body>
 </html>
