@@ -5,7 +5,6 @@ import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp } from "firebase-admin/firestore";
 
-// dayjs 관련 import는 그대로 유지
 import dayjs from "dayjs";
 import isBetween from "dayjs/plugin/isBetween";
 
@@ -13,7 +12,7 @@ import type { Product, SalesRound, VariantGroup, Order, OrderItem } from "../typ
 
 dayjs.extend(isBetween);
 
-// --- 헬퍼 함수들 (기존과 동일) ---
+// --- 헬퍼 함수들은 이전과 동일 ---
 const safeToDate = (dateInput: any): Date | null => {
     try {
         if (!dateInput) return null;
@@ -30,7 +29,6 @@ const getDisplayRound = (product: any): SalesRound | null => {
     try {
         if (!product || !Array.isArray(product.salesHistory) || product.salesHistory.length === 0) return null;
         const now = dayjs();
-        
         const sortedRounds = [...product.salesHistory]
             .filter((r: any) => r && r.status !== 'draft' && r.publishAt)
             .sort((a: any, b: any) => {
@@ -38,11 +36,9 @@ const getDisplayRound = (product: any): SalesRound | null => {
                 const dateB = safeToDate(b.publishAt)?.getTime() || 0;
                 return dateB - dateA;
             });
-        
         if (sortedRounds.length === 0) return null;
-
         return sortedRounds.find((r: any) => dayjs(safeToDate(r.publishAt)).isBefore(now)) || sortedRounds[0];
-    } catch(e) {
+    } catch (e) {
         logger.error("getDisplayRound에서 오류 발생:", e, { productId: product?.id });
         return null;
     }
@@ -58,19 +54,17 @@ export const getBannerProductsHttp = onRequest(
   {
     region: "asia-northeast3",
     cors: allowedOrigins,
-    memory: "1GiB", // ✅ [개선] 주문 데이터 조회를 위해 메모리 상향
+    memory: "1GiB",
   },
   async (req, res) => {
     logger.info("✅ getBannerProductsHttp 함수 실행 시작");
 
     try {
-      // ✅ [개선] 1. 상품과 주문 정보를 병렬로 가져옵니다.
       const [productsSnapshot, ordersSnapshot] = await Promise.all([
         db.collection("products").where("isVisible", "==", true).get(),
         db.collection("orders").where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"]).get()
       ]);
 
-      // ✅ [개선] 2. 예약 수량을 계산하여 Map에 저장합니다. (getProductsWithStock 로직과 동일)
       const claimedMap = new Map<string, number>();
       ordersSnapshot.docs.forEach((od) => {
         const order = od.data() as Order;
@@ -83,24 +77,39 @@ export const getBannerProductsHttp = onRequest(
           claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
         });
       });
+      // ✅ [디버깅] 계산된 예약 현황 맵을 로그로 출력
+      logger.debug("계산된 전체 예약 현황:", Object.fromEntries(claimedMap));
+
 
       const now = dayjs();
       const bannerProducts: any[] = [];
 
-      productsSnapshot.forEach((doc) => {
+      // ✅ [디버깅] forEach 대신 for...of 루프를 사용하여 비동기 로깅이 용이하도록 변경
+      for (const doc of productsSnapshot.docs) {
         const product = doc.data() as Product;
-        if (!product || !product.groupName) return;
+        // ✅ [디버깅] 현재 확인 중인 상품명 로그 출력
+        logger.debug(`[${product.groupName}] 상품 확인 시작...`);
+
+        if (!product || !product.groupName) {
+            logger.debug(`[${product.groupName}] SKIPPING: 상품 데이터나 이름이 유효하지 않음`);
+            continue;
+        };
 
         const displayRound = getDisplayRound(product);
-        if (!displayRound) return;
+        if (!displayRound) {
+            logger.debug(`[${product.groupName}] SKIPPING: 표시할 판매 회차 없음`);
+            continue;
+        };
 
-        if (
-          displayRound.manualStatus === "sold_out" ||
-          displayRound.manualStatus === "ended"
-        ) return;
+        if (displayRound.manualStatus === "sold_out" || displayRound.manualStatus === "ended") {
+            logger.debug(`[${product.groupName}] SKIPPING: 수동으로 판매 종료됨 (상태: ${displayRound.manualStatus})`);
+            continue;
+        };
         
-        // isManuallyOnsite 상태는 배너에 노출하지 않음
-        if (displayRound.isManuallyOnsite) return;
+        if (displayRound.isManuallyOnsite) {
+            logger.debug(`[${product.groupName}] SKIPPING: 현장 판매 상품으로 설정됨`);
+            continue;
+        };
 
         const { primaryEnd, secondaryEnd } = getDeadlines(displayRound);
         let phase: "primary" | "secondary" | "past" = "past";
@@ -110,26 +119,34 @@ export const getBannerProductsHttp = onRequest(
         } else if (secondaryEnd && primaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, "(]")) {
           phase = "secondary";
         }
+        logger.debug(`[${product.groupName}] 현재 판매 단계: ${phase}`);
 
         if (phase === "primary" || phase === "secondary") {
-          // ✅ [개선] 3. 실제 예약량을 반영하여 '품절' 여부를 판단합니다.
-          const isSoldOut = (displayRound.variantGroups || []).every(
+          const variantChecks = (displayRound.variantGroups || []).map(
             (vg: VariantGroup) => {
               const stock = vg.totalPhysicalStock;
-              // 무제한 재고가 아니면 품절 여부 계산
               if (stock !== -1 && stock !== null && stock !== undefined) {
                 const key = `${doc.id}-${displayRound.roundId}-${vg.id}`;
                 const reservedCount = claimedMap.get(key) || 0;
                 const remainingStock = stock - reservedCount;
+                // ✅ [디버깅] 각 옵션의 재고 계산 결과 로그 출력
+                logger.debug(` -> [${vg.groupName}] 옵션: 총재고=${stock}, 예약=${reservedCount}, 남은재고=${remainingStock}`);
                 return remainingStock <= 0;
               }
-              // 무제한 재고는 절대 품절 아님
-              return false;
+              logger.debug(` -> [${vg.groupName}] 옵션: 무제한 재고`);
+              return false; // 무제한 재고는 품절이 아님
             }
           );
           
-          if(isSoldOut) return;
+          const isSoldOut = variantChecks.every(Boolean);
+          logger.debug(`[${product.groupName}] 모든 옵션 품절 여부: ${isSoldOut}`);
+          
+          if(isSoldOut) {
+            logger.debug(`[${product.groupName}] SKIPPING: 모든 옵션 품절로 판단됨`);
+            continue;
+          }
 
+          logger.info(`[${product.groupName}] ✅ SUCCESS: 배너 상품 목록에 추가됨!`);
           bannerProducts.push({
             id: doc.id,
             status: phase,
@@ -137,11 +154,13 @@ export const getBannerProductsHttp = onRequest(
             price: displayRound.variantGroups?.[0]?.items?.[0]?.price || 0,
             imageUrl: product.imageUrls?.[0] || "",
           });
+        } else {
+            logger.debug(`[${product.groupName}] SKIPPING: 판매 기간이 아님 (phase: ${phase})`);
         }
-      });
+      }
 
       const sortedProducts = bannerProducts.sort((a, b) => b.price - a.price);
-      logger.info(`✅ 성공: ${sortedProducts.length}개의 상품을 찾았습니다.`);
+      logger.info(`✅ 최종 결과: ${sortedProducts.length}개의 상품을 찾았습니다.`);
       res.status(200).json({ products: sortedProducts });
 
     } catch (error: any) {

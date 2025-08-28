@@ -43,6 +43,7 @@ import '@/pages/admin/ProductAddAdminPage.css';
 import { formatKRW, parseKRW } from '@/utils/number';
 import { toYmd, toDateTimeLocal, fromYmd } from '@/utils/date';
 import { reportError } from '@/utils/logger';
+import dayjs from 'dayjs'; // 💡 dayjs를 import 합니다.
 
 export type ProductFormMode = 'newProduct' | 'newRound' | 'editRound';
 
@@ -425,14 +426,24 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   }, [mode, variantGroups.length]);
 
   useEffect(() => {
-    if (mode === 'editRound') return;
-    const newDeadline = new Date(publishDate);
-    const dayOfWeek = newDeadline.getDay();
-    if (dayOfWeek === 6) newDeadline.setDate(newDeadline.getDate() + 2);
-    else if (dayOfWeek === 0) newDeadline.setDate(newDeadline.getDate() + 1);
-    else newDeadline.setDate(newDeadline.getDate() + 1);
-    newDeadline.setHours(13, 0, 0, 0);
-    setDeadlineDate(newDeadline);
+    if (mode === 'editRound') return; // 수정 모드에서는 자동 변경 안 함
+
+    // 💡 [수정] 아래 로직을 dayjs를 사용하여 주말 마감 규칙을 적용하는 코드로 교체합니다.
+    const baseDate = dayjs(publishDate);
+    let deadline = baseDate.add(1, 'day'); // 기본적으로 다음 날로 설정
+
+    const dayOfWeek = deadline.day(); // 0: 일요일, 6: 토요일
+    
+    if (dayOfWeek === 6) { // 토요일이면
+      deadline = deadline.add(2, 'day'); // +2일 하여 월요일로
+    } else if (dayOfWeek === 0) { // 일요일이면
+      deadline = deadline.add(1, 'day'); // +1일 하여 월요일로
+    }
+
+    // 마감 시간을 오후 1시로 설정
+    const finalDeadline = deadline.hour(13).minute(0).second(0).millisecond(0).toDate();
+    
+    setDeadlineDate(finalDeadline);
   }, [publishDate, mode]);
 
   useEffect(() => {

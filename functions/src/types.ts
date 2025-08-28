@@ -140,6 +140,7 @@ export interface Product {
   storageType: StorageType;
   salesHistory: SalesRound[];
   isArchived: boolean;
+  isVisible?: boolean; // ✅ [추가] 이 줄을 추가해주세요.
   category?: string;
   encoreCount?: number;
   encoreRequesterIds?: string[];

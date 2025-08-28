@@ -42,6 +42,8 @@ export * from "./http/banner.js";
  */
 export * from "./scheduled/notifications.js";
 export * from "./scheduled/points.js";
+export * from "./scheduled/visibility.js";
+
 
 
 /**

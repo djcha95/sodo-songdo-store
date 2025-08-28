@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>소도몰 관리 스크립트 실행</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; }
+        h1 { color: #333; }
+        p { color: #555; }
+        button {
+            background-color: #d9534f; color: white; padding: 15px 25px;
+            border: none; border-radius: 5px; font-size: 16px; cursor: pointer;
+        }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        pre { background-color: #eee; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+
+    <h1>✅ 기존 상품 isVisible 필드 초기화 스크립트</h1>
+    <p>
+        이 버튼을 누르면 모든 기존 상품 데이터에 `isVisible` 필드를 추가하고,
+        현재 판매 상태에 따라 초기값을 설정합니다. <strong>데이터가 많을 경우 몇 분 정도 소요될 수 있습니다.</strong>
+    </p>
+    <button id="runScriptBtn">지금 바로 스크립트 실행</button>
+    <hr style="margin: 20px 0;">
+    <h3>실행 결과:</h3>
+    <pre id="result">아직 실행되지 않았습니다.</pre>
+
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js"></script>
+
+    <script>
+        // 🚨🚨🚨 [여기에 Firebase 설정 복사] 🚨🚨🚨
+        const firebaseConfig = {
+            apiKey: "AIza...",
+            authDomain: "sso-do.firebaseapp.com",
+            projectId: "sso-do",
+            storageBucket: "sso-do.appspot.com",
+            messagingSenderId: "...",
+            appId: "1:..."
+        };
+
+        // Firebase 앱 초기화
+        firebase.initializeApp(firebaseConfig);
+        const functions = firebase.functions('asia-northeast3');
+        const runScriptBtn = document.getElementById('runScriptBtn');
+        const resultDiv = document.getElementById('result');
+
+        runScriptBtn.addEventListener('click', async () => {
+            if (!confirm('정말로 모든 기존 상품의 isVisible 필드를 초기화하시겠습니까? 이 작업은 한 번만 실행하면 됩니다.')) {
+                return;
+            }
+
+            runScriptBtn.disabled = true;
+            resultDiv.textContent = '스크립트 실행 중... 브라우저를 닫지 마세요.';
+
+            try {
+                // Cloud Function 호출
+                const backfillProductVisibility = functions.httpsCallable('backfillProductVisibility');
+                const response = await backfillProductVisibility();
+                
+                resultDiv.textContent = '스크립트 실행 성공!\n\n';
+                resultDiv.textContent += JSON.stringify(response.data, null, 2);
+
+            } catch (error) {
+                console.error("스크립트 실행 실패:", error);
+                resultDiv.textContent = '오류가 발생했습니다. 브라우저 개발자 콘솔(F12)을 확인해주세요.\n\n';
+                resultDiv.textContent += error.message;
+            } finally {
+                runScriptBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

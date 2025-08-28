@@ -6,7 +6,10 @@ import { getAuth } from "firebase-admin/auth";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { executePickupReminders } from "../scheduled/notifications.js";
-import type { Order, UserDocument, LoyaltyTier, PointLog } from "../types.js";
+// ✅ [수정] Product와 SalesRound 타입을 import 목록에 추가합니다.
+import type { Order, UserDocument, LoyaltyTier, PointLog, Product, SalesRound } from "../types.js";
+import dayjs from "dayjs"; // dayjs import 추가
+
 
 // =================================================================
 // ✅ [기존 함수] 픽업 알림 수동 발송 (유지)
@@ -223,3 +226,85 @@ export const grant100PointsToAllUsers = onCall({
         throw new HttpsError("internal", "포인트 지급 중 오류가 발생했습니다.");
     }
 });
+
+
+// 💡 [헬퍼 함수 추가] visibility.ts에 있던 헬퍼 함수를 그대로 가져옵니다.
+const isRoundActive = (round: SalesRound): boolean => {
+  if (!round.publishAt || !round.pickupDate) {
+    return false;
+  }
+  const now = dayjs();
+  const publishAt = dayjs(round.publishAt.toDate());
+  const finalDeadline = dayjs(round.pickupDate.toDate()).hour(13).minute(0).second(0);
+  return now.isAfter(publishAt) && now.isBefore(finalDeadline);
+};
+
+
+/**
+ * =================================================================
+ * ✅ [신규 추가] 모든 상품의 isVisible 필드를 초기화하는 일회성 함수
+ * =================================================================
+ * 기존에 isVisible 필드가 없던 상품들을 위해 딱 한 번만 실행하는 스크립트입니다.
+ */
+export const backfillProductVisibility = onCall(
+  {
+    region: "asia-northeast3",
+    memory: "1GiB", // 많은 상품을 처리하기 위해 메모리 증량
+    timeoutSeconds: 540, // 9분
+  },
+  async (request) => {
+    // 1. 관리자 권한 확인
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자만 이 기능을 사용할 수 있습니다.");
+    }
+    
+    logger.info("🚀 [일회성 스크립트] 모든 상품 isVisible 필드 초기화 시작...");
+
+    try {
+      const productsSnapshot = await db.collection("products")
+        .where("isArchived", "==", false)
+        .get();
+      
+      if (productsSnapshot.empty) {
+        logger.info("처리할 상품이 없습니다.");
+        return { success: true, message: "처리할 상품이 없습니다." };
+      }
+
+      const batch = db.batch();
+      let updatesCount = 0;
+
+      productsSnapshot.docs.forEach((doc) => {
+        const product = doc.data() as Product;
+
+        // isVisible 필드가 이미 있는지 확인. 이미 있으면 건너뜁니다.
+        if (product.isVisible !== undefined) {
+          return;
+        }
+
+        // isVisible 초기값 계산
+        const shouldBeVisible = product.salesHistory?.some(isRoundActive) || false;
+
+        batch.update(doc.ref, { 
+          isVisible: shouldBeVisible,
+        });
+        updatesCount++;
+        logger.info(`  -> [${product.groupName}] 상품 isVisible: ${shouldBeVisible}로 설정`);
+      });
+
+      if (updatesCount > 0) {
+        await batch.commit();
+        const message = `✅ 총 ${updatesCount}개 상품의 isVisible 필드를 성공적으로 초기화했습니다.`;
+        logger.info(message);
+        return { success: true, message };
+      } else {
+        const message = "모든 상품에 이미 isVisible 필드가 설정되어 있습니다.";
+        logger.info(message);
+        return { success: true, message };
+      }
+    } catch (error) {
+      logger.error("backfillProductVisibility 함수 실행 중 오류 발생", error);
+      throw new HttpsError("internal", "스크립트 실행 중 오류가 발생했습니다.");
+    }
+  }
+);
