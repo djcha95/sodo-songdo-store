@@ -1,6 +1,7 @@
 // src/pages/customer/LoginPage.tsx
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// ✅ [수정] useLocation import 추가
+import { useNavigate, useLocation } from "react-router-dom";
 import { signInWithCustomToken } from "firebase/auth";
 import type { UserCredential } from "firebase/auth";
 import { auth, processUserSignIn } from "@/firebase";
@@ -26,6 +27,8 @@ const LoginPage: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false); // 로그인 버튼 클릭 시 로딩 상태
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  // ✅ [추가] useLocation 훅을 사용해 리디렉션 상태를 가져옵니다.
+  const location = useLocation();
 
   useEffect(() => {
     // 스크립트가 이미 있는지 확인
@@ -75,9 +78,11 @@ const LoginPage: React.FC = () => {
   /* 이미 로그인됐으면 홈으로 */
   useEffect(() => {
     if (!authLoading && user) {
-      navigate("/", { replace: true });
+      // ✅ [수정] 로그인 완료 후, 원래 가려던 페이지로 이동합니다.
+      const from = location.state?.from?.pathname || "/";
+      navigate(from, { replace: true });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.state]);
 
   /* ───── 카카오 로그인 ───── */
   const handleKakaoLogin = async () => {

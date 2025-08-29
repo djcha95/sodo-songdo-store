@@ -1,13 +1,10 @@
 // src/pages/customer/ProductDetailPage.tsx
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense, useRef, useLayoutEffect, startTransition } from 'react';
-// ✅ [수정] useLocation import 제거
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
 import { useAuth } from '@/context/AuthContext';
-// useCart는 이제 사용되지 않으므로 제거하거나, 다른 기능에 필요하면 유지합니다.
-// import { useCart } from '@/context/CartContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { useLaunch } from '@/context/LaunchContext';
 import { detailPageTourSteps } from '@/components/customer/AppTour';
@@ -23,7 +20,6 @@ import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getSto
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 
-// ✅ [수정] Box 아이콘 import
 import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 
@@ -436,6 +432,7 @@ const ProductDetailPage: React.FC = () => {
     const { user, userDocument, isSuspendedUser } = useAuth();
     const { runPageTourIfFirstTime } = useTutorial();
     const { isPreLaunch, launchDate } = useLaunch();
+    const location = useLocation();
 
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
@@ -459,17 +456,15 @@ const ProductDetailPage: React.FC = () => {
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'submitOrder'), [functionsInstance]);
     const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'addWaitlistEntry'), [functionsInstance]);
 
-    // ✅ [수정] 뒤로가기 동작 수정
-    // 이전에는 location.key를 확인하여 히스토리 스택의 첫 페이지일 경우 메인('/')으로 보냈습니다.
-    // 하지만 이로 인해 사용자가 상품 목록 등 이전 페이지에서 상세 페이지로 이동했을 때도
-    // 메인으로 돌아가는 문제가 발생했습니다.
-    // 이제 navigate(-1)을 사용하여 브라우저의 '뒤로가기' 기능과 동일하게 동작하도록 수정합니다.
-    // 이를 통해 사용자는 항상 이전에 보던 페이지로 돌아갈 수 있게 되어 사용성이 향상됩니다.
-    // 만약 사용자가 URL을 직접 입력해 들어온 경우에도 브라우저의 이전 히스토리로 이동하는 것이
-    // 더 자연스러운 동작입니다.
     const handleClose = useCallback(() => {
-        navigate(-1);
-    }, [navigate]);
+        // ✅ [수정] 이전 히스토리가 없거나, 직접 URL을 통해 들어온 경우 홈으로 이동
+        if (location.key === 'default' || window.history.length <= 1) {
+            navigate('/', { replace: true });
+        } else {
+            navigate(-1);
+        }
+    }, [navigate, location.key]);
+
 
     const displayRound = useMemo(() => {
         if (!product) return null;
