@@ -18,6 +18,7 @@ import { useInView } from 'react-intersection-observer';
 import { getDisplayRound, getDeadlines, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 import toast from 'react-hot-toast';
+import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
 import '@/styles/common.css';
 
@@ -130,7 +131,7 @@ const SimpleOrderPage: React.FC = () => {
       hasMoreRef.current = newProducts?.length === PAGE_SIZE && newLastVisible !== null;
     } catch (err: any) {
       setError('상품을 불러오는 중 오류가 발생했습니다.');
-      toast.error(err?.message || '데이터 로딩 중 문제가 발생했습니다.');
+      showToast('error', err?.message || '데이터 로딩 중 문제가 발생했습니다.');
       hasMoreRef.current = false;
     } finally {
       if (isInitial) setLoading(false);

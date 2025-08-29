@@ -259,6 +259,8 @@ const usePaginatedData = <T,>(
     } catch (err: any) {
       console.error('데이터 로딩 오류:', err);
       showToast('error', err.message || '데이터를 불러오는 데 실패했습니다.');
+      // ✅ [수정] hasMoreRef -> setHasMore(false)로 수정
+      setHasMore(false);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -608,9 +610,9 @@ const OrderHistoryPage: React.FC = () => {
     orders.forEach(order => {
       const date = viewMode === 'orders' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
       if (!date) return;
-      const dateStr = dayjs(date).format('YYYY-MM-DD');
       (order.items || []).forEach((item: OrderItem) => {
-        const aggregationKey = `${dateStr}-${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}-${order.status}-${(order as any).eventId ?? ''}`;
+        // 각 주문이 고유한 카드로 표시되도록 aggregation key를 주문 ID 기반으로 설정
+        const aggregationKey = `${order.id}-${item.itemId}`;
         const stableAnimationId = `${item.productId?.trim() ?? ''}-${item.variantGroupName?.trim() ?? ''}-${item.itemName?.trim() ?? ''}-${order.wasPrepaymentRequired}`;
         if (!aggregated[aggregationKey]) {
           aggregated[aggregationKey] = {
@@ -699,7 +701,7 @@ const OrderHistoryPage: React.FC = () => {
                 .catch(error => ({ status: 'rejected' as const, reason: error, item }))
         );
 
-        toast.promise(Promise.all(cancelPromises), {
+        showPromiseToast(Promise.all(cancelPromises), {
             loading: `${ordersToCancel.length}개 항목 취소 중...`,
             success: (results) => {
                 const successfulCancellations = results
@@ -733,9 +735,6 @@ const OrderHistoryPage: React.FC = () => {
                 console.error("Unexpected error during bulk order cancel:", err);
                 return '일부 항목 취소 중 예상치 못한 오류가 발생했습니다.'
             }
-        }, {
-            success: { duration: 2000 },
-            error: { duration: 2000 },
         });
 
     } else { // waitlist
@@ -747,7 +746,7 @@ const OrderHistoryPage: React.FC = () => {
                 .catch(error => ({ status: 'rejected' as const, reason: error, item }))
         );
 
-        toast.promise(Promise.all(cancelPromises), {
+        showPromiseToast(Promise.all(cancelPromises), {
             loading: `${itemsToCancel.length}개 항목 취소 중...`,
             success: (results) => {
                 const successfulCancellations = results
@@ -771,9 +770,6 @@ const OrderHistoryPage: React.FC = () => {
                 return `${successfulCancellations.length}개 대기 신청이 취소되었습니다.`;
             },
             error: () => '대기 취소 중 예상치 못한 오류가 발생했습니다.'
-        }, {
-            success: { duration: 2000 },
-            error: { duration: 2000 },
         });
     }
   }, [user, setOrders, setWaitlist]);

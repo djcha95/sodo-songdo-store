@@ -14,6 +14,7 @@ import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, Orde
 import { getStockInfo, getMaxPurchasableQuantity, safeToDate, getDeadlines } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
+import { showPromiseToast, showToast } from '@/utils/toastUtils';
 import './SimpleProductCard.css';
 
 type Product = OriginalProduct & {
@@ -76,12 +77,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
   const handleImmediateOrder = async () => {
     if (!user || !userDocument) {
-      toast.error('로그인이 필요합니다.', { duration: 2000 });
+      showToast('error', '로그인이 필요합니다.');
       navigate('/login');
       return;
     }
     if (isSuspendedUser) {
-      toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.', { duration: 2000 });
+      showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.');
       return;
     }
     if (isProcessing || !cardData) return;
@@ -96,7 +97,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     const vg = cardData.singleOptionVg;
     if (!vg) {
-      toast.error('상품 정보를 찾을 수 없습니다.', { id: toastId, duration: 2000 });
+      toast.dismiss(toastId);
+      showToast('error', '상품 정보를 찾을 수 없습니다.');
       setIsProcessing(false);
       return;
     }
@@ -173,11 +175,13 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         ), { id: customToastId, duration: Infinity });
         
       } else {
-        toast.success(`${product.groupName} 예약이 완료되었습니다!`, { id: toastId, duration: 3000 });
+        showToast('success', `${product.groupName} 예약이 완료되었습니다!`);
+        toast.dismiss(toastId);
       }
 
     } catch (error: any) {
-      toast.error(error.message || '예약 처리 중 오류가 발생했습니다.', { id: toastId, duration: 2000 });
+      toast.dismiss(toastId);
+      showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
     } finally {
       if (!showPrepaymentModal) {
         setIsProcessing(false);
@@ -187,8 +191,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
   };
 
   const handleWaitlistRequest = async () => {
-    if (!user) { toast.error('로그인이 필요합니다.', { duration: 2000 }); navigate('/login'); return; }
-    if (isSuspendedUser) { toast.error('반복적인 약속 불이행으로 참여가 제한됩니다.', { duration: 2000 }); return; }
+    if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
+    if (isSuspendedUser) { showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
     if (isProcessing || !cardData?.singleOptionItem || !cardData.singleOptionVg) return;
 
     setIsProcessing(true);
@@ -204,9 +208,11 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     try {
       await addWaitlistEntryCallable(waitlistPayload);
-      toast.success(`${product.groupName} 대기 신청이 완료되었습니다.`, { id: toastId, duration: 3000 });
+      toast.dismiss(toastId);
+      showToast('success', `${product.groupName} 대기 신청이 완료되었습니다.`);
     } catch (error: any) {
-      toast.error(error.message || '대기 신청 중 오류가 발생했습니다.', { id: toastId, duration: 2000 });
+      toast.dismiss(toastId);
+      showToast('error', error.message || '대기 신청 중 오류가 발생했습니다.');
     } finally {
       setIsProcessing(false);
       setQuantity(1);
@@ -215,7 +221,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
   const showConfirmation = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isPreLaunch) { toast(`🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️', duration: 2000 }); return; }
+    if (isPreLaunch) { showToast('info', `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 2000); return; }
     if (!cardData?.singleOptionItem) return;
 
     const { primaryEnd } = getDeadlines(cardData.displayRound);
@@ -259,7 +265,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
   
   const showWaitlistConfirmation = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isPreLaunch) { toast(`🛍️ 대기 신청은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, { icon: '🗓️', duration: 2000 }); return; }
+    if (isPreLaunch) { showToast('info', `🛍️ 대기 신청은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 2000); return; }
     
     const finalVariant = cardData?.singleOptionItem;
     if (!finalVariant) return;
