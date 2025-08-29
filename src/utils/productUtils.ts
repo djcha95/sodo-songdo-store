@@ -72,10 +72,30 @@ export const safeToDate = (date: any): Date | null => {
   return null;
 };
 
+// ✅ [수정] 등록일 기준 마감일/시간 계산 로직 재구현
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
-    const primaryEnd = safeToDate(round.deadlineDate) ? dayjs(safeToDate(round.deadlineDate)) : null;
-    const pickupDate = safeToDate(round.pickupDate);
-    const secondaryEnd = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0) : null;
+    const publishAt = safeToDate(round.publishAt);
+    if (!publishAt) return { primaryEnd: null, secondaryEnd: null };
+    
+    const publishDay = dayjs(publishAt);
+    const dayOfWeek = publishDay.day(); // 0: 일요일, 1: 월요일, ..., 6: 토요일
+
+    let primaryEnd: dayjs.Dayjs;
+
+    switch (dayOfWeek) {
+        case 5: // 금요일
+            primaryEnd = publishDay.add(1, 'day').hour(13).minute(0).second(0).millisecond(0);
+            break;
+        case 6: // 토요일
+            primaryEnd = publishDay.add(2, 'day').hour(13).minute(0).second(0).millisecond(0);
+            break;
+        default: // 일~목요일
+            primaryEnd = publishDay.add(1, 'day').hour(13).minute(0).second(0).millisecond(0);
+            break;
+    }
+
+    const secondaryEnd = safeToDate(round.pickupDate) ? dayjs(safeToDate(round.pickupDate)).hour(13).minute(0).second(0) : null;
+    
     return { primaryEnd, secondaryEnd };
 };
 

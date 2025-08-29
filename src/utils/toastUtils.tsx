@@ -9,7 +9,7 @@ type ToastType = 'success' | 'error' | 'info' | 'loading';
 
 // ✅ [수정] 커스텀 토스트의 기본 스타일을 제거하기 위한 공용 옵션
 const customToastOptions = {
-  duration: Infinity, // ✅ FIX: 사용자가 직접 닫아야 하므로 무한 지속되도록 변경
+  duration: Infinity, 
   style: {
     background: 'transparent',
     boxShadow: 'none',

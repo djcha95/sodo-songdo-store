@@ -31,6 +31,7 @@ interface ProductWithUIState extends Product {
 }
 
 const CACHE_KEY = 'simpleOrderPageCache';
+const CACHE_LIFETIME = 5 * 60 * 1000; // ✅ [추가] 5분 (밀리초)
 
 // ✅ [개선] Firestore Timestamp 객체를 되살리는 reviver 함수 추가
 // JSON으로 변환된 Timestamp 객체({seconds: ..., nanoseconds: ...})를
@@ -53,9 +54,15 @@ const readCache = () => {
     try {
         const cachedData = sessionStorage.getItem(CACHE_KEY);
         if (cachedData) {
-            sessionStorage.removeItem(CACHE_KEY);
-            // ✅ [개선] reviver를 사용하여 캐시를 파싱, 날짜 데이터를 복원합니다.
-            return JSON.parse(cachedData, jsonReviver);
+            const parsedData = JSON.parse(cachedData, jsonReviver);
+            const now = Date.now();
+            // ✅ [개선] 캐시 생성 시간과 비교하여 5분 이상 지나지 않았을 경우에만 반환
+            if (parsedData.timestamp && now - parsedData.timestamp < CACHE_LIFETIME) {
+              return parsedData;
+            } else {
+              // ✅ [개선] 만료된 캐시는 제거
+              sessionStorage.removeItem(CACHE_KEY);
+            }
         }
     } catch (error) {
         console.error("캐시를 읽는 데 실패했습니다:", error);
@@ -153,6 +160,7 @@ const SimpleOrderPage: React.FC = () => {
           hasMore: hasMoreRef.current,
           scrollPos: window.scrollY,
           activeTab: activeTab,
+          timestamp: Date.now(), // ✅ [추가] 캐시 생성 시간
         };
         try {
           sessionStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
