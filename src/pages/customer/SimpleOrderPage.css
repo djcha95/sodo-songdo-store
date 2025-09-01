@@ -75,7 +75,7 @@
 }
 
 .tab-content-area {
-    padding-top: 0.5rem;
+    padding-top: 0rem;
 }
 
 .simple-product-list {
@@ -84,19 +84,48 @@
     gap: 0;
 }
 
-.list-countdown-timer {
+/* ✅ [제거] 기존의 전체 너비 카운트다운 타이머 스타일 제거
+.list-countdown-timer { ... }
+*/
+
+/* ✅ [추가] 섹션 제목과 카운트다운을 양쪽으로 나누는 헤더 스타일 */
+.section-header-split {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 0.75rem;
+}
+
+/* ✅ [추가] '공동구매', '추가예약' 등 섹션 제목 스타일 */
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-color-dark);
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 0.5rem;
-    margin: 0.25rem 0.5rem;
-    padding: 0.6rem;
+    margin: 0;
+    padding: 0.5rem 0;
+}
+
+/* ✅ [추가] 헤더 오른쪽에 표시될 인라인 카운트다운 타이머 스타일 */
+.countdown-timer-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
     background-color: var(--danger-color-light);
     color: var(--danger-color);
     border: 1px solid var(--danger-color-border);
-    border-radius: 8px;
-    font-size: 0.9rem;
+    border-radius: 20px; /* 둥근 알약 모양 */
+    font-size: 0.8rem;
     font-weight: 600;
+    white-space: nowrap;
+}
+
+.countdown-timer-inline > span {
+    min-width: 50px; /* 카운트다운 숫자 변경 시 너비 고정 */
+    text-align: center;
 }
 
 .product-list-placeholder {
@@ -132,7 +161,6 @@
     padding: 0.5rem 0.75rem;
 }
 
-/* ✅ [추가] 불타오르는 효과를 위한 키프레임 애니메이션 */
 @keyframes flameEffect {
   0%, 100% {
     text-shadow: 0 0 4px #fff, 0 0 6px #ffc107, 0 0 8px #ff9800;
@@ -142,19 +170,16 @@
   }
 }
 
-/* ✅ [추가] 활성화된 '공동구매' 탭에만 애니메이션 적용 */
 .tab-btn.primary-tab.active .tab-text {
-    color: #E65100; /* 텍스트 색상을 진한 주황색으로 변경 */
-    animation: flameEffect 1.5s ease-in-out infinite; /* 애니메이션 적용 */
+    color: #E65100;
+    animation: flameEffect 1.5s ease-in-out infinite;
 }
 
-/* ✅ [추가] 활성화된 '공동구매' 탭의 아이콘과 카운트 색상도 통일 */
 .tab-btn.primary-tab.active,
 .tab-btn.primary-tab.active .tab-count {
     color: #E65100;
 }
 
-/* ✅ [추가] 활성화된 '공동구매' 탭의 하단 보더 색상도 통일 */
 .tab-btn.primary-tab.active {
     border-bottom-color: #FF9800;
 }
