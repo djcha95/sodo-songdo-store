@@ -90,23 +90,70 @@ const SimpleOrderPage: React.FC = () => {
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getProductsWithStockCallable = useMemo(() => httpsCallable(functions, 'getProductsWithStock'), [functions]);
   
+  // 무한 스크롤을 위한 useInView는 유지합니다.
   const { ref: loadMoreRef, inView: isLoadMoreVisible } = useInView({ threshold: 0.1 });
 
-  const { ref: primaryInViewRef, inView: isPrimaryVisible } = useInView({ threshold: 0.3 });
-  const { ref: secondaryInViewRef, inView: isSecondaryVisible } = useInView({ threshold: 0.3 });
+  // ✅ [수정] 신뢰도가 낮은 useInView 기반의 탭 전환 로직을 제거합니다.
+  /*
+  const { ref: primaryInViewRef, inView: isPrimaryVisible } = useInView({ threshold: 0.1 });
+  const { ref: secondaryInViewRef, inView: isSecondaryVisible } = useInView({ threshold: 0.7 });
+  useEffect(() => { ... }, [isPrimaryVisible, isSecondaryVisible]);
+  */
 
+  // ✅ [추가] 스크롤 이벤트 리스너를 사용하여 더 정확한 탭 전환 로직 구현
   useEffect(() => {
-    if (isSecondaryVisible) {
-      setVisibleSection('secondary');
-    } else if (isPrimaryVisible) {
-      setVisibleSection('primary');
-    }
-  }, [isPrimaryVisible, isSecondaryVisible]);
+    let throttleTimeout: NodeJS.Timeout | null = null;
 
+    const handleScroll = () => {
+      if (!primaryRef.current || !secondaryRef.current || !tabContainerRef.current) return;
+
+      const triggerLine = tabContainerRef.current.offsetHeight + 50 + 15; // 탭바 하단 기준선
+
+      const primaryTop = primaryRef.current.getBoundingClientRect().top;
+      const secondaryTop = secondaryRef.current.getBoundingClientRect().top;
+
+      // startTransition으로 상태 업데이트를 부드럽게 처리
+      startTransition(() => {
+        // '추가예약' 섹션의 상단이 기준선 위로 올라오면 '추가예약' 탭 활성화
+        if (secondaryTop <= triggerLine) {
+          if (visibleSection !== 'secondary') {
+            setVisibleSection('secondary');
+          }
+        } 
+        // '공동구매' 섹션의 상단이 기준선 위로 올라오면 '공동구매' 탭 활성화
+        else if (primaryTop <= triggerLine) {
+          if (visibleSection !== 'primary') {
+            setVisibleSection('primary');
+          }
+        }
+      });
+    };
+
+    // 성능을 위해 100ms 간격으로 스크롤 이벤트 쓰로틀링
+    const throttledHandleScroll = () => {
+      if (!throttleTimeout) {
+        throttleTimeout = setTimeout(() => {
+          handleScroll();
+          throttleTimeout = null;
+        }, 100);
+      }
+    };
+
+    window.addEventListener('scroll', throttledHandleScroll);
+    return () => {
+      window.removeEventListener('scroll', throttledHandleScroll);
+      if (throttleTimeout) clearTimeout(throttleTimeout);
+    };
+  }, [visibleSection]); // visibleSection이 바뀔 때마다 핸들러를 새로 등록하여 최신 상태를 참조하도록 함
+
+
+  // ✅ [수정] useInView를 제거했으므로 setCombinedRefs도 필요 없습니다.
+  /*
   const setCombinedRefs = useCallback((node: HTMLDivElement | null, ref: React.RefObject<HTMLDivElement | null>, inViewRef: (instance: HTMLDivElement | null) => void) => {
     (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
     inViewRef(node);
   }, []);
+  */
 
   const fetchData = useCallback(async (isInitial = false) => {
     if (isFetchingRef.current) return;
@@ -298,17 +345,15 @@ const SimpleOrderPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [primarySaleEndDate]);
 
-  // ✅ [수정] 스크롤 함수: 탭 컨테이너 높이와 CSS의 `top` 오프셋(50px)을 모두 고려하여 스크롤 위치를 정확하게 보정합니다.
   const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
     if (!ref.current || !tabContainerRef.current) return;
 
     const tabContainerHeight = tabContainerRef.current.offsetHeight;
     const elementPosition = ref.current.getBoundingClientRect().top;
     
-    const STICKY_HEADER_TOP_OFFSET = 50; // .tab-container의 CSS `top` 값
-    const EXTRA_MARGIN = 15; // 제목과 탭바 사이의 추가 여백
+    const STICKY_HEADER_TOP_OFFSET = 50;
+    const EXTRA_MARGIN = 15;
     
-    // 최종 스크롤 위치 = 현재 스크롤 위치 + 대상의 현재 위치 - (탭바 높이 + CSS top 오프셋 + 추가 여백)
     const offsetPosition = window.pageYOffset + elementPosition - (tabContainerHeight + STICKY_HEADER_TOP_OFFSET + EXTRA_MARGIN);
   
     window.scrollTo({
@@ -325,8 +370,10 @@ const SimpleOrderPage: React.FC = () => {
         <div ref={tabContainerRef} className="tab-container sticky-tabs">
             <button 
                 className={`tab-btn primary-tab ${activeTab === 'primary' && visibleSection === 'primary' ? 'active' : ''}`} 
+                // ✅ [수정] 클릭 시 visibleSection을 'primary'로 즉시 설정하여 바로 활성화되도록 함
                 onClick={() => {
                     setActiveTab('primary');
+                    setVisibleSection('primary');
                     setTimeout(() => scrollToSection(primaryRef), 0);
                 }}
             >
@@ -338,8 +385,10 @@ const SimpleOrderPage: React.FC = () => {
             </button>
             <button 
                 className={`tab-btn ${activeTab === 'primary' && visibleSection === 'secondary' ? 'active' : ''}`} 
+                // ✅ [수정] 클릭 시 visibleSection을 'secondary'로 즉시 설정하여 바로 활성화되도록 함
                 onClick={() => {
                     setActiveTab('primary');
+                    setVisibleSection('secondary');
                     setTimeout(() => scrollToSection(secondaryRef), 0);
                 }}
             >
@@ -364,8 +413,8 @@ const SimpleOrderPage: React.FC = () => {
         <div className="tab-content-area">
             {activeTab === 'primary' && (
                 <>
-                    {/* --- 공동구매 섹션 --- */}
-                    <div ref={(node) => setCombinedRefs(node, primaryRef, primaryInViewRef)} className="content-section">
+                    {/* ✅ [수정] 섹션 div에서 useInView 관련 ref 제거 */}
+                    <div ref={primaryRef} className="content-section">
                         {primarySaleProducts.length > 0 && (
                           <div className="section-header-split">
                             <h2 className="section-title">
@@ -390,9 +439,9 @@ const SimpleOrderPage: React.FC = () => {
                           </div>
                         )}
                     </div>
-
-                    {/* --- 추가예약 섹션 --- */}
-                    <div ref={(node) => setCombinedRefs(node, secondaryRef, secondaryInViewRef)} className="content-section">
+                    
+                    {/* ✅ [수정] 섹션 div에서 useInView 관련 ref 제거 */}
+                    <div ref={secondaryRef} className="content-section">
                         {secondarySaleProducts.length > 0 && (
                             <>
                                 <h2 className="section-title">
