@@ -445,7 +445,7 @@ const SimpleOrderPage: React.FC = () => {
                         {secondarySaleProducts.length > 0 && (
                             <>
                                 <h2 className="section-title">
-                                    <span className="tab-icon">⏰</span> 추가예약 (픽업 전까지)
+                                    <span className="tab-icon">⏰</span> 추가예약 (픽업시작 전까지)
                                 </h2>
                                 <div className="simple-product-list">
                                     {secondarySaleProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
