@@ -202,7 +202,6 @@ const ProductImageSlider: React.FC<{ images: string[]; productName: string; onIm
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
 type SalesPhase = 'PRIMARY' | 'SECONDARY' | 'ON_SITE' | 'UNKNOWN';
 
-// ✅ [오류 수정] actionState prop 타입에 'ON_SITE_SALE' 추가
 const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState | 'ON_SITE_SALE'; expirationDateInfo: ExpirationDateInfo; salesPhase: SalesPhase; }> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase }) => {
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate = safeToDate(round.arrivalDate);
@@ -312,7 +311,8 @@ const OptionSelector: React.FC<{
     round: SalesRound;
     selectedVariantGroup: VariantGroup | null;
     onVariantGroupChange: (vg: VariantGroup) => void;
-}> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange }) => {
+    actionState: ProductActionState | 'ON_SITE_SALE';
+}> = React.memo(({ round, selectedVariantGroup, onVariantGroupChange, actionState }) => {
     if (!round.variantGroups || round.variantGroups.length <= 1) return null;
     return (
         <div className="select-wrapper" data-tutorial-id="detail-options">
@@ -327,12 +327,24 @@ const OptionSelector: React.FC<{
             >
                 <option value="" disabled>옵션을 선택해주세요.</option>
                 {round.variantGroups.map(vg => {
+                    const stockInfo = getStockInfo(vg);
+                    const isSoldOut = stockInfo.isLimited && stockInfo.remainingUnits <= 0;
+                    
+                    const isDisabled = isSoldOut && actionState !== 'WAITLISTABLE';
+
                     const representativePrice = vg.items?.[0]?.price;
                     const priceText = typeof representativePrice === 'number'
                         ? ` (${representativePrice.toLocaleString()}원)`
                         : '';
+                    
+                    const statusText = isSoldOut 
+                        ? (actionState === 'WAITLISTABLE' ? ' (대기 가능)' : ' (품절)')
+                        : '';
+
                     return (
-                        <option key={vg.id} value={vg.id}>{`${vg.groupName}${priceText}`}</option>
+                        <option key={vg.id} value={vg.id} disabled={isDisabled}>
+                            {`${vg.groupName}${priceText}${statusText}`}
+                        </option>
                     );
                 })}
             </select>
@@ -341,7 +353,6 @@ const OptionSelector: React.FC<{
 });
 
 
-// ✅ [오류 수정] actionState prop 타입에 'ON_SITE_SALE' 추가
 const ItemSelector: React.FC<{
   selectedVariantGroup: VariantGroup;
   selectedItem: ProductItem | null;
@@ -601,7 +612,6 @@ const ProductDetailPage: React.FC = () => {
         return product?.imageUrls?.filter(url => typeof url === 'string' && url.trim() !== '') || [];
     }, [product?.imageUrls]);
 
-    // ✅ [오류 수정] pickupEnd를 getDeadlines가 아닌 pickupDate로부터 직접 계산
     const salesPhase = useMemo<SalesPhase>(() => {
         if (!displayRound) return 'UNKNOWN';
         const { primaryEnd } = getDeadlines(displayRound);
@@ -727,8 +737,8 @@ const ProductDetailPage: React.FC = () => {
               </div>
             ), { id: customToastId, duration: Infinity });
           } else {
-            showToast('success', `${product.groupName} 예약이 완료되었습니다!`);
             toast.dismiss(toastId);
+            showToast('success', `${product.groupName} 예약이 완료되었습니다!`);
           }
 
         } catch (error: any) {
@@ -757,8 +767,8 @@ const ProductDetailPage: React.FC = () => {
 
         try {
           await addWaitlistEntryCallable(waitlistPayload);
-          showToast('success', `${product.groupName} 대기 신청이 완료되었습니다.`);
           toast.dismiss(toastId);
+          showToast('success', `${product.groupName} 대기 신청이 완료되었습니다.`);
         } catch (error: any) {
           toast.dismiss(toastId);
           showToast('error', error.message || '대기 신청 중 오류가 발생했습니다.');
@@ -775,17 +785,18 @@ const ProductDetailPage: React.FC = () => {
         }
 
         if (status === 'WAITLIST') {
-            toast((t) => (
-                <div className="confirmation-toast-content">
-                  <Hourglass size={44} className="toast-icon" /><h4>대기 신청</h4>
-                  <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개에 대해 대기 신청하시겠습니까?`}</p>
-                  <div className="toast-warning-box"><AlertTriangle size={16} /> 재고 확보 시 알림이 발송되며, 선착순으로 예약이 진행됩니다.</div>
-                  <div className="toast-buttons">
-                    <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
-                    <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleWaitlistRequest(); }}>신청</button>
-                  </div>
-                </div>
-              ), { id: `waitlist-confirm-${product.id}`, duration: Infinity });
+            // ✅ [수정] toast.custom으로 감싸고 t 객체를 전달
+            toast.custom((t) => showConfirmationToast({
+                t,
+                title: '대기 신청',
+                message: (
+                    <>
+                        <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개에 대해 대기 신청하시겠습니까?`}</p>
+                        <div className="toast-warning-box"><AlertTriangle size={16} /> 재고 확보 시 알림이 발송되며, 선착순으로 예약이 진행됩니다.</div>
+                    </>
+                ),
+                onConfirm: handleWaitlistRequest
+            }), { duration: Infinity });
             return;
         }
 
@@ -793,21 +804,21 @@ const ProductDetailPage: React.FC = () => {
         const isSecondarySale = primaryEnd ? dayjs().isAfter(primaryEnd) : false;
 
         if (isSecondarySale) {
-            toast((t) => (
-                <div className="confirmation-toast-content">
-                    <Info size={44} className="toast-icon" />
-                    <h4>2차 예약 확정</h4>
-                    <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개를 예약하시겠습니까?`}</p>
-                    <div className="toast-warning-box">
-                        <AlertTriangle size={16} />
-                        2차 예약 기간에는 확정 후 취소 시 페널티가 부과될 수 있습니다.
-                    </div>
-                    <div className="toast-buttons">
-                        <button className="common-button button-secondary button-medium" onClick={() => toast.dismiss(t.id)}>취소</button>
-                        <button className="common-button button-accent button-medium" onClick={() => { toast.dismiss(t.id); handleImmediateOrder(); }}>확인</button>
-                    </div>
-                </div>
-            ), { id: `order-confirm-secondary-${product.id}`, duration: Infinity });
+            // ✅ [수정] toast.custom으로 감싸고 t 객체를 전달
+            toast.custom((t) => showConfirmationToast({
+                t,
+                title: '2차 예약 확정',
+                message: (
+                    <>
+                        <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개를 예약하시겠습니까?`}</p>
+                        <div className="toast-warning-box">
+                            <AlertTriangle size={16} />
+                            2차 예약 기간에는 확정 후 취소 시 페널티가 부과될 수 있습니다.
+                        </div>
+                    </>
+                ),
+                onConfirm: handleImmediateOrder
+            }), { duration: Infinity });
         } else {
             handleImmediateOrder();
         }
@@ -868,6 +879,7 @@ const ProductDetailPage: React.FC = () => {
                                 setQuantity(1);
                                 showToast('success', `'${vg.groupName}' 옵션을 선택했어요.`);
                             }}
+                            actionState={actionState}
                         />
                         {selectedVariantGroup && (
                             <ItemSelector

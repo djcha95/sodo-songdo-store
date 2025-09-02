@@ -255,19 +255,39 @@
   border: 1px solid #ddd;
   border-radius: 12px;
 }
-.quantity-display-fixed {
-  padding: 0 1rem;
-  font-weight: 600;
-  font-size: 1.1rem;
-  min-width: 40px;
+
+/* ✅ [수정] quantity-display-fixed를 quantity-input으로 대체하고 input 요소에 맞게 스타일 수정 */
+.quantity-input {
+  width: 40px;
+  border: none;
+  background-color: transparent;
   text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0;
+  color: #111;
+  /* Firefox에서 기본 화살표(스피너) 제거 */
+  -moz-appearance: textfield;
+  /* ✅ [수정] linter 경고 해결 및 표준 속성 추가 */
+  appearance: none;
 }
+
+/* Chrome, Safari, Edge 등 Webkit 기반 브라우저에서 스피너 제거 */
+.quantity-input::-webkit-outer-spin-button,
+.quantity-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .quantity-btn {
   background-color: transparent;
   border: none;
   padding: 0.8rem;
   cursor: pointer;
   color: #555;
+  display: flex; /* 아이콘 중앙 정렬 */
+  align-items: center;
+  justify-content: center;
 }
 .quantity-btn:disabled {
   opacity: 0.4;
@@ -356,6 +376,21 @@
 .action-notice p { margin: 0; font-size: 0.9rem; }
 .action-notice span { font-size: 0.8rem; color: #6b7281; }
 
+/* ✅ [추가] 사용자 요청: 커스텀 토스트(선입금, 확인) 뒷배경 제거 */
+.prepayment-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: transparent; /* 뒷배경 투명 처리 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+
 /* 스켈레톤 UI */
 .skeleton-box {
   background-color: #e0e0e0;
@@ -423,7 +458,6 @@
   box-sizing: border-box;
 }
 
-/* ✅ [수정] 썸네일 영역이 작아진 만큼 메인 이미지 영역 높이 재조정 */
 .lightbox-swiper {
   width: 100%;
   height: calc(100% - 80px); 
@@ -484,25 +518,23 @@
   object-fit: contain;
 }
 
-/* ✅ [수정] 썸네일 컨테이너 높이 축소 */
 .lightbox-thumbs-swiper {
   height: 60px;
   width: 100%;
   max-width: 90vw;
-  padding: 5px 0; /* 상하 패딩도 줄임 */
+  padding: 5px 0;
   box-sizing: border-box;
 }
 
-/* ✅ [수정] 썸네일 슬라이드 크기 축소 및 테두리 두께 조정 */
 .lightbox-thumbs-swiper .lightbox-thumb-slide {
   width: 50px;
   height: 50px;
   opacity: 0.6;
   transition: opacity 0.3s ease, border-color 0.3s ease;
   cursor: pointer;
-  border-radius: 6px; /* 크기에 맞춰 모서리 둥글기도 줄임 */
+  border-radius: 6px;
   overflow: hidden;
-  border: 2px solid transparent; /* 테두리 얇게 */
+  border: 2px solid transparent;
 }
 
 .lightbox-thumbs-swiper .lightbox-thumb-slide:hover {
