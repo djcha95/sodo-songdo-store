@@ -223,11 +223,16 @@ export const submitOrder = onCall(
           const round = product.salesHistory.find(r => r.roundId === item.roundId);
           if (!round) throw new HttpsError("not-found", "판매 회차 정보를 찾을 수 없습니다.");
 
-          const vg = round.variantGroups.find(v => v.id === item.variantGroupId);
+          // ✅ [수정] 하위 호환성 로직 추가
+          // ID로 옵션을 찾되, 실패하면 옵션이 1개뿐인지 확인하고 그걸로 대체
+          const vg = round.variantGroups.find(v => v.id === item.variantGroupId) ||
+                     (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
+          
           if (!vg) throw new HttpsError("not-found", "옵션 그룹 정보를 찾을 수 없습니다.");
-
+          
           const required = item.quantity * (item.stockDeductionAmount || 1);
-          const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+          // variantGroupId가 없는 옛날 상품의 경우, 식별을 위해 productId와 roundId만 사용
+          const key = `${item.productId}-${item.roundId}-${vg.id || 'default'}`;
 
           txRequestMap.set(key, (txRequestMap.get(key) || 0) + required);
 

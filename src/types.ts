@@ -133,6 +133,7 @@ export interface SalesRound {
   preOrderTiers?: LoyaltyTier[];
   manualStatus?: SalesRoundStatus | null; // 관리자가 수동으로 설정한 상태
   isManuallyOnsite?: boolean;
+  eventType?: string | null; 
 }
 
 export interface Product {

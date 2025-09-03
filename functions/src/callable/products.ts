@@ -168,8 +168,9 @@ export const getProductsWithStock = onCall(
 );
 
 
+
 /** --------------------------------
- * 3) ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock
+ * 3) ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock (✅ 개선됨)
  * --------------------------------- */
 export const getProductByIdWithStock = onCall(
   {
@@ -200,7 +201,10 @@ export const getProductByIdWithStock = onCall(
         .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
 
+      // ✅ [개선] claimedMap(총 예약/판매량)과 pickedUpMap(픽업 완료량)을 모두 계산
       const claimedMap = new Map<string, number>();
+      const pickedUpMap = new Map<string, number>();
+      
       ordersSnap.docs.forEach((doc) => {
         const order = doc.data() as Order;
         (order.items || []).forEach((item) => {
@@ -208,7 +212,12 @@ export const getProductByIdWithStock = onCall(
             const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
             const quantityToDeduct = (item.quantity || 0) * (item.stockDeductionAmount || 1);
             if (!quantityToDeduct) return;
+            
             claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
+
+            if (order.status === "PICKED_UP") {
+                pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + quantityToDeduct);
+            }
           }
         });
       });
@@ -222,6 +231,8 @@ export const getProductByIdWithStock = onCall(
             return {
               ...vg,
               reservedCount: claimedMap.get(key) || 0,
+              // ✅ [개선] pickedUpCount 추가
+              pickedUpCount: pickedUpMap.get(key) || 0,
             };
           });
           return round;
@@ -237,7 +248,6 @@ export const getProductByIdWithStock = onCall(
     }
   }
 );
-
 
 /** --------------------------------
  * 4) 페이지네이션용 단순 목록: getProductsPage
@@ -439,9 +449,8 @@ export const notifyUsersOfProductUpdate = onCall(
 
 /**
  * =================================================================
- * 7) 장바구니 유효성 검사: validateCart (신규 추가)
+ * 7) 장바구니 유효성 검사: validateCart (🚨 중요: 로직 수정됨)
  * =================================================================
- * 프론트엔드에서 주문 직전 호출하여 재고, 등급 등을 최종 확인합니다.
  */
 export const validateCart = onCall({
   region: "asia-northeast3",
@@ -455,7 +464,6 @@ export const validateCart = onCall({
   }
   
   if (!userId) {
-    // 비로그인 사용자는 검증 없이 통과 (또는 에러 처리)
     return {
       validatedItems: itemsToValidate.map(item => ({ ...item, status: "OK" })),
       summary: { sufficient: true, reason: "OK" },
@@ -466,50 +474,82 @@ export const validateCart = onCall({
     const userDocRef = db.collection("users").doc(userId);
     const productIds = [...new Set(itemsToValidate.map(item => item.productId))];
 
-    // 트랜잭션 안에서 사용자 정보와 모든 관련 상품 정보를 한 번에 읽습니다.
     const validationResult = await db.runTransaction(async (transaction) => {
-      const userDoc = (await transaction.get(userDocRef)).data() as UserDocument | undefined;
+      const userDocSnap = await transaction.get(userDocRef);
+      const userDoc = userDocSnap.data() as UserDocument | undefined;
       const productDocs = await Promise.all(productIds.map(id => transaction.get(db.collection("products").doc(id))));
       const productsMap = new Map(productDocs.map(doc => [doc.id, doc.data() as Product]));
       
+      // ✅ [추가] 현재 예약된 수량을 트랜잭션 내에서 실시간으로 계산
+      const ordersSnap = await transaction.get(
+        db.collection("orders").where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
+      );
+      const claimedMap = new Map<string, number>();
+      ordersSnap.forEach(doc => {
+          const order = doc.data() as Order;
+          (order.items || []).forEach(item => {
+              const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+              const quantityToDeduct = (item.quantity || 0) * (item.stockDeductionAmount || 1);
+              claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
+          });
+      });
+
       const validatedItems: any[] = [];
-      const removalReasons = new Set<string>();
       let isSufficient = true;
 
       for (const item of itemsToValidate) {
         const product = productsMap.get(item.productId);
         if (!product) {
           validatedItems.push({ ...item, status: "REMOVED", reason: "상품 정보 없음" });
-          removalReasons.add("상품 정보 없음");
           continue;
         }
 
         const round = product.salesHistory.find(r => r.roundId === item.roundId);
         if (!round) {
           validatedItems.push({ ...item, status: "REMOVED", reason: "판매 회차 정보 없음" });
-          removalReasons.add("판매 회차 정보 없음");
           continue;
         }
+
+        // ✅ [수정] 하위 호환성 로직 추가
+        // ID로 옵션을 찾되, 실패하면 옵션이 1개뿐인지 확인하고 그걸로 대체
+        const vg = round.variantGroups.find(v => v.id === item.variantGroupId) ||
+                   (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
         
-        // TODO: 사용자 등급(Tier) 검증 로직 추가
-        if (userDoc && round.allowedTiers && !round.allowedTiers.includes(userDoc.loyaltyTier)) {
+        if (!vg) {
+            validatedItems.push({ ...item, status: "REMOVED", reason: "옵션 정보 없음" });
+            continue;
+        }
+        
+        // ✅ [수정] 사용자 등급 검증 로직 활성화
+        if (userDoc && Array.isArray(round.allowedTiers) && !round.allowedTiers.includes(userDoc.loyaltyTier)) {
            validatedItems.push({ ...item, status: "INELIGIBLE", reason: "사용자 등급 제한" });
-           continue; // 등급 미달 상품은 총액 계산에서 제외
+           continue;
         }
 
-        // TODO: 재고 검증 로직 추가
+        // ✅ [수정] 재고 검증 로직 구현
+        if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
+            // variantGroupId가 없는 옛날 상품의 경우, 식별을 위해 productId와 roundId만 사용
+            const key = `${item.productId}-${item.roundId}-${vg.id || 'default'}`;
+            const reservedCount = claimedMap.get(key) || 0;
+            const remainingStock = vg.totalPhysicalStock - reservedCount;
+            const requestedStock = (item.quantity || 0) * (item.stockDeductionAmount || 1);
+
+            if (requestedStock > remainingStock) {
+                validatedItems.push({ ...item, status: "REMOVED", reason: `재고 부족 (잔여: ${Math.floor(remainingStock / (item.stockDeductionAmount || 1))}개)` });
+                continue;
+            }
+        }
         
-        // 검증 통과
         validatedItems.push({ ...item, status: "OK" });
       }
       
-      isSufficient = validatedItems.every(item => item.status === "OK" || item.status === "INELIGIBLE");
+      isSufficient = validatedItems.every(item => item.status === "OK");
 
       return {
         validatedItems,
         summary: {
           sufficient: isSufficient,
-          reason: [...removalReasons].join(', ') || "OK",
+          reason: validatedItems.find(item => item.status === "REMOVED")?.reason || "OK",
         },
       };
     });
@@ -522,7 +562,6 @@ export const validateCart = onCall({
     throw new HttpsError("internal", "장바구니 검증 중 서버 오류가 발생했습니다.");
   }
 });
-
 
 /**
  * =================================================================

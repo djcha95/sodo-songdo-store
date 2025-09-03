@@ -20,7 +20,7 @@ import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getSto
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 
-import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox } from 'lucide-react';
+import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -785,7 +785,6 @@ const ProductDetailPage: React.FC = () => {
         }
 
         if (status === 'WAITLIST') {
-            // ✅ [수정] toast.custom으로 감싸고 t 객체를 전달
             toast.custom((t) => showConfirmationToast({
                 t,
                 title: '대기 신청',
@@ -804,7 +803,6 @@ const ProductDetailPage: React.FC = () => {
         const isSecondarySale = primaryEnd ? dayjs().isAfter(primaryEnd) : false;
 
         if (isSecondarySale) {
-            // ✅ [수정] toast.custom으로 감싸고 t 객체를 전달
             toast.custom((t) => showConfirmationToast({
                 t,
                 title: '2차 예약 확정',
@@ -849,16 +847,27 @@ const ProductDetailPage: React.FC = () => {
     const ogImage = originalImageUrls[0] || 'https://www.sodo-songdo.store/sodomall-preview.png';
     const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
+    const isEventProduct = displayRound.eventType === 'CHUSEOK';
+    const modalContentClassName = `product-detail-modal-content ${isEventProduct ? 'event-detail-chuseok' : ''}`;
+
+
     return (
         <>
             <Helmet><title>{ogTitle}</title><meta property="og:title" content={ogTitle} /><meta property="og:description" content={ogDescription} /><meta property="og:image" content={ogImage} /><meta property="og:url" content={ogUrl} /><meta property="og:type" content="product" /></Helmet>
             <div className="product-detail-modal-overlay" onClick={handleClose}>
-                <div className="product-detail-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className={modalContentClassName} onClick={(e) => e.stopPropagation()}>
                     <button onClick={handleClose} className="modal-close-btn-top"><X /></button>
                     <div className="modal-scroll-area">
                         <div ref={contentAreaRef} className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"><ProductImageSlider images={originalImageUrls} productName={product.groupName} onImageClick={handleOpenLightbox} /></div>
                             <div className="product-info-area">
+                                {isEventProduct && (
+                                    <div className="event-banner-chuseok">
+                                        <Moon size={18} />
+                                        <span>풍성한 한가위 특집</span>
+                                        <Moon size={18} />
+                                    </div>
+                                )}
                                 <ProductInfo 
                                     product={product} 
                                     round={displayRound} 

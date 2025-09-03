@@ -13,7 +13,7 @@ import OnsiteProductCard from '@/components/customer/OnsiteProductCard';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PackageSearch, Clock } from 'lucide-react';
+import { PackageSearch, Clock, Gift } from 'lucide-react'; // ✅ [추가] Gift 아이콘
 import { useInView } from 'react-intersection-observer';
 import { getDisplayRound, getDeadlines, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
@@ -28,6 +28,7 @@ interface ProductWithUIState extends Product {
   phase: 'primary' | 'secondary' | 'onsite' | 'past';
   displayRound: SalesRound;
   actionState: ProductActionState;
+  isEventProduct: boolean; // ✅ [추가] 이벤트 상품 여부 플래그
 }
 
 const CACHE_KEY = 'simpleOrderPageCache';
@@ -75,7 +76,8 @@ const SimpleOrderPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
   
-  const [activeTab, setActiveTab] = useState<'primary' | 'onsite'>('primary');
+  // ✅ [수정] activeTab 타입에 'event' 추가
+  const [activeTab, setActiveTab] = useState<'primary' | 'onsite' | 'event'>('primary');
   const [visibleSection, setVisibleSection] = useState<'primary' | 'secondary'>('primary');
 
   const PAGE_SIZE = 10;
@@ -231,15 +233,20 @@ const SimpleOrderPage: React.FC = () => {
     };
   }, [products]);
 
-  const { primarySaleProducts, secondarySaleProducts, onsiteSaleProducts, primarySaleEndDate } = useMemo(() => {
+  // ✅ [수정] useMemo 로직을 이벤트 상품을 분리하도록 변경
+  const { primarySaleProducts, secondarySaleProducts, onsiteSaleProducts, eventProducts, primarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const tempPrimary: ProductWithUIState[] = [];
     const tempSecondary: ProductWithUIState[] = [];
     const tempOnsite: ProductWithUIState[] = [];
+    const tempEvent: ProductWithUIState[] = []; // ✅ [추가] 이벤트 상품 배열
     
     products.forEach(product => {
-      const round = getDisplayRound(product);
+      const round = getDisplayRound(product) as SalesRound & { eventType?: string };
       if (!round || round.status === 'draft') return;
+
+      // ✅ [추가] 이벤트 상품인지 확인
+      const isEvent = round.eventType === 'chuseok_2025';
 
       if (round.manualStatus === 'sold_out' || round.manualStatus === 'ended') {
         return;
@@ -271,8 +278,16 @@ const SimpleOrderPage: React.FC = () => {
         phase: finalPhase,
         displayRound: round as SalesRound,
         actionState,
+        isEventProduct: isEvent, // ✅ [추가] 플래그 설정
       };
       
+      // ✅ [수정] 이벤트 상품이면 eventProducts 배열에 추가
+      if (isEvent) {
+          const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION', 'SCHEDULED'].includes(actionState);
+          if(isDisplayableState) tempEvent.push(productWithState);
+          return; // 이벤트 상품은 다른 카테고리에 중복 포함되지 않도록 여기서 종료
+      }
+
       if (finalPhase === 'primary') {
         const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
         if(isDisplayableState) tempPrimary.push(productWithState);
@@ -321,6 +336,7 @@ const SimpleOrderPage: React.FC = () => {
         const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() ?? 0;
         return dateB - dateA;
       }),
+      eventProducts: tempEvent.sort((a,b) => (safeToDate(a.displayRound.publishAt)?.getTime() ?? 0) - (safeToDate(b.displayRound.publishAt)?.getTime() ?? 0)), // ✅ [추가] 이벤트 상품 반환
       primarySaleEndDate: firstPrimarySaleEndDate,
     };
   }, [products, userDocument]);
@@ -368,9 +384,23 @@ const SimpleOrderPage: React.FC = () => {
   return (
     <div className="customer-page-container simple-order-page">
         <div ref={tabContainerRef} className="tab-container sticky-tabs">
+            {/* ✅ [추가] 이벤트 상품이 있을 때만 '추석특집' 탭 렌더링 */}
+            {eventProducts.length > 0 && (
+                <button 
+                    className={`tab-btn ${activeTab === 'event' ? 'active' : ''}`} 
+                    onClick={() => setActiveTab('event')}
+                >
+                    <span className="tab-title">
+                        <span className="tab-icon"><Gift /></span>
+                        <span className="tab-text">추석특집</span>
+                        <span className="tab-count">({eventProducts.length})</span>
+                    </span>
+                </button>
+            )}
+            
             <button 
+                // ✅ [수정] onClick 핸들러에서 activeTab을 'primary'로 설정
                 className={`tab-btn primary-tab ${activeTab === 'primary' && visibleSection === 'primary' ? 'active' : ''}`} 
-                // ✅ [수정] 클릭 시 visibleSection을 'primary'로 즉시 설정하여 바로 활성화되도록 함
                 onClick={() => {
                     setActiveTab('primary');
                     setVisibleSection('primary');
@@ -384,8 +414,8 @@ const SimpleOrderPage: React.FC = () => {
                 </span>
             </button>
             <button 
+                // ✅ [수정] onClick 핸들러에서 activeTab을 'primary'로 설정
                 className={`tab-btn ${activeTab === 'primary' && visibleSection === 'secondary' ? 'active' : ''}`} 
-                // ✅ [수정] 클릭 시 visibleSection을 'secondary'로 즉시 설정하여 바로 활성화되도록 함
                 onClick={() => {
                     setActiveTab('primary');
                     setVisibleSection('secondary');
@@ -411,6 +441,7 @@ const SimpleOrderPage: React.FC = () => {
         </div>
 
         <div className="tab-content-area">
+            {/* ✅ [수정] activeTab 조건 변경 */}
             {activeTab === 'primary' && (
                 <>
                     {/* ✅ [수정] 섹션 div에서 useInView 관련 ref 제거 */}
@@ -454,6 +485,18 @@ const SimpleOrderPage: React.FC = () => {
                         )}
                     </div>
                 </>
+            )}
+
+            {/* ✅ [추가] 'event' 탭 선택 시 렌더링될 컨텐츠 */}
+            {activeTab === 'event' && (
+                <div className="content-section">
+                    <h2 className="section-title">
+                      <span className="tab-icon"><Gift /></span> 2025 추석 특집
+                    </h2>
+                    <div className="simple-product-list">
+                        {eventProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    </div>
+                </div>
             )}
 
             {activeTab === 'onsite' && (

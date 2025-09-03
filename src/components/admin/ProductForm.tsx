@@ -15,7 +15,6 @@ import {
   functions,
   getReservedQuantitiesMap 
 } from '@/firebase';
-// [추가] Cloud Function 호출을 위해 import
 import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import type {
   Category,
@@ -30,7 +29,7 @@ import type {
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag
+  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
@@ -43,7 +42,7 @@ import '@/pages/admin/ProductAddAdminPage.css';
 import { formatKRW, parseKRW } from '@/utils/number';
 import { toYmd, toDateTimeLocal, fromYmd } from '@/utils/date';
 import { reportError } from '@/utils/logger';
-import dayjs from 'dayjs'; // 💡 dayjs를 import 합니다.
+import dayjs from 'dayjs';
 
 export type ProductFormMode = 'newProduct' | 'newRound' | 'editRound';
 
@@ -232,7 +231,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [pageTitle, setPageTitle] = useState('새 상품 등록');
   const [submitButtonText, setSubmitButtonText] = useState('신규 상품 등록하기');
 
-  // [추가] 수정 시 변경사항 감지를 위한 원본 데이터 저장 State
   const [initialProduct, setInitialProduct] = useState<Partial<Product> | null>(null);
   const [initialRound, setInitialRound] = useState<Partial<SalesRound> | null>(null);
 
@@ -271,6 +269,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isParsingWithAI, setIsParsingWithAI] = useState(false);
+  const [eventType, setEventType] = useState<string>('NONE');
+
 
   useEffect(() => {
     switch (mode) {
@@ -313,7 +313,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
         if (!product) { toast.error('상품을 찾을 수 없습니다.'); navigate('/admin/products'); return; }
 
-        // [추가] 수정 모드에서 원본 데이터 저장
         if (mode === 'editRound') {
             setInitialProduct({
                 groupName: product.groupName,
@@ -341,7 +340,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           if (!roundToLoad) { toast.error('판매 회차를 찾을 수 없습니다.'); navigate(`/admin/products/edit/${productId}`); return; }
           setPageTitle(`'${product.groupName}' 회차 수정`);
 
-          // [추가] 수정 모드에서 원본 회차 데이터 저장
           setInitialRound(JSON.parse(JSON.stringify(roundToLoad)));
 
         } else if (mode === 'newRound') {
@@ -358,6 +356,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           if (mode === 'editRound') setRoundName(roundData.roundName);
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
+          setEventType(roundData.eventType || 'NONE');
 
           const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
@@ -428,19 +427,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   useEffect(() => {
     if (mode === 'editRound') return; // 수정 모드에서는 자동 변경 안 함
 
-    // 💡 [수정] 아래 로직을 dayjs를 사용하여 주말 마감 규칙을 적용하는 코드로 교체합니다.
     const baseDate = dayjs(publishDate);
-    let deadline = baseDate.add(1, 'day'); // 기본적으로 다음 날로 설정
+    let deadline = baseDate.add(1, 'day');
 
-    const dayOfWeek = deadline.day(); // 0: 일요일, 6: 토요일
+    const dayOfWeek = deadline.day();
     
-    if (dayOfWeek === 6) { // 토요일이면
-      deadline = deadline.add(2, 'day'); // +2일 하여 월요일로
-    } else if (dayOfWeek === 0) { // 일요일이면
-      deadline = deadline.add(1, 'day'); // +1일 하여 월요일로
+    if (dayOfWeek === 6) {
+      deadline = deadline.add(2, 'day');
+    } else if (dayOfWeek === 0) {
+      deadline = deadline.add(1, 'day');
     }
 
-    // 마감 시간을 오후 1시로 설정
     const finalDeadline = deadline.hour(13).minute(0).second(0).millisecond(0).toDate();
     
     setDeadlineDate(finalDeadline);
@@ -766,6 +763,7 @@ const settingsSummary = useMemo(() => {
       const salesRoundData = {
         roundName: roundName.trim(),
         status,
+        eventType: eventType === 'NONE' ? null : eventType,
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
@@ -824,7 +822,6 @@ const settingsSummary = useMemo(() => {
         toast.success(isDraft ? '새 회차가 임시저장되었습니다.' : '새로운 판매 회차가 추가되었습니다.');
       } else if (mode === 'editRound' && productId && roundId) {
         
-        // --- [추가] 변경사항 감지 및 알림 전송 로직 ---
         const changes: string[] = [];
         const currentCategoryName = categories.find(c => c.id === selectedMainCategory)?.name || '';
         const storageTypeMap = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
@@ -837,7 +834,6 @@ const settingsSummary = useMemo(() => {
         if (initialRound?.roundName !== salesRoundData.roundName) changes.push(`회차명: ${initialRound?.roundName} -> ${salesRoundData.roundName}`);
         if (toYmd(convertToDate(initialRound?.pickupDate)) !== toYmd(convertToDate(salesRoundData.pickupDate))) changes.push(`픽업 시작일 변경`);
         if (toYmd(convertToDate(initialRound?.pickupDeadlineDate)) !== toYmd(convertToDate(salesRoundData.pickupDeadlineDate))) changes.push(`픽업 마감일 변경`);
-        // 옵션/가격 변경은 너무 복잡하므로 간단하게 알림
         if (JSON.stringify(initialRound?.variantGroups) !== JSON.stringify(salesRoundData.variantGroups)) changes.push('가격/옵션 정보 변경');
 
         if (changes.length > 0 && !isDraft) {
@@ -847,7 +843,7 @@ const settingsSummary = useMemo(() => {
                     productId,
                     roundId,
                     productName: groupName.trim(),
-                    changes: [...new Set(changes)], // 중복 제거
+                    changes: [...new Set(changes)],
                 });
                 toast.success('상품 정보 변경 알림을 발송했습니다.');
             } catch (err) {
@@ -855,7 +851,6 @@ const settingsSummary = useMemo(() => {
                 toast.error('변경 알림 발송에 실패했습니다.');
             }
         }
-        // --- 알림 로직 끝 ---
 
         const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> & { hashtags?: string[] } = {
           groupName: groupName.trim(),
@@ -1106,13 +1101,14 @@ const settingsSummary = useMemo(() => {
                       </div>
                     </div>
                     <div className="form-group">
-<label>유통기한</label>
-<input
-  type="date"
-  className="date-input-native"
-  value={toYmd(vg.expirationDate)}
-  onChange={e => handleVariantGroupChange(vg.id, 'expirationDate', fromYmd(e.target.value))}
-/>                    </div>
+                      <label>유통기한</label>
+                      <input
+                        type="date"
+                        className="date-input-native"
+                        value={toYmd(vg.expirationDate)}
+                        onChange={e => handleVariantGroupChange(vg.id, 'expirationDate', fromYmd(e.target.value))}
+                      />
+                    </div>
                     {productType === 'group' && (
                       <button type="button" onClick={() => removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? '마지막 그룹은 삭제할 수 없습니다.' : '그룹 삭제'}>
                         <Trash2 size={16} />
@@ -1169,6 +1165,17 @@ const settingsSummary = useMemo(() => {
                 <div className="title-text-group"><SlidersHorizontal size={20} className="icon-color-settings" /><h3>발행 및 기간 설정</h3></div>
               </div>
               <p className="section-subtitle">상품의 판매 시점 및 조건을 설정합니다.</p>
+
+              <div className="form-group">
+                <label>이벤트 타입</label>
+                <div className="input-with-icon">
+                  <Gift size={16} className="input-icon" />
+                  <select value={eventType} onChange={e => setEventType(e.target.value)}>
+                    <option value="NONE">일반 상품</option>
+                    <option value="CHUSEOK">🌕 추석 특집</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="form-group">
                 <label>판매 옵션</label>

@@ -72,31 +72,27 @@ export const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// ✅ [수정] 등록일 기준 마감일/시간 계산 로직 재구현
+// 마감일 계산 로직은 유지
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
     const publishAt = safeToDate(round.publishAt);
     if (!publishAt) return { primaryEnd: null, secondaryEnd: null };
-    
-    const publishDay = dayjs(publishAt);
-    const dayOfWeek = publishDay.day(); // 0: 일요일, 1: 월요일, ..., 6: 토요일
 
-    let primaryEnd: dayjs.Dayjs;
-
-    switch (dayOfWeek) {
-        case 5: // 금요일
-            primaryEnd = publishDay.add(1, 'day').hour(13).minute(0).second(0).millisecond(0);
-            break;
-        case 6: // 토요일
-            primaryEnd = publishDay.add(2, 'day').hour(13).minute(0).second(0).millisecond(0);
-            break;
-        default: // 일~목요일
-            primaryEnd = publishDay.add(1, 'day').hour(13).minute(0).second(0).millisecond(0);
-            break;
+    const deadlineDate = safeToDate(round.deadlineDate);
+    if (deadlineDate) {
+        const primaryEnd = dayjs(deadlineDate);
+        const secondaryEnd = safeToDate(round.pickupDate) ? dayjs(safeToDate(round.pickupDate)).hour(13).minute(0).second(0) : null;
+        return { primaryEnd, secondaryEnd };
     }
 
-    const secondaryEnd = safeToDate(round.pickupDate) ? dayjs(safeToDate(round.pickupDate)).hour(13).minute(0).second(0) : null;
+    // deadlineDate가 없을 경우, 기존 로직으로 대체 (Fallback)
+    const publishDay = dayjs(publishAt);
+    let primaryEndFallback = publishDay.add(1, 'day').hour(13).minute(0).second(0);
+    const dayOfWeek = primaryEndFallback.day();
+    if (dayOfWeek === 6) primaryEndFallback = primaryEndFallback.add(2, 'day');
+    else if (dayOfWeek === 0) primaryEndFallback = primaryEndFallback.add(1, 'day');
     
-    return { primaryEnd, secondaryEnd };
+    const secondaryEndFallback = safeToDate(round.pickupDate) ? dayjs(safeToDate(round.pickupDate)).hour(13).minute(0).second(0) : null;
+    return { primaryEnd: primaryEndFallback, secondaryEnd: secondaryEndFallback };
 };
 
 export const getDisplayRound = (product: Product): OriginalSalesRound | null => {
@@ -144,12 +140,10 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
     return 'SCHEDULED';
   }
 
-  // ℹ️ [설명] 상품의 모든 옵션이 품절되었는지 확인하는 헬퍼 함수
   const isAllOptionsSoldOut = () => {
     if (!round.variantGroups || round.variantGroups.length === 0) return true;
     return round.variantGroups.every(vg => {
       const stockInfo = getStockInfo(vg);
-      // isLimited가 false(무제한)이면 품절이 아님
       return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
     });
   };
@@ -159,20 +153,26 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   // 2. 1차 공구 기간 ( ~ 1차 마감 시간 전)
   if (primaryEnd && now.isBefore(primaryEnd)) {
     if (isAllOptionsSoldOut()) {
-      // 모든 옵션이 품절된 경우에만 '대기 가능'
       return 'WAITLISTABLE';
     }
-    // 하나라도 구매 가능한 옵션이 있다면 '구매 가능' 또는 '옵션 선택 필요'
     return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
   }
 
   // 3. 2차 공구 기간 (1차 마감 이후 ~ 2차 마감 시간 전)
   if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
+    // ✅ [수정] 1차 공구 때 무제한이었던 상품인지 확인하는 로직 추가
+    const wasUnlimitedInPrimary = round.variantGroups.some(vg => {
+        const stockInfo = getStockInfo(vg);
+        return !stockInfo.isLimited;
+    });
+
+    if (wasUnlimitedInPrimary) {
+        return 'AWAITING_STOCK'; // 무제한 상품은 2차 때 '재고 준비중'으로 변경
+    }
+    
     if (isAllOptionsSoldOut()) {
-      // 2차 공구에서는 품절 시 '대기' 없음. 즉시 '앵콜 요청'
       return 'ENCORE_REQUESTABLE';
     }
-    // 재고가 남아있으면 '구매 가능' 또는 '옵션 선택 필요'
     return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
   }
 

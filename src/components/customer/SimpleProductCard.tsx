@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { Flame, Minus, Plus, ChevronRight, ShieldX, Banknote, AlertTriangle, Info, Calendar, Hourglass } from 'lucide-react';
+import { Flame, Minus, Plus, ChevronRight, ShieldX, Banknote, AlertTriangle, Info, Calendar, Hourglass, Star } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useLaunch } from '@/context/LaunchContext';
 import toast from 'react-hot-toast';
@@ -14,7 +14,7 @@ import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, Orde
 import { getStockInfo, getMaxPurchasableQuantity, safeToDate, getDeadlines } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
-import { showPromiseToast, showToast } from '@/utils/toastUtils';
+import { showToast } from '@/utils/toastUtils';
 import './SimpleProductCard.css';
 
 type Product = OriginalProduct & {
@@ -128,7 +128,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         itemId: finalVariant.id,
         itemName: finalVariant.name,
         quantity: quantity,
-        unitPrice: finalVariant.price,
+        unitPrice: finalVariant.price, 
         stock: finalVariant.stock,
         stockDeductionAmount: finalVariant.stockDeductionAmount,
         arrivalDate: cardData.displayRound.arrivalDate || null,
@@ -241,7 +241,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
           ), { 
             id: `order-confirm-secondary-${product.id}`, 
             duration: Infinity,
-            // ✅ [추가] 토스트 컨테이너의 기본 스타일을 없애기 위한 클래스
             className: 'transparent-toast',
            });
     } else {
@@ -257,7 +256,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         ), { 
             id: `order-confirm-primary-${product.id}`, 
             duration: Infinity,
-            // ✅ [추가] 토스트 컨테이너의 기본 스타일을 없애기 위한 클래스
             className: 'transparent-toast',
         });
     }
@@ -283,7 +281,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     ), { 
         id: `waitlist-confirm-${product.id}`, 
         duration: Infinity,
-        // ✅ [추가] 토스트 컨테이너의 기본 스타일을 없애기 위한 클래스
         className: 'transparent-toast',
     });
   };
@@ -292,6 +289,14 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
   const renderStockBadge = () => {
     const { isMultiOption, displayRound } = cardData;
+
+    if (displayRound.eventType === 'CHUSEOK') {
+        return (
+            <span className="stock-badge event-badge-chuseok">
+                <Star size={12} /> 추석특가 상품
+            </span>
+        );
+    }
 
     if (isMultiOption) {
         const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
@@ -388,9 +393,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
   };
   
   const pickupDateFormatted = dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');
+  
+  const isEventProduct = cardData.displayRound.eventType === 'CHUSEOK';
+  const cardClassName = `simple-product-card ${isEventProduct ? 'event-card-chuseok' : ''}`;
 
   return (
-    <div className="simple-product-card" onClick={handleCardClick}>
+    <div className={cardClassName} onClick={handleCardClick}>
       <div className="simple-card-main-content">
         <div className="simple-card-image-wrapper">
           <OptimizedImage originalUrl={product.imageUrls?.[0]} size='150x150' alt={product.groupName} className="simple-card-image" />
