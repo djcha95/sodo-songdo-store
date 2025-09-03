@@ -256,7 +256,6 @@
   border-radius: 12px;
 }
 
-/* ✅ [수정] quantity-display-fixed를 quantity-input으로 대체하고 input 요소에 맞게 스타일 수정 */
 .quantity-input {
   width: 40px;
   border: none;
@@ -266,13 +265,10 @@
   font-weight: 600;
   padding: 0;
   color: #111;
-  /* Firefox에서 기본 화살표(스피너) 제거 */
   -moz-appearance: textfield;
-  /* ✅ [수정] linter 경고 해결 및 표준 속성 추가 */
   appearance: none;
 }
 
-/* Chrome, Safari, Edge 등 Webkit 기반 브라우저에서 스피너 제거 */
 .quantity-input::-webkit-outer-spin-button,
 .quantity-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -285,7 +281,7 @@
   padding: 0.8rem;
   cursor: pointer;
   color: #555;
-  display: flex; /* 아이콘 중앙 정렬 */
+  display: flex;
   align-items: center;
   justify-content: center;
 }
@@ -375,38 +371,6 @@
 }
 .action-notice p { margin: 0; font-size: 0.9rem; }
 .action-notice span { font-size: 0.8rem; color: #6b7281; }
-
-/* ✅ [추가] 사용자 요청: 커스텀 토스트(선입금, 확인) 뒷배경 제거 */
-.prepayment-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: transparent; /* 뒷배경 투명 처리 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-
-/* 스켈레톤 UI */
-.skeleton-box {
-  background-color: #e0e0e0;
-  border-radius: 4px;
-  animation: pulse 1.5s infinite ease-in-out;
-}
-@keyframes pulse {
-  0% { background-color: #e0e0e0; }
-  50% { background-color: #f0f0f0; }
-  100% { background-color: #e0e0e0; }
-}
-.skeleton-image { width: 100%; aspect-ratio: 1 / 1; }
-.skeleton-title { width: 60%; height: 2rem; margin: 0 auto 1rem auto; }
-.skeleton-text { width: 90%; height: 1rem; margin: 0 auto 0.5rem auto; }
-.skeleton-text.short { width: 40%; }
-.skeleton-info-row { width: 100%; height: 1.5rem; margin-bottom: 0.8rem; }
 
 /* 라이트박스(이미지 확대 보기) 스타일 */
 .lightbox-overlay {
@@ -582,7 +546,6 @@
   background-color: var(--color-primary-light, #f0f5ff);
 }
 
-/* ✨ [추가] 추석 특집 상세 페이지 스타일 */
 .product-detail-modal-content.event-detail-chuseok {
     border: 3px solid transparent;
     border-radius: 20px;
@@ -592,7 +555,6 @@
     background-clip: content-box, border-box;
 }
 
-/* ✨ [추가] 추석 특집 배너 스타일 */
 .event-banner-chuseok {
     display: flex;
     align-items: center;
@@ -609,4 +571,170 @@
     box-shadow: 0 4px 10px rgba(109, 76, 65, 0.3);
     border: 1px solid rgba(255, 235, 59, 0.3);
     width: fit-content;
+}
+
+.countdown-timer-detail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: #fff8e1;
+  color: #854d0e;
+  padding: 0.6rem;
+  margin: 0.5rem auto 0;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border: 1px solid #ffecb3;
+  width: fit-content;
+  margin-bottom: 1rem; 
+}
+
+.countdown-timer-detail strong {
+  font-weight: 700;
+  color: #e65100;
+  letter-spacing: 0.5px;
+}
+
+/* --- ✅ [수정] 통합 선입금 안내 모달 스타일 --- */
+.prepayment-modal-overlay {
+    position: flex;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+}
+  
+.prepayment-modal-content {
+    background-color: #ffffff;
+    color: #333;
+    padding: 24px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    border: 1px solid #e5e7eb;
+}
+
+.prepayment-modal-content.animate-enter {
+    animation: fadeInScale 0.3s ease-out forwards;
+}
+
+.prepayment-modal-content.animate-leave {
+    animation: fadeOutScale 0.3s ease-in forwards;
+}
+
+@keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fadeOutScale {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.95); }
+}
+
+.prepayment-modal-content .toast-icon-wrapper {
+    margin: 0 auto 16px;
+    color: var(--color-primary, #2563eb);
+}
+
+.prepayment-modal-content h4 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 10px;
+    color: #111827;
+}
+
+.prepayment-modal-content p {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    color: #4b5563;
+}
+
+.prepayment-modal-content .bank-info-highlight {
+    background-color: #f3f4f6;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px dashed #d1d5db;
+}
+
+.prepayment-modal-content .bank-info-highlight strong {
+    display: block;
+    font-size: 1rem;
+    margin-bottom: 12px;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.prepayment-modal-content .price-to-pay-prominent {
+    margin-top: 8px;
+}
+
+.prepayment-modal-content .price-label {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+.prepayment-modal-content .price-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--color-primary, #2563eb);
+}
+
+.prepayment-modal-content small {
+    font-size: 0.8rem;
+    display: block;
+    margin-bottom: 24px;
+    color: #6b7280;
+}
+
+.prepayment-modal-content .modal-button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.prepayment-modal-content .modal-button-row {
+    display: flex;
+    gap: 10px;
+}
+
+.prepayment-modal-content .modal-button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.prepayment-modal-content .modal-button.primary {
+    background-color: #2b3a67; /* 채널톡 버튼 색상 */
+    color: white;
+}
+
+.prepayment-modal-content .modal-button.secondary {
+    background-color: var(--color-primary, #2563eb);
+    color: white;
+}
+
+.prepayment-modal-content .modal-button.tertiary {
+    background-color: #e5e7eb;
+    color: #4b5563;
+}
+
+.prepayment-modal-content .modal-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }

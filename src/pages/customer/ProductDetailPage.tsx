@@ -19,8 +19,9 @@ import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRou
 import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getStockInfo, getMaxPurchasableQuantity } from '@/utils/productUtils';
 import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
+import PrepaymentModal from '@/components/common/PrepaymentModal'; // ✅ [추가] 전용 모달 import
 
-import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon } from 'lucide-react';
+import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon, Clock } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -85,115 +86,115 @@ const normalizeProduct = (product: Product): Product => {
 // --- Sub Components ---
 
 const Lightbox: React.FC<{
-  images: string[];
-  startIndex: number;
-  isOpen: boolean;
-  onClose: () => void;
+    images: string[];
+    startIndex: number;
+    isOpen: boolean;
+    onClose: () => void;
 }> = React.memo(({ images, startIndex, isOpen, onClose }) => {
-  const [mainSwiper, setMainSwiper] = useState<SwiperCore | null>(null);
-  const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
-  const [activeIndex, setActiveIndex] = useState(startIndex);
+    const [mainSwiper, setMainSwiper] = useState<SwiperCore | null>(null);
+    const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
+    const [activeIndex, setActiveIndex] = useState(startIndex);
 
-  useEffect(() => {
-    if (isOpen) {
-      setActiveIndex(startIndex);
-      if (mainSwiper && !mainSwiper.destroyed) {
-        mainSwiper.slideToLoop(startIndex, 0);
-      }
-      if (thumbsSwiper && !thumbsSwiper.destroyed) {
-        thumbsSwiper.slideToLoop(startIndex, 0);
-      }
-    }
-  }, [isOpen, startIndex, mainSwiper, thumbsSwiper]);
-
-  useEffect(() => {
-    if (mainSwiper && !mainSwiper.destroyed) {
-      const handleSlideChange = () => {
-        setActiveIndex(mainSwiper.realIndex);
-        if (thumbsSwiper && !thumbsSwiper.destroyed) {
-          thumbsSwiper.slideToLoop(mainSwiper.realIndex);
+    useEffect(() => {
+        if (isOpen) {
+            setActiveIndex(startIndex);
+            if (mainSwiper && !mainSwiper.destroyed) {
+                mainSwiper.slideToLoop(startIndex, 0);
+            }
+            if (thumbsSwiper && !thumbsSwiper.destroyed) {
+                thumbsSwiper.slideToLoop(startIndex, 0);
+            }
         }
-      };
-      mainSwiper.on('slideChange', handleSlideChange);
-      return () => {
-        mainSwiper.off('slideChange', handleSlideChange);
-      };
-    }
-  }, [mainSwiper, thumbsSwiper]);
+    }, [isOpen, startIndex, mainSwiper, thumbsSwiper]);
 
-  useEffect(() => {
-    if (thumbsSwiper && !thumbsSwiper.destroyed && mainSwiper && !mainSwiper.destroyed) {
-      const handleThumbsSlideChange = () => {
-        if (mainSwiper.realIndex !== thumbsSwiper.realIndex) {
-          mainSwiper.slideToLoop(thumbsSwiper.realIndex);
-        }
-      };
-      thumbsSwiper.on('slideChange', handleThumbsSlideChange);
-      return () => {
-        thumbsSwiper.off('slideChange', handleThumbsSlideChange);
-      };
-    }
-  }, [mainSwiper, thumbsSwiper]);
-
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="lightbox-overlay" onClick={onClose}>
-      <button className="lightbox-close-btn" onClick={onClose} aria-label="닫기">
-        <X size={32} />
-      </button>
-      <div className="lightbox-content-wrapper" onClick={(e) => e.stopPropagation()}>
-        <Swiper
-          onSwiper={setMainSwiper}
-          modules={[Pagination, Navigation, Zoom, Thumbs]}
-          initialSlide={startIndex}
-          spaceBetween={20}
-          slidesPerView={1}
-          navigation
-          pagination={{ clickable: true }}
-          zoom
-          loop={true}
-          className="lightbox-swiper"
-        >
-          {images.map((url, index) => (
-            <SwiperSlide key={index}>
-              <div className="swiper-zoom-container">
-                <OptimizedImage originalUrl={url} size="1080x1080" alt={`이미지 ${index + 1}`} />
-              </div>
-            </SwiperSlide>
-          ))}
-        </Swiper>
-
-        <Swiper
-          onSwiper={setThumbsSwiper}
-          modules={[Thumbs, FreeMode]}
-          slidesPerView="auto"
-          spaceBetween={5}
-          centeredSlides={true}
-          watchSlidesProgress={true}
-          loop={true}
-          initialSlide={startIndex}
-          className="lightbox-thumbs-swiper"
-          freeMode={true}
-        >
-          {images.map((url, index) => (
-            <SwiperSlide
-              key={index}
-              className={`lightbox-thumb-slide ${activeIndex === index ? 'is-active' : ''}`}
-              onClick={() => {
-                if (mainSwiper && !mainSwiper.destroyed) {
-                    mainSwiper.slideToLoop(index);
+    useEffect(() => {
+        if (mainSwiper && !mainSwiper.destroyed) {
+            const handleSlideChange = () => {
+                setActiveIndex(mainSwiper.realIndex);
+                if (thumbsSwiper && !thumbsSwiper.destroyed) {
+                    thumbsSwiper.slideToLoop(mainSwiper.realIndex);
                 }
-              }}
-            >
-              <OptimizedImage originalUrl={url} size="200x200" alt={`썸네일 ${index + 1}`} />
-            </SwiperSlide>
-          ))}
-        </Swiper>
-      </div>
-    </div>
-  );
+            };
+            mainSwiper.on('slideChange', handleSlideChange);
+            return () => {
+                mainSwiper.off('slideChange', handleSlideChange);
+            };
+        }
+    }, [mainSwiper, thumbsSwiper]);
+
+    useEffect(() => {
+        if (thumbsSwiper && !thumbsSwiper.destroyed && mainSwiper && !mainSwiper.destroyed) {
+            const handleThumbsSlideChange = () => {
+                if (mainSwiper.realIndex !== thumbsSwiper.realIndex) {
+                    mainSwiper.slideToLoop(thumbsSwiper.realIndex);
+                }
+            };
+            thumbsSwiper.on('slideChange', handleThumbsSlideChange);
+            return () => {
+                thumbsSwiper.off('slideChange', handleThumbsSlideChange);
+            };
+        }
+    }, [mainSwiper, thumbsSwiper]);
+
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="lightbox-overlay" onClick={onClose}>
+            <button className="lightbox-close-btn" onClick={onClose} aria-label="닫기">
+                <X size={32} />
+            </button>
+            <div className="lightbox-content-wrapper" onClick={(e) => e.stopPropagation()}>
+                <Swiper
+                    onSwiper={setMainSwiper}
+                    modules={[Pagination, Navigation, Zoom, Thumbs]}
+                    initialSlide={startIndex}
+                    spaceBetween={20}
+                    slidesPerView={1}
+                    navigation
+                    pagination={{ clickable: true }}
+                    zoom
+                    loop={true}
+                    className="lightbox-swiper"
+                >
+                    {images.map((url, index) => (
+                        <SwiperSlide key={index}>
+                            <div className="swiper-zoom-container">
+                                <OptimizedImage originalUrl={url} size="1080x1080" alt={`이미지 ${index + 1}`} />
+                            </div>
+                        </SwiperSlide>
+                    ))}
+                </Swiper>
+
+                <Swiper
+                    onSwiper={setThumbsSwiper}
+                    modules={[Thumbs, FreeMode]}
+                    slidesPerView="auto"
+                    spaceBetween={5}
+                    centeredSlides={true}
+                    watchSlidesProgress={true}
+                    loop={true}
+                    initialSlide={startIndex}
+                    className="lightbox-thumbs-swiper"
+                    freeMode={true}
+                >
+                    {images.map((url, index) => (
+                        <SwiperSlide
+                            key={index}
+                            className={`lightbox-thumb-slide ${activeIndex === index ? 'is-active' : ''}`}
+                            onClick={() => {
+                                if (mainSwiper && !mainSwiper.destroyed) {
+                                    mainSwiper.slideToLoop(index);
+                                }
+                            }}
+                        >
+                            <OptimizedImage originalUrl={url} size="200x200" alt={`썸네일 ${index + 1}`} />
+                        </SwiperSlide>
+                    ))}
+                </Swiper>
+            </div>
+        </div>
+    );
 });
 
 
@@ -202,14 +203,24 @@ const ProductImageSlider: React.FC<{ images: string[]; productName: string; onIm
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
 type SalesPhase = 'PRIMARY' | 'SECONDARY' | 'ON_SITE' | 'UNKNOWN';
 
-const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState | 'ON_SITE_SALE'; expirationDateInfo: ExpirationDateInfo; salesPhase: SalesPhase; }> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase }) => {
+// ✅ [수정] countdown prop 추가
+const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState | 'ON_SITE_SALE'; expirationDateInfo: ExpirationDateInfo; salesPhase: SalesPhase; countdown: string | null; }> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown }) => {
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate = safeToDate(round.arrivalDate);
     const isMultiGroup = round.variantGroups.length > 1;
+    const isEventProduct = round.eventType === 'CHUSEOK'; // ✅ [추가] 이벤트 상품 여부 확인
+
     return (
         <>
             <div className="product-header-content">
                 <h1 className="product-name">{product.groupName}</h1>
+                {/* ✅ [추가] 이벤트 상품일 경우 카운트다운 렌더링 */}
+                {isEventProduct && countdown && (
+                    <div className="countdown-timer-detail">
+                        <Clock size={18} />
+                        <span>예약 마감까지 <strong>{countdown}</strong></span>
+                    </div>
+                )}
                 <div className="markdown-content">
                     <ReactMarkdown>{product.description || ''}</ReactMarkdown>
                 </div>
@@ -280,12 +291,12 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                                 {round.variantGroups.map(vg => {
                                     const stockInfo = getStockInfo(vg);
                                     let stockElement: React.ReactNode;
-        
+
                                     if (!stockInfo.isLimited) {
                                         stockElement = <span className="unlimited-stock">무제한</span>;
                                     } else if (stockInfo.remainingUnits > 0) {
                                         const pretty = <>{stockInfo.remainingUnits}개 남음</>;
-        
+
                                         if (stockInfo.remainingUnits <= 10) {
                                             stockElement = <span className="low-stock"><Flame size={14} /> {pretty} <Flame size={14} /></span>;
                                         } else {
@@ -294,7 +305,7 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                                     } else {
                                         stockElement = <span className="sold-out">{actionState === 'WAITLISTABLE' ? '대기 가능' : '품절'}</span>;
                                     }
-        
+
                                     const displayText = isMultiGroup ? <>{vg.groupName}: {stockElement}</> : stockElement;
                                     return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
                                 })}
@@ -329,15 +340,15 @@ const OptionSelector: React.FC<{
                 {round.variantGroups.map(vg => {
                     const stockInfo = getStockInfo(vg);
                     const isSoldOut = stockInfo.isLimited && stockInfo.remainingUnits <= 0;
-                    
+
                     const isDisabled = isSoldOut && actionState !== 'WAITLISTABLE';
 
                     const representativePrice = vg.items?.[0]?.price;
                     const priceText = typeof representativePrice === 'number'
                         ? ` (${representativePrice.toLocaleString()}원)`
                         : '';
-                    
-                    const statusText = isSoldOut 
+
+                    const statusText = isSoldOut
                         ? (actionState === 'WAITLISTABLE' ? ' (대기 가능)' : ' (품절)')
                         : '';
 
@@ -354,99 +365,100 @@ const OptionSelector: React.FC<{
 
 
 const ItemSelector: React.FC<{
-  selectedVariantGroup: VariantGroup;
-  selectedItem: ProductItem | null;
-  onItemChange: (item: ProductItem) => void;
-  actionState: ProductActionState | 'ON_SITE_SALE';
+    selectedVariantGroup: VariantGroup;
+    selectedItem: ProductItem | null;
+    onItemChange: (item: ProductItem) => void;
+    actionState: ProductActionState | 'ON_SITE_SALE';
 }> = React.memo(({ selectedVariantGroup, selectedItem, onItemChange, actionState }) => {
-  if (!selectedVariantGroup.items || selectedVariantGroup.items.length <= 1) {
-    return null;
-  }
+    if (!selectedVariantGroup.items || selectedVariantGroup.items.length <= 1) {
+        return null;
+    }
 
-  const totalStock = selectedVariantGroup.totalPhysicalStock;
-  let remainingStock = Infinity;
+    const totalStock = selectedVariantGroup.totalPhysicalStock;
+    let remainingStock = Infinity;
 
-  if (totalStock !== null && totalStock !== -1) {
-      const reserved = selectedVariantGroup.reservedCount || 0;
-      remainingStock = Math.max(0, totalStock - reserved);
-  }
+    if (totalStock !== null && totalStock !== -1) {
+        const reserved = selectedVariantGroup.reservedCount || 0;
+        remainingStock = Math.max(0, totalStock - reserved);
+    }
 
-  const basePrice = selectedVariantGroup.items?.[0]?.price ?? 0;
+    const basePrice = selectedVariantGroup.items?.[0]?.price ?? 0;
 
-  return (
-    <div className="select-wrapper item-selector-wrapper" data-tutorial-id="detail-items">
-      <select
-        className="price-select"
-        value={selectedItem?.id || ''}
-        onChange={(e) => {
-          const selectedId = e.target.value;
-          const newItem = selectedVariantGroup.items.find(it => it.id === selectedId);
-          if (newItem) {
-            onItemChange(newItem);
-          }
-        }}
-      >
-        <option value="" disabled>세부 옵션을 선택해주세요.</option>
-        {selectedVariantGroup.items.map(item => {
-          const isAvailable = actionState === 'WAITLISTABLE' || (item.stockDeductionAmount || 1) <= remainingStock;
-          const priceDiff = item.price - basePrice;
-          const priceText = priceDiff > 0 ? ` (+${priceDiff.toLocaleString()}원)` : '';
+    return (
+        <div className="select-wrapper item-selector-wrapper" data-tutorial-id="detail-items">
+            <select
+                className="price-select"
+                value={selectedItem?.id || ''}
+                onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const newItem = selectedVariantGroup.items.find(it => it.id === selectedId);
+                    if (newItem) {
+                        onItemChange(newItem);
+                    }
+                }}
+            >
+                <option value="" disabled>세부 옵션을 선택해주세요.</option>
+                {selectedVariantGroup.items.map(item => {
+                    const isAvailable = actionState === 'WAITLISTABLE' || (item.stockDeductionAmount || 1) <= remainingStock;
+                    const priceDiff = item.price - basePrice;
+                    const priceText = priceDiff > 0 ? ` (+${priceDiff.toLocaleString()}원)` : '';
 
-          return (
-            <option key={item.id} value={item.id} disabled={!isAvailable}>
-              {item.name}{priceText} {!isAvailable ? '(재고 부족)' : ''}
-            </option>
-          );
-        })}
-      </select>
-    </div>
-  );
+                    return (
+                        <option key={item.id} value={item.id} disabled={!isAvailable}>
+                            {item.name}{priceText} {!isAvailable ? '(재고 부족)' : ''}
+                        </option>
+                    );
+                })}
+            </select>
+        </div>
+    );
 });
 
-const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<React.SetStateAction<number>>; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => { 
-  const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]); 
-  const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]); 
-  const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 }); 
-  const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 }); 
-  
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    const numValue = parseInt(value, 10);
-    if (value === '') {
-      setQuantity(NaN);
-    } else if (!isNaN(numValue) && numValue >= 1) {
-      setQuantity(numValue);
-    }
-  }, [setQuantity]);
 
-  const handleInputBlur = useCallback(() => {
-    if (isNaN(quantity) || quantity < 1) {
-      setQuantity(1);
-    } else if (maxQuantity !== null && quantity > maxQuantity) {
-      setQuantity(maxQuantity);
-    }
-  }, [quantity, maxQuantity, setQuantity]);
+const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<React.SetStateAction<number>>; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => {
+    const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]);
+    const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]);
+    const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 });
+    const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 });
 
-  const displayedQuantity = isNaN(quantity) ? '' : quantity;
-  
-  return (
-    <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls">
-      <button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1 || isNaN(quantity)}>
-        <Minus />
-      </button>
-      <input
-        type="number"
-        className="quantity-input"
-        value={displayedQuantity}
-        onChange={handleInputChange}
-        onBlur={handleInputBlur}
-        onClick={(e) => e.stopPropagation()}
-      />
-      <button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}>
-        <Plus />
-      </button>
-    </div>
-  );
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        const numValue = parseInt(value, 10);
+        if (value === '') {
+            setQuantity(NaN);
+        } else if (!isNaN(numValue) && numValue >= 1) {
+            setQuantity(numValue);
+        }
+    }, [setQuantity]);
+
+    const handleInputBlur = useCallback(() => {
+        if (isNaN(quantity) || quantity < 1) {
+            setQuantity(1);
+        } else if (maxQuantity !== null && quantity > maxQuantity) {
+            setQuantity(maxQuantity);
+        }
+    }, [quantity, maxQuantity, setQuantity]);
+
+    const displayedQuantity = isNaN(quantity) ? '' : quantity;
+
+    return (
+        <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls">
+            <button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1 || isNaN(quantity)}>
+                <Minus />
+            </button>
+            <input
+                type="number"
+                className="quantity-input"
+                value={displayedQuantity}
+                onChange={handleInputChange}
+                onBlur={handleInputBlur}
+                onClick={(e) => e.stopPropagation()}
+            />
+            <button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}>
+                <Plus />
+            </button>
+        </div>
+    );
 });
 
 const PurchasePanel: React.FC<{
@@ -514,6 +526,11 @@ const ProductDetailPage: React.FC = () => {
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [countdown, setCountdown] = useState<string | null>(null);
+
+    // ✅ [추가] 선입금 모달 상태 관리
+    const [isPrepaymentModalOpen, setPrepaymentModalOpen] = useState(false);
+    const [prepaymentPrice, setPrepaymentPrice] = useState(0);
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
@@ -539,6 +556,36 @@ const ProductDetailPage: React.FC = () => {
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
 
+    // ✅ [추가] 이벤트 상품 카운트다운 로직
+    useEffect(() => {
+        if (!displayRound || displayRound.eventType !== 'CHUSEOK') {
+            setCountdown(null);
+            return;
+        }
+
+        const { primaryEnd } = getDeadlines(displayRound);
+        if (!primaryEnd) {
+            setCountdown(null);
+            return;
+        }
+
+        const interval = setInterval(() => {
+            const diff = primaryEnd.diff(dayjs(), 'second');
+            if (diff <= 0) {
+                setCountdown('마감!');
+                clearInterval(interval);
+                return;
+            }
+            const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+            const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+            const s = String(diff % 60).padStart(2, '0');
+            setCountdown(`${h}:${m}:${s}`);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [displayRound]);
+
+
     useLayoutEffect(() => {
         const contentElement = contentAreaRef.current;
         const footerElement = footerRef.current;
@@ -553,35 +600,35 @@ const ProductDetailPage: React.FC = () => {
     }, [displayRound]);
 
     useEffect(() => {
-      if (!productId) {
-        setError("잘못된 상품 ID입니다.");
-        setLoading(false);
-        return;
-      }
-      const fetchProduct = async () => {
-        setLoading(true);
-        try {
-          const result = await getProductByIdWithStock({ productId });
-          const productData = (result.data as any)?.product as Product | null;
-          if (!productData) {
-            setError("상품을 찾을 수 없습니다.");
+        if (!productId) {
+            setError("잘못된 상품 ID입니다.");
+            setLoading(false);
             return;
-          }
-          const normalized = normalizeProduct(productData);
-          setProduct(normalized);
-          if (userDocument) {
-            const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
-            setIsEncoreRequested(alreadyRequested);
-            runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
-          }
-        } catch (e: any) {
-          console.error("상품 상세 정보 로딩 실패:", e);
-          showToast('error', e.message || "상품 정보를 불러오는 데 실패했습니다.");
-        } finally {
-          setLoading(false);
         }
-      };
-      fetchProduct();
+        const fetchProduct = async () => {
+            setLoading(true);
+            try {
+                const result = await getProductByIdWithStock({ productId });
+                const productData = (result.data as any)?.product as Product | null;
+                if (!productData) {
+                    setError("상품을 찾을 수 없습니다.");
+                    return;
+                }
+                const normalized = normalizeProduct(productData);
+                setProduct(normalized);
+                if (userDocument) {
+                    const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
+                    setIsEncoreRequested(alreadyRequested);
+                    runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
+                }
+            } catch (e: any) {
+                console.error("상품 상세 정보 로딩 실패:", e);
+                showToast('error', e.message || "상품 정보를 불러오는 데 실패했습니다.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchProduct();
     }, [productId, userDocument, getProductByIdWithStock, runPageTourIfFirstTime]);
 
 
@@ -615,8 +662,8 @@ const ProductDetailPage: React.FC = () => {
     const salesPhase = useMemo<SalesPhase>(() => {
         if (!displayRound) return 'UNKNOWN';
         const { primaryEnd } = getDeadlines(displayRound);
-        const pickupEnd = displayRound.pickupDate 
-            ? dayjs(safeToDate(displayRound.pickupDate)).hour(13).minute(0).second(0) 
+        const pickupEnd = displayRound.pickupDate
+            ? dayjs(safeToDate(displayRound.pickupDate)).hour(13).minute(0).second(0)
             : null;
 
         const now = dayjs();
@@ -627,7 +674,7 @@ const ProductDetailPage: React.FC = () => {
 
     const actionState = useMemo<ProductActionState | 'ON_SITE_SALE'>(() => {
         if (!displayRound) return 'LOADING';
-        
+
         if (salesPhase === 'ON_SITE') return 'ON_SITE_SALE';
 
         const baseState = determineActionState(displayRound, userDocument);
@@ -639,7 +686,7 @@ const ProductDetailPage: React.FC = () => {
         if (baseState === 'REQUIRE_OPTION' && selectedItem) return 'PURCHASABLE';
 
         if (baseState === 'PURCHASABLE' && !selectedItem) {
-             const isAnyItemAvailable = displayRound.variantGroups.some(vg => {
+            const isAnyItemAvailable = displayRound.variantGroups.some(vg => {
                 const stock = getStockInfo(vg);
                 return !stock.isLimited || stock.remainingUnits > 0;
             });
@@ -684,70 +731,55 @@ const ProductDetailPage: React.FC = () => {
         setIsProcessing(true);
         const toastId = toast.loading('예약 처리 중...');
 
-        let showPrepaymentModal = false;
         try {
-          const validationResult = await validateCartCallable({
-            items: [{ productId: product.id, roundId: displayRound.roundId, itemId: selectedItem.id, quantity: quantity, ...selectedItem }]
-          });
-          if (!validationResult.data.summary.sufficient) {
-            throw new Error(validationResult.data.summary.reason || '재고가 부족하거나 예약할 수 없는 상품입니다.');
-          }
+            const validationResult = await validateCartCallable({
+                items: [{ productId: product.id, roundId: displayRound.roundId, itemId: selectedItem.id, quantity: quantity, ...selectedItem }]
+            });
+            if (!validationResult.data.summary.sufficient) {
+                throw new Error(validationResult.data.summary.reason || '재고가 부족하거나 예약할 수 없는 상품입니다.');
+            }
 
-          const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
-          const prepaymentRequired = isWarningUser || displayRound.isPrepaymentRequired;
-          const totalPrice = selectedItem.price * quantity;
+            const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
+            const prepaymentRequired = isWarningUser || displayRound.isPrepaymentRequired;
+            const totalPrice = selectedItem.price * quantity;
 
-          const orderItem: OrderItem = {
-            id: `order-item-${selectedItem.id}-${Date.now()}`,
-            productId: product.id, productName: product.groupName, imageUrl: product.imageUrls?.[0] || '',
-            roundId: displayRound.roundId, roundName: displayRound.roundName,
-            variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName,
-            itemId: selectedItem.id, itemName: selectedItem.name,
-            quantity: quantity, unitPrice: selectedItem.price, stock: selectedItem.stock,
-            stockDeductionAmount: selectedItem.stockDeductionAmount,
-            arrivalDate: displayRound.arrivalDate || null, pickupDate: displayRound.pickupDate,
-            deadlineDate: displayRound.deadlineDate,
-            isPrepaymentRequired: displayRound.isPrepaymentRequired ?? false,
-          };
+            const orderItem: OrderItem = {
+                id: `order-item-${selectedItem.id}-${Date.now()}`,
+                productId: product.id, productName: product.groupName, imageUrl: product.imageUrls?.[0] || '',
+                roundId: displayRound.roundId, roundName: displayRound.roundName,
+                variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName,
+                itemId: selectedItem.id, itemName: selectedItem.name,
+                quantity: quantity, unitPrice: selectedItem.price, stock: selectedItem.stock,
+                stockDeductionAmount: selectedItem.stockDeductionAmount,
+                arrivalDate: displayRound.arrivalDate || null, pickupDate: displayRound.pickupDate,
+                deadlineDate: displayRound.deadlineDate,
+                isPrepaymentRequired: displayRound.isPrepaymentRequired ?? false,
+            };
 
-          const orderPayload = {
-            userId: user.uid, items: [orderItem], totalPrice,
-            customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
-            pickupDate: displayRound.pickupDate, wasPrepaymentRequired: prepaymentRequired,
-            notes: '상세페이지 즉시 예약'
-          };
+            const orderPayload = {
+                userId: user.uid, items: [orderItem], totalPrice,
+                customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
+                pickupDate: displayRound.pickupDate, wasPrepaymentRequired: prepaymentRequired,
+                notes: '상세페이지 즉시 예약'
+            };
 
-          await submitOrderCallable(orderPayload);
-
-          if (prepaymentRequired) {
-            showPrepaymentModal = true;
+            await submitOrderCallable(orderPayload);
             toast.dismiss(toastId);
-            const customToastId = 'prepayment-toast-detail';
-            const performNavigation = () => { toast.dismiss(customToastId); startTransition(() => { navigate('/mypage/history'); }); };
-            toast.custom((t) => (
-              <div className="prepayment-modal-overlay">
-                <div className={`prepayment-modal-content ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
-                  <div className="toast-icon-wrapper"><Banknote size={48} /></div>
-                  <h4>⚠️ 선입금 후 예약이 확정됩니다</h4>
-                  <p>'주의 요망' 등급이시거나 해당 상품이 선입금 필수 상품입니다.<br/>마감 시간 전까지 입금 후 채널톡으로 내역을 보내주세요.</p>
-                  <div className="bank-info"><strong>카카오뱅크 3333-12-3456789 (소도몰)</strong><div className="price-to-pay">입금할 금액: <strong>{totalPrice.toLocaleString()}원</strong></div></div>
-                  <small>관리자가 확인 후 예약을 확정 처리해 드립니다.<br/>미입금 시 예약은 자동 취소될 수 있습니다.</small>
-                  <button className="modal-confirm-button" onClick={performNavigation}>확인 및 주문내역으로 이동</button>
-                </div>
-              </div>
-            ), { id: customToastId, duration: Infinity });
-          } else {
-            toast.dismiss(toastId);
-            showToast('success', `${product.groupName} 예약이 완료되었습니다!`);
-          }
+
+            if (prepaymentRequired) {
+                // ✅ [수정] toast.custom 대신 전용 모달 상태 업데이트
+                setPrepaymentPrice(totalPrice);
+                setPrepaymentModalOpen(true);
+            } else {
+                showToast('success', `${product.groupName} 예약이 완료되었습니다!`);
+            }
 
         } catch (error: any) {
-          toast.dismiss(toastId);
-          showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
+            toast.dismiss(toastId);
+            showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
         } finally {
-            if (!showPrepaymentModal) {
-              setIsProcessing(false);
-            }
+            // ✅ [수정] 모달을 띄우는 경우에도 processing 상태는 해제
+            setIsProcessing(false);
         }
     };
 
@@ -760,20 +792,20 @@ const ProductDetailPage: React.FC = () => {
         const toastId = toast.loading('대기 신청 처리 중...');
 
         const waitlistPayload = {
-          productId: product.id, roundId: displayRound.roundId,
-          variantGroupId: selectedVariantGroup.id, itemId: selectedItem.id,
-          quantity: quantity,
+            productId: product.id, roundId: displayRound.roundId,
+            variantGroupId: selectedVariantGroup.id, itemId: selectedItem.id,
+            quantity: quantity,
         };
 
         try {
-          await addWaitlistEntryCallable(waitlistPayload);
-          toast.dismiss(toastId);
-          showToast('success', `${product.groupName} 대기 신청이 완료되었습니다.`);
+            await addWaitlistEntryCallable(waitlistPayload);
+            toast.dismiss(toastId);
+            showToast('success', `${product.groupName} 대기 신청이 완료되었습니다.`);
         } catch (error: any) {
-          toast.dismiss(toastId);
-          showToast('error', error.message || '대기 신청 중 오류가 발생했습니다.');
+            toast.dismiss(toastId);
+            showToast('error', error.message || '대기 신청 중 오류가 발생했습니다.');
         } finally {
-          setIsProcessing(false);
+            setIsProcessing(false);
         }
     };
 
@@ -820,7 +852,7 @@ const ProductDetailPage: React.FC = () => {
         } else {
             handleImmediateOrder();
         }
-     }, [
+    }, [
         isPreLaunch, launchDate, product, displayRound, selectedVariantGroup,
         selectedItem, quantity, handleImmediateOrder, handleWaitlistRequest
     ]);
@@ -868,12 +900,13 @@ const ProductDetailPage: React.FC = () => {
                                         <Moon size={18} />
                                     </div>
                                 )}
-                                <ProductInfo 
-                                    product={product} 
-                                    round={displayRound} 
-                                    actionState={actionState} 
+                                <ProductInfo
+                                    product={product}
+                                    round={displayRound}
+                                    actionState={actionState}
                                     expirationDateInfo={expirationDateInfo}
                                     salesPhase={salesPhase}
+                                    countdown={countdown}
                                 />
                             </div>
                         </div>
@@ -919,6 +952,13 @@ const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
             <Lightbox isOpen={isLightboxOpen} onClose={handleCloseLightbox} images={originalImageUrls} startIndex={lightboxStartIndex} />
+
+            {/* ✅ [추가] 전용 모달 렌더링 */}
+            <PrepaymentModal
+                isOpen={isPrepaymentModalOpen}
+                totalPrice={prepaymentPrice}
+                onClose={() => setPrepaymentModalOpen(false)}
+            />
         </>
     );
 };

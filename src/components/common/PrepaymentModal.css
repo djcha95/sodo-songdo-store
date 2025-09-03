@@ -1,0 +1,153 @@
+/* src/components/common/PrepaymentModal.css */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background-color: #ffffff;
+  color: #333;
+  padding: 14px; /* ✅ 패딩 증가: 전체적인 여백 확대 */
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  animation: fadeInScale 0.3s ease-out forwards;
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-icon-wrapper {
+  margin: 0 auto 20px; /* ✅ 마진 증가: 아이콘 아래 여백 확대 */
+  color: var(--color-primary, #2563eb);
+}
+
+.modal-content h4 {
+  font-size: 1.3rem; /* ✅ 폰트 크기 확대: 제목 강조 */
+  font-weight: 700;
+  margin: 0 0 12px; /* ✅ 마진 조정 */
+  color: #111827;
+  line-height: 1.4; /* ✅ 라인 높이 추가: 제목 가독성 향상 */
+}
+
+.description-text { /* ✅ 신규 클래스 */
+  font-size: 0.95rem; /* ✅ 폰트 크기 조정 */
+  line-height: 1.7; /* ✅ 라인 높이 증가: 줄 간격 확보 */
+  margin-bottom: 20px; /* ✅ 마진 증가 */
+  color: #4b5563;
+}
+
+.bank-info-highlight {
+  background-color: #f3f4f6;
+  border-radius: 12px;
+  padding: 20px; /* ✅ 패딩 증가: 강조 영역 내부 여백 확대 */
+  margin-bottom: 20px; /* ✅ 마진 증가 */
+  border: 1px dashed #d1d5db;
+}
+
+.bank-account-number { /* ✅ 신규 클래스 */
+  display: block;
+  font-size: 1.05rem; /* ✅ 폰트 크기 미세 조정 */
+  margin-bottom: 8px; /* ✅ 계좌번호와 이름 사이 간격 조정 */
+  color: #1f2937;
+  font-weight: 600;
+  letter-spacing: 0.5px; /* ✅ 글자 간격 추가: 계좌번호 가독성 향상 */
+}
+
+.account-holder-name { /* ✅ 신규 클래스 */
+  display: block;
+  font-size: 0.95rem; /* ✅ 폰트 크기 조정 */
+  margin-top: -4px; /* ✅ 계좌번호 위로 살짝 당겨서 그룹화된 느낌 */
+  margin-bottom: 12px; /* ✅ 계좌주 이름 아래 간격 조정 */
+  color: #555;
+  font-weight: 500;
+}
+
+.price-to-pay-prominent {
+  margin-top: 10px; /* ✅ 마진 조정 */
+}
+
+.price-label {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 0px; /* ✅ 라벨과 금액 사이 간격 조정 */
+  display: block; /* ✅ 줄바꿈 */
+}
+
+.price-value {
+  font-size: 1.7rem; /* ✅ 금액 폰트 크기 확대: 가장 강조 */
+  font-weight: 800;
+  color: var(--color-primary, #2563eb);
+  letter-spacing: -0.5px; /* ✅ 금액 글자 간격 미세 조정 */
+}
+
+.notice-text { /* ✅ 신규 클래스 */
+  font-size: 0.85rem; /* ✅ 폰트 크기 조정 */
+  line-height: 1.5; /* ✅ 라인 높이 조정 */
+  display: block;
+  margin-bottom: 10px; /* ✅ 마진 증가: 버튼과 위 텍스트 간 분리 */
+  color: #6b7280;
+}
+
+.modal-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.modal-button-row {
+  display: flex;
+  gap: 10px;
+}
+
+.modal-button {
+  flex: 1;
+  padding: 14px; /* ✅ 버튼 패딩 증가 */
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.modal-button.primary {
+  background-color: #ffee00;
+  color: rgb(0, 0, 0);
+}
+
+.modal-button.secondary {
+  background-color: var(--color-primary, #2563eb);
+  color: white;
+}
+
+.modal-button.tertiary {
+  background-color: #e5e7eb;
+  color: #5b634b;
+}
+
+.modal-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}

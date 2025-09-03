@@ -21,7 +21,10 @@ export interface VariantGroup extends OriginalVariantGroup {
 
 export interface SalesRound extends OriginalSalesRound {
   variantGroups: VariantGroup[];
+  // ✅ [수정] eventType이 null일 수 있는 가능성을 타입에 추가하여 오류를 해결합니다.
+  eventType?: string | null; // eventType이 null도 허용하도록 변경
 }
+
 
 export interface StockInfo {
   isLimited: boolean;
@@ -72,7 +75,6 @@ export const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// 마감일 계산 로직은 유지
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
     const publishAt = safeToDate(round.publishAt);
     if (!publishAt) return { primaryEnd: null, secondaryEnd: null };
@@ -84,7 +86,6 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Day
         return { primaryEnd, secondaryEnd };
     }
 
-    // deadlineDate가 없을 경우, 기존 로직으로 대체 (Fallback)
     const publishDay = dayjs(publishAt);
     let primaryEndFallback = publishDay.add(1, 'day').hour(13).minute(0).second(0);
     const dayOfWeek = primaryEndFallback.day();
@@ -122,9 +123,8 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
     return sortedHistory[0] || null;
 };
 
-// ✅ [수정] 1차/2차 공구 비즈니스 로직을 완벽하게 반영하여 상태 결정 로직을 전면 재구성
+// ✅ [수정] 이벤트 상품 관련 로직을 제거하여 단순화. 판매 상태는 이벤트 여부와 관계없이 동일한 규칙을 따르도록 함.
 export const determineActionState = (round: SalesRound, userDocument: UserDocument | null): ProductActionState => {
-  // 0. 참여 등급 확인
   const userTier = userDocument?.loyaltyTier;
   const allowedTiers = round.allowedTiers || [];
   if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier as LoyaltyTier))) {
@@ -135,7 +135,6 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   const publishAt = safeToDate(round.publishAt);
   const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
-  // 1. 판매 예정 (게시 시간 전)
   if (publishAt && now.isBefore(publishAt)) {
     return 'SCHEDULED';
   }
@@ -150,7 +149,6 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
 
   const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
 
-  // 2. 1차 공구 기간 ( ~ 1차 마감 시간 전)
   if (primaryEnd && now.isBefore(primaryEnd)) {
     if (isAllOptionsSoldOut()) {
       return 'WAITLISTABLE';
@@ -158,16 +156,14 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
     return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
   }
 
-  // 3. 2차 공구 기간 (1차 마감 이후 ~ 2차 마감 시간 전)
   if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
-    // ✅ [수정] 1차 공구 때 무제한이었던 상품인지 확인하는 로직 추가
     const wasUnlimitedInPrimary = round.variantGroups.some(vg => {
         const stockInfo = getStockInfo(vg);
         return !stockInfo.isLimited;
     });
 
     if (wasUnlimitedInPrimary) {
-        return 'AWAITING_STOCK'; // 무제한 상품은 2차 때 '재고 준비중'으로 변경
+        return 'AWAITING_STOCK';
     }
     
     if (isAllOptionsSoldOut()) {
@@ -176,13 +172,11 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
     return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
   }
 
-  // 4. 모든 판매 기간 종료 후
   const salesEnd = secondaryEnd || primaryEnd;
   if (salesEnd && now.isAfter(salesEnd)) {
     return 'ENCORE_REQUESTABLE';
   }
   
-  // 5. 위 모든 조건에 해당하지 않는 경우 (데이터 오류 등)
   return 'ENDED';
 };
 
