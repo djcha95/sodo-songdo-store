@@ -34,10 +34,23 @@
     line-height: 1.2;
 }
 
-.tab-btn.active {
+/* ✅ [수정] 활성화된 추석특집 탭에 배경 그라데이션과 새로운 색상 적용 */
+.tab-btn.event-tab.active {
+    color: #8c5a01; /* Rich golden-brown */
+    font-weight: 700;
+    border-bottom-color: #FFD700;
+    background-image: linear-gradient(to top, #fff3d4 0%, #ffffff 100%);
+}
+
+.tab-btn.primary-tab.active {
+    color: #E65100;
+    border-bottom-color: #FF9800;
+}
+.tab-btn.secondary-tab.active {
     color: #5A8DEE;
     border-bottom-color: #5A8DEE;
 }
+
 
 .tab-title {
     display: flex;
@@ -56,7 +69,7 @@
 }
 
 .tab-btn.active .tab-count {
-    color: #5A8DEE;
+    color: inherit;
 }
 
 @media (min-width: 360px) {
@@ -84,11 +97,6 @@
     gap: 0;
 }
 
-/* ✅ [제거] 기존의 전체 너비 카운트다운 타이머 스타일 제거
-.list-countdown-timer { ... }
-*/
-
-/* ✅ [추가] 섹션 제목과 카운트다운을 양쪽으로 나누는 헤더 스타일 */
 .section-header-split {
     display: flex;
     justify-content: space-between;
@@ -96,7 +104,6 @@
     padding: 0 0.75rem;
 }
 
-/* ✅ [추가] '공동구매', '추가예약' 등 섹션 제목 스타일 */
 .section-title {
     font-size: 1.1rem;
     font-weight: 700;
@@ -108,7 +115,27 @@
     padding: 0.5rem 0;
 }
 
-/* ✅ [추가] 헤더 오른쪽에 표시될 인라인 카운트다운 타이머 스타일 */
+/* ✅ [추가] 추석특집 이벤트 섹션 전용 스타일 */
+.event-section-header {
+    background-color: #fff9e6; /* Soft moonlight yellow */
+    padding: 0.75rem 0.75rem 0.25rem;
+    text-align: center;
+    border-bottom: 1px solid #ffeeba;
+}
+
+.section-title-event {
+    color: #8c5a01;
+    font-size: 1.2rem;
+    padding: 0;
+    margin: 0;
+    justify-content: center;
+}
+
+.section-title-event .tab-icon {
+    animation: moonGlow 2.5s ease-in-out infinite;
+}
+
+
 .countdown-timer-inline {
     display: flex;
     align-items: center;
@@ -117,14 +144,14 @@
     background-color: var(--danger-color-light);
     color: var(--danger-color);
     border: 1px solid var(--danger-color-border);
-    border-radius: 20px; /* 둥근 알약 모양 */
+    border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 600;
     white-space: nowrap;
 }
 
 .countdown-timer-inline > span {
-    min-width: 50px; /* 카운트다운 숫자 변경 시 너비 고정 */
+    min-width: 50px;
     text-align: center;
 }
 
@@ -154,6 +181,22 @@
     color: #909090;
 }
 
+/* ✅ [추가] 추석특집 상품이 없을 때의 플레이스홀더 스타일 */
+.event-placeholder {
+    background-color: #fffef7;
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    border-top: 1px dashed #ffeeba;
+}
+
+.event-placeholder p {
+    color: #b17d19;
+}
+.event-placeholder span {
+    color: #b17d19;
+}
+
+
 .onsite-product-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -169,6 +212,17 @@
     text-shadow: 0 0 6px #fff, 0 0 8px #ffc107, 0 0 12px #ff5722;
   }
 }
+
+/* ✅ [추가] 보름달 아이콘 반짝임 효과 */
+@keyframes moonGlow {
+  0%, 100% {
+    text-shadow: 0 0 3px #fff, 0 0 5px #ffd700, 0 0 8px #ffc107;
+  }
+  50% {
+    text-shadow: 0 0 5px #fff, 0 0 10px #ffd700, 0 0 15px #ffc107;
+  }
+}
+
 
 .tab-btn.primary-tab.active .tab-text {
     color: #E65100;

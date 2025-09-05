@@ -10,3 +10,6 @@ node_modules/
 *.local
 
 serviceAccountKey.json
+
+# ✅ [추가] 민감한 서비스 계정 키 파일을 Git이 무시하도록 설정
+functions/service-account-key.json
