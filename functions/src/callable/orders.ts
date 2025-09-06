@@ -510,7 +510,6 @@ export const getUserOrders = onCall(
           lastVisible: lastVisibleDocData,
           orderByField,
           orderDirection = 'desc',
-          // [수정] filterStatuses 파라미터를 추가로 받습니다.
           filterStatuses,
         } = request.data as {
           userId: string;
@@ -518,8 +517,6 @@ export const getUserOrders = onCall(
           lastVisible?: any;
           orderByField: 'createdAt' | 'pickupDate';
           orderDirection?: 'asc' | 'desc';
-          startDate?: string; // startDate는 더 이상 사용되지 않지만 호환성을 위해 남겨둡니다.
-          // [수정] filterStatuses의 타입을 명시합니다.
           filterStatuses?: OrderStatus[];
         };
 
@@ -531,17 +528,17 @@ export const getUserOrders = onCall(
         }
     
         try {
-          let queryBuilder = db.collection('orders').withConverter(orderConverter).where('userId', '==', targetUserId);
+          // ✅ [수정] 문제를 일으켰던 isArchived 필터를 제거합니다.
+          let queryBuilder = db.collection('orders')
+            .withConverter(orderConverter)
+            .where('userId', '==', targetUserId);
+            // .where('isArchived', '!=', true); // 👈 이 줄을 삭제했습니다!
           
-          // [수정] '픽업일순' 보기의 필터링 로직을 백엔드에서 처리합니다.
-          // 프론트엔드에서 filterStatuses 배열을 보내면, 해당 상태의 주문들만 필터링합니다.
           if (Array.isArray(filterStatuses) && filterStatuses.length > 0) {
             queryBuilder = queryBuilder.where('status', 'in', filterStatuses);
           }
     
           if (orderByField === 'pickupDate') {
-            // [수정] 기존의 startDate 필터링 로직은 제거합니다.
-            // 이제 '픽업일순' 보기는 filterStatuses 조건에 따라 모든 미수령 주문을 가져옵니다.
             queryBuilder = queryBuilder.orderBy('pickupDate', orderDirection);
           } else {
             queryBuilder = queryBuilder.orderBy('createdAt', orderDirection);
@@ -577,6 +574,7 @@ export const getUserOrders = onCall(
         }
     }
 );
+
 
 export const getUserWaitlist = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },

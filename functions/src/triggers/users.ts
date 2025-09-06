@@ -4,13 +4,14 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { MISSION_REWARDS } from '../utils/pointService.js';
-import type { UserDocument, Product } from '../types.js';
+// ✅ [수정] 사용하지 않는 'Product' 타입을 import 목록에서 제거합니다.
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
-const db = admin.firestore();
+// ✅ [수정] 주석 처리된 코드에서만 사용되었으므로 'db' 변수 선언을 제거합니다.
+// const db = admin.firestore();
 
 // handleNewUserSetup 함수는 그대로 유지합니다.
 export const handleNewUserSetup = onDocumentCreated({
@@ -23,7 +24,8 @@ export const handleNewUserSetup = onDocumentCreated({
         return;
     }
     const userId = event.params.userId;
-    const newUser = snapshot.data() as UserDocument;
+    // ✅ [수정] 주석 처리된 코드에서만 사용되었으므로 'newUser' 변수 선언을 제거합니다.
+    // const newUser = snapshot.data() as UserDocument;
 
     console.log(`[New User Trigger] User document created for ${userId}. Starting welcome rewards.`);
     
@@ -51,7 +53,11 @@ export const handleNewUserSetup = onDocumentCreated({
         console.log(`[Points] Successfully awarded points to ${userId}.`);
     }
 
-    // --- 가입 환영 간식 주문 생성 (수정된 로직) ---
+    /*
+    // =================================================================
+    // ✅ [수정] 이벤트가 종료되어 가입 환영 간식 지급 로직을 비활성화합니다.
+    // =================================================================
+    // --- 가입 환영 간식 주문 생성 (비활성화된 로직) ---
     try {
         const productRef = db.collection('products').doc('GIFT_WELCOME_SNACK');
         const productSnap = await productRef.get();
@@ -73,11 +79,9 @@ export const handleNewUserSetup = onDocumentCreated({
             return;
         }
 
-        // [수정] 일괄 지급 함수와 동일한 이벤트 ID를 사용합니다.
         const snackEventId = 'welcome-snack-2025-all';
         const newOrderRef = db.collection('orders').doc();
         
-        // [핵심] 알림톡 방지를 위해 픽업일을 과거(어제)로 설정합니다.
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
 
@@ -86,12 +90,11 @@ export const handleNewUserSetup = onDocumentCreated({
             userId: userId,
             status: 'RESERVED',
             wasPrepaymentRequired: false,
-            eventId: snackEventId, // [수정] 통합 이벤트 ID 사용
+            eventId: snackEventId,
             createdAt: FieldValue.serverTimestamp(),
-            // [핵심] 상품 데이터의 픽업일 대신 과거 날짜를 사용하여 알림톡을 방지합니다.
             pickupDate: Timestamp.fromDate(yesterday), 
             pickupDeadlineDate: eventRound.pickupDeadlineDate || null,
-            deadlineText: "이벤트 증정 (소진 시까지)", // [수정] 문구 통일
+            deadlineText: "이벤트 증정 (소진 시까지)",
             cancelLocked: true,
             items: [{
                 productId: productSnap.id,
@@ -121,4 +124,5 @@ export const handleNewUserSetup = onDocumentCreated({
     } catch (error) {
         console.error(`[Snack] Failed to create welcome snack for user ${userId}.`, error);
     }
+    */
 });

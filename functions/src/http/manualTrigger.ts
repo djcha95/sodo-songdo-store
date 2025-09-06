@@ -6,9 +6,8 @@ import { getAuth } from "firebase-admin/auth";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { executePickupReminders } from "../scheduled/notifications.js";
-// ✅ [수정] Product와 SalesRound 타입을 import 목록에 추가합니다.
 import type { Order, UserDocument, LoyaltyTier, PointLog, Product, SalesRound } from "../types.js";
-import dayjs from "dayjs"; // dayjs import 추가
+import dayjs from "dayjs";
 
 
 // =================================================================
@@ -305,6 +304,150 @@ export const backfillProductVisibility = onCall(
     } catch (error) {
       logger.error("backfillProductVisibility 함수 실행 중 오류 발생", error);
       throw new HttpsError("internal", "스크립트 실행 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+/**
+ * =================================================================
+ * ✅ [신규 추가] 웰컴 스낵 주문을 숨김(archive) 처리하는 함수
+ * =================================================================
+ * 'GIFT_WELCOME_SNACK' productId를 가진 모든 주문을 찾아 isArchived: true로 업데이트합니다.
+ * 이 함수는 배포 후 단 한 번만 URL을 통해 직접 실행하면 됩니다.
+ */
+export const archiveWelcomeSnackOrders = onRequest(
+  { region: "asia-northeast3", timeoutSeconds: 540, memory: "1GiB" },
+  async (req, res) => {
+    try {
+      logger.info("🚀 [일회성 스크립트] 웰컴 스낵 주문 숨김 처리 시작...");
+      const ordersRef = db.collection("orders");
+      // 쿼리: isArchived 필드가 true가 아닌 모든 주문을 가져옵니다.
+      const querySnapshot = await ordersRef.where("isArchived", "!=", true).get();
+
+      if (querySnapshot.empty) {
+        logger.info("숨김 처리할 주문이 없습니다.");
+        res.status(200).send("✅ 처리할 웰컴 스낵 주문이 없습니다.");
+        return;
+      }
+
+      const batch = db.batch();
+      let updateCount = 0;
+      const MAX_BATCH_SIZE = 500; // Firestore batch 쓰기 제한
+
+      logger.info(`전체 ${querySnapshot.size}개의 주문을 확인 중...`);
+
+      for (const doc of querySnapshot.docs) {
+        const order = doc.data() as Order;
+        
+        // 주문 항목(items)에 'GIFT_WELCOME_SNACK'이 포함되어 있는지 확인
+        const isWelcomeSnackOrder = order.items?.some(
+          (item) => item.productId === "GIFT_WELCOME_SNACK"
+        );
+
+        if (isWelcomeSnackOrder) {
+          batch.update(doc.ref, { isArchived: true });
+          updateCount++;
+          logger.info(`  -> 주문 ID: ${doc.id} 숨김 처리 목록에 추가`);
+
+          // 배치 크기가 500에 도달하면 커밋하고 새 배치를 시작합니다.
+          if (updateCount % MAX_BATCH_SIZE === 0) {
+            await batch.commit();
+            logger.info(`🔥 ${updateCount}개의 주문을 처리했습니다. 다음 배치를 시작합니다...`);
+            // batch = db.batch(); // batch.commit() 후에 자동으로 새 배치가 되므로 재할당 필요 없음
+          }
+        }
+      }
+
+      // 남은 업데이트가 있는 경우 최종 커밋
+      if (updateCount % MAX_BATCH_SIZE !== 0) {
+        await batch.commit();
+      }
+
+      if (updateCount > 0) {
+        const successMessage = `✅ 성공: 총 ${updateCount}개의 웰컴 스낵 주문을 숨김 처리했습니다.`;
+        logger.info(successMessage);
+        res.status(200).send(successMessage);
+      } else {
+        const message = "모든 웰컴 스낵 주문이 이미 처리되었거나, 해당 주문이 없습니다.";
+        logger.info(message);
+        res.status(200).send(message);
+      }
+
+    } catch (error) {
+      logger.error("archiveWelcomeSnackOrders 함수 실행 중 오류 발생", error);
+      res.status(500).send("❌ 오류가 발생했습니다. Functions 로그를 확인해주세요.");
+    }
+  }
+);
+
+/**
+ * =================================================================
+ * 🚨 [수정] 픽업 전 '웰컴 스낵' 주문을 영구 삭제하는 함수 (버그 수정)
+ * =================================================================
+ */
+export const deleteUnclaimedWelcomeSnacks = onRequest(
+  { region: "asia-northeast3", timeoutSeconds: 540, memory: "1GiB" },
+  async (req, res) => {
+    try {
+      logger.warn("🚨 [데이터 삭제 스크립트] 픽업 전 웰컴 스낵 주문 삭제 프로세스 시작...");
+
+      const ordersRef = db.collection("orders");
+      const querySnapshot = await ordersRef
+        .where("status", "in", ["RESERVED", "PREPAID"])
+        .get();
+
+      if (querySnapshot.empty) {
+        const message = "✅ 'RESERVED' 또는 'PREPAID' 상태의 주문이 없습니다. 삭제할 데이터가 없습니다.";
+        logger.info(message);
+        res.status(200).send(message);
+        return;
+      }
+
+      let batch = db.batch();
+      let deleteCount = 0;
+      const MAX_BATCH_SIZE = 499;
+
+      logger.info(`🔍 ${querySnapshot.size}개의 '픽업 전' 주문을 대상으로 검사 시작...`);
+
+      for (const doc of querySnapshot.docs) {
+        const order = doc.data() as Order;
+        
+        const isWelcomeSnackOrder = order.items?.some(
+          (item) => item.productId === "GIFT_WELCOME_SNACK"
+        );
+
+        if (isWelcomeSnackOrder) {
+          batch.delete(doc.ref);
+          deleteCount++;
+          logger.info(`  🗑️  삭제 대상 추가: 주문 ID ${doc.id}`);
+
+          if (deleteCount > 0 && deleteCount % MAX_BATCH_SIZE === 0) {
+            await batch.commit();
+            logger.warn(`🔥 ${deleteCount}개의 주문을 삭제했습니다. 다음 배치를 계속합니다...`);
+            // ✅ [수정] 처리가 끝난 후, 다음 작업을 위해 새로운 batch를 생성합니다.
+            batch = db.batch(); 
+          }
+        }
+      }
+
+      // 남은 삭제 작업이 있다면 최종 실행
+      if (deleteCount > 0 && deleteCount % MAX_BATCH_SIZE !== 0) {
+        await batch.commit();
+      }
+
+      if (deleteCount > 0) {
+        const successMessage = `✅ 성공: 총 ${deleteCount}개의 픽업 전 '웰컴 스낵' 주문을 영구적으로 삭제했습니다.`;
+        logger.info(successMessage);
+        res.status(200).send(successMessage);
+      } else {
+        const message = "✅ '픽업 전' 상태인 웰컴 스낵 주문을 찾을 수 없습니다. 삭제할 항목이 없습니다.";
+        logger.info(message);
+        res.status(200).send(message);
+      }
+
+    } catch (error) {
+      logger.error("deleteUnclaimedWelcomeSnacks 함수 실행 중 심각한 오류 발생", error);
+      res.status(500).send("❌ 오류가 발생했습니다. Functions 로그를 확인해주세요.");
     }
   }
 );

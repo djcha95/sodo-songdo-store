@@ -71,7 +71,7 @@
     color: var(--text-color-dark);
     position: relative;
     border-radius: 50%;
-    width: 40px;
+    width: auto; /* ✅ [수정] 너비 자동 조정 */
     height: 40px;
     transition: background-color 0.2s, color 0.2s;
     text-decoration: none;
@@ -242,11 +242,9 @@
 .icon-tier-up { color: #ffc107; }
 .icon-tier-down { color: #ff9800; }
 
-/* ✅ [수정] 예약내역/예약하기 버튼 스타일 */
 .header-order-history-btn {
     display: flex;
     align-items: center;
-    /* 밑줄 및 외곽선 제거 */
     text-decoration: none !important;
     border-bottom: none !important;
     outline: none !important;
@@ -256,23 +254,49 @@
     color: white;
     font-size: 0.8rem;
     font-weight: 700;
-    padding: 7px 8px; /* 패딩 조정으로 더 보기 좋게 */
-    border-radius: 16px; /* 둥글게 만들어 부드러운 느낌 */
+    padding: 7px 8px;
+    border-radius: 16px;
     white-space: nowrap;
     transition: all 0.2s ease-in-out;
 }
 
-/* 예약내역 페이지에 있을 때 (예약하기 버튼) */
 .header-order-history-btn.order-now .order-history-badge {
-    background-color: #14b8a6; /* 청록색 (Teal) */
+    background-color: #14b8a6; 
 }
 
-/* 다른 페이지에 있을 때 (예약내역 버튼) */
 .header-order-history-btn.view-history .order-history-badge {
-    background-color: #3b82f6; /* 파란색 (Blue) */
+    background-color: #3b82f6; 
 }
 
 .header-order-history-btn:hover .order-history-badge {
     opacity: 0.9;
-    transform: scale(1.03); /* 호버 시 약간 커지는 효과 */
+    transform: scale(1.03); 
+}
+
+/* ✅ [추가] 주말이벤트 버튼 스타일 */
+.header-event-btn {
+    display: flex;
+    align-items: center;
+    text-decoration: none !important;
+    border-bottom: none !important;
+    outline: none !important;
+    padding: 0 8px; /* 패딩을 좌우로만 줍니다 */
+}
+
+.event-badge {
+    display: flex;
+    align-items: center;
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 7px 12px;
+    border-radius: 16px;
+    white-space: nowrap;
+    transition: all 0.2s ease-in-out;
+    background-color: #d81b60; /* 핑크색 계열 */
+}
+
+.header-event-btn:hover .event-badge {
+    opacity: 0.9;
+    transform: scale(1.03);
 }

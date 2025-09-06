@@ -15,6 +15,6 @@ a:hover { text-decoration: underline; }
 @media (min-width: 1024px) {
   .customer-page-container {
     /* ✅ [수정] BottomNav가 사라졌으므로 하단 패딩 제거 */
-    padding: 32px 40px 40px;
+    padding: 0px 40px 40px;
   }
 }

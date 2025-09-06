@@ -13,7 +13,7 @@ import OnsiteProductCard from '@/components/customer/OnsiteProductCard';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PackageSearch, Clock, Gift, Moon } from 'lucide-react'; // ✅ Moon 아이콘 추가
+import { PackageSearch, Clock, Gift } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { getDisplayRound, getDeadlines, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
@@ -76,7 +76,9 @@ const SimpleOrderPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
   
-  // ✅ [수정] activeTab 상태를 제거하고 visibleSection으로 UI 상태를 통일
+  // ✅ [수정] activeTab 타입을 'event' | 'primary' | 'secondary'로 변경
+  const [activeTab, setActiveTab] = useState<'event' | 'primary' | 'secondary'>('event');
+  // ✅ [수정] visibleSection 타입을 'event' | 'primary' | 'secondary'로 변경
   const [visibleSection, setVisibleSection] = useState<'event' | 'primary' | 'secondary'>('event');
 
   const PAGE_SIZE = 10;
@@ -84,6 +86,7 @@ const SimpleOrderPage: React.FC = () => {
   const hasMoreRef = useRef<boolean>(initialCache?.hasMore ?? true);
   const isFetchingRef = useRef<boolean>(false);
 
+  // ✅ [추가] 이벤트 섹션 참조
   const eventRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLDivElement>(null);
   const secondaryRef = useRef<HTMLDivElement>(null);
@@ -210,6 +213,7 @@ const SimpleOrderPage: React.FC = () => {
     };
   }, [products]);
 
+  // ✅ [수정] useMemo 로직을 변경하여 UI는 통합하되, 카운트다운 계산은 분리
   const { eventProducts, primarySaleProducts, secondarySaleProducts, generalPrimarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const tempPrimary: ProductWithUIState[] = [];
@@ -265,6 +269,7 @@ const SimpleOrderPage: React.FC = () => {
       }
     });
     
+    // 카운트다운은 '일반' 공동구매 상품만을 기준으로 계산
     const firstGeneralPrimarySaleEndDate = tempPrimary.length > 0
       ? getDeadlines(tempPrimary[0].displayRound).primaryEnd
       : null;
@@ -328,17 +333,17 @@ const SimpleOrderPage: React.FC = () => {
 
   return (
     <div className="customer-page-container simple-order-page">
+        {/* ✅ [수정] 탭 UI를 원래 상태로 복원 */}
         <div ref={tabContainerRef} className="tab-container sticky-tabs">
             <button 
                 className={`tab-btn event-tab ${visibleSection === 'event' ? 'active' : ''}`} 
                 onClick={() => {
-                    // ✅ [수정] 클릭 시 visibleSection을 직접 변경하여 즉시 탭 활성화
-                    setVisibleSection('event');
-                    scrollToSection(eventRef);
+                    setActiveTab('event');
+                    setTimeout(() => scrollToSection(eventRef), 0);
                 }}
             >
                 <span className="tab-title">
-                    <span className="tab-icon">🌕</span> {/* ✅ [수정] 아이콘 변경 */}
+                    <span className="tab-icon">✨</span>
                     <span className="tab-text">추석특집</span>
                     <span className="tab-count">({eventProducts.length})</span>
                 </span>
@@ -346,9 +351,8 @@ const SimpleOrderPage: React.FC = () => {
             <button 
                 className={`tab-btn primary-tab ${visibleSection === 'primary' ? 'active' : ''}`} 
                 onClick={() => {
-                    // ✅ [수정] 클릭 시 visibleSection을 직접 변경하여 즉시 탭 활성화
-                    setVisibleSection('primary');
-                    scrollToSection(primaryRef);
+                    setActiveTab('primary');
+                    setTimeout(() => scrollToSection(primaryRef), 0);
                 }}
             >
                 <span className="tab-title">
@@ -360,9 +364,8 @@ const SimpleOrderPage: React.FC = () => {
             <button 
                 className={`tab-btn secondary-tab ${visibleSection === 'secondary' ? 'active' : ''}`} 
                 onClick={() => {
-                    // ✅ [수정] 클릭 시 visibleSection을 직접 변경하여 즉시 탭 활성화
-                    setVisibleSection('secondary');
-                    scrollToSection(secondaryRef);
+                    setActiveTab('secondary');
+                    setTimeout(() => scrollToSection(secondaryRef), 0);
                 }}
             >
                 <span className="tab-title">
@@ -374,24 +377,20 @@ const SimpleOrderPage: React.FC = () => {
         </div>
 
         <div className="tab-content-area">
-            {/* ✅ [수정] 추석특집 섹션 UI 개선 및 구조 변경 */}
             <div ref={eventRef} className="content-section">
+              {eventProducts.length > 0 && (
+                <h2 className="section-title">
+                  <span className="tab-icon">✨</span> 추석특집 상품
+                </h2>
+              )}
               {eventProducts.length > 0 ? (
-                <>
-                  <div className="event-section-header">
-                    <h2 className="section-title section-title-event">
-                      <span className="tab-icon">🌕</span> 추석특집: 풍성한 한가위!
-                    </h2>
-                  </div>
-                  <div className="simple-product-list">
-                    {eventProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
-                  </div>
-                </>
+                <div className="simple-product-list">
+                  {eventProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                </div>
               ) : (
-                <div className="product-list-placeholder event-placeholder">
-                  <Moon size={48} />
-                  <p>풍성한 한가위를 위한 상품을 준비중입니다.</p>
-                  <span>조금만 기다려주세요! 🌕</span>
+                <div className="product-list-placeholder">
+                  <Gift size={48} />
+                  <p>아쉽게도 현재 추석특집 상품이 없습니다.</p>
                 </div>
               )}
             </div>
@@ -434,6 +433,8 @@ const SimpleOrderPage: React.FC = () => {
                     </>
                 )}
             </div>
+
+            {/* ✅ [제거] activeTab === 'onsite' 블록 제거 */}
         </div>
 
         <div ref={loadMoreRef} className="infinite-scroll-loader">

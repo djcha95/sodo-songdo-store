@@ -15,15 +15,15 @@ import type { DocumentData } from "firebase/firestore"; // DocumentData는 클�
 // =================================================================
 
 export type StorageType = 'ROOM' | 'COLD' | 'FROZEN' | 'FRESH';
-export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
-export type OrderStatus = 
-  | 'RESERVED' 
-  | 'PREPAID' 
-  | 'PICKED_UP' 
-  | 'COMPLETED' 
-  | 'CANCELED' 
+export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended' | 'DRAW_COMPLETED'; // ✅ [추가] 추첨 완료 상태
+export type OrderStatus =
+  | 'RESERVED'
+  | 'PREPAID'
+  | 'PICKED_UP'
+  | 'COMPLETED'
+  | 'CANCELED'
   | 'NO_SHOW'
-  | 'LATE_CANCELED'; 
+  | 'LATE_CANCELED';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
 
@@ -50,6 +50,8 @@ export type NotificationType =
   | 'TIER_DOWN'
   | 'ENCORE_AVAILABLE'
   | 'PRODUCT_UPDATE'
+  | 'RAFFLE_WON' // ✅ [추가] 이벤트 당첨
+  | 'RAFFLE_LOST' // ✅ [추가] 이벤트 미당첨
   | 'success'
   | 'error';
 
@@ -115,6 +117,13 @@ export interface WaitlistEntry {
   prioritizedAt?: Timestamp | null;
 }
 
+// ✅ [추가] 추첨 이벤트 응모자 정보
+export interface RaffleEntry {
+    userId: string;
+    entryAt: Timestamp;
+    status: 'entered' | 'won' | 'lost';
+}
+
 export interface SalesRound {
   roundId: string;
   roundName: string;
@@ -133,7 +142,9 @@ export interface SalesRound {
   preOrderTiers?: LoyaltyTier[];
   manualStatus?: SalesRoundStatus | null; // 관리자가 수동으로 설정한 상태
   isManuallyOnsite?: boolean;
-  eventType?: string | null; 
+  eventType?: 'CHUSEOK' | 'RAFFLE' | null; // ✅ [수정] RAFFLE 타입 추가
+  raffleDrawDate?: Timestamp | null; // ✅ [추가] 추첨일
+  entryCount?: number; // ✅ [추가] 총 응모자 수
 }
 
 export interface Product {
@@ -255,6 +266,7 @@ export interface UserDocument {
   hasCompletedTutorial?: boolean;
   tutorialProgress?: UserTutorialProgress;
   completedMissions?: { [key: string]: boolean };
+  enteredRaffleIds?: string[]; // ✅ [추가] 응모한 이벤트 ID 목록
 }
 
 

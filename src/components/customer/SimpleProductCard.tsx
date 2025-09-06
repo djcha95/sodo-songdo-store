@@ -1,10 +1,10 @@
 // src/components/customer/SimpleProductCard.tsx
 
-import React, { useState, useMemo, useCallback, startTransition } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { Flame, Minus, Plus, ChevronRight, ShieldX, Banknote, AlertTriangle, Info, Calendar, Hourglass, Star } from 'lucide-react';
+import { Flame, Minus, Plus, ChevronRight, ShieldX, Banknote, AlertTriangle, Info, Calendar, Hourglass, Star, Ticket, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useLaunch } from '@/context/LaunchContext';
 import toast from 'react-hot-toast';
@@ -15,7 +15,7 @@ import { getStockInfo, getMaxPurchasableQuantity, safeToDate, getDeadlines } fro
 import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import { showToast } from '@/utils/toastUtils';
-import PrepaymentModal from '@/components/common/PrepaymentModal'; // ✅ [추가] 전용 모달 import
+import PrepaymentModal from '@/components/common/PrepaymentModal';
 import './SimpleProductCard.css';
 
 type Product = OriginalProduct & {
@@ -34,8 +34,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     const [quantity, setQuantity] = useState(1);
     const [isProcessing, setIsProcessing] = useState(false);
-
-    // ✅ [추가] 선입금 모달 상태 관리
     const [isPrepaymentModalOpen, setPrepaymentModalOpen] = useState(false);
     const [prepaymentPrice, setPrepaymentPrice] = useState(0);
 
@@ -43,6 +41,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     const validateCartCallable = useMemo(() => httpsCallable<any, any>(functions, 'validateCart'), [functions]);
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functions, 'submitOrder'), [functions]);
     const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functions, 'addWaitlistEntry'), [functions]);
+    const enterRaffleEventCallable = useMemo(() => httpsCallable<any, any>(functions, 'enterRaffleEvent'), [functions]);
 
     const cardData = useMemo(() => {
         const { displayRound } = product;
@@ -78,6 +77,34 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     const handleQuantityBlur = (e: React.FocusEvent<HTMLInputElement>) => {
         e.stopPropagation();
         if (isNaN(quantity) || quantity < 1) { setQuantity(1); }
+    };
+
+    const handleRaffleEntry = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
+        if (isSuspendedUser) { showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
+        if (isProcessing || !cardData) return;
+
+        setIsProcessing(true);
+        const toastId = toast.loading('응모 처리 중...');
+
+        try {
+            await enterRaffleEventCallable({
+                productId: product.id,
+                roundId: cardData.displayRound.roundId,
+            });
+            toast.dismiss(toastId);
+            showToast('success', `${product.groupName} 이벤트 응모가 완료되었습니다!`);
+            // TODO: 응모 완료 상태를 UI에 반영하기 위해 userDocument를 새로고침하거나 상태를 관리해야 합니다.
+            // 이 예제에서는 간단히 버튼을 비활성화하는 것으로 처리합니다.
+            e.currentTarget.setAttribute('disabled', 'true');
+
+        } catch (error: any) {
+            toast.dismiss(toastId);
+            showToast('error', error.message || '응모 처리 중 오류가 발생했습니다.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleImmediateOrder = async () => {
@@ -155,7 +182,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             toast.dismiss(toastId);
 
             if (prepaymentRequired) {
-                // ✅ [수정] toast.custom 대신 전용 모달 상태 업데이트
                 setPrepaymentPrice(totalPrice);
                 setPrepaymentModalOpen(true);
             } else {
@@ -166,7 +192,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             toast.dismiss(toastId);
             showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
         } finally {
-            // ✅ [수정] 모달을 띄우는 경우에도 processing 상태는 해제
             setIsProcessing(false);
             setQuantity(1);
         }
@@ -272,6 +297,16 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     const renderStockBadge = () => {
         const { isMultiOption, displayRound } = cardData;
 
+        if (displayRound.eventType === 'RAFFLE') {
+            const deadline = dayjs(safeToDate(displayRound.deadlineDate));
+            const isEnded = dayjs().isAfter(deadline);
+            return (
+                <span className={`stock-badge event-badge-raffle ${isEnded ? 'ended' : ''}`}>
+                    <Ticket size={12} /> {isEnded ? '응모 마감' : '추첨 이벤트'}
+                </span>
+            );
+        }
+
         if (displayRound.eventType === 'CHUSEOK') {
             return (
                 <span className="stock-badge event-badge-chuseok">
@@ -319,6 +354,23 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
         if (isPreLaunch) {
             return <button className="simple-card-action-btn disabled" disabled><Calendar size={16} /> {dayjs(launchDate).format('M/D')} 오픈</button>;
+        }
+
+        if (cardData.displayRound.eventType === 'RAFFLE') {
+            const isEntered = userDocument?.enteredRaffleIds?.includes(cardData.displayRound.roundId);
+            const isEnded = dayjs().isAfter(dayjs(safeToDate(cardData.displayRound.deadlineDate)));
+
+            if (isEnded) {
+                return <button className="simple-card-action-btn disabled" disabled><Hourglass size={16} /> 응모 마감</button>;
+            }
+            if (isEntered) {
+                return <button className="simple-card-action-btn disabled" disabled><CheckCircle size={16} /> 응모 완료</button>;
+            }
+            return (
+                <button className="simple-card-action-btn raffle" onClick={handleRaffleEntry} disabled={isProcessing}>
+                    {isProcessing ? '처리중...' : <><Ticket size={16} /> 응모하기</>}
+                </button>
+            );
         }
 
         if (cardData.isMultiOption || actionState === 'REQUIRE_OPTION') {
@@ -374,10 +426,14 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
     };
 
-    const pickupDateFormatted = dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');
+    const isRaffleEvent = cardData.displayRound.eventType === 'RAFFLE';
+    const pickupDateFormatted = isRaffleEvent
+        ? `추첨: ${dayjs(safeToDate(cardData.displayRound.raffleDrawDate)).locale('ko').format('M/D(ddd) HH:mm')}`
+        : dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');
 
-    const isEventProduct = cardData.displayRound.eventType === 'CHUSEOK';
-    const cardClassName = `simple-product-card ${isEventProduct ? 'event-card-chuseok' : ''}`;
+    const isEventProduct = cardData.displayRound.eventType === 'CHUSEOK' || cardData.displayRound.eventType === 'RAFFLE';
+    const cardClassName = `simple-product-card ${isEventProduct ? `event-card-${cardData.displayRound.eventType?.toLowerCase()}` : ''}`;
+
 
     return (
         <>
@@ -391,7 +447,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                             <h3 className="simple-card-title">{product.groupName}</h3>
                             {renderStockBadge()}
                         </div>
-                        <p className="simple-card-price">{cardData.price.toLocaleString()}원</p>
+                        <p className="simple-card-price">{isRaffleEvent ? '무료 응모' : `${cardData.price.toLocaleString()}원`}</p>
                         <p className="simple-card-pickup">{pickupDateFormatted}</p>
                     </div>
                 </div>
@@ -400,7 +456,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 </div>
             </div>
 
-            {/* ✅ [추가] 전용 모달 렌더링 */}
             <PrepaymentModal
                 isOpen={isPrepaymentModalOpen}
                 totalPrice={prepaymentPrice}

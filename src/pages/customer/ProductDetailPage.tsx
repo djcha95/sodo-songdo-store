@@ -17,11 +17,11 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRound as OriginalSalesRound, OrderItem } from '@/types';
 import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getStockInfo, getMaxPurchasableQuantity } from '@/utils/productUtils';
-import type { ProductActionState, SalesRound, VariantGroup } from '@/utils/productUtils';
+import type { ProductActionState, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import PrepaymentModal from '@/components/common/PrepaymentModal'; // ✅ [추가] 전용 모달 import
 
-import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon, Clock } from 'lucide-react';
+import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon, Clock, Ticket } from 'lucide-react'; // ✅ Ticket 아이콘 추가
 import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -42,7 +42,11 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
 
-// --- Helper Functions (변경 없음) ---
+// ✅ [수정] src/utils/productUtils의 SalesRound가 아닌 src/types의 SalesRound를 사용합니다.
+import type { SalesRound } from '@/types';
+
+
+// --- Helper Functions ---
 const toTimestamp = (date: any): Timestamp | null => {
     if (!date) return null;
     if (date instanceof Timestamp) return date;
@@ -57,6 +61,16 @@ const formatDateWithDay = (dateInput: Date | Timestamp | null | undefined): stri
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     return `${date.format('M.D')}(${days[date.day()]})`;
 };
+
+// ✅ [추가] 날짜/시간 포맷 함수
+const formatDateTimeWithDay = (dateInput: Date | Timestamp | null | undefined): string => {
+    if (!dateInput) return '미정';
+    const date = dayjs(safeToDate(dateInput));
+    if (!date.isValid()) return '날짜 오류';
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${date.format('M.D(ddd) HH:mm')}`;
+};
+
 
 const formatExpirationDate = (dateInput: Date | Timestamp | null | undefined): string => {
     if (!dateInput) return '';
@@ -201,21 +215,23 @@ const Lightbox: React.FC<{
 const ProductImageSlider: React.FC<{ images: string[]; productName: string; onImageClick: (index: number) => void; }> = React.memo(({ images, productName, onImageClick }) => (<div className="product-swiper-container"><Swiper modules={[Pagination, Navigation]} spaceBetween={0} slidesPerView={1} navigation pagination={{ clickable: true, dynamicBullets: true }} className="product-swiper">{images.map((url, index) => (<SwiperSlide key={index} onClick={() => onImageClick(index)}><OptimizedImage originalUrl={url} size="1080x1080" alt={`${productName} 이미지 ${index + 1}`} /></SwiperSlide>))}</Swiper><div className="image-zoom-indicator"><Search size={16} /><span>클릭해서 크게 보기</span></div></div>));
 
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
-type SalesPhase = 'PRIMARY' | 'SECONDARY' | 'ON_SITE' | 'UNKNOWN';
+// ✅ [수정] RAFFLE 추가
+type SalesPhase = 'PRIMARY' | 'SECONDARY' | 'ON_SITE' | 'RAFFLE' | 'UNKNOWN';
 
 // ✅ [수정] countdown prop 추가
 const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState | 'ON_SITE_SALE'; expirationDateInfo: ExpirationDateInfo; salesPhase: SalesPhase; countdown: string | null; }> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown }) => {
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate = safeToDate(round.arrivalDate);
     const isMultiGroup = round.variantGroups.length > 1;
-    const isEventProduct = round.eventType === 'CHUSEOK'; // ✅ [추가] 이벤트 상품 여부 확인
+    // ✅ [수정] 이벤트 상품 여부 확인에 RAFFLE 추가
+    const isEventProduct = round.eventType === 'CHUSEOK' || round.eventType === 'RAFFLE';
 
     return (
         <>
             <div className="product-header-content">
                 <h1 className="product-name">{product.groupName}</h1>
-                {/* ✅ [추가] 이벤트 상품일 경우 카운트다운 렌더링 */}
-                {isEventProduct && countdown && (
+                {/* ✅ [수정] 추첨 이벤트는 카운트다운 제외 */}
+                {round.eventType !== 'RAFFLE' && countdown && (
                     <div className="countdown-timer-detail">
                         <Clock size={18} />
                         <span>예약 마감까지 <strong>{countdown}</strong></span>
@@ -235,84 +251,104 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
             )}
 
             <div className="product-key-info" data-tutorial-id="detail-key-info">
-                {expirationDateInfo.type === 'single' && (
-                    <div className="info-row">
-                        <div className="info-label"><Hourglass size={16} />유통기한</div>
-                        <div className="info-value">{expirationDateInfo.date}</div>
-                    </div>
-                )}
-                {expirationDateInfo.type === 'multiple' && (
-                    <div className="info-row expiration-info-row">
-                        <div className="info-label"><Hourglass size={16} />유통기한</div>
-                        <div className="info-value">
-                            <div className="expiration-list">
-                                {expirationDateInfo.details.map((item, index) => (
-                                    <div key={index} className="expiration-list-item">
-                                        {item.groupName}: {item.date}
-                                    </div>
-                                ))}
-                            </div>
+                {/* ✅ [추가] 추첨 이벤트 정보 렌더링 */}
+                {round.eventType === 'RAFFLE' ? (
+                    <>
+                        <div className="info-row">
+                            <div className="info-label"><Calendar size={16} />응모 마감</div>
+                            <div className="info-value">{formatDateTimeWithDay(round.deadlineDate)}</div>
                         </div>
-                    </div>
-                )}
-
-                {arrivalDate && (
-                    <div className="info-row">
-                        <div className="info-label"><Inbox size={16} />입고일</div>
-                        <div className="info-value">{formatDateWithDay(arrivalDate)}</div>
-                    </div>
-                )}
-
-                <div className="info-row">
-                    <div className="info-label"><Calendar size={16} />픽업일</div>
-                    <div className="info-value">{pickupDate ? formatDateWithDay(pickupDate) : '미정'}</div>
-                </div>
-                <div className="info-row">
-                    <div className="info-label">{storageIcons[product.storageType]}보관 방법</div>
-                    <div className={`info-value storage-type-${product.storageType}`}>{storageLabels[product.storageType]}</div>
-                </div>
-                {(() => {
-                    const tierCount = round.allowedTiers?.length ?? 0;
-                    if (tierCount > 0 && tierCount < 4) {
-                        return ( <div className="info-row"><div className="info-label"><Lock size={16} />참여 등급</div><div className="info-value"><span className="tier-badge-group">{(round.allowedTiers as LoyaltyTier[]).join(' / ')}</span></div></div> );
-                    }
-                    return null;
-                })()}
-                <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}>
-                    <div className="info-label">
-                        {salesPhase === 'ON_SITE' ? <Box size={16}/> : <PackageCheck size={16} />}
-                        {salesPhase === 'ON_SITE' ? '판매 정보' : '잔여 수량'}
-                    </div>
-                    <div className="info-value">
-                        {salesPhase === 'ON_SITE' ? (
-                            <span className="on-site-sale-info">현장 판매 진행 중</span>
-                        ) : (
-                            <div className="stock-list">
-                                {round.variantGroups.map(vg => {
-                                    const stockInfo = getStockInfo(vg);
-                                    let stockElement: React.ReactNode;
-
-                                    if (!stockInfo.isLimited) {
-                                        stockElement = <span className="unlimited-stock">무제한</span>;
-                                    } else if (stockInfo.remainingUnits > 0) {
-                                        const pretty = <>{stockInfo.remainingUnits}개 남음</>;
-
-                                        if (stockInfo.remainingUnits <= 10) {
-                                            stockElement = <span className="low-stock"><Flame size={14} /> {pretty} <Flame size={14} /></span>;
-                                        } else {
-                                            stockElement = <span className="limited-stock">{pretty}</span>;
-                                        }
-                                    } else {
-                                        stockElement = <span className="sold-out">{actionState === 'WAITLISTABLE' ? '대기 가능' : '품절'}</span>;
-                                    }
-
-                                    const displayText = isMultiGroup ? <>{vg.groupName}: {stockElement}</> : stockElement;
-                                    return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
-                                })}
+                        <div className="info-row">
+                            <div className="info-label"><Ticket size={16} />추첨 예정</div>
+                            <div className="info-value">{formatDateTimeWithDay(round.raffleDrawDate)}</div>
+                        </div>
+                        <div className="info-row">
+                            <div className="info-label"><PackageCheck size={16} />총 당첨 인원</div>
+                            <div className="info-value">{round.variantGroups[0]?.totalPhysicalStock ?? 0}명</div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {expirationDateInfo.type === 'single' && (
+                            <div className="info-row">
+                                <div className="info-label"><Hourglass size={16} />유통기한</div>
+                                <div className="info-value">{expirationDateInfo.date}</div>
                             </div>
                         )}
-                    </div>
-                </div>
+                        {expirationDateInfo.type === 'multiple' && (
+                            <div className="info-row expiration-info-row">
+                                <div className="info-label"><Hourglass size={16} />유통기한</div>
+                                <div className="info-value">
+                                    <div className="expiration-list">
+                                        {expirationDateInfo.details.map((item, index) => (
+                                            <div key={index} className="expiration-list-item">
+                                                {item.groupName}: {item.date}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {arrivalDate && (
+                            <div className="info-row">
+                                <div className="info-label"><Inbox size={16} />입고일</div>
+                                <div className="info-value">{formatDateWithDay(arrivalDate)}</div>
+                            </div>
+                        )}
+
+                        <div className="info-row">
+                            <div className="info-label"><Calendar size={16} />픽업일</div>
+                            <div className="info-value">{pickupDate ? formatDateWithDay(pickupDate) : '미정'}</div>
+                        </div>
+                        <div className="info-row">
+                            <div className="info-label">{storageIcons[product.storageType]}보관 방법</div>
+                            <div className={`info-value storage-type-${product.storageType}`}>{storageLabels[product.storageType]}</div>
+                        </div>
+                        {(() => {
+                            const tierCount = round.allowedTiers?.length ?? 0;
+                            if (tierCount > 0 && tierCount < 4) {
+                                return ( <div className="info-row"><div className="info-label"><Lock size={16} />참여 등급</div><div className="info-value"><span className="tier-badge-group">{(round.allowedTiers as LoyaltyTier[]).join(' / ')}</span></div></div> );
+                            }
+                            return null;
+                        })()}
+                        <div className={`info-row stock-info-row ${isMultiGroup ? 'multi-group' : ''}`}>
+                            <div className="info-label">
+                                {salesPhase === 'ON_SITE' ? <Box size={16}/> : <PackageCheck size={16} />}
+                                {salesPhase === 'ON_SITE' ? '판매 정보' : '잔여 수량'}
+                            </div>
+                            <div className="info-value">
+                                {salesPhase === 'ON_SITE' ? (
+                                    <span className="on-site-sale-info">현장 판매 진행 중</span>
+                                ) : (
+                                    <div className="stock-list">
+                                        {round.variantGroups.map(vg => {
+                                            const stockInfo = getStockInfo(vg);
+                                            let stockElement: React.ReactNode;
+
+                                            if (!stockInfo.isLimited) {
+                                                stockElement = <span className="unlimited-stock">무제한</span>;
+                                            } else if (stockInfo.remainingUnits > 0) {
+                                                const pretty = <>{stockInfo.remainingUnits}개 남음</>;
+
+                                                if (stockInfo.remainingUnits <= 10) {
+                                                    stockElement = <span className="low-stock"><Flame size={14} /> {pretty} <Flame size={14} /></span>;
+                                                } else {
+                                                    stockElement = <span className="limited-stock">{pretty}</span>;
+                                                }
+                                            } else {
+                                                stockElement = <span className="sold-out">{actionState === 'WAITLISTABLE' ? '대기 가능' : '품절'}</span>;
+                                            }
+
+                                            const displayText = isMultiGroup ? <>{vg.groupName}: {stockElement}</> : stockElement;
+                                            return (<div key={vg.id} className="stock-list-item">{displayText}</div>);
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
         </>
     );
@@ -468,22 +504,33 @@ const PurchasePanel: React.FC<{
     selectedItem: ProductItem | null;
     quantity: number;
     setQuantity: React.Dispatch<React.SetStateAction<number>>;
-    onPurchaseAction: (status: 'RESERVATION' | 'WAITLIST') => void;
+    onPurchaseAction: (status: 'RESERVATION' | 'WAITLIST' | 'RAFFLE_ENTRY') => void; // ✅ [수정]
     onEncore: () => void;
     isEncoreRequested: boolean;
     isEncoreLoading: boolean;
     isProcessing: boolean;
-}> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onPurchaseAction, onEncore, isEncoreRequested, isEncoreLoading, isProcessing }) => {
+    isRaffleEntered: boolean; // ✅ [추가]
+}> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onPurchaseAction, onEncore, isEncoreRequested, isEncoreLoading, isProcessing, isRaffleEntered }) => {
     const renderContent = () => {
+        // ✅ [추가] 추첨 이벤트 로직
+        if (round.eventType === 'RAFFLE') {
+            const isEnded = dayjs().isAfter(dayjs(safeToDate(round.deadlineDate)));
+            if (isEnded) {
+                return <button className="add-to-cart-btn-fixed" disabled><Hourglass size={20} /><span>응모 마감</span></button>;
+            }
+            if (isRaffleEntered) {
+                return <button className="add-to-cart-btn-fixed" disabled><CheckCircle size={20} /><span>응모 완료</span></button>;
+            }
+            return <button onClick={() => onPurchaseAction('RAFFLE_ENTRY')} className="raffle-entry-btn-fixed" data-tutorial-id="detail-action-button" disabled={isProcessing}>{isProcessing ? '처리 중...' : <><Ticket size={20} /><span>무료 응모하기</span></>}</button>;
+        }
+
         switch (actionState) {
             case 'ON_SITE_SALE':
                 return <div className="action-notice"><Box size={20} /><div><p><strong>현장 판매 진행 중</strong></p><span>매장에서 직접 구매 가능합니다.</span></div></div>;
             case 'PURCHASABLE':
                 if (!selectedItem || !selectedVariantGroup) return <button className="add-to-cart-btn-fixed" disabled><span>구매 가능한 옵션이 없습니다</span></button>;
-                const stock = selectedVariantGroup.totalPhysicalStock, reserved = selectedVariantGroup.reservedCount || 0, limit = selectedItem.limitQuantity;
-                const stockValue = (typeof stock === 'number' && stock !== -1) ? stock : null, limitValue = (typeof limit === 'number') ? limit : null;
-                const effectiveStock = stockValue === null ? Infinity : stockValue - reserved, effectiveLimit = limitValue === null ? Infinity : limitValue;
-                const max = Math.floor(Math.min(effectiveStock / (selectedItem.stockDeductionAmount || 1), effectiveLimit)), maxQuantity = isFinite(max) ? max : null;
+                // ✅ [수정] null 체크 추가 및 getMaxPurchasableQuantity 함수 사용
+                const maxQuantity = selectedVariantGroup && selectedItem ? getMaxPurchasableQuantity(selectedVariantGroup, selectedItem) : null;
                 return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={() => onPurchaseAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button" disabled={isProcessing}>{isProcessing ? '처리 중...' : '예약하기'}</button></div> );
             case 'WAITLISTABLE':
                 const waitlistMax = selectedItem?.limitQuantity ?? 99;
@@ -527,6 +574,7 @@ const ProductDetailPage: React.FC = () => {
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [countdown, setCountdown] = useState<string | null>(null);
+    const [isRaffleEntered, setIsRaffleEntered] = useState(false); // ✅ [추가]
 
     // ✅ [추가] 선입금 모달 상태 관리
     const [isPrepaymentModalOpen, setPrepaymentModalOpen] = useState(false);
@@ -541,6 +589,7 @@ const ProductDetailPage: React.FC = () => {
     const validateCartCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'validateCart'), [functionsInstance]);
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'submitOrder'), [functionsInstance]);
     const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'addWaitlistEntry'), [functionsInstance]);
+    const enterRaffleEventCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'enterRaffleEvent'), [functionsInstance]); // ✅ [추가]
 
     const handleClose = useCallback(() => {
         if (location.key === 'default' || window.history.length <= 1) {
@@ -553,12 +602,13 @@ const ProductDetailPage: React.FC = () => {
 
     const displayRound = useMemo(() => {
         if (!product) return null;
+        // ✅ [수정] productUtils의 SalesRound가 아닌 types의 SalesRound로 타입 캐스팅
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
 
-    // ✅ [추가] 이벤트 상품 카운트다운 로직
+    // ✅ [수정] 이벤트 상품 카운트다운 로직에 RAFFLE 제외
     useEffect(() => {
-        if (!displayRound || displayRound.eventType !== 'CHUSEOK') {
+        if (!displayRound || displayRound.eventType === 'RAFFLE') {
             setCountdown(null);
             return;
         }
@@ -617,6 +667,11 @@ const ProductDetailPage: React.FC = () => {
                 const normalized = normalizeProduct(productData);
                 setProduct(normalized);
                 if (userDocument) {
+                    const round = getDisplayRound(normalized);
+                    if (round) {
+                        // ✅ [추가] 추첨 이벤트 응모 여부 확인
+                        setIsRaffleEntered(userDocument.enteredRaffleIds?.includes(round.roundId) || false);
+                    }
                     const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
                     setIsEncoreRequested(alreadyRequested);
                     runPageTourIfFirstTime('hasSeenProductDetailPage', detailPageTourSteps);
@@ -661,6 +716,8 @@ const ProductDetailPage: React.FC = () => {
 
     const salesPhase = useMemo<SalesPhase>(() => {
         if (!displayRound) return 'UNKNOWN';
+        // ✅ [추가] 추첨 이벤트 페이즈
+        if (displayRound.eventType === 'RAFFLE') return 'RAFFLE';
         const { primaryEnd } = getDeadlines(displayRound);
         const pickupEnd = displayRound.pickupDate
             ? dayjs(safeToDate(displayRound.pickupDate)).hour(13).minute(0).second(0)
@@ -676,6 +733,11 @@ const ProductDetailPage: React.FC = () => {
         if (!displayRound) return 'LOADING';
 
         if (salesPhase === 'ON_SITE') return 'ON_SITE_SALE';
+        // ✅ [추가] 추첨 이벤트는 별도 상태 관리
+        if (displayRound.eventType === 'RAFFLE') {
+            const isEnded = dayjs().isAfter(dayjs(safeToDate(displayRound.deadlineDate)));
+            return isEnded ? 'ENDED' : 'PURCHASABLE'; // 'PURCHASABLE'을 임시로 사용
+        }
 
         const baseState = determineActionState(displayRound, userDocument);
 
@@ -722,6 +784,30 @@ const ProductDetailPage: React.FC = () => {
 
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
+
+    // ✅ [추가] 추첨 이벤트 응모 함수
+    const handleRaffleEntry = async () => {
+        if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
+        if (isSuspendedUser) { showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
+        if (isProcessing || !product || !displayRound) return;
+
+        setIsProcessing(true);
+        const toastId = toast.loading('응모 처리 중...');
+        try {
+            await enterRaffleEventCallable({
+                productId: product.id,
+                roundId: displayRound.roundId,
+            });
+            toast.dismiss(toastId);
+            showToast('success', `${product.groupName} 이벤트 응모가 완료되었습니다!`);
+            setIsRaffleEntered(true); // UI 상태 업데이트
+        } catch (error: any) {
+            toast.dismiss(toastId);
+            showToast('error', error.message || '응모 처리 중 오류가 발생했습니다.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const handleImmediateOrder = async () => {
         if (!userDocument || !user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
@@ -809,8 +895,16 @@ const ProductDetailPage: React.FC = () => {
         }
     };
 
-    const handlePurchaseAction = useCallback((status: 'RESERVATION' | 'WAITLIST') => {
+    // ✅ [수정] RAFFLE_ENTRY 추가
+    const handlePurchaseAction = useCallback((status: 'RESERVATION' | 'WAITLIST' | 'RAFFLE_ENTRY') => {
         if (isPreLaunch) { showToast('info', `상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`); return; }
+        
+        // ✅ [추가] 추첨 이벤트 응모 로직
+        if (status === 'RAFFLE_ENTRY') {
+            handleRaffleEntry();
+            return;
+        }
+
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
             showToast('error', '옵션을 선택해주세요.');
             return;
@@ -854,7 +948,7 @@ const ProductDetailPage: React.FC = () => {
         }
     }, [
         isPreLaunch, launchDate, product, displayRound, selectedVariantGroup,
-        selectedItem, quantity, handleImmediateOrder, handleWaitlistRequest
+        selectedItem, quantity, handleImmediateOrder, handleWaitlistRequest, handleRaffleEntry
     ]);
 
     const handleEncore = useCallback(async () => {
@@ -879,8 +973,9 @@ const ProductDetailPage: React.FC = () => {
     const ogImage = originalImageUrls[0] || 'https://www.sodo-songdo.store/sodomall-preview.png';
     const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
-    const isEventProduct = displayRound.eventType === 'CHUSEOK';
-    const modalContentClassName = `product-detail-modal-content ${isEventProduct ? 'event-detail-chuseok' : ''}`;
+    // ✅ [수정] RAFFLE 이벤트도 처리하도록 수정
+    const isEventProduct = displayRound.eventType === 'CHUSEOK' || displayRound.eventType === 'RAFFLE';
+    const modalContentClassName = `product-detail-modal-content ${isEventProduct && displayRound.eventType ? `event-detail-${displayRound.eventType.toLowerCase()}` : ''}`;
 
 
     return (
@@ -893,11 +988,18 @@ const ProductDetailPage: React.FC = () => {
                         <div ref={contentAreaRef} className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"><ProductImageSlider images={originalImageUrls} productName={product.groupName} onImageClick={handleOpenLightbox} /></div>
                             <div className="product-info-area">
-                                {isEventProduct && (
+                                {displayRound.eventType === 'CHUSEOK' && (
                                     <div className="event-banner-chuseok">
                                         <Moon size={18} />
                                         <span>풍성한 한가위 특집</span>
                                         <Moon size={18} />
+                                    </div>
+                                )}
+                                {displayRound.eventType === 'RAFFLE' && (
+                                    <div className="event-banner-raffle">
+                                        <Ticket size={18} />
+                                        <span>주말 특별 추첨 이벤트</span>
+                                        <Ticket size={18} />
                                     </div>
                                 )}
                                 <ProductInfo
@@ -912,28 +1014,33 @@ const ProductDetailPage: React.FC = () => {
                         </div>
                     </div>
                     <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
-                        <OptionSelector
-                            round={displayRound}
-                            selectedVariantGroup={selectedVariantGroup}
-                            onVariantGroupChange={(vg) => {
-                                setSelectedVariantGroup(vg);
-                                selectInitialItemForVg(vg);
-                                setQuantity(1);
-                                showToast('success', `'${vg.groupName}' 옵션을 선택했어요.`);
-                            }}
-                            actionState={actionState}
-                        />
-                        {selectedVariantGroup && (
-                            <ItemSelector
-                                selectedVariantGroup={selectedVariantGroup}
-                                selectedItem={selectedItem}
-                                onItemChange={(item) => {
-                                    setSelectedItem(item);
-                                    setQuantity(1);
-                                    showToast('success', `'${item.name}'으로 변경했어요.`);
-                                }}
-                                actionState={actionState}
-                            />
+                        {/* ✅ [수정] 추첨 이벤트는 옵션 선택기 제외 */}
+                        {displayRound.eventType !== 'RAFFLE' && (
+                            <>
+                                <OptionSelector
+                                    round={displayRound}
+                                    selectedVariantGroup={selectedVariantGroup}
+                                    onVariantGroupChange={(vg) => {
+                                        setSelectedVariantGroup(vg);
+                                        selectInitialItemForVg(vg);
+                                        setQuantity(1);
+                                        showToast('success', `'${vg.groupName}' 옵션을 선택했어요.`);
+                                    }}
+                                    actionState={actionState}
+                                />
+                                {selectedVariantGroup && (
+                                    <ItemSelector
+                                        selectedVariantGroup={selectedVariantGroup}
+                                        selectedItem={selectedItem}
+                                        onItemChange={(item) => {
+                                            setSelectedItem(item);
+                                            setQuantity(1);
+                                            showToast('success', `'${item.name}'으로 변경했어요.`);
+                                        }}
+                                        actionState={actionState}
+                                    />
+                                )}
+                            </>
                         )}
                         <PurchasePanel
                             actionState={actionState}
@@ -947,6 +1054,7 @@ const ProductDetailPage: React.FC = () => {
                             isEncoreRequested={isEncoreRequested}
                             isEncoreLoading={isEncoreLoading}
                             isProcessing={isProcessing}
+                            isRaffleEntered={isRaffleEntered}
                         />
                     </div>
                 </div>

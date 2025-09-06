@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
-import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Bell, Menu } from 'lucide-react';
+import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Bell, Menu, Ticket } from 'lucide-react'; // Ticket 아이콘 추가
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 import './SideMenu.css';
@@ -34,6 +34,8 @@ const notificationIcons: { [key in NotificationType | 'default']: React.ReactNod
     TIER_DOWN: <Bell size={20} />,
     PRODUCT_UPDATE: <Bell size={20} />,
     ENCORE_AVAILABLE: <Bell size={20} />,
+    RAFFLE_WON: <Bell size={20} />,
+    RAFFLE_LOST: <Bell size={20} />,
     success: <Bell size={20} />,
     error: <Bell size={20} />,
     default: <Bell size={20} />,
@@ -87,7 +89,6 @@ const Header: React.FC = () => {
   const location = useLocation();
   const isOnHistoryPage = location.pathname === '/mypage/history';
 
-  // ✅ [추가] 페이지 위치에 따라 버튼에 적용할 클래스를 결정합니다.
   const buttonModeClass = isOnHistoryPage ? 'order-now' : 'view-history';
 
   React.useEffect(() => {
@@ -121,10 +122,22 @@ const Header: React.FC = () => {
             </div>
             <div className="header-right">
                 {user && (
-                    isOnHistoryPage ? (
+                  <>
+                    {/* ✅ [추가] 주말이벤트 버튼 */}
+                    <NavLink
+                        to="/events" 
+                        className="header-action-btn header-event-btn"
+                        aria-label="주말이벤트 바로가기"
+                    >
+                        <span className="event-badge">
+                            <Ticket size={14} style={{ marginRight: '4px' }}/>
+                            주말이벤트
+                        </span>
+                    </NavLink>
+                    
+                    {isOnHistoryPage ? (
                         <NavLink
                             to="/"
-                            // ✅ [수정] 동적으로 클래스를 적용합니다.
                             className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
                             aria-label="예약하러 가기"
                         >
@@ -133,13 +146,13 @@ const Header: React.FC = () => {
                     ) : (
                         <NavLink
                             to="/mypage/history"
-                             // ✅ [수정] 동적으로 클래스를 적용합니다.
                             className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
                             aria-label="예약내역 확인"
                         >
                             <span className="order-history-badge">예약내역</span>
                         </NavLink>
-                    )
+                    )}
+                  </>
                 )}
             </div>
         </header>
