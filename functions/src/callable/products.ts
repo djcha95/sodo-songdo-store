@@ -583,4 +583,89 @@ export const getBannerProducts = onCall(
   }
 );
 
-// ✅ getBannerProductsHttp 함수와 관련 헬퍼 함수들은 모두 삭제되었습니다.
+// functions/src/callable/products.ts 파일의 맨 아래에 이 함수를 추가해 주세요.
+
+/**
+ * =================================================================
+ * 9) 추첨 이벤트 응모: enterRaffleEvent (✅ 신규 추가)
+ * =================================================================
+ */
+export const enterRaffleEvent = onCall(
+  {
+    region: "asia-northeast3",
+    cors: allowedOrigins, // CORS 오류 방지를 위해 필수
+    enforceAppCheck: true,
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+    }
+    const userId = request.auth.uid;
+    const { productId, roundId } = request.data;
+
+    if (!productId || !roundId) {
+      throw new HttpsError("invalid-argument", "상품 정보가 올바르지 않습니다.");
+    }
+
+    try {
+      await db.runTransaction(async (transaction) => {
+        const productRef = db.collection("products").doc(productId);
+        const userRef = db.collection("users").doc(userId);
+        const entryRef = db.collection("products").doc(productId)
+          .collection("salesHistory").doc(roundId)
+          .collection("entries").doc(userId);
+
+        const [productDoc, userDoc, entryDoc] = await Promise.all([
+          transaction.get(productRef),
+          transaction.get(userRef),
+          transaction.get(entryRef)
+        ]);
+        
+        if (!productDoc.exists) {
+          throw new HttpsError("not-found", "이벤트 상품을 찾을 수 없습니다.");
+        }
+        if (!userDoc.exists) {
+            throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
+        }
+
+        const product = productDoc.data() as Product;
+        const round = product.salesHistory?.find(r => r.roundId === roundId);
+
+        if (round?.eventType !== 'RAFFLE') {
+          throw new HttpsError("failed-precondition", "추첨 이벤트 상품이 아닙니다.");
+        }
+
+        if (entryDoc.exists) {
+          throw new HttpsError("already-exists", "이미 응모하셨습니다.");
+        }
+        
+        const now = Timestamp.now();
+        if (round.deadlineDate && now > round.deadlineDate) {
+            throw new HttpsError("failed-precondition", "응모 기간이 마감되었습니다.");
+        }
+
+        // 응모 내역 저장
+        transaction.set(entryRef, {
+            userId: userId,
+            entryAt: now,
+            status: 'entered'
+        });
+
+        // 사용자 문서에도 응모한 라운드 ID 기록 (프론트엔드에서 응모 여부 확인 시 사용)
+        transaction.update(userRef, {
+            enteredRaffleIds: FieldValue.arrayUnion(roundId)
+        });
+      });
+
+      logger.info(`User ${userId} successfully entered raffle for product ${productId}, round ${roundId}`);
+      return { success: true, message: "이벤트 응모가 완료되었습니다." };
+
+    } catch (error) {
+      logger.error(`Error entering raffle for user ${userId}, product ${productId}:`, error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError("internal", "이벤트 응모 중 오류가 발생했습니다.");
+    }
+  }
+);

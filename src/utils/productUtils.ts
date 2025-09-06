@@ -19,10 +19,10 @@ export interface VariantGroup extends OriginalVariantGroup {
   reservedCount?: number;
 }
 
+// ✅ [수정] SalesRound 인터페이스 재정의
+// eventType을 직접 정의하는 대신 OriginalSalesRound로부터 상속받도록 하여 타입 오류를 해결합니다.
 export interface SalesRound extends OriginalSalesRound {
   variantGroups: VariantGroup[];
-  // ✅ [수정] eventType이 null일 수 있는 가능성을 타입에 추가하여 오류를 해결합니다.
-  eventType?: string | null; // eventType이 null도 허용하도록 변경
 }
 
 
@@ -123,8 +123,8 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
     return sortedHistory[0] || null;
 };
 
-// ✅ [수정] 이벤트 상품 관련 로직을 제거하여 단순화. 판매 상태는 이벤트 여부와 관계없이 동일한 규칙을 따르도록 함.
-export const determineActionState = (round: SalesRound, userDocument: UserDocument | null): ProductActionState => {
+// ✅ [수정] determineActionState의 round 파라미터 타입을 OriginalSalesRound로 명시
+export const determineActionState = (round: OriginalSalesRound, userDocument: UserDocument | null): ProductActionState => {
   const userTier = userDocument?.loyaltyTier;
   const allowedTiers = round.allowedTiers || [];
   if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier as LoyaltyTier))) {
@@ -142,7 +142,7 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
   const isAllOptionsSoldOut = () => {
     if (!round.variantGroups || round.variantGroups.length === 0) return true;
     return round.variantGroups.every(vg => {
-      const stockInfo = getStockInfo(vg);
+      const stockInfo = getStockInfo(vg as VariantGroup); // 캐스팅 필요
       return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
     });
   };
@@ -158,7 +158,7 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
 
   if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
     const wasUnlimitedInPrimary = round.variantGroups.some(vg => {
-        const stockInfo = getStockInfo(vg);
+        const stockInfo = getStockInfo(vg as VariantGroup); // 캐스팅 필요
         return !stockInfo.isLimited;
     });
 
@@ -181,17 +181,17 @@ export const determineActionState = (round: SalesRound, userDocument: UserDocume
 };
 
 
-export const sortProductsForDisplay = (a: { displayRound: SalesRound }, b: { displayRound: SalesRound }): number => {
+export const sortProductsForDisplay = (a: { displayRound: OriginalSalesRound }, b: { displayRound: OriginalSalesRound }): number => {
     const roundA = a.displayRound;
     const roundB = b.displayRound;
     const vgA = roundA.variantGroups?.[0], vgB = roundB.variantGroups?.[0];
     const itemA = vgA?.items?.[0], itemB = vgB?.items?.[0];
     if (!vgA || !itemA) return 1; if (!vgB || !itemB) return -1;
     const isLimitedA = vgA.totalPhysicalStock !== null && vgA.totalPhysicalStock !== -1;
-    const remainingStockA = isLimitedA ? (vgA.totalPhysicalStock || 0) - (vgA.reservedCount || 0) : Infinity;
+    const remainingStockA = isLimitedA ? (vgA.totalPhysicalStock || 0) - ((vgA as VariantGroup).reservedCount || 0) : Infinity;
     const priceA = itemA.price;
     const isLimitedB = vgB.totalPhysicalStock !== null && vgB.totalPhysicalStock !== -1;
-    const remainingStockB = isLimitedB ? (vgB.totalPhysicalStock || 0) - (vgB.reservedCount || 0) : Infinity;
+    const remainingStockB = isLimitedB ? (vgB.totalPhysicalStock || 0) - ((vgB as VariantGroup).reservedCount || 0) : Infinity;
     const priceB = itemB.price;
     if (isLimitedA && !isLimitedB) return -1; if (!isLimitedA && isLimitedB) return 1;
     if (isLimitedA && isLimitedB) { if (remainingStockA !== remainingStockB) return remainingStockA - remainingStockB; }
