@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
-import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Bell, Menu, Ticket } from 'lucide-react'; // Ticket 아이콘 추가
+import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Bell, Menu, Ticket, Gift } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 import './SideMenu.css';
@@ -102,6 +102,9 @@ const Header: React.FC = () => {
     };
   }, [isModalOpen, isMenuOpen]);
 
+  // ✅ [삭제] 스크롤 이동을 위한 onClick 핸들러 제거
+  // const handleEventClick = ...
+
   return (
     <>
         <header className="main-header customer-header-sticky">
@@ -113,6 +116,16 @@ const Header: React.FC = () => {
                 >
                     <Menu size={24} />
                 </button>
+                 {user && (
+                    // ✅ [수정] a 태그를 Link 컴포넌트로 변경하고, to 속성에 직접 경로 지정
+                    <Link
+                        to="/product/T83giZ7uYOA79PB4lm29"
+                        className="header-action-btn header-bling-event-btn"
+                        aria-label="이벤트 바로가기"
+                    >
+                        <span>이벤트</span>
+                    </Link>
+                 )}
             </div>
             <div className="header-center">
                 <Link to="/" className="brand-text-logo-container">
@@ -122,37 +135,25 @@ const Header: React.FC = () => {
             </div>
             <div className="header-right">
                 {user && (
-                  <>
-                    {/* ✅ [추가] 주말이벤트 버튼 */}
-                    <NavLink
-                        to="/events" 
-                        className="header-action-btn header-event-btn"
-                        aria-label="주말이벤트 바로가기"
-                    >
-                        <span className="event-badge">
-                            <Ticket size={14} style={{ marginRight: '4px' }}/>
-                            주말이벤트
-                        </span>
-                    </NavLink>
-                    
-                    {isOnHistoryPage ? (
-                        <NavLink
-                            to="/"
-                            className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
-                            aria-label="예약하러 가기"
-                        >
-                            <span className="order-history-badge">예약하기</span>
-                        </NavLink>
-                    ) : (
-                        <NavLink
-                            to="/mypage/history"
-                            className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
-                            aria-label="예약내역 확인"
-                        >
-                            <span className="order-history-badge">예약내역</span>
-                        </NavLink>
-                    )}
-                  </>
+                    <>
+                        {isOnHistoryPage ? (
+                            <NavLink
+                                to="/"
+                                className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
+                                aria-label="예약하러 가기"
+                            >
+                                <span className="order-history-badge">예약하기</span>
+                            </NavLink>
+                        ) : (
+                            <NavLink
+                                to="/mypage/history"
+                                className={`header-action-btn header-order-history-btn ${buttonModeClass}`}
+                                aria-label="예약내역 확인"
+                            >
+                                <span className="order-history-badge">예약내역</span>
+                            </NavLink>
+                        )}
+                    </>
                 )}
             </div>
         </header>

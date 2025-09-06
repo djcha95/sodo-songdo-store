@@ -22,6 +22,8 @@
     align-items: center;
     flex: 1;
     gap: 8px;
+    /* ✅ [추가] 모바일에서 로고와 겹치지 않도록 최대 너비 설정 */
+    max-width: 35%;
 }
 
 .header-right {
@@ -71,7 +73,7 @@
     color: var(--text-color-dark);
     position: relative;
     border-radius: 50%;
-    width: auto; /* ✅ [수정] 너비 자동 조정 */
+    width: auto;
     height: 40px;
     transition: background-color 0.2s, color 0.2s;
     text-decoration: none;
@@ -204,7 +206,7 @@
     text-align: center;
     padding: 40px 0;
     color: #999;
-    display: flex; /* 아이콘과 텍스트 정렬 */
+    display: flex; 
     flex-direction: column;
     align-items: center;
     gap: 8px;
@@ -273,30 +275,38 @@
     transform: scale(1.03); 
 }
 
-/* ✅ [추가] 주말이벤트 버튼 스타일 */
-.header-event-btn {
-    display: flex;
-    align-items: center;
-    text-decoration: none !important;
-    border-bottom: none !important;
-    outline: none !important;
-    padding: 0 8px; /* 패딩을 좌우로만 줍니다 */
+/* ✅ [삭제] 기존 이벤트 버튼 스타일 제거 */
+/* .header-event-btn, .event-badge ... */
+
+/* ✅ [추가] 새로운 블링블링 이벤트 버튼 스타일 */
+@keyframes bling-effect {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 3px #ff4757, 0 0 6px #ff6b81, 0 0 9px #ff6b81;
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 6px #ff4757, 0 0 12px #ff6b81, 0 0 18px #ff6b81;
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 3px #ff4757, 0 0 6px #ff6b81, 0 0 9px #ff6b81;
+    }
 }
 
-.event-badge {
-    display: flex;
-    align-items: center;
+.header-bling-event-btn {
+    background-color: #e53935; /* 밝은 빨강 */
     color: white;
+    border-radius: 20px;
+    padding: 0 10px !important; /* 내부 패딩 */
     font-size: 0.8rem;
     font-weight: 700;
-    padding: 7px 12px;
-    border-radius: 16px;
-    white-space: nowrap;
-    transition: all 0.2s ease-in-out;
-    background-color: #d81b60; /* 핑크색 계열 */
+    gap: 4px;
+    animation: bling-effect 2s ease-in-out infinite;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    height: 32px !important;
 }
 
-.header-event-btn:hover .event-badge {
-    opacity: 0.9;
-    transform: scale(1.03);
+.header-bling-event-btn:hover {
+    background-color: #d32f2f !important; /* 호버 시 약간 어둡게 */
 }
