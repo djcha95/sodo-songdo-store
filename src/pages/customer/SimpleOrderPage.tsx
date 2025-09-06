@@ -5,22 +5,20 @@ import { useAuth } from '@/context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import { Timestamp } from 'firebase/firestore';
 import type { Product, SalesRound } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
-import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import SimpleProductCard from '@/components/customer/SimpleProductCard';
-import OnsiteProductCard from '@/components/customer/OnsiteProductCard';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PackageSearch, Clock, Gift, Moon, Ticket } from 'lucide-react';
-import { useInView } from 'react-intersection-observer';
+import { PackageSearch, Clock, Moon, Ticket } from 'lucide-react';
 import { getDisplayRound, getDeadlines, determineActionState, safeToDate } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
 import '@/styles/common.css';
+// ✅ [수정] getProductsWithStock 함수를 직접 import 합니다.
+import { getProductsWithStock } from '@/firebase/productService'; 
 
 dayjs.extend(isBetween);
 dayjs.locale('ko');
@@ -32,59 +30,26 @@ interface ProductWithUIState extends Product {
   isEventProduct: boolean;
 }
 
-const CACHE_KEY = 'simpleOrderPageCache';
-const CACHE_LIFETIME = 5 * 60 * 1000;
-
-const jsonReviver = (key: string, value: any) => {
-    if (
-        typeof value === 'object' &&
-        value !== null &&
-        'seconds' in value &&
-        'nanoseconds' in value &&
-        Object.keys(value).length === 2
-    ) {
-        return new Timestamp(value.seconds, value.nanoseconds);
-    }
-    return value;
-};
-
-const readCache = () => {
-    try {
-        const cachedData = sessionStorage.getItem(CACHE_KEY);
-        if (cachedData) {
-            const parsedData = JSON.parse(cachedData, jsonReviver);
-            const now = Date.now();
-            if (parsedData.timestamp && now - parsedData.timestamp < CACHE_LIFETIME) {
-              return parsedData;
-            } else {
-              sessionStorage.removeItem(CACHE_KEY);
-            }
-        }
-    } catch (error) {
-        console.error("캐시를 읽는 데 실패했습니다:", error);
-        sessionStorage.removeItem(CACHE_KEY);
-    }
-    return null;
-};
+// ❌ [삭제] 페이지네이션 기반의 캐싱 로직은 더 이상 필요 없으므로 제거합니다.
 
 const SimpleOrderPage: React.FC = () => {
   const { userDocument } = useAuth();
-  const initialCache = useMemo(() => readCache(), []);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState<Product[]>(initialCache?.products || []);
-  const [loading, setLoading] = useState(!initialCache);
-  const [loadingMore, setLoadingMore] = useState(false);
+  // ✅ [수정] 상태 관리를 단순화합니다.
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
 
   const [visibleSection, setVisibleSection] = useState<'event' | 'primary' | 'secondary'>('primary');
 
-  const PAGE_SIZE = 10;
-  const lastVisibleRef = useRef<number | null>(initialCache?.lastVisible || null);
-  const hasMoreRef = useRef<boolean>(initialCache?.hasMore ?? true);
-  const isFetchingRef = useRef<boolean>(false);
+  // ❌ [삭제] 페이지네이션 관련 상태 및 ref들을 모두 제거합니다.
+  // const PAGE_SIZE = 10;
+  // const lastVisibleRef = useRef<number | null>(null);
+  // const hasMoreRef = useRef<boolean>(true);
+  // const isFetchingRef = useRef<boolean>(false);
 
   const raffleRef = useRef<HTMLDivElement>(null);
   const eventRef = useRef<HTMLDivElement>(null);
@@ -92,10 +57,9 @@ const SimpleOrderPage: React.FC = () => {
   const secondaryRef = useRef<HTMLDivElement>(null);
   const tabContainerRef = useRef<HTMLDivElement>(null);
 
-  const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-  const getProductsPageCallable = useMemo(() => httpsCallable(functions, 'getProductsPage'), [functions]);
+  // ❌ [삭제] getProductsPageCallable은 더 이상 사용하지 않습니다.
 
-  const { ref: loadMoreRef, inView: isLoadMoreVisible } = useInView({ threshold: 0.1 });
+  // ❌ [삭제] useInView 훅 (무한 스크롤 트리거)을 제거합니다.
 
   const scrollToSection = useCallback((ref: React.RefObject<HTMLDivElement | null>, behavior: 'smooth' | 'auto' = 'smooth') => {
       if (!ref.current || !tabContainerRef.current) return;
@@ -118,7 +82,6 @@ const SimpleOrderPage: React.FC = () => {
         const eventTop = eventRef.current.getBoundingClientRect().top;
         const primaryTop = primaryRef.current.getBoundingClientRect().top;
         const secondaryTop = secondaryRef.current.getBoundingClientRect().top;
-        // raffleRef는 탭이 없으므로 스크롤 감지 로직에서 제외합니다.
         
         startTransition(() => {
             if (eventTop <= triggerLine && primaryTop > triggerLine) {
@@ -146,102 +109,45 @@ const SimpleOrderPage: React.FC = () => {
   }, [visibleSection]);
 
 
-  const fetchData = useCallback(async (isInitial = false) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-
-    if (isInitial) {
-      setLoading(true);
-      setError(null);
-      lastVisibleRef.current = null;
-      hasMoreRef.current = true;
-    } else {
-      if (!hasMoreRef.current) { isFetchingRef.current = false; return; }
-      setLoadingMore(true);
-    }
-
+  // ✅ [수정] fetchData 함수를 getProductsWithStock을 사용하도록 변경하고 단순화합니다.
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const result: HttpsCallableResult<any> = await getProductsPageCallable({
-        pageSize: PAGE_SIZE,
-        lastVisibleTimestamp: lastVisibleRef.current
-      });
-
-      const { products: newProducts, lastVisible: newLastVisible } = result.data as {
-        products: Product[],
-        lastVisible: number | null
-      };
-
+      // getProductsWithStock은 페이지네이션 없이 모든 활성 상품과 재고를 가져옵니다.
+      const { products: fetchedProducts } = await getProductsWithStock();
       startTransition(() => {
-        setProducts(prev => isInitial ? (newProducts || []) : [...prev, ...(newProducts || [])]);
+        setProducts(fetchedProducts || []);
       });
 
-      lastVisibleRef.current = newLastVisible;
-      hasMoreRef.current = (newProducts?.length || 0) === PAGE_SIZE;
-
-      if (isInitial) {
-        setTimeout(() => {
-            const targetSection = location.state?.scrollToSection;
-            if (targetSection === 'raffle' && raffleRef.current) {
-                scrollToSection(raffleRef, 'auto');
-                navigate(location.pathname, { replace: true, state: {} });
-            } else if (primaryRef.current) {
-                scrollToSection(primaryRef, 'auto');
-            }
-        }, 100);
-      }
+      // 데이터 로드 후 스크롤 위치 조정
+      setTimeout(() => {
+          const targetSection = location.state?.scrollToSection;
+          if (targetSection === 'raffle' && raffleRef.current) {
+              scrollToSection(raffleRef, 'auto');
+              navigate(location.pathname, { replace: true, state: {} });
+          } else if (primaryRef.current) {
+              // 기본적으로 첫 섹션으로 스크롤
+              scrollToSection(primaryRef, 'auto');
+          }
+      }, 100);
 
     } catch (err: any) {
       setError('상품을 불러오는 중 오류가 발생했습니다.');
       showToast('error', err?.message || '데이터 로딩 중 문제가 발생했습니다.');
-      hasMoreRef.current = false;
     } finally {
-      if (isInitial) setLoading(false);
-      setLoadingMore(false);
-      isFetchingRef.current = false;
+      setLoading(false);
     }
-  }, [getProductsPageCallable, scrollToSection, location, navigate]);
+  }, [scrollToSection, location, navigate]);
 
+  // ✅ [수정] 컴포넌트 마운트 시 fetchData를 한 번만 호출합니다.
   useEffect(() => {
-    if (!initialCache) {
-      fetchData(true);
-    } else {
-       setTimeout(() => {
-            const targetSection = location.state?.scrollToSection;
-            if (targetSection === 'raffle' && raffleRef.current) {
-                scrollToSection(raffleRef, 'auto');
-                navigate(location.pathname, { replace: true, state: {} });
-            } else if (primaryRef.current) {
-                scrollToSection(primaryRef, 'auto');
-            }
-       }, 100);
-    }
-  }, [fetchData, initialCache, scrollToSection, location, navigate]);
+    fetchData();
+  }, [fetchData]);
 
-  useEffect(() => {
-    if (isLoadMoreVisible && !loading && !loadingMore && hasMoreRef.current) {
-      fetchData(false);
-    }
-  }, [isLoadMoreVisible, loading, loadingMore, fetchData]);
 
-  useEffect(() => {
-    return () => {
-      if (products.length > 0) {
-        const cacheData = {
-          products: products,
-          lastVisible: lastVisibleRef.current,
-          hasMore: hasMoreRef.current,
-          timestamp: Date.now(),
-        };
-        try {
-          sessionStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-        } catch (error) {
-          console.error("캐시를 저장하는 데 실패했습니다:", error);
-        }
-      }
-    };
-  }, [products]);
+  // ❌ [삭제] 페이지네이션 및 캐싱 관련 useEffect들을 모두 제거합니다.
 
-  // ✅ [수정] useMemo 로직에 raffleProducts 다시 추가
   const { raffleProducts, eventProducts, primarySaleProducts, secondarySaleProducts, generalPrimarySaleEndDate } = useMemo(() => {
     const now = dayjs();
     const tempPrimary: ProductWithUIState[] = [];
@@ -272,7 +178,8 @@ const SimpleOrderPage: React.FC = () => {
       else finalPhase = 'past';
 
       if (finalPhase === 'past' || finalPhase === 'onsite') return;
-
+      
+      // getStockInfo가 이제 정확한 reservedCount를 받으므로 actionState가 올바르게 계산됩니다.
       const actionState = determineActionState(round as SalesRound, userDocument);
 
       const productWithState: ProductWithUIState = {
@@ -284,7 +191,6 @@ const SimpleOrderPage: React.FC = () => {
       };
 
       if (finalPhase === 'raffle') {
-          // RAFFLE 상품은 scheduled 상태여도 보여줘야 함
           if (['SCHEDULED', 'PURCHASABLE', 'ENDED'].includes(actionState)) {
               tempRaffle.push(productWithState);
           }
@@ -355,12 +261,11 @@ const SimpleOrderPage: React.FC = () => {
   }, [generalPrimarySaleEndDate]);
 
 
-  if (loading && products.length === 0) return <SodomallLoader />;
+  if (loading) return <SodomallLoader />;
   if (error) return <div className="error-message-container">{error}</div>;
 
   return (
     <div className="customer-page-container simple-order-page">
-        {/* ✅ [수정] '주말이벤트' 탭 제거 */}
         <div ref={tabContainerRef} className="tab-container sticky-tabs">
             <button
                 className={`tab-btn event-tab ${visibleSection === 'event' ? 'active' : ''}`}
@@ -413,7 +318,7 @@ const SimpleOrderPage: React.FC = () => {
                     </h2>
                   </div>
                   <div className="simple-product-list">
-                    {eventProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    {eventProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
                   </div>
                 </>
               ) : (
@@ -441,7 +346,7 @@ const SimpleOrderPage: React.FC = () => {
                 )}
                 {primarySaleProducts.length > 0 ? (
                   <div className="simple-product-list">
-                    {primarySaleProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    {primarySaleProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
                   </div>
                 ) : (
                   !loading && <div className="product-list-placeholder">
@@ -458,13 +363,12 @@ const SimpleOrderPage: React.FC = () => {
                             <span className="tab-icon">⏰</span> 추가예약 (픽업시작 전까지)
                         </h2>
                         <div className="simple-product-list">
-                            {secondarySaleProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                            {secondarySaleProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
                         </div>
                     </>
                 )}
             </div>
             
-            {/* ✅ [추가] '주말이벤트' 상품을 스크롤 최하단에 렌더링 */}
             <div ref={raffleRef} className="content-section">
               {raffleProducts.length > 0 ? (
                 <>
@@ -474,7 +378,7 @@ const SimpleOrderPage: React.FC = () => {
                     </h2>
                   </div>
                   <div className="simple-product-list">
-                    {raffleProducts.map(p => <SimpleProductCard key={p.id} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    {raffleProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
                   </div>
                 </>
               ) : (
@@ -487,10 +391,7 @@ const SimpleOrderPage: React.FC = () => {
             </div>
         </div>
 
-        <div ref={loadMoreRef} className="infinite-scroll-loader">
-            {loadingMore && <InlineSodomallLoader />}
-            {!hasMoreRef.current && products.length > 0 && <div className="end-of-list">모든 상품을 불러왔습니다.</div>}
-        </div>
+        {/* ❌ [삭제] 무한 스크롤 관련 로더를 제거합니다. */}
     </div>
   );
 };
