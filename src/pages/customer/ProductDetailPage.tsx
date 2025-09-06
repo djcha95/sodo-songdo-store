@@ -818,9 +818,18 @@ const ProductDetailPage: React.FC = () => {
         const toastId = toast.loading('예약 처리 중...');
 
         try {
+            // ✅ [수정] validateCart 호출 시 variantGroupId를 명시적으로 추가합니다.
             const validationResult = await validateCartCallable({
-                items: [{ productId: product.id, roundId: displayRound.roundId, itemId: selectedItem.id, quantity: quantity, ...selectedItem }]
+                items: [{
+                    productId: product.id,
+                    roundId: displayRound.roundId,
+                    variantGroupId: selectedVariantGroup.id, // 👈 이 부분이 핵심 수정 사항입니다.
+                    itemId: selectedItem.id,
+                    quantity: quantity,
+                    ...selectedItem
+                }]
             });
+
             if (!validationResult.data.summary.sufficient) {
                 throw new Error(validationResult.data.summary.reason || '재고가 부족하거나 예약할 수 없는 상품입니다.');
             }

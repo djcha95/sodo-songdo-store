@@ -1,4 +1,5 @@
 // functions/src/callable/products.ts
+
 // Cloud Functions (v2) — Products related callables
 // v1.5 - getProductsWithStock에서 전체 예약/판매량과 픽업량을 분리하여 계산
 
@@ -13,7 +14,7 @@ import type {
   OrderItem,
   SalesRound,
   VariantGroup,
-  UserDocument 
+  UserDocument
 } from "../types.js";
 
 import { analyzeProductTextWithAI } from "../utils/gemini.js";
@@ -565,36 +566,14 @@ export const validateCart = onCall({
 
 /**
  * =================================================================
- * 8) TV 디지털 배너용 상품 목록 조회: getBannerProducts (Callable)
- * =================================================================
- * 참고: 이 함수는 이제 HTTP 버전으로 대체되었지만, 내부 관리용으로 필요할 수 있어 남겨둡니다.
- */
-export const getBannerProducts = onCall(
-  {
-    region: "asia-northeast3",
-    cors: allowedOrigins,
-    memory: "1GiB",
-  },
-  async (request) => {
-    // ... (기존 onCall 버전 getBannerProducts 로직은 그대로 유지)
-    // ... HTTP 버전과 로직은 동일하지만, 호출 방식과 반환 방식에 차이가 있습니다.
-    // ... 이 함수는 현재 tv-banner.html에서 사용하지 않습니다.
-    // ... 로직 생략 ...
-  }
-);
-
-// functions/src/callable/products.ts 파일의 맨 아래에 이 함수를 추가해 주세요.
-
-/**
- * =================================================================
- * 9) 추첨 이벤트 응모: enterRaffleEvent (✅ 신규 추가)
+ * 9) 추첨 이벤트 응모: enterRaffleEvent (✅ 수정됨)
  * =================================================================
  */
 export const enterRaffleEvent = onCall(
   {
     region: "asia-northeast3",
-    cors: allowedOrigins, // CORS 오류 방지를 위해 필수
-    enforceAppCheck: true,
+    cors: allowedOrigins,
+    enforceAppCheck: false,
   },
   async (request) => {
     if (!request.auth) {
@@ -611,8 +590,8 @@ export const enterRaffleEvent = onCall(
       await db.runTransaction(async (transaction) => {
         const productRef = db.collection("products").doc(productId);
         const userRef = db.collection("users").doc(userId);
-        const entryRef = db.collection("products").doc(productId)
-          .collection("salesHistory").doc(roundId)
+        
+        const entryRef = productRef.collection("salesHistory").doc(roundId)
           .collection("entries").doc(userId);
 
         const [productDoc, userDoc, entryDoc] = await Promise.all([
@@ -629,7 +608,12 @@ export const enterRaffleEvent = onCall(
         }
 
         const product = productDoc.data() as Product;
-        const round = product.salesHistory?.find(r => r.roundId === roundId);
+        const roundIndex = product.salesHistory?.findIndex(r => r.roundId === roundId);
+
+        if (roundIndex === undefined || roundIndex === -1) {
+            throw new HttpsError("not-found", "판매 회차를 찾을 수 없습니다.");
+        }
+        const round = product.salesHistory[roundIndex];
 
         if (round?.eventType !== 'RAFFLE') {
           throw new HttpsError("failed-precondition", "추첨 이벤트 상품이 아닙니다.");
@@ -640,7 +624,7 @@ export const enterRaffleEvent = onCall(
         }
         
         const now = Timestamp.now();
-        if (round.deadlineDate && now > round.deadlineDate) {
+        if (round.deadlineDate && now.toMillis() > (round.deadlineDate as Timestamp).toMillis()) {
             throw new HttpsError("failed-precondition", "응모 기간이 마감되었습니다.");
         }
 
@@ -651,10 +635,19 @@ export const enterRaffleEvent = onCall(
             status: 'entered'
         });
 
-        // 사용자 문서에도 응모한 라운드 ID 기록 (프론트엔드에서 응모 여부 확인 시 사용)
+        // 사용자 문서에도 응모한 라운드 ID 기록
         transaction.update(userRef, {
             enteredRaffleIds: FieldValue.arrayUnion(roundId)
         });
+
+        // ✅ [추가] Product 문서의 SalesRound에 있는 entryCount를 1 증가시킴
+        const newSalesHistory = [...product.salesHistory];
+        newSalesHistory[roundIndex] = {
+            ...round,
+            entryCount: (round.entryCount || 0) + 1
+        };
+        transaction.update(productRef, { salesHistory: newSalesHistory });
+
       });
 
       logger.info(`User ${userId} successfully entered raffle for product ${productId}, round ${roundId}`);
@@ -668,4 +661,78 @@ export const enterRaffleEvent = onCall(
       throw new HttpsError("internal", "이벤트 응모 중 오류가 발생했습니다.");
     }
   }
+);
+
+
+/**
+ * =================================================================
+ * 10) 추첨 이벤트 응모자 목록 조회: getRaffleEntrants (✅ 신규 추가)
+ * =================================================================
+ */
+export const getRaffleEntrants = onCall(
+    {
+        region: "asia-northeast3",
+        cors: allowedOrigins,
+        enforceAppCheck: false, // 관리자용이므로 App Check는 false로 설정 가능
+    },
+    async (request) => {
+        const userRole = request.auth?.token.role;
+        if (!userRole || !['admin', 'master'].includes(userRole)) {
+            throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+        }
+
+        const { productId, roundId } = request.data;
+        if (!productId || !roundId) {
+            throw new HttpsError("invalid-argument", "필수 정보(상품 ID, 회차 ID)가 누락되었습니다.");
+        }
+
+        try {
+            const entriesSnapshot = await db.collection("products").doc(productId)
+                .collection("salesHistory").doc(roundId)
+                .collection("entries")
+                .orderBy("entryAt", "asc")
+                .get();
+
+            if (entriesSnapshot.empty) {
+                return { entrants: [] };
+            }
+
+            const userIds = entriesSnapshot.docs.map(doc => doc.id);
+            const entryDataMap = new Map(entriesSnapshot.docs.map(doc => [doc.id, doc.data()]));
+            
+            // Firestore 'in' 쿼리는 최대 30개의 ID만 지원하므로, userIds 배열을 30개씩 나눕니다.
+            const chunks = [];
+            for (let i = 0; i < userIds.length; i += 30) {
+                chunks.push(userIds.slice(i, i + 30));
+            }
+
+            const usersMap = new Map<string, UserDocument>();
+            for (const chunk of chunks) {
+                const usersSnapshot = await db.collection("users").where(admin.firestore.FieldPath.documentId(), "in", chunk).get();
+                usersSnapshot.forEach(doc => {
+                    usersMap.set(doc.id, doc.data() as UserDocument);
+                });
+            }
+
+            const entrants = userIds.map(userId => {
+                const user = usersMap.get(userId);
+                const entry = entryDataMap.get(userId);
+                return {
+                    userId: userId,
+                    name: user?.displayName || '이름 없음',
+                    phone: user?.phone || '정보 없음',
+                    entryAt: entry?.entryAt,
+                };
+            });
+
+            return { entrants };
+
+        } catch (error) {
+            logger.error(`Error fetching raffle entrants for product ${productId}:`, error);
+            if (error instanceof HttpsError) {
+                throw error;
+            }
+            throw new HttpsError("internal", "응모자 목록을 불러오는 중 오류가 발생했습니다.");
+        }
+    }
 );

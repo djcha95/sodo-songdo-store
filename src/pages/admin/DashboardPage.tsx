@@ -5,15 +5,14 @@ import { Link } from 'react-router-dom';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService'; 
 import { db } from '@/firebase/firebaseConfig';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
-// ✅ [수정] 링크 복사를 위한 Check, ClipboardCopy 아이콘 추가
-import { TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy } from 'lucide-react';
+import { TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy, Ticket } from 'lucide-react';
 import './DashboardPage.css';
 import { reportError } from '@/utils/logger';
-
+import dayjs from 'dayjs';
 
 interface EnrichedGroupItem {
   id: string;
@@ -31,10 +30,17 @@ interface EnrichedGroupItem {
   configuredStock: number;
 }
 
-// ✅ [추가] 상품 페이지 링크 복사 버튼 컴포넌트
+// ✅ [추가] 이벤트 정보를 담을 새로운 타입
+interface ActiveRaffleEvent {
+    productId: string;
+    roundId: string;
+    productName: string;
+    entryCount: number;
+    deadlineDate: Timestamp;
+}
+
 const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     const [copied, setCopied] = useState(false);
-    // TODO: 실제 운영 도메인으로 변경해야 합니다.
     const productUrl = `https://www.sodo-songdo.store/product/${productId}`;
 
     const handleCopy = (e: React.MouseEvent) => {
@@ -70,6 +76,8 @@ const DashboardPage: React.FC = () => {
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
   const [editingStockId, setEditingStockId] = useState<string | null>(null);
+  // ✅ [추가] 활성 이벤트 상태
+  const [activeRaffles, setActiveRaffles] = useState<ActiveRaffleEvent[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -98,10 +106,24 @@ const DashboardPage: React.FC = () => {
       });
 
       const allDisplayItems: EnrichedGroupItem[] = [];
+      // ✅ [추가] 활성 래플 이벤트 목록을 담을 배열
+      const currentActiveRaffles: ActiveRaffleEvent[] = [];
+
       productsResponse.products.forEach((product: Product) => {
         const uploadDate = product.createdAt && 'toDate' in product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
 
         product.salesHistory?.forEach((round: SalesRound) => {
+          // ✅ [추가] 진행중인 래플 이벤트인지 확인하고 목록에 추가
+          if (round.eventType === 'RAFFLE' && round.deadlineDate && Timestamp.now().toMillis() < round.deadlineDate.toMillis()) {
+            currentActiveRaffles.push({
+                productId: product.id,
+                roundId: round.roundId,
+                productName: product.groupName,
+                entryCount: round.entryCount || 0,
+                deadlineDate: round.deadlineDate,
+            });
+          }
+
           round.variantGroups?.forEach((vg: VariantGroup) => {
             const groupId = vg.id || `${product.id}-${round.roundId}-${vg.groupName}`;
             const groupKey = `${product.id}-${round.roundId}-${groupId}`;
@@ -140,6 +162,7 @@ const DashboardPage: React.FC = () => {
       }, {} as Record<string, EnrichedGroupItem[]>);
 
       setGroupedItems(grouped);
+      setActiveRaffles(currentActiveRaffles); // ✅ [추가] 상태 업데이트
 
     } catch (error) {
       reportError("대시보드 데이터 로딩 실패", error);
@@ -219,6 +242,31 @@ const DashboardPage: React.FC = () => {
           <h1>통합 판매 현황 대시보드</h1>
         </div>
       </div>
+      
+      {/* ✅ [추가] 진행중인 추첨 이벤트 섹션 */}
+      {activeRaffles.length > 0 && (
+          <div className="dashboard-group raffle-summary-group">
+              <h2 className="group-title"><Ticket size={20} /> 진행중인 추첨 이벤트</h2>
+              <div className="raffle-cards-container">
+                  {activeRaffles.map(raffle => (
+                      <div key={raffle.roundId} className="raffle-summary-card">
+                          <h3 className="raffle-product-name">{raffle.productName}</h3>
+                          <div className="raffle-info">
+                              <span className="raffle-entry-count">
+                                  <strong>{raffle.entryCount}</strong>명 응모 중
+                              </span>
+                              <span className="raffle-deadline">
+                                  마감: {dayjs(raffle.deadlineDate.toDate()).format('M/D(ddd) HH:mm')}
+                              </span>
+                          </div>
+                          <Link to="/admin/products" className="raffle-details-link">
+                              상세보기
+                          </Link>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
 
       {sortedDateKeys.length > 0 ? (
         sortedDateKeys.map(date => (
@@ -236,13 +284,12 @@ const DashboardPage: React.FC = () => {
                     <th>대기 수량</th>
                     <th>남은 수량</th>
                     <th>설정된 재고</th>
-                    {/* ✅ [추가] 링크 복사 컬럼 */}
                     <th>링크 복사</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedItems[date].map((item, index) => {
-                    const remainingStock = item.configuredStock === -1 ? -1 : item.configuredStock - item.confirmedReservedQuantity;
+                    const remainingStock = item.configuredStock === -1 ? item.configuredStock : item.configuredStock - item.confirmedReservedQuantity;
                     
                     return (
                       <tr key={item.id}>
@@ -250,7 +297,6 @@ const DashboardPage: React.FC = () => {
                         <td><img src={item.imageUrl} alt={item.productName} className="dashboard-product-thumbnail" /></td>
                         <td className="dashboard-product-name-cell">
                           <Link to={`/admin/products/edit/${item.productId}/${item.roundId}`} className="product-link">
-                            {/* ✅ [수정] 상품명과 옵션명이 같으면 상품명만 표시 */}
                             {item.productName === item.variantGroupName 
                               ? item.productName
                               : `${item.productName} - ${item.variantGroupName}`
@@ -292,7 +338,6 @@ const DashboardPage: React.FC = () => {
                             </button>
                           )}
                         </td>
-                        {/* ✅ [추가] 링크 복사 버튼 셀 */}
                         <td>
                           <CopyLinkButton productId={item.productId} />
                         </td>

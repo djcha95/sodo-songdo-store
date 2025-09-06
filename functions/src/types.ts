@@ -131,6 +131,7 @@ export interface SalesRound {
   manualStatus?: SalesRoundStatus | null; // 관리자가 수동으로 설정한 상태
   isManuallyOnsite?: boolean;
   eventType?: string | null; 
+  entryCount?: number; // ✅ 이 줄을 추가해주세요.
 }
 
 export interface Product {
