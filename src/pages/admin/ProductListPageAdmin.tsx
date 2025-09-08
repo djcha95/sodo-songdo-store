@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { useNavigate } from 'react-router-dom';
+// ✅ [추가] useSearchParams 훅을 import 합니다.
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, deleteSalesRounds, updateSalesRound } from '../../firebase';
 import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType, WaitlistEntry } from '../../types';
 import toast from 'react-hot-toast';
@@ -28,7 +29,6 @@ import { safeToDate, getDeadlines } from '@/utils/productUtils';
 // 📌 타입 정의 및 헬퍼 함수
 // =================================================================
 
-// ✅ [추가] 추첨 이벤트 응모자 타입
 interface Entrant {
     userId: string;
     name: string;
@@ -71,7 +71,7 @@ interface WaitlistInfo {
   userName: string;
   quantity: number;
   timestamp: Timestamp;
-  variantGroupId: string; // ✅ [추가] 필터링을 위해 variantGroupId 추가
+  variantGroupId: string;
 }
 
 interface WaitlistProcessResult {
@@ -81,7 +81,10 @@ interface WaitlistProcessResult {
 
 
 const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicStatus => {
-  // ✅ [추가] 추첨 이벤트 전용 상태 추가
+  // ✅ [수정] 추첨 완료 상태 추가
+  if (round.status === 'DRAW_COMPLETED') {
+    return { text: "추첨완료", className: "ended" };
+  }
   if (round.eventType === 'RAFFLE') {
     const now = dayjs();
     const deadline = safeToDate(round.deadlineDate);
@@ -90,8 +93,6 @@ const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicSta
     }
     return { text: "응모진행중", className: "selling-raffle" };
   }
-
-  // 0. 수동으로 설정된 상태가 있으면 최우선으로 반환
   if (round.manualStatus === 'sold_out') return { text: "매진 (수동)", className: "manual-sold-out" };
   if (round.manualStatus === 'ended') return { text: "판매종료 (수동)", className: "manual-ended" };
   if (round.isManuallyOnsite) return { text: "현장판매 (수동)", className: "manual-onsite-sale" };
@@ -105,12 +106,10 @@ const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicSta
 
   const isUnlimited = remainingStock === Infinity;
 
-  // 1. 발행 전
   if (publishAt && now.isBefore(publishAt)) {
     return { text: "판매예정", className: "scheduled" };
   }
 
-  // 2. 1차 공구 기간
   if (primaryEnd && now.isBefore(primaryEnd)) {
     if (!isUnlimited && remainingStock <= 0) {
       return { text: "대기접수중", className: "waitlist" };
@@ -118,7 +117,6 @@ const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicSta
     return { text: "1차 공구중", className: "selling" };
   }
 
-  // 3. 2차 공구 기간
   if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
     if (remainingStock <= 0) {
       return { text: "매진", className: "sold-out" };
@@ -126,12 +124,10 @@ const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicSta
     return { text: "2차 공구중", className: "late-reservation" };
   }
 
-  // 4. 픽업 기간
   if (pickupStart && pickupDeadline && now.isBetween(pickupStart, pickupDeadline, null, '[]')) {
     return { text: "픽업중", className: "pickup" };
   }
 
-  // 5. 픽업 기간 종료 후 (현장 판매)
   if (pickupDeadline && now.isAfter(pickupDeadline)) {
      if (remainingStock > 0 || isUnlimited) {
       return { text: "현장판매중", className: "onsite-sale" };
@@ -139,12 +135,10 @@ const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicSta
     return { text: "판매종료", className: "ended" };
   }
 
-  // 6. 모든 기간 종료 후 (재고 없을 때)
   if (secondaryEnd && now.isAfter(secondaryEnd)) {
     return { text: "판매종료", className: "ended" };
   }
 
-  // 7. 데이터베이스의 원본 상태를 fallback으로 사용
   if (round.status === 'sold_out') return { text: "매진", className: "sold-out" };
   if (round.status === 'ended') return { text: "판매종료", className: "ended" };
   if (round.status === 'scheduled') return { text: "판매예정", className: "scheduled" };
@@ -284,38 +278,35 @@ interface ProductAdminRowProps {
     onStockEditSave: (id: string, currentItem: EnrichedRoundItem) => void; 
     onSetStockInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>; 
     onOpenWaitlistModal: (productId: string, roundId: string, variantGroupId: string, productName: string, roundName: string, variantGroupName: string) => void; 
-    onOpenEntrantModal: (productId: string, roundId: string, productName: string, roundName: string) => void; // ✅ [추가]
     onStatusChange: (productId: string, roundId: string, newStatus: Partial<SalesRound>) => void; 
 }
-const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpanded, isSelected, editingStockId, stockInputs, onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs, onOpenWaitlistModal, onOpenEntrantModal, onStatusChange }) => {
+const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpanded, isSelected, editingStockId, stockInputs, onToggleExpansion, onSelectionChange, onStockEditStart, onStockEditSave, onSetStockInputs, onOpenWaitlistModal, onStatusChange }) => {
     const navigate = useNavigate();
     const handleAddNewRound = () => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } });
     
     const isExpandable = item.enrichedVariantGroups.length > 1;
 
-    // ✅ [추가] 이벤트 타입에 따라 예약/대기/응모 셀을 렌더링하는 함수
     const renderReserveAndWaitlistCell = (vg: EnrichedVariantGroup | null, isMasterRow: boolean = false) => {
         if (item.round.eventType === 'RAFFLE') {
-            if (isMasterRow || !isExpandable) { // 다중 옵션의 마스터 행 또는 단일 옵션 행에 표시
+            if (isMasterRow || !isExpandable) {
                 return (
                     <td className="quantity-cell" style={{textAlign: isMasterRow ? 'center' : 'left'}}>
-                        <button className="waitlist-count-button" onClick={() => onOpenEntrantModal(item.productId, item.round.roundId, item.productName, item.round.roundName)}>
+                        <Link to={`/admin/events/${item.productId}/${item.round.roundId}`} className="waitlist-count-button">
                             <Ticket size={14} /> {item.round.entryCount || 0}명
-                        </button>
+                        </Link>
                     </td>
                 );
-            } else { // 다중 옵션의 서브 행
+            } else {
                 return <td className="quantity-cell" style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
             }
         }
         
-        // 기본 판매 상품 로직
         if (isMasterRow) {
             const totalWaitlistCount = item.enrichedVariantGroups.reduce((sum, v) => sum + v.waitlistCount, 0);
             return <td className="quantity-cell" style={{textAlign: 'center'}}>{totalWaitlistCount > 0 ? totalWaitlistCount : '–'}</td>;
         }
     
-        if (!vg) return <td></td>; // 서브 행인데 vg가 없는 경우는 없어야 함
+        if (!vg) return <td></td>;
     
         return (
             <td className="quantity-cell">{`${vg.reservedCount} / `}{(vg.waitlistCount > 0) ? (<button className="waitlist-count-button" onClick={() => onOpenWaitlistModal(item.productId, item.round.roundId, vg.id, item.productName, item.round.roundName, vg.groupName)}>{vg.waitlistCount}</button>) : (vg.waitlistCount)}</td>
@@ -326,7 +317,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
         return (<tr className="master-row error-row"><td><input type="checkbox" checked={isSelected} onChange={(e) => onSelectionChange(item.uniqueId, e.target.checked)} /></td><td>{index + 1}</td><td><CopyableId id={item.productId} /></td><td colSpan={11} style={{color: 'var(--danger-color)'}}>데이터 오류: 이 회차에 옵션 그룹이 없습니다. (ID: {item.uniqueId})</td><td><div className="action-buttons-wrapper"><button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button"><Edit size={16}/></button></div></td></tr>);
     }
     
-    // 단일 옵션 상품 렌더링
     if (!isExpandable) {
         const vg = item.enrichedVariantGroups[0];
         const vgUniqueId = `${item.productId}_${item.round.roundId}_${vg.id}`;
@@ -364,7 +354,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
         );
     }
 
-    // 다중 옵션 상품 렌더링 (마스터 행)
     const earliestOverallExpiration = useMemo(() => { const allDates = item.enrichedVariantGroups.flatMap(vg => vg.items.map(i => i.expirationDate ? safeToDate(i.expirationDate)?.getTime() : undefined).filter(Boolean) as number[]); return allDates.length > 0 ? Math.min(...allDates) : Infinity; }, [item.enrichedVariantGroups]);
     
     return (
@@ -391,7 +380,6 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
             </div>
           </td>
         </tr>
-        {/* 다중 옵션 상품 렌더링 (서브 행) */}
         {isExpanded && item.enrichedVariantGroups.map((subVg, vgIndex) => {
           const subVgUniqueId = `${item.productId}_${item.round.roundId}_${subVg.id}`;
           const subStatus = subVg.dynamicStatus;
@@ -499,77 +487,6 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
     );
 };
 
-// ✅ [추가] 응모자 목록 모달
-const EntrantListModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    data: { productId: string; roundId: string; productName: string; roundName: string; } | null;
-}> = ({ isOpen, onClose, data }) => {
-    const [entrants, setEntrants] = useState<Entrant[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    const functions = getFunctions(getApp(), 'asia-northeast3');
-    const getRaffleEntrantsCallable = useMemo(() => httpsCallable(functions, 'getRaffleEntrants'), [functions]);
-
-    useEffect(() => {
-        if (isOpen && data) {
-            setLoading(true);
-            getRaffleEntrantsCallable({ productId: data.productId, roundId: data.roundId })
-                .then(result => {
-                    const data = (result.data as { entrants: Entrant[] }).entrants || [];
-                    setEntrants(data);
-                })
-                .catch(err => {
-                    toast.error("응모자 목록을 불러오는 데 실패했습니다.");
-                    reportError('getRaffleEntrants.call', err);
-                })
-                .finally(() => setLoading(false));
-        }
-    }, [isOpen, data, getRaffleEntrantsCallable]);
-
-    if (!isOpen || !data) return null;
-
-    return (
-        <div className="waitlist-modal-overlay" onClick={onClose}>
-            <div className="waitlist-modal-content" onClick={e => e.stopPropagation()}>
-                <div className="waitlist-modal-header">
-                    <h3>"{data.productName}" 응모자 명단</h3>
-                    <span>({data.roundName})</span>
-                    <button onClick={onClose} className="modal-close-button">&times;</button>
-                </div>
-                <div className="waitlist-modal-body">
-                    {loading ? (
-                        <div className="modal-inline-loader"><InlineSodomallLoader /></div>
-                    ) : entrants.length > 0 ? (
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>순번</th>
-                                    <th>이름</th>
-                                    <th>연락처</th>
-                                    <th>응모시간</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {entrants.map((entry, index) => (
-                                    <tr key={entry.userId}>
-                                        <td>{index + 1}</td>
-                                        <td>{entry.name}</td>
-                                        <td>{entry.phone}</td>
-                                        <td>{dayjs(entry.entryAt.toDate()).format('YYYY-MM-DD HH:mm:ss')}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    ) : (
-                        <p>아직 응모한 사용자가 없습니다.</p>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
 
 // =================================================================
 // 📌 메인 컴포넌트
@@ -595,16 +512,14 @@ const ProductListPageAdmin: React.FC = () => {
   const [activeTab, setActiveTab] = usePersistentState<'rounds' | 'analysis'>('adminProductTab', 'rounds');
   const [searchQuery, setSearchQuery] = usePersistentState('adminProductSearch', '');
   const [filterCategory, setFilterCategory] = usePersistentState('adminProductCategory', 'all');
-  const [filterStatus, setFilterStatus] = usePersistentState<string>('adminProductStatus', 'all');
+  // ✅ [수정] URL 쿼리 파라미터에서 필터 상태를 읽어오도록 수정
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filterStatus, setFilterStatus] = usePersistentState<string>('adminProductStatus', searchParams.get('filterStatus') || 'all');
   const [sortConfig, setSortConfig] = usePersistentState<{key: SortableKeys, direction: 'asc' | 'desc'}>('adminProductSort', { key: 'roundCreatedAt', direction: 'desc' });
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [currentWaitlistData, setCurrentWaitlistData] = useState<{ productId: string; roundId: string; variantGroupId: string; productName: string; roundName: string; variantGroupName: string; } | null>(null);
-  
-  // ✅ [추가] 응모자 모달 관련 state
-  const [isEntrantModalOpen, setIsEntrantModalOpen] = useState(false);
-  const [currentEntrantData, setCurrentEntrantData] = useState<{ productId: string; roundId: string; productName: string; roundName: string; } | null>(null);
   
   const navigate = useNavigate();
 
@@ -633,7 +548,14 @@ const ProductListPageAdmin: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { 
+    // ✅ [추가] 컴포넌트 마운트 시 URL의 쿼리 파라미터를 읽어 필터 상태를 설정
+    const statusFromUrl = searchParams.get('filterStatus');
+    if (statusFromUrl) {
+      setFilterStatus(statusFromUrl);
+    }
+    fetchData(); 
+  }, [fetchData, searchParams]);
 
   const enrichedRounds = useMemo<EnrichedRoundItem[]>(() => {
     let flatRounds: EnrichedRoundItem[] = [];
@@ -686,8 +608,16 @@ const ProductListPageAdmin: React.FC = () => {
 
     if (searchQuery) flatRounds = flatRounds.filter(item => item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || item.round.roundName.toLowerCase().includes(searchQuery.toLowerCase()));
     if (filterCategory !== 'all') flatRounds = flatRounds.filter(item => item.category === filterCategory);
+    
+    // ✅ [수정] 필터 로직 수정
     if (filterStatus !== 'all') {
-        flatRounds = flatRounds.filter(item => item.dynamicStatus.text === filterStatus);
+        if (filterStatus === 'event') {
+            // 'event' 필터일 경우, eventType이 RAFFLE인 것만 필터링
+            flatRounds = flatRounds.filter(item => item.round.eventType === 'RAFFLE');
+        } else {
+            // 그 외에는 기존처럼 상태 텍스트로 필터링
+            flatRounds = flatRounds.filter(item => item.dynamicStatus.text === filterStatus);
+        }
     }
 
     return flatRounds.sort((a, b) => {
@@ -848,13 +778,6 @@ const ProductListPageAdmin: React.FC = () => {
   const handleCloseWaitlistModal = () => { setIsWaitlistModalOpen(false); setCurrentWaitlistData(null); };
   const handleWaitlistSuccess = () => { fetchData(); };
   
-  // ✅ [추가] 응모자 모달 핸들러
-  const handleOpenEntrantModal = (productId: string, roundId: string, productName: string, roundName: string) => {
-    setCurrentEntrantData({ productId, roundId, productName, roundName });
-    setIsEntrantModalOpen(true);
-  };
-  const handleCloseEntrantModal = () => { setIsEntrantModalOpen(false); setCurrentEntrantData(null); };
-
   const handleStatusChange = useCallback(async (productId: string, roundId: string, newStatus: Partial<SalesRound>) => {
     const promise = updateSalesRound(productId, roundId, newStatus);
     toast.promise(promise, {
@@ -863,7 +786,6 @@ const ProductListPageAdmin: React.FC = () => {
       error: '상태 변경 중 오류가 발생했습니다.',
     });
     
-    // Optimistic UI update
     setPageData(prev => ({
       ...prev,
       allProducts: prev.allProducts.map(p => 
@@ -874,7 +796,7 @@ const ProductListPageAdmin: React.FC = () => {
     }));
 
     await promise;
-    fetchData(); // Re-fetch for consistency
+    fetchData();
   }, [fetchData]);
 
 
@@ -901,11 +823,15 @@ const ProductListPageAdmin: React.FC = () => {
                     <div className="control-group"><Filter size={16} /><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="control-select"><option value="all">모든 카테고리</option>{pageData.categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select>
                     <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select">
                         <option value="all">모든 상태</option>
+                        {/* ✅ [추가] 필터 옵션에 '이벤트' 추가 */}
+                        <option value="event">이벤트</option>
                         <option value="1차 공구중">1차 공구중</option>
                         <option value="2차 공구중">2차 공구중</option>
                         <option value="대기접수중">대기접수중</option>
                         <option value="응모진행중">응모진행중</option>
                         <option value="응모종료">응모종료</option>
+                        {/* ✅ [추가] '추첨완료' 상태 필터 옵션 추가 */}
+                        <option value="추첨완료">추첨완료</option>
                         <option value="픽업중">픽업중</option>
                         <option value="현장판매중">현장판매중</option>
                         <option value="현장판매 (수동)">현장판매 (수동)</option>
@@ -942,7 +868,7 @@ const ProductListPageAdmin: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedRounds.length > 0 ? ( paginatedRounds.map((item, index) => (<ProductAdminRow key={item.uniqueId} item={item} index={(currentPage - 1) * itemsPerPage + index} isExpanded={expandedRoundIds.has(item.uniqueId)} isSelected={selectedItems.has(item.uniqueId)} editingStockId={editingStockId} stockInputs={stockInputs} onToggleExpansion={toggleRowExpansion} onSelectionChange={handleSelectionChange} onStockEditStart={handleStockEditStart} onStockEditSave={handleStockEditSave} onSetStockInputs={setStockInputs} onOpenWaitlistModal={handleOpenWaitlistModal} onOpenEntrantModal={handleOpenEntrantModal} onStatusChange={handleStatusChange}/>)) ) : (
+                  {paginatedRounds.length > 0 ? ( paginatedRounds.map((item, index) => (<ProductAdminRow key={item.uniqueId} item={item} index={(currentPage - 1) * itemsPerPage + index} isExpanded={expandedRoundIds.has(item.uniqueId)} isSelected={selectedItems.has(item.uniqueId)} editingStockId={editingStockId} stockInputs={stockInputs} onToggleExpansion={toggleRowExpansion} onSelectionChange={handleSelectionChange} onStockEditStart={handleStockEditStart} onStockEditSave={handleStockEditSave} onSetStockInputs={setStockInputs} onOpenWaitlistModal={handleOpenWaitlistModal} onStatusChange={handleStatusChange}/>)) ) : (
                     <tr><td colSpan={15} style={{textAlign: 'center', padding: '4rem', color: 'var(--text-color-light)'}}>표시할 판매 회차가 없습니다.</td></tr>
                   )}
                 </tbody>
@@ -955,12 +881,6 @@ const ProductListPageAdmin: React.FC = () => {
         )}
       </div>
       <WaitlistModal isOpen={isWaitlistModalOpen} onClose={handleCloseWaitlistModal} data={currentWaitlistData} onSuccess={handleWaitlistSuccess}/>
-      {/* ✅ [추가] 응모자 목록 모달 렌더링 */}
-      <EntrantListModal 
-        isOpen={isEntrantModalOpen}
-        onClose={handleCloseEntrantModal}
-        data={currentEntrantData}
-      />
     </div>
   );
 };

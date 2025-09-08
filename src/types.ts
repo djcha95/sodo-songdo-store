@@ -15,7 +15,7 @@ import type { DocumentData } from "firebase/firestore"; // DocumentData는 클�
 // =================================================================
 
 export type StorageType = 'ROOM' | 'COLD' | 'FROZEN' | 'FRESH';
-export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended' | 'DRAW_COMPLETED'; // ✅ [추가] 추첨 완료 상태
+export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended' | 'DRAW_COMPLETED';
 export type OrderStatus =
   | 'RESERVED'
   | 'PREPAID'

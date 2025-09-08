@@ -41,7 +41,7 @@ if (typeof window !== 'undefined') {
   // 2단계에서 발급받은 '사이트 키'를 여기에 붙여넣으세요.
   // 키는 따옴표 안에 문자열로 넣어야 합니다.
   const appCheck = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider('여기에_reCAPTCHA_사이트_키를_붙여넣으세요'),
+    provider: new ReCaptchaV3Provider('6LfS38ErAAAAAKQYHGcIieHQ4PeMpdx4DZx7JYIp'),
     isTokenAutoRefreshEnabled: true
   });
 }

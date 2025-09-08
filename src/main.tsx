@@ -44,6 +44,7 @@ const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));
 const ProductListPageAdmin = React.lazy(() => import('@/pages/admin/ProductListPageAdmin'));
 const ProductAddAdminPage = React.lazy(() => import('@/pages/admin/ProductAddAdminPage'));
 const SalesRoundEditPage = React.lazy(() => import('@/pages/admin/SalesRoundEditPage'));
+const RaffleEventAdminPage = React.lazy(() => import('@/pages/admin/RaffleEventAdminPage'));
 const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
 const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage'));
@@ -125,9 +126,10 @@ const router = createBrowserRouter([
               { path: 'prepaid-check', element: <PrepaidCheckPage /> },
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
-              { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
+               { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
+              // ✅ [추가] 새로운 이벤트 관리 페이지 라우트
+              { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> },
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
-              { path: 'categories', element: <CategoryManagementPage /> },
               { path: 'orders', element: <OrderManagementPage /> },
               { path: 'create-order', element: <CreateOrderPage /> },
               { path: 'users', element: <UserListPage /> },

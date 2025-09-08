@@ -14,8 +14,10 @@ import type {
   OrderItem,
   SalesRound,
   VariantGroup,
-  UserDocument
+  UserDocument,
+  CustomerInfo // ✅ CustomerInfo 타입 추가
 } from "../types.js";
+
 
 import { analyzeProductTextWithAI } from "../utils/gemini.js";
 
@@ -735,4 +737,156 @@ export const getRaffleEntrants = onCall(
             throw new HttpsError("internal", "응모자 목록을 불러오는 중 오류가 발생했습니다.");
         }
     }
+);
+
+/**
+ * =================================================================
+ * 11) 당첨자 추첨 실행: drawRaffleWinners (✅ 신규 추가)
+ * =================================================================
+ */
+export const drawRaffleWinners = onCall(
+  {
+      region: "asia-northeast3",
+      cors: allowedOrigins,
+      memory: "1GiB", // 다수의 사용자 정보 조회 및 주문 생성을 위해 메모리 상향
+      timeoutSeconds: 300,
+  },
+  async (request) => {
+      const userRole = request.auth?.token.role;
+      if (!userRole || !['admin', 'master'].includes(userRole)) {
+          throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+      }
+
+      const { productId, roundId } = request.data;
+      if (!productId || !roundId) {
+          throw new HttpsError("invalid-argument", "필수 정보(상품 ID, 회차 ID)가 누락되었습니다.");
+      }
+
+      const winners: { userId: string, name: string, phone: string }[] = [];
+
+      try {
+          const productRef = db.collection("products").doc(productId);
+          
+          await db.runTransaction(async (transaction) => {
+              const productDoc = await transaction.get(productRef);
+              if (!productDoc.exists) {
+                  throw new HttpsError("not-found", "이벤트 상품을 찾을 수 없습니다.");
+              }
+
+              const product = productDoc.data() as Product;
+              const roundIndex = product.salesHistory?.findIndex(r => r.roundId === roundId);
+
+              if (roundIndex === undefined || roundIndex === -1) {
+                  throw new HttpsError("not-found", "판매 회차를 찾을 수 없습니다.");
+              }
+              const round = product.salesHistory[roundIndex];
+
+              if (round.status === 'DRAW_COMPLETED') {
+                  throw new HttpsError("failed-precondition", "이미 추첨이 완료된 이벤트입니다.");
+              }
+
+              const winnerCount = round.variantGroups[0]?.totalPhysicalStock;
+              if (!winnerCount || winnerCount <= 0) {
+                  throw new HttpsError("failed-precondition", "당첨 인원이 설정되지 않았습니다.");
+              }
+
+              const entriesRef = productRef.collection("salesHistory").doc(roundId).collection("entries");
+              const entriesSnapshot = await transaction.get(entriesRef);
+              
+              if (entriesSnapshot.empty) {
+                  throw new HttpsError("failed-precondition", "응모자가 없습니다.");
+              }
+
+              const allEntrants = entriesSnapshot.docs.map(doc => doc.id);
+              
+              // Fisher-Yates shuffle algorithm
+              for (let i = allEntrants.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [allEntrants[i], allEntrants[j]] = [allEntrants[j], allEntrants[i]];
+              }
+
+              const winnerIds = allEntrants.slice(0, winnerCount);
+              const loserIds = allEntrants.slice(winnerCount);
+              
+              // 사용자 정보 조회
+              const allUserDocs = await db.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', winnerIds).get();
+              const usersMap = new Map<string, UserDocument>();
+              allUserDocs.forEach(doc => usersMap.set(doc.id, doc.data() as UserDocument));
+
+              const now = Timestamp.now();
+              const pickupDate = round.pickupDate || now; // 픽업일 없으면 현재시간으로
+
+              // 당첨자 처리
+              for (const userId of winnerIds) {
+                  const user = usersMap.get(userId);
+                  if (user) {
+                      winners.push({ userId, name: user.displayName || '이름없음', phone: user.phone || '연락처없음' });
+                      
+                      // 1. 당첨자 주문 생성
+                      const newOrderRef = db.collection("orders").doc();
+                      const customerInfo: CustomerInfo = { name: user.displayName || '', phone: user.phone || '', phoneLast4: user.phone?.slice(-4) || ''};
+                      const orderItem: OrderItem = {
+                          // ... 주문 상품 정보 채우기
+                          id: `${roundId}-${userId}`,
+                          productId,
+                          productName: product.groupName,
+                          imageUrl: product.imageUrls?.[0] || '',
+                          roundId,
+                          roundName: round.roundName,
+                          variantGroupId: round.variantGroups[0].id,
+                          variantGroupName: round.variantGroups[0].groupName,
+                          itemId: round.variantGroups[0].items[0].id,
+                          itemName: round.variantGroups[0].items[0].name,
+                          quantity: 1,
+                          unitPrice: 0,
+                          stock: -1,
+                          stockDeductionAmount: 1,
+                          arrivalDate: null,
+                          pickupDate,
+                          deadlineDate: round.deadlineDate,
+                      };
+                      const newOrder: Omit<Order, 'id'> = {
+                          userId,
+                          customerInfo,
+                          items: [orderItem],
+                          totalPrice: 0,
+                          orderNumber: `EVENT-${now.toMillis()}-${userId.slice(0, 4)}`,
+                          status: 'RESERVED',
+                          createdAt: now,
+                          pickupDate,
+                          pickupDeadlineDate: round.pickupDeadlineDate,
+                          notes: `[이벤트 당첨] ${product.groupName}`,
+                          eventId: roundId,
+                      };
+                      transaction.set(newOrderRef, newOrder);
+                  }
+                  // 2. 응모 상태 'won'으로 변경
+                  transaction.update(entriesRef.doc(userId), { status: 'won' });
+              }
+
+              // 미당첨자 처리
+              for (const userId of loserIds) {
+                  transaction.update(entriesRef.doc(userId), { status: 'lost' });
+              }
+
+              // 이벤트 상태 '추첨완료'로 변경
+              const newSalesHistory = [...product.salesHistory];
+              newSalesHistory[roundIndex] = {
+                  ...round,
+                  status: 'DRAW_COMPLETED'
+              };
+              transaction.update(productRef, { salesHistory: newSalesHistory });
+          });
+
+          logger.info(`Raffle draw completed for product ${productId}, round ${roundId}. Winners: ${winners.length}`);
+          return { success: true, winners };
+
+      } catch (error) {
+          logger.error(`Error drawing raffle winners for product ${productId}:`, error);
+          if (error instanceof HttpsError) {
+              throw error;
+          }
+          throw new HttpsError("internal", "당첨자 추첨 중 오류가 발생했습니다.");
+      }
+  }
 );
