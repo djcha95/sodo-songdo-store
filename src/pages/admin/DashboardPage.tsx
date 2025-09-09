@@ -259,8 +259,8 @@ const DashboardPage: React.FC = () => {
                                   마감: {dayjs(raffle.deadlineDate.toDate()).format('M/D(ddd) HH:mm')}
                               </span>
                           </div>
-                          <Link to="/admin/products" className="raffle-details-link">
-                              상세보기
+                          <Link to={`/admin/events/${raffle.productId}/${raffle.roundId}`} className="raffle-details-link">
+                              관리하기
                           </Link>
                       </div>
                   ))}

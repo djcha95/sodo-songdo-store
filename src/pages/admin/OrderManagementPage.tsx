@@ -10,7 +10,6 @@ import {
     toggleOrderBookmark,
     updateMultipleOrderStatuses,
 } from '../../firebase';
-// ✅ [수정] firebase 라이브러리가 아닌, 우리가 설정한 config 파일에서 'functions'를 가져옵니다.
 import { functions } from '@/firebase/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import type { Order, OrderItem, OrderStatus } from '../../types';
@@ -20,8 +19,6 @@ import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCh
 import './OrderManagementPage.css';
 import { formatKRW } from '@/utils/number';
 
-// ❌ const functions = getFunctions(); // 이 라인을 삭제하고
-// ✅ 우리가 만든 'functions' 인스턴스를 사용하도록 변경합니다.
 const splitBundledOrderCallable = httpsCallable(functions, 'splitBundledOrder');
 
 
@@ -75,13 +72,20 @@ const formatDateWithDay = (timestamp: any): string => {
 const formatCurrency = (amount: number): string => `${formatKRW(amount)}원`;
 
 // --- Status Configuration ---
+// ✅ [수정] 'LATE_CANCELED' 상태를 추가하고, 가독성을 위해 sortOrder를 재정렬했습니다.
 const ORDER_STATUS_CONFIG: Record<OrderStatus, { label: string; icon: React.ReactNode; className: string; sortOrder: number }> = {
-    PICKED_UP: { label: '픽업 완료', icon: <PackageCheck size={14} />, className: 'status-picked-up', sortOrder: 0 },
+    // 활성 주문
+    RESERVED: { label: '예약 확정', icon: <Clock size={14} />, className: 'status-reserved', sortOrder: 0 },
     PREPAID: { label: '선입금', icon: <DollarSign size={14} />, className: 'status-prepaid', sortOrder: 1 },
-    CANCELED: { label: '예약 취소', icon: <PackageX size={14} />, className: 'status-canceled', sortOrder: 2 },
-    RESERVED: { label: '예약 확정', icon: <Clock size={14} />, className: 'status-reserved', sortOrder: 3 },
-    NO_SHOW: { label: '노쇼', icon: <UserX size={14} />, className: 'status-no-show', sortOrder: 4 },
-    COMPLETED: { label: '처리 완료', icon: <PackageCheck size={14} />, className: 'status-completed', sortOrder: 5 },
+    
+    // 완료된 주문
+    PICKED_UP: { label: '픽업 완료', icon: <PackageCheck size={14} />, className: 'status-picked-up', sortOrder: 2 },
+    COMPLETED: { label: '처리 완료', icon: <BadgeCheck size={14} />, className: 'status-completed', sortOrder: 3 },
+    
+    // 취소/문제성 주문
+    CANCELED: { label: '예약 취소', icon: <PackageX size={14} />, className: 'status-canceled', sortOrder: 4 },
+    LATE_CANCELED: { label: '임박 취소', icon: <AlertTriangle size={14} />, className: 'status-late-canceled', sortOrder: 5 },
+    NO_SHOW: { label: '노쇼', icon: <UserX size={14} />, className: 'status-no-show', sortOrder: 6 },
 };
 
 const getDisplayStatusInfo = (order: Order) => {
@@ -92,7 +96,9 @@ const getDisplayStatusInfo = (order: Order) => {
     if ((order.status === 'RESERVED' || order.status === 'PREPAID') && order.pickupDeadlineDate && order.pickupDeadlineDate instanceof Timestamp && order.pickupDeadlineDate.toDate() < now) {
         return { ...ORDER_STATUS_CONFIG.NO_SHOW, badge: <span className="status-extra-badge no-show-pending"><AlertTriangle size={12} /> 미수령</span> };
     }
-    return { ...ORDER_STATUS_CONFIG[order.status], badge: null };
+    // ✅ [수정] order.status가 CONFIG에 없을 경우를 대비한 방어 코드
+    const statusInfo = ORDER_STATUS_CONFIG[order.status] || { label: '알 수 없음', icon: <AlertTriangle size={14} />, className: 'status-unknown', sortOrder: 99 };
+    return { ...statusInfo, badge: null };
 };
 
 // --- Editable Notes Component ---
@@ -135,6 +141,9 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
         navigator.clipboard.writeText(row.orderId);
         toast.success('주문 ID가 복사되었습니다.');
     };
+    
+    // ✅ [수정] row.status가 CONFIG에 없을 경우를 대비하여 기본값을 설정합니다.
+    const statusConfig = ORDER_STATUS_CONFIG[row.status] || { className: 'status-unknown', label: '알 수 없음' };
 
     return (
         <tr key={row.uniqueRowKey} className={row.isBookmarked ? 'bookmarked-row' : ''}>
@@ -159,7 +168,7 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
                     <select
                         value={row.status}
                         onChange={(e) => onStatusChange(row.originalOrder, e.target.value as OrderStatus)}
-                        className={`status-select ${ORDER_STATUS_CONFIG[row.status].className}`}
+                        className={`status-select ${statusConfig.className}`}
                     >
                         {Object.entries(ORDER_STATUS_CONFIG).map(([statusKey, { label }]) => (
                             <option key={statusKey} value={statusKey}>{label}</option>
@@ -428,23 +437,40 @@ const OrderManagementPage: React.FC = () => {
     }, []);
 
     const handleSplitOrder = useCallback(async (orderId: string) => {
-        const isConfirmed = window.confirm(`[주의] 이 주문을 여러 개의 개별 주문으로 분리하시겠습니까?\n\n- 원본 주문은 '취소' 상태로 변경됩니다.\n- 이 작업은 되돌릴 수 없습니다.`);
-        
-        if (isConfirmed) {
-            const toastId = toast.loading("주문을 분리하는 중입니다...");
-            try {
-                const result = await splitBundledOrderCallable({ orderId });
-                if ((result.data as any).success) {
-                    toast.success("주문이 성공적으로 분리되었습니다. 목록을 새로고침합니다.", { id: toastId });
-                    fetchOrders();
-                } else {
-                    throw new Error((result.data as any).message || "알 수 없는 오류가 발생했습니다.");
-                }
-            } catch (error: any) {
-                console.error("주문 분리 실패:", error);
-                toast.error(`오류가 발생했습니다: ${error.message}`, { id: toastId });
-            }
-        }
+        // ✅ [개선] window.confirm 대신 react-hot-toast를 사용한 커스텀 확인 토스트로 변경
+        toast((t) => (
+            <div className="custom-toast-container">
+                <p className="toast-message"><b>[주의]</b> 이 주문을 여러 개의<br/>개별 주문으로 분리하시겠습니까?</p>
+                <ul className="toast-description-list">
+                    <li>원본 주문은 '취소' 상태로 변경됩니다.</li>
+                    <li>이 작업은 되돌릴 수 없습니다.</li>
+                </ul>
+                <div className="toast-button-group">
+                    <button className="toast-button toast-button-cancel" onClick={() => toast.dismiss(t.id)}>취소</button>
+                    <button
+                        className="toast-button toast-button-confirm"
+                        onClick={async () => {
+                            toast.dismiss(t.id);
+                            const toastId = toast.loading("주문을 분리하는 중입니다...");
+                            try {
+                                const result = await splitBundledOrderCallable({ orderId });
+                                if ((result.data as any).success) {
+                                    toast.success("주문이 성공적으로 분리되었습니다. 목록을 새로고침합니다.", { id: toastId });
+                                    fetchOrders();
+                                } else {
+                                    throw new Error((result.data as any).message || "알 수 없는 오류가 발생했습니다.");
+                                }
+                            } catch (error: any) {
+                                console.error("주문 분리 실패:", error);
+                                toast.error(`오류가 발생했습니다: ${error.message}`, { id: toastId });
+                            }
+                        }}
+                    >
+                        분리 실행
+                    </button>
+                </div>
+            </div>
+        ), { duration: 10000, position: 'top-center' });
     }, [fetchOrders]);
 
 
