@@ -158,3 +158,35 @@
    .qco-customer-name { font-size: 0.9rem; }
    .qco-total-price { font-size: 1.05rem; }
 }
+
+/* --- ✅ [추가] 하단 액션 바 버튼 스타일 --- */
+.cat-action-footer .common-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* 빨간색 버튼 (노쇼) */
+.cat-action-footer .button-danger {
+    background-color: var(--danger-color, #dc3545);
+    color: white;
+    border: 1px solid var(--danger-color, #dc3545);
+}
+.cat-action-footer .button-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+/* 회색 버튼 (취소) */
+.cat-action-footer .button-secondary {
+    background-color: #6c757d;
+    color: white;
+    border: 1px solid #6c757d;
+}
+.cat-action-footer .button-secondary:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}

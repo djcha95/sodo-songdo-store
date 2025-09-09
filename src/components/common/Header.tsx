@@ -102,9 +102,6 @@ const Header: React.FC = () => {
     };
   }, [isModalOpen, isMenuOpen]);
 
-  // ✅ [삭제] 스크롤 이동을 위한 onClick 핸들러 제거
-  // const handleEventClick = ...
-
   return (
     <>
         <header className="main-header customer-header-sticky">
@@ -116,16 +113,7 @@ const Header: React.FC = () => {
                 >
                     <Menu size={24} />
                 </button>
-                 {user && (
-                    // ✅ [수정] a 태그를 Link 컴포넌트로 변경하고, to 속성에 직접 경로 지정
-                    <Link
-                        to="/product/T83giZ7uYOA79PB4lm29"
-                        className="header-action-btn header-bling-event-btn"
-                        aria-label="이벤트 바로가기"
-                    >
-                        <span>이벤트</span>
-                    </Link>
-                 )}
+                 {/* ✅ [수정] '이벤트' 버튼 Link 컴포넌트 제거 */}
             </div>
             <div className="header-center">
                 <Link to="/" className="brand-text-logo-container">

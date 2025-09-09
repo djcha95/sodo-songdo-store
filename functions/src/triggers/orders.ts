@@ -4,25 +4,28 @@ import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
-// ✅ [수정] helpers.js 대신 필요한 타입을 직접 가져오거나 여기서 정의합니다.
 import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
 
-// ✅ [수정] calculateTier와 POINT_POLICIES를 helpers.js 대신 여기에 직접 정의하여 외부 의존성을 제거합니다.
 const POINT_POLICIES = {
   FRIEND_INVITED: { points: 100, reason: '친구 초대 성공' },
 };
 
+/**
+ * ✅ [수정] 등급 산정 기준 완화
+ * - 노쇼 5회 이상: '참여 제한'
+ * - 노쇼 3회 이상: '주의 요망'
+ * - 픽업률 기반 강등 조건은 삭제하여 노쇼 횟수에 집중
+ */
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    if (noShowCount >= 3) return '참여 제한';
-    if (noShowCount >= 1) return '주의 요망';
+    if (noShowCount >= 5) return '참여 제한';
+    if (noShowCount >= 3) return '주의 요망';
     if (pickupCount >= 50) return '공구의 신';
     if (pickupCount >= 30) return '공구왕';
     if (pickupCount >= 10) return '공구요정';
     return '공구새싹';
 };
 
-
-type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED";
+type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED" | "LATE_PICKUP_CONFIRMED";
 
 function calculateUserUpdateFromOrder(
   currentUserData: UserDocument,
@@ -41,7 +44,6 @@ function calculateUserUpdateFromOrder(
 
   switch (updateType) {
     case "PICKUP_CONFIRMED": {
-      // ✅ [핵심 수정] 결제액의 0.5% + 선입금 보너스 5P 로직으로 변경
       const purchasePoints = Math.floor((order.totalPrice || 0) * 0.005);
       const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
       const totalPoints = purchasePoints + prepaidBonus;
@@ -51,21 +53,34 @@ function calculateUserUpdateFromOrder(
       pickupCountIncrement = 1;
       break;
     }
+    /**
+     * ✅ [신규] 지연 픽업 로직
+     * - 기존 노쇼를 만회했으므로 noShowCount를 1 감소시킴
+     * - 정상 픽업이 아니므로 pickupCount는 0.5만 증가시킴
+     */
+    case "LATE_PICKUP_CONFIRMED": {
+        const purchasePoints = Math.floor((order.totalPrice || 0) * 0.005);
+        const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
+        const totalPoints = purchasePoints + prepaidBonus;
+        let reason = `[지연] 구매 확정 ${orderIdSuffix}`;
+        if (prepaidBonus > 0) reason = `[선결제] ${reason}`;
+        pointPolicy = { points: totalPoints, reason };
+        pickupCountIncrement = 0.5; // 지연 픽업은 0.5회로 기록
+        noShowCountIncrement = -1;  // 기존 노쇼 기록 1회 차감
+        break;
+    }
     case "NO_SHOW_CONFIRMED": {
-      // ✅ [수정] 노쇼 페널티 단순화: -100P
       pointPolicy = { points: -100, reason: `미수령 페널티 ${orderIdSuffix}` };
       noShowCountIncrement = 1;
       break;
     }
     case "PICKUP_REVERTED": {
-      // ✅ [수정] 픽업 취소 시에도 적립되었던 포인트만큼 정확히 차감
       const pointsToRevert = Math.floor((order.totalPrice || 0) * 0.005) + (order.wasPrepaymentRequired ? 5 : 0);
       pointPolicy = { points: -pointsToRevert, reason: `픽업 처리 취소 ${orderIdSuffix}` };
       pickupCountIncrement = -1;
       break;
     }
     case "NO_SHOW_REVERTED": {
-      // ✅ [수정] 노쇼 취소 시에도 차감되었던 100P 복구
       pointPolicy = { points: 100, reason: `미수령 처리 취소 ${orderIdSuffix}` };
       noShowCountIncrement = -1;
       break;
@@ -74,9 +89,13 @@ function calculateUserUpdateFromOrder(
 
   if (!pointPolicy) return null;
 
+  const currentPickupCount = currentUserData.pickupCount || 0;
+  const currentNoShowCount = currentUserData.noShowCount || 0;
+
+  // pickupCount가 정수가 아닐 수 있으므로 Math.round 등을 사용하지 않고 그대로 계산
+  const newPickupCount = Math.max(0, currentPickupCount + pickupCountIncrement);
+  const newNoShowCount = Math.max(0, currentNoShowCount + noShowCountIncrement);
   const newPoints = (currentUserData.points || 0) + pointPolicy.points;
-  const newPickupCount = Math.max(0, (currentUserData.pickupCount || 0) + pickupCountIncrement);
-  const newNoShowCount = Math.max(0, (currentUserData.noShowCount || 0) + noShowCountIncrement);
 
   const newTier = calculateTier(newPickupCount, newNoShowCount);
 
@@ -370,16 +389,22 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
 
     let updateType: OrderUpdateType | null = null;
 
+    // ✅ [수정] '지연 픽업' 상태 감지 로직 추가
     if (before.status !== "PICKED_UP" && after.status === "PICKED_UP") {
-      updateType = "PICKUP_CONFIRMED";
+      if (before.status === "NO_SHOW") {
+        updateType = "LATE_PICKUP_CONFIRMED";
+      } else {
+        updateType = "PICKUP_CONFIRMED";
+      }
     } else if (before.status !== "NO_SHOW" && after.status === "NO_SHOW") {
       updateType = "NO_SHOW_CONFIRMED";
     } else if (before.status === "PICKED_UP" && after.status !== "PICKED_UP") {
       updateType = "PICKUP_REVERTED";
     } else if (before.status === "NO_SHOW" && after.status !== "NO_SHOW") {
+      // '지연 픽업'이 아닌 다른 상태로 변경될 경우(예: 관리자가 강제 취소)
+      // 기존 노쇼를 되돌리는 로직
       updateType = "NO_SHOW_REVERTED";
     }
-    // LATE_CANCELED 상태는 Callable Function에서 직접 처리하므로 트리거에서는 제외합니다.
     
     if (!updateType) {
       logger.info(`No relevant status change for order ${event.params.orderId} from ${before.status} to ${after.status}. Skipping.`);

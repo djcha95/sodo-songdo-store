@@ -1,12 +1,19 @@
 // src/components/admin/CustomerFocusView.tsx
 
 import React from 'react';
-import type { UserDocument, Order } from '@/types';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import toast from 'react-hot-toast';
+import type { UserDocument, Order, AggregatedOrderGroup } from '@/types';
 import CustomerProfileSummary from './CustomerProfileSummary';
 import CustomerActionTabs from './CustomerActionTabs';
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { showPromiseToast } from '@/utils/toastUtils';
 import './CustomerFocusView.css';
+
+const functions = getFunctions(getApp(), 'asia-northeast3');
+const markOrderAsNoShowCallable = httpsCallable<{ orderId: string }, { success: boolean, message: string }>(functions, 'markOrderAsNoShow');
 
 interface CustomerFocusViewProps {
     user: UserDocument;
@@ -23,6 +30,26 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
     onStatUpdate, 
     onActionSuccess 
 }) => {
+
+    const handleMarkAsNoShow = (group: AggregatedOrderGroup) => {
+        const orderId = group.originalOrders[0]?.orderId;
+        if (!orderId) {
+            toast.error("처리할 주문 ID를 찾을 수 없습니다.");
+            return;
+        }
+
+        const promise = markOrderAsNoShowCallable({ orderId });
+
+        showPromiseToast(promise, {
+            loading: `${group.customerInfo.name}님의 주문을 '노쇼' 처리 중...`,
+            success: (result) => {
+                onActionSuccess(); 
+                return result.data.message;
+            },
+            error: (err) => err.message || "노쇼 처리에 실패했습니다.",
+        });
+    };
+
     return (
         <motion.div 
             className="cfv-container"
@@ -47,6 +74,7 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
                         orders={orders} 
                         onStatUpdate={onStatUpdate}
                         onActionSuccess={onActionSuccess}
+                        onMarkAsNoShow={handleMarkAsNoShow}
                     />
                 </main>
             </div>

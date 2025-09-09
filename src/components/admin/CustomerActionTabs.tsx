@@ -1,6 +1,6 @@
 // src/components/admin/CustomerActionTabs.tsx
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Timestamp } from 'firebase/firestore';
 import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatus } from '@/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
@@ -25,7 +25,9 @@ interface CustomerActionTabsProps {
     orders: Order[];
     onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
+    onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
 }
+
 
 const convertToDate = (date: Timestamp | Date | null | undefined): Date | null => {
     if (!date) return null;
@@ -195,10 +197,18 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
 type Tab = 'pickup' | 'history' | 'manage';
 interface SplitInfo { group: AggregatedOrderGroup; newQuantity: number; }
 
-const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = [], onStatUpdate, onActionSuccess }) => {
+const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ 
+    user, 
+    orders = [], 
+    onStatUpdate, 
+    onActionSuccess,
+    // ✅ [수정] onMarkAsNoShow prop을 받습니다.
+    onMarkAsNoShow 
+}) => {
     const [activeTab, setActiveTab] = useState<Tab>('pickup');
     const [selectedGroupKeys, setSelectedGroupKeys] = useState<string[]>([]);
     const [splitInfo, setSplitInfo] = useState<SplitInfo | null>(null);
+
 
     const aggregatedPickupOrders = useMemo<AggregatedOrderGroup[]>(() => {
         const pickupOrders = orders.filter(o => o.status === 'RESERVED' || o.status === 'PREPAID');
@@ -239,12 +249,12 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         [aggregatedPickupOrders, selectedGroupKeys]
     );
 
-    const handleSelectGroup = (groupKey: string) => {
+const handleSelectGroup = useCallback((groupKey: string) => {
         if(splitInfo) { toast.error('수량 변경 후에는 먼저 부분 픽업 처리를 완료해주세요.'); return; }
         setSelectedGroupKeys(prev => prev.includes(groupKey) ? prev.filter(key => key !== groupKey) : [...prev, groupKey]);
-    };
+    }, [splitInfo]); // splitInfo가 바뀔 때만 함수를 새로 만듭니다.
 
-    const handleQuantityChange = (group: AggregatedOrderGroup, newQuantity: number) => {
+    const handleQuantityChange = useCallback((group: AggregatedOrderGroup, newQuantity: number) => {
         if (newQuantity < group.totalQuantity) {
             if(group.originalOrders.length > 1) { 
                 toast.error("여러 주문이 묶인 그룹의 수량은 변경할 수 없습니다. '전체 주문 내역' 탭에서 주문을 분할한 후 시도해주세요."); 
@@ -255,11 +265,10 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
         } else {
             setSplitInfo(null);
             // 수량이 원래대로 돌아오면 선택 해제
-            if (selectedGroupKeys.includes(group.groupKey)) {
-               setSelectedGroupKeys(prev => prev.filter(key => key !== group.groupKey));
-            }
+            setSelectedGroupKeys(prev => prev.filter(key => key !== group.groupKey));
         }
-    };
+    }, []); // 의존성이 없으므로 처음 한 번만 함수를 만듭니다.
+
 
     const handleStatusUpdate = (status: OrderStatus) => {
         if (selectedGroupKeys.length === 0) return;
@@ -465,6 +474,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
                                     onSelect={handleSelectGroup}
                                     onQuantityChange={handleQuantityChange}
                                     isFuture={isFuture}
+                                    onMarkAsNoShow={onMarkAsNoShow}
                                 />
                             );
                         })}
@@ -519,10 +529,21 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ user, orders = 
             <div className="cat-action-footer">
                 <span className="cat-footer-summary">{selectedGroupKeys.length}건 선택 / {totalSelectedPrice.toLocaleString()}원</span>
                 <div className="cat-footer-actions">
+                    {/* [핵심 수정] 버튼 구성 변경 */}
                     <button onClick={() => handleStatusUpdate('PICKED_UP')} className="common-button button-pickup"><CheckCircle size={20} /> 픽업</button>
                     {prepaymentButton}
-                    <button onClick={handleCancelOrder} className="common-button button-cancel"><XCircle size={16} /> 취소</button>
-                    <button onClick={handleDelete} className="common-button button-dark"><Trash2 size={16} /> 삭제</button>
+                    
+                    {/* [추가] '노쇼' 버튼 (빨간색) */}
+                    <button onClick={() => handleStatusUpdate('NO_SHOW')} className="common-button button-danger">
+                        <AlertTriangle size={16} /> 노쇼
+                    </button>
+                    
+                    {/* [수정] '취소' 버튼 (회색) */}
+                    <button onClick={handleCancelOrder} className="common-button button-secondary">
+                        <XCircle size={16} /> 취소
+                    </button>
+
+                    {/* [삭제] '삭제' 버튼 제거됨 */}
                 </div>
             </div>
         )

@@ -388,8 +388,25 @@ const AggregatedItemCard: React.FC<{
     if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
       return { statusText: '선입금 필요', StatusIcon: CreditCard, statusClass: 'status-prepayment_required' };
     }
-    const textMap: Record<OrderStatus, string> = { RESERVED: '예약 완료', PREPAID: '선입금 완료', PICKED_UP: '픽업 완료', COMPLETED: '처리 완료', CANCELED: '취소됨', NO_SHOW: '노쇼', LATE_CANCELED: '취소됨' };
-    const iconMap: Record<OrderStatus, React.ElementType> = { RESERVED: Hourglass, PREPAID: PackageCheck, PICKED_UP: PackageCheck, COMPLETED: CircleCheck, CANCELED: PackageX, NO_SHOW: AlertCircle, LATE_CANCELED: PackageX };
+    // ✅ [수정] 'NO_SHOW' 상태에 대한 텍스트와 아이콘 추가
+    const textMap: Record<OrderStatus, string> = { 
+        RESERVED: '예약 완료', 
+        PREPAID: '선입금 완료', 
+        PICKED_UP: '픽업 완료', 
+        COMPLETED: '처리 완료', 
+        CANCELED: '취소됨', 
+        NO_SHOW: '픽업 기간 만료', // '노쇼' 대신 고객에게 더 부드러운 표현 사용
+        LATE_CANCELED: '취소됨' 
+    };
+    const iconMap: Record<OrderStatus, React.ElementType> = { 
+        RESERVED: Hourglass, 
+        PREPAID: PackageCheck, 
+        PICKED_UP: PackageCheck, 
+        COMPLETED: CircleCheck, 
+        CANCELED: PackageX, 
+        NO_SHOW: AlertCircle, // 'NO_SHOW' 상태 아이콘
+        LATE_CANCELED: PackageX 
+    };
     return {
       statusText: textMap[item.status] || '알 수 없음',
       StatusIcon: iconMap[item.status] || AlertCircle,
@@ -397,11 +414,16 @@ const AggregatedItemCard: React.FC<{
     }
   }, [item.status, item.wasPrepaymentRequired]);
 
+
   const { cancellable, isEvent } = useMemo(() => getCancellationDetails(item), [item]);
   const isQuantityEditable = (item.status === 'RESERVED' || item.status === 'PREPAID') && item.originalOrders.length === 1;
 
-  const isCanceled = useMemo(() => item.status === 'CANCELED' || item.status === 'LATE_CANCELED', [item.status]);
-
+  // ✅ [수정] 'NO_SHOW' 상태일 때도 취소된 것처럼 보이도록 처리
+  const isCanceledOrNoShow = useMemo(() => 
+    item.status === 'CANCELED' || item.status === 'LATE_CANCELED' || item.status === 'NO_SHOW', 
+    [item.status]
+  );
+  
   const topText = useMemo(
     () => isEvent ? item.productName : item.variantGroupName,
     [isEvent, item.productName, item.variantGroupName]
@@ -413,11 +435,11 @@ const AggregatedItemCard: React.FC<{
   );
     
   const handleClick = useCallback(() => {
-    if (isCanceled) return; // 취소된 항목은 선택 불가
+    if (isCanceledOrNoShow) return; // 취소되거나 노쇼된 항목은 선택 불가
     if (cancellable || (item.status === 'RESERVED' || item.status === 'PREPAID')) {
       onSelect(item.id);
     }
-  }, [cancellable, item.status, item.id, onSelect, isCanceled]);
+  }, [cancellable, item.status, item.id, onSelect, isCanceledOrNoShow]);
 
   const handlers = useLongPress(() => {}, handleClick, { initialDelay: 500 });
 
@@ -429,11 +451,11 @@ const AggregatedItemCard: React.FC<{
 
   return (
     <motion.div
-      className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''} ${isCanceled ? 'canceled-order' : ''}`}
+      className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''} ${isCanceledOrNoShow ? 'canceled-order' : ''}`} // ✅ isCanceled -> isCanceledOrNoShow
       layoutId={item.stableId}
       key={item.id}
       {...handlers}
-      whileTap={cancellable && !isCanceled ? { scale: 0.98 } : {}}
+      whileTap={cancellable && !isCanceledOrNoShow ? { scale: 0.98 } : {}}
       transition={{ duration: 0.2, ease: "easeInOut" }}
     >
       <div className="card-v3-body">
@@ -853,6 +875,10 @@ const OrderHistoryPage: React.FC = () => {
         duration: Infinity, 
         style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } 
     });
+    // ✅ 토스트가 띄워진 후 상태 초기화 방지
+    // return () => {
+    //   toast.dismiss(toastId);
+    // };
   }, [cancellationRequest, executeCancellation]);
 
   const renderOrderContent = () => {

@@ -1025,3 +1025,51 @@ export const revertFinalizedOrder = onCall(
     }
   }
 );
+
+/**
+ * =================================================================
+ * 관리자 수동 노쇼 처리: markOrderAsNoShow (✅ 신규 추가)
+ * =================================================================
+ */
+export const markOrderAsNoShow = onCall(
+  {
+    region: "asia-northeast3",
+  },
+  async (request) => {
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    const { orderId } = request.data;
+    if (!orderId) {
+      throw new HttpsError("invalid-argument", "주문 ID가 필요합니다.");
+    }
+
+    const orderRef = db.collection("orders").doc(orderId);
+
+    try {
+      const orderSnap = await orderRef.get();
+      if (!orderSnap.exists) {
+        throw new HttpsError("not-found", "해당 주문을 찾을 수 없습니다.");
+      }
+
+      const order = orderSnap.data() as Order;
+      const unchangeableStatuses: Array<typeof order.status> = ["PICKED_UP", "CANCELED", "LATE_CANCELED", "NO_SHOW"];
+
+      if (unchangeableStatuses.includes(order.status)) {
+        throw new HttpsError("failed-precondition", `이미 '${order.status}' 상태인 주문은 변경할 수 없습니다.`);
+      }
+
+      await orderRef.update({ status: "NO_SHOW" });
+      
+      logger.info(`Admin ${request.auth?.uid} marked order ${orderId} as NO_SHOW.`);
+      return { success: true, message: "주문이 '노쇼' 처리되었습니다." };
+
+    } catch (error) {
+      logger.error(`Error marking order ${orderId} as NO_SHOW:`, error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "노쇼 처리 중 오류가 발생했습니다.");
+    }
+  }
+);

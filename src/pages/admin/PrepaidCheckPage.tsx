@@ -9,16 +9,16 @@ import SodomallLoader from '@/components/common/SodomallLoader';
 import PrepaidListTable from '@/components/admin/PrepaidListTable';
 import './PrepaidCheckPage.css';
 import dayjs from 'dayjs';
-import 'dayjs/locale/ko'; // ✅ [수정] 한국어 로케일 import
+import 'dayjs/locale/ko';
 
-dayjs.locale('ko'); // ✅ [수정] dayjs 전역 로케일 설정
+dayjs.locale('ko');
 
 const PrepaidCheckPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set()); // ✅ [추가] 아코디언 상태 관리
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -52,7 +52,6 @@ const PrepaidCheckPage: React.FC = () => {
     const groups = filtered.reduce((acc, order) => {
       if (!order.items || order.items.length === 0) return acc;
       
-      // ✅ [오류 수정] pickupDate가 Date 객체일 수 있으므로 .toDate() 호출을 안전하게 처리
       const pickupDate = order.pickupDate;
       const dateObj = 'toDate' in pickupDate ? pickupDate.toDate() : pickupDate;
       const key = dayjs(dateObj).format('YYYY년 M월 D일 (ddd)');
@@ -95,12 +94,21 @@ const PrepaidCheckPage: React.FC = () => {
           products: Array.from(productMap.values()).sort((a, b) => a.productName.localeCompare(b.productName)),
         };
       })
-      // ✅ [오류 수정] a.key -> a.groupKey로 수정
-      .sort((a, b) => b.groupKey.localeCompare(a.groupKey));
+      // ✅ [수정] 문자열 비교가 아닌, dayjs 객체로 변환하여 실제 날짜를 기준으로 정렬합니다. (최신순)
+      .sort((a, b) => {
+        // 'YYYY년 M월 D일 (ddd)' 형식의 groupKey를 dayjs 객체로 다시 파싱합니다.
+        const dateA = dayjs(a.groupKey, 'YYYY년 M월 D일 (ddd)');
+        const dateB = dayjs(b.groupKey, 'YYYY년 M월 D일 (ddd)');
+        return dateB.valueOf() - dateA.valueOf(); // 내림차순 (최신 날짜가 위로)
+      })
+      // ✅ [추가] 정렬이 끝난 후, 화면에 표시될 groupKey에 '픽업시작' 텍스트를 추가합니다.
+      .map(group => ({
+        ...group,
+        groupKey: `${group.groupKey} 픽업시작`,
+      }));
 
   }, [allOrders, searchTerm]);
 
-  // ✅ [추가] 데이터 로드 시 모든 그룹을 펼친 상태로 초기화
   useEffect(() => {
     if (processedData.length > 0) {
       setExpandedGroups(new Set(processedData.map(g => g.groupKey)));
@@ -118,7 +126,6 @@ const PrepaidCheckPage: React.FC = () => {
     setSelectedOrderIds(newSelected);
   };
   
-  // ✅ [추가] 아코디언 토글 핸들러
   const handleToggleGroup = (groupKey: string) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
@@ -131,7 +138,6 @@ const PrepaidCheckPage: React.FC = () => {
     });
   };
   
-  // ✅ [추가] 모두 펼치기/접기 핸들러
   const handleToggleAll = (expand: boolean) => {
     if (expand) {
       setExpandedGroups(new Set(processedData.map(g => g.groupKey)));
@@ -187,7 +193,6 @@ const PrepaidCheckPage: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        {/* ✅ [추가] 모두 펼치기/접기 버튼 */}
         <div className="pcp-view-controls">
           <button onClick={() => handleToggleAll(true)}><ChevronsDown size={16} /> 모두 펼치기</button>
           <button onClick={() => handleToggleAll(false)}><ChevronsUp size={16} /> 모두 접기</button>

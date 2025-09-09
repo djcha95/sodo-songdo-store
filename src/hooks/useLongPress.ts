@@ -12,8 +12,6 @@ const useLongPress = (
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // ✅ "꾹 누르기"가 발동되었는지 추적하는 플래그
   const longPressTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -21,31 +19,24 @@ const useLongPress = (
     clickCallbackRef.current = clickCallback;
   }, [longPressCallback, clickCallback]);
 
-  // 마우스를 누르기 시작할 때
   const start = useCallback((event: React.MouseEvent | React.TouchEvent) => {
-    // ✅ [수정] passive listener 경고를 해결하기 위해 'mousedown' 이벤트에만 preventDefault를 적용합니다.
-    // 이렇게 하면 터치 이벤트에서 발생하는 경고를 피하면서, 데스크톱에서 꾹 누를 때 텍스트가 선택되는 현상을 방지할 수 있습니다.
     if (event.type === 'mousedown' && event.cancelable) {
       event.preventDefault();
     }
-    
-    // 플래그 초기화
     longPressTriggeredRef.current = false;
 
-    // 꾹 누르기 타이머 설정
     timeoutRef.current = setTimeout(() => {
-      longPressTriggeredRef.current = true; // 플래그 세우기
-      longPressCallbackRef.current(); // 꾹 누르기 콜백 첫 실행
+      longPressTriggeredRef.current = true;
+      longPressCallbackRef.current();
       
-      // 반복 실행 설정
       intervalRef.current = setInterval(() => {
         longPressCallbackRef.current();
       }, delay);
     }, initialDelay);
   }, [delay, initialDelay]);
 
-  // 마우스를 떼거나, 버튼 밖으로 나갔을 때
-  const stop = useCallback(() => {
+  // ✅ [수정] 타이머만 취소하는 별도의 함수를 만듭니다.
+  const cancel = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -54,26 +45,28 @@ const useLongPress = (
     }
   }, []);
 
-  // ✅ "짧은 클릭"을 처리할 onClick 핸들러
-  const handleClick = useCallback(() => {
-    // 꾹 누르기가 발동되지 않았을 때만 짧은 클릭으로 간주
-    if (!longPressTriggeredRef.current) {
+  // ✅ [수정] 마우스를 뗄 때만 클릭을 판정하는 함수입니다.
+  const handleStop = useCallback(() => {
+    // 롱클릭이 발동되기 전에 손을 뗐다면, 짧은 클릭으로 간주
+    if (longPressTriggeredRef.current === false) {
       clickCallbackRef.current();
     }
-  }, []);
+    // 모든 타이머 정리
+    cancel();
+  }, [cancel]); // cancel 함수에 의존합니다.
 
   useEffect(() => {
-    // 컴포넌트 언마운트 시 모든 타이머 정리
-    return stop;
-  }, [stop]);
+    // 컴포넌트가 사라질 때 타이머 정리
+    return cancel;
+  }, [cancel]);
 
   return {
     onMouseDown: start,
-    onMouseUp: stop,
-    onMouseLeave: stop,
     onTouchStart: start,
-    onTouchEnd: stop,
-    onClick: handleClick, // ✅ onClick 핸들러를 반환
+    // ✅ [핵심 수정] 이벤트 핸들러를 올바르게 분리합니다.
+    onMouseUp: handleStop,      // 마우스 버튼을 뗄 때
+    onTouchEnd: handleStop,     // 터치를 뗄 때
+    onMouseLeave: cancel,       // 마우스가 요소 밖으로 나갈 때 (타이머만 취소)
   };
 };
 

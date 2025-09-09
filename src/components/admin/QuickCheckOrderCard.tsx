@@ -1,11 +1,14 @@
 // src/components/admin/QuickCheckOrderCard.tsx
 
+// ✅ [수정] useState와 useEffect를 import 목록에 추가합니다.
 import React, { useState, useEffect } from 'react';
 import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/types';
 import toast from 'react-hot-toast';
-import { MinusCircle, PlusCircle, CheckSquare } from 'lucide-react';
+import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle } from 'lucide-react';
+import useLongPress from '@/hooks/useLongPress';
 import './QuickCheckOrderCard.css';
 import { formatKRW } from '@/utils/number';
+
 
 interface OrderCardProps {
   group: AggregatedOrderGroup;
@@ -13,6 +16,7 @@ interface OrderCardProps {
   isSelected: boolean;
   onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
   isFuture: boolean;
+  onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
 }
 
 // 개별 품목 행: 수량 편집 UX/에러 처리 강화
@@ -95,8 +99,20 @@ const CardItemRow: React.FC<{
 };
 
 // 메인 카드
-const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSelected, onQuantityChange, isFuture }) => {
+const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ 
+    group, 
+    onSelect, 
+    isSelected, 
+    onQuantityChange, 
+    isFuture,
+    onMarkAsNoShow 
+}) => {
   const { groupKey, status, item, totalPrice, customerInfo, pickupDate, pickupDeadlineDate, totalQuantity } = group;
+
+  const handleShortClick = () => onSelect(groupKey);
+  const handleLongClick = () => onQuantityChange(group, group.totalQuantity + 1);
+
+  const pressHandlers = useLongPress(handleLongClick, handleShortClick, { initialDelay: 300, delay: 150 });
 
   const formatDate = (timestamp: any): string => {
     if (!timestamp) return '미지정';
@@ -126,7 +142,7 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
            d1.getDate() === d2.getDate();
   };
 
-  const getStatusClassName = (status: OrderStatus): string => {
+ const getStatusClassName = (status: OrderStatus): string => {
     switch (status) {
       case 'PICKED_UP': return 'bg-picked-up-strong';
       case 'PREPAID': return 'bg-prepaid-strong';
@@ -135,7 +151,7 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
       default: return 'bg-default';
     }
   };
-
+  
   const arrivalDate = pickupDate;
   const deadlineDate = pickupDeadlineDate ?? pickupDate;
   const isSingleDayPickup = isSameDay(arrivalDate, deadlineDate);
@@ -144,16 +160,44 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
     onQuantityChange(group, newQuantity);
   };
 
+  const handleNoShowClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toast((t) => (
+        <div>
+            <p><b>{customerInfo.name}</b>님의 주문을 정말 '노쇼' 처리하시겠습니까?</p>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button
+                    className="common-button button-secondary button-small"
+                    onClick={() => toast.dismiss(t.id)}
+                >
+                    취소
+                </button>
+                <button
+                    className="common-button button-danger button-small"
+                    onClick={() => {
+                        onMarkAsNoShow(group);
+                        toast.dismiss(t.id);
+                    }}
+                >
+                    노쇼 처리
+                </button>
+            </div>
+        </div>
+    ), { duration: 6000 });
+  };
+
+  const canBeMarkedAsNoShow = status === 'RESERVED' || status === 'PREPAID';
+
   return (
-    // [수정] 'is-future' 클래스는 유지하되, 내부에 있던 '입고 예정' 배지 엘리먼트는 삭제했습니다.
-    <div className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)} ${isFuture ? 'is-future' : ''}`} onClick={() => onSelect(groupKey)}>
-      
+    <div 
+      className={`qc-order-card ${isSelected ? 'selected' : ''} ${getStatusClassName(status)} ${isFuture ? 'is-future' : ''}`} 
+      {...pressHandlers}
+    >
       {isSelected && (
         <div className="qco-checkmark">
           <CheckSquare size={24} />
         </div>
       )}
-
       <div className="qco-top-row">
         {isSingleDayPickup ? (
           <span className="today">🔥 {formatDate(arrivalDate)} 당일픽업</span>
@@ -164,7 +208,6 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
           </>
         )}
       </div>
-
       <div className="qco-body">
         <CardItemRow
           item={item}
@@ -172,13 +215,24 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({ group, onSelect, isSele
           onUpdateQuantity={handleItemQuantityUpdate}
         />
       </div>
-
+      {status === 'NO_SHOW' && (
+        <div className="qco-noshow-badge">
+            <AlertTriangle size={14} />
+            <span>노쇼 처리됨</span>
+        </div>
+      )}
       <div className="qco-bottom-row">
         <span className="qco-customer-name" title={`전화번호: ${customerInfo.phone}`}>{customerInfo.name}</span>
-        <span className="qco-total-price">{formatKRW(totalPrice)}원</span>
+        {canBeMarkedAsNoShow ? (
+            <button className="qco-noshow-button" onClick={handleNoShowClick}>
+                노쇼 처리
+            </button>
+        ) : (
+            <span className="qco-total-price">{formatKRW(totalPrice)}원</span>
+        )}
       </div>
     </div>
   );
 };
 
-export default QuickCheckOrderCard;
+export default React.memo(QuickCheckOrderCard);
