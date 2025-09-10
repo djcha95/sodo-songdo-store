@@ -452,8 +452,30 @@ const ItemSelector: React.FC<{
 
 
 const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<React.SetStateAction<number>>; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => {
-    const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]);
-    const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]);
+    // 마지막 호출 시간을 추적하기 위한 ref 추가
+    const lastCallTimestamp = useRef(0);
+
+    const increment = useCallback(() => {
+        const now = Date.now();
+        // 100ms 이내의 중복 호출을 방지하여 수량이 2씩 증가하는 버그 수정
+        if (now - lastCallTimestamp.current < 100) {
+            return;
+        }
+        lastCallTimestamp.current = now;
+        setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q);
+    }, [setQuantity, maxQuantity]);
+
+    const decrement = useCallback(() => {
+        const now = Date.now();
+        // 100ms 이내의 중복 호출을 방지
+        if (now - lastCallTimestamp.current < 100) {
+            return;
+        }
+        lastCallTimestamp.current = now;
+        setQuantity(q => q > 1 ? q - 1 : 1);
+    }, [setQuantity]);
+
+    // TypeScript 오류를 해결하고 long-press 기능을 유지하기 위해 원래의 호출 구조로 복원
     const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 });
     const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 });
 
@@ -496,7 +518,6 @@ const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<Re
         </div>
     );
 });
-
 const PurchasePanel: React.FC<{
     actionState: ProductActionState | 'ON_SITE_SALE';
     round: SalesRound;

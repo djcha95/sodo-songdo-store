@@ -8,7 +8,7 @@ import {
     updateMultipleOrderStatuses,
     revertOrderStatus,
     deleteMultipleOrders,
-    processPartialPickup, // [수정] splitAndUpdateOrderStatus 대신 processPartialPickup 사용
+    processPartialPickup,
     splitBundledOrder,
     cancelOrder,
     revertFinalizedOrder
@@ -25,7 +25,7 @@ interface CustomerActionTabsProps {
     orders: Order[];
     onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
-    onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
+    // [삭제] onMarkAsNoShow prop 제거
 }
 
 
@@ -89,7 +89,6 @@ const ActionableOrderTable: React.FC<{
                         </thead>
                         <tbody>
                             {sortedOrders.map(order => {
-                                // [수정] '되돌리기' 버튼이 CANCELED, LATE_CANCELED 상태에서도 보이도록 조건 변경
                                 const isRevertable = ['PICKED_UP', 'NO_SHOW', 'CANCELED', 'LATE_CANCELED'].includes(order.status);
                                 const isSplittable = Array.isArray(order.items) && order.items.length > 1;
 
@@ -202,8 +201,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
     orders = [], 
     onStatUpdate, 
     onActionSuccess,
-    // ✅ [수정] onMarkAsNoShow prop을 받습니다.
-    onMarkAsNoShow 
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('pickup');
     const [selectedGroupKeys, setSelectedGroupKeys] = useState<string[]>([]);
@@ -252,7 +249,7 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
 const handleSelectGroup = useCallback((groupKey: string) => {
         if(splitInfo) { toast.error('수량 변경 후에는 먼저 부분 픽업 처리를 완료해주세요.'); return; }
         setSelectedGroupKeys(prev => prev.includes(groupKey) ? prev.filter(key => key !== groupKey) : [...prev, groupKey]);
-    }, [splitInfo]); // splitInfo가 바뀔 때만 함수를 새로 만듭니다.
+    }, [splitInfo]);
 
     const handleQuantityChange = useCallback((group: AggregatedOrderGroup, newQuantity: number) => {
         if (newQuantity < group.totalQuantity) {
@@ -261,13 +258,12 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                 return; 
             }
             setSplitInfo({ group, newQuantity });
-            setSelectedGroupKeys([group.groupKey]); // 수량 변경 시 해당 카드만 자동 선택
+            setSelectedGroupKeys([group.groupKey]);
         } else {
             setSplitInfo(null);
-            // 수량이 원래대로 돌아오면 선택 해제
             setSelectedGroupKeys(prev => prev.filter(key => key !== group.groupKey));
         }
-    }, []); // 의존성이 없으므로 처음 한 번만 함수를 만듭니다.
+    }, []);
 
 
     const handleStatusUpdate = (status: OrderStatus) => {
@@ -383,7 +379,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
         );
     };
 
-    // [수정] 기존 handleSplit을 부분 픽업 로직으로 전면 교체
     const handlePartialPickup = () => {
         if (!splitInfo) return;
 
@@ -408,7 +403,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
         });
         
         confirmationPromise.then(() => {
-            // 백엔드 정책과 일치: 부분 픽업 시 -50점
             const PENALTY_POINTS = -50; 
             const pointsForPickedUpItems = Math.round(group.item.unitPrice * newQuantity * 0.01);
             const totalPointChange = pointsForPickedUpItems + PENALTY_POINTS;
@@ -424,7 +418,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                 { loading: '부분 픽업 처리 중...', success: '부분 픽업 및 페널티가 적용되었습니다.', error: '부분 픽업 처리 실패' }
             );
         }).catch(() => {
-           // 사용자가 확인 창에서 '아니오'를 누르면 아무 작업도 하지 않음
            console.log("Partial pickup was canceled by the user.");
         });
     };
@@ -474,7 +467,7 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                                     onSelect={handleSelectGroup}
                                     onQuantityChange={handleQuantityChange}
                                     isFuture={isFuture}
-                                    onMarkAsNoShow={onMarkAsNoShow}
+                                    // [삭제] onMarkAsNoShow prop 전달 제거
                                 />
                             );
                         })}
@@ -501,7 +494,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                         {splitInfo.group.item.productName}: <strong>{splitInfo.newQuantity}개</strong> ({(newPrice).toLocaleString()}원)
                     </span>
                     <div className="cat-footer-actions">
-                         {/* [수정] 버튼 텍스트와 핸들러 변경 */}
                          <button onClick={handlePartialPickup} className="common-button button-pickup">
                             <GitCommit size={16} /> 부분 픽업 처리
                          </button>
@@ -529,21 +521,17 @@ const handleSelectGroup = useCallback((groupKey: string) => {
             <div className="cat-action-footer">
                 <span className="cat-footer-summary">{selectedGroupKeys.length}건 선택 / {totalSelectedPrice.toLocaleString()}원</span>
                 <div className="cat-footer-actions">
-                    {/* [핵심 수정] 버튼 구성 변경 */}
                     <button onClick={() => handleStatusUpdate('PICKED_UP')} className="common-button button-pickup"><CheckCircle size={20} /> 픽업</button>
                     {prepaymentButton}
                     
-                    {/* [추가] '노쇼' 버튼 (빨간색) */}
                     <button onClick={() => handleStatusUpdate('NO_SHOW')} className="common-button button-danger">
                         <AlertTriangle size={16} /> 노쇼
                     </button>
                     
-                    {/* [수정] '취소' 버튼 (회색) */}
                     <button onClick={handleCancelOrder} className="common-button button-secondary">
                         <XCircle size={16} /> 취소
                     </button>
 
-                    {/* [삭제] '삭제' 버튼 제거됨 */}
                 </div>
             </div>
         )

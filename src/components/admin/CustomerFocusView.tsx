@@ -1,19 +1,16 @@
 // src/components/admin/CustomerFocusView.tsx
 
 import React from 'react';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import toast from 'react-hot-toast';
-import type { UserDocument, Order, AggregatedOrderGroup } from '@/types';
+// [삭제] Firebase Functions 관련 import 제거
+import type { UserDocument, Order } from '@/types'; // [수정] AggregatedOrderGroup 타입 제거
 import CustomerProfileSummary from './CustomerProfileSummary';
 import CustomerActionTabs from './CustomerActionTabs';
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { showPromiseToast } from '@/utils/toastUtils';
+// [삭제] showPromiseToast 유틸리티 import 제거
 import './CustomerFocusView.css';
 
-const functions = getFunctions(getApp(), 'asia-northeast3');
-const markOrderAsNoShowCallable = httpsCallable<{ orderId: string }, { success: boolean, message: string }>(functions, 'markOrderAsNoShow');
+// [삭제] Firebase Functions 인스턴스 및 callable function 선언 제거
 
 interface CustomerFocusViewProps {
     user: UserDocument;
@@ -31,24 +28,7 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
     onActionSuccess 
 }) => {
 
-    const handleMarkAsNoShow = (group: AggregatedOrderGroup) => {
-        const orderId = group.originalOrders[0]?.orderId;
-        if (!orderId) {
-            toast.error("처리할 주문 ID를 찾을 수 없습니다.");
-            return;
-        }
-
-        const promise = markOrderAsNoShowCallable({ orderId });
-
-        showPromiseToast(promise, {
-            loading: `${group.customerInfo.name}님의 주문을 '노쇼' 처리 중...`,
-            success: (result) => {
-                onActionSuccess(); 
-                return result.data.message;
-            },
-            error: (err) => err.message || "노쇼 처리에 실패했습니다.",
-        });
-    };
+    // [삭제] handleMarkAsNoShow 함수 제거
 
     return (
         <motion.div 
@@ -74,7 +54,7 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
                         orders={orders} 
                         onStatUpdate={onStatUpdate}
                         onActionSuccess={onActionSuccess}
-                        onMarkAsNoShow={handleMarkAsNoShow}
+                        // [삭제] onMarkAsNoShow prop 전달 제거
                     />
                 </main>
             </div>

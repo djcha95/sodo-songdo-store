@@ -4,7 +4,6 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
-// ✅ [수정] OrderStatus 타입을 import 목록에 추가합니다.
 import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo } from "../types.js";
 import { getAuth } from "firebase-admin/auth";
 import type { LoyaltyTier } from "../types.js";
@@ -954,7 +953,6 @@ export const processPartialPickup = onCall(
   }
 );
 
-
 // ✅ [신규 추가] 취소된 주문을 포함하여 확정된 주문을 되돌리는 함수
 export const revertFinalizedOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
@@ -1072,4 +1070,71 @@ export const markOrderAsNoShow = onCall(
       throw new HttpsError("internal", "노쇼 처리 중 오류가 발생했습니다.");
     }
   }
+);
+
+/**
+ * =================================================================
+ * (신규) 픽업 날짜 변경: updateOrdersForPickupDateChange (관리자용)
+ * =================================================================
+ * 관리자가 상품 회차 픽업 날짜를 변경하면, 해당 회차를 주문한 모든 고객의 주문 내역을 업데이트합니다.
+ */
+export const updateOrdersForPickupDateChange = onCall(
+    { region: "asia-northeast3", cors: allowedOrigins, enforceAppCheck: false },
+    async (request) => {
+        const userRole = request.auth?.token.role;
+        // 관리자 권한 확인
+        if (!userRole || !['admin', 'master'].includes(userRole)) {
+            throw new HttpsError("permission-denied", "관리자만 이 기능을 사용할 수 있습니다.");
+        }
+        
+        const { productId, roundId, newPickupDate, newPickupDeadlineDate } = request.data;
+        if (!productId || !roundId || !newPickupDate || !newPickupDeadlineDate) {
+            throw new HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다.");
+        }
+        
+        try {
+            // Firestore Timestamp로 변환
+            const pickupTs = new Timestamp(newPickupDate.seconds, newPickupDate.nanoseconds);
+            const pickupDeadlineTs = new Timestamp(newPickupDeadlineDate.seconds, newPickupDeadlineDate.nanoseconds);
+            
+            // 해당 상품-회차를 포함하는 모든 주문을 찾습니다.
+            const ordersSnapshot = await db.collection("orders")
+                .where("status", "in", ["RESERVED", "PREPAID"]) // 예약 및 선입금 상태의 주문만 대상으로
+                .get();
+
+            const ordersToUpdate = ordersSnapshot.docs.filter(doc => {
+                const order = doc.data() as Order;
+                return (order.items || []).some(item => 
+                    item.productId === productId && item.roundId === roundId
+                );
+            });
+
+            if (ordersToUpdate.length === 0) {
+                logger.info(`No active orders found for product ${productId} and round ${roundId}.`);
+                return { success: true, message: "업데이트할 주문이 없습니다." };
+            }
+
+            // 배치 쓰기(Batch write)로 여러 문서를 한 번에 업데이트
+            const batch = db.batch();
+            ordersToUpdate.forEach(doc => {
+                const orderRef = db.collection("orders").doc(doc.id);
+                // 주문 문서의 최상위 필드와 items 배열 내부의 픽업 날짜를 모두 업데이트
+                batch.update(orderRef, { 
+                    pickupDate: pickupTs,
+                    pickupDeadlineDate: pickupDeadlineTs,
+                    notes: FieldValue.arrayUnion(`[자동 업데이트] 픽업 날짜가 ${pickupTs.toDate().toLocaleDateString()}으로 변경되었습니다.`)
+                });
+            });
+
+            await batch.commit();
+
+            logger.info(`Successfully updated pickup dates for ${ordersToUpdate.length} orders.`);
+            return { success: true, updatedCount: ordersToUpdate.length };
+
+        } catch (error) {
+            logger.error("updateOrdersForPickupDateChange error:", error);
+            if (error instanceof HttpsError) throw error;
+            throw new HttpsError("internal", "주문 픽업 날짜 업데이트 중 오류가 발생했습니다.");
+        }
+    }
 );
