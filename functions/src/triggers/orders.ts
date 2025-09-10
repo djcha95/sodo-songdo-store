@@ -11,18 +11,50 @@ const POINT_POLICIES = {
 };
 
 /**
- * ✅ [수정] 등급 산정 기준 완화
- * - 노쇼 5회 이상: '참여 제한'
- * - 노쇼 3회 이상: '주의 요망'
- * - 픽업률 기반 강등 조건은 삭제하여 노쇼 횟수에 집중
+ * @description ✅ [사용자 요청 반영] 등급 산정 기준을 '노쇼 횟수'에서 '픽업률' 중심으로 변경합니다.
+ * - '참여 제한': 총 거래 5회 이상이면서 픽업률 50% 미만
+ * - '주의 요망': 총 거래 5회 이상이면서 픽업률 70% 미만
+ * - 등급 상승 조건은 '픽업 횟수 + 픽업률' 기준을 사용합니다.
+ * - 이 로직은 `helpers.ts`의 `calculateTier`와 완전히 동일해야 합니다.
+ * @param pickupCount 총 픽업 완료 건수
+ * @param noShowCount 총 노쇼(미픽업) 건수
+ * @returns 계산된 LoyaltyTier 등급명
  */
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    if (noShowCount >= 5) return '참여 제한';
-    if (noShowCount >= 3) return '주의 요망';
-    if (pickupCount >= 50) return '공구의 신';
-    if (pickupCount >= 30) return '공구왕';
-    if (pickupCount >= 10) return '공구요정';
-    return '공구새싹';
+  const totalTransactions = pickupCount + noShowCount;
+
+  // 1. 거래 내역이 없는 초기 사용자는 '공구새싹'
+  if (totalTransactions === 0) {
+    return "공구새싹";
+  }
+
+  const pickupRate = (pickupCount / totalTransactions) * 100;
+
+  // 2. 픽업률 기반 페널티 (총 거래 5회 이상부터 적용)
+  if (totalTransactions >= 5) {
+    if (pickupRate < 50) {
+      return "참여 제한";
+    }
+    if (pickupRate < 70) {
+      return "주의 요망";
+    }
+  }
+
+  // 3. 픽업률과 누적 픽업 건수를 조합한 등급 상승
+  //   - 클라이언트 `helpers.ts`와 기준을 일치시키기 위해 기존 `orders.ts`의 단순 픽업 횟수 기준을 수정합니다.
+  //   - 상향된 등급 기준(250/100/30회)을 적용합니다.
+  if (pickupRate >= 98 && pickupCount >= 250) {
+    return "공구의 신";
+  }
+  if (pickupRate >= 95 && pickupCount >= 100) {
+    return "공구왕";
+  }
+  if (pickupRate >= 90 && pickupCount >= 30) {
+    return "공구요정";
+  }
+
+  // 4. 위 조건에 모두 해당하지 않는 경우 '공구새싹'
+  return "공구새싹";
 };
 
 type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED" | "LATE_PICKUP_CONFIRMED";

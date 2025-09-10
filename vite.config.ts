@@ -4,10 +4,20 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+// ✅ [추가] 번들 분석 도구를 import 합니다.
+import { visualizer } from 'rollup-plugin-visualizer';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  // ✅ [수정] plugins 배열에 visualizer를 추가합니다.
+  plugins: [
+    react(),
+    visualizer({
+      open: true, // 빌드 시 자동으로 분석 리포트를 브라우저에서 엽니다.
+      filename: 'dist/bundle-analysis.html', // 결과 파일을 dist 폴더 내에 생성합니다.
+      gzipSize: true, // gzip 압축 후의 크기도 함께 보여줍니다.
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

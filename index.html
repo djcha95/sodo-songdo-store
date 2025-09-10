@@ -15,12 +15,20 @@
     <meta property="og:site_name" content="소도몰" />
     <meta property="og:type" content="website" />
     
+    <!-- ✅ [추가] 폰트 프리로딩: 텍스트가 표시되기 전에 폰트 파일을 미리 다운로드하여
+         레이아웃 시프트(CLS)를 방지하고 텍스트 표시 속도를 개선합니다. -->
+    <link rel="preload" href="/fonts/Pretendard-Regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
+
     <script 
       type="text/javascript" 
       src="//dapi.kakao.com/v2/maps/sdk.js?appkey=d3d9ad6394a41f92ce4bb276a0448a6f&autoload=false"
     ></script>
     
     <style>
+      /* ✅ [추가] Critical CSS: 초기 로딩 스피너 및 핵심 레이아웃 스타일 */
+      /* 이 스타일들은 사용자가 앱을 보는 순간부터 즉시 적용되어
+         로딩 중에도 화면이 깨지지 않고 자연스럽게 전환되도록 돕습니다. */
       #app-loading-indicator {
         position: fixed;
         top: 0;
@@ -44,6 +52,8 @@
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
+      /* 여기에 앱의 헤더, 기본 배경색 등 최소한의 레이아웃 CSS를 추가합니다. */
+      body { margin: 0; background-color: #fff; }
     </style>
   </head>
   <body>

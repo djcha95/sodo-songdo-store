@@ -15,35 +15,48 @@ const POINT_POLICIES = {
 } as const;
 
 
+/**
+ * @description ✅ [수정] 서버의 모든 등급 계산 로직을 '픽업률' 기반 최신 정책으로 통일합니다.
+ * - '참여 제한': 총 거래 5회 이상이면서 픽업률 50% 미만
+ * - '주의 요망': 총 거래 5회 이상이면서 픽업률 70% 미만
+ * - 이 로직은 `helpers.ts` 및 `triggers/orders.ts`의 `calculateTier`와 완전히 동일합니다.
+ * @param pickupCount 총 픽업 완료 건수
+ * @param noShowCount 총 노쇼(미픽업) 건수
+ * @returns 계산된 LoyaltyTier 등급명
+ */
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    // [수정] 등급 계산 로직을 프론트엔드(loyaltyUtils.ts)와 일치시킴
-    const totalTransactions = pickupCount + noShowCount;
+  const totalTransactions = pickupCount + noShowCount;
 
-    if (noShowCount >= 3) {
-        return '참여 제한';
-    }
+  // 1. 거래 내역이 없는 초기 사용자는 '공구새싹'
+  if (totalTransactions === 0) {
+    return "공구새싹";
+  }
 
-    if (totalTransactions === 0) {
-        return '공구새싹';
-    }
+  const pickupRate = (pickupCount / totalTransactions) * 100;
 
-    const pickupRate = (pickupCount / totalTransactions) * 100;
-
-    if (pickupRate >= 98 && pickupCount >= 250) {
-        return '공구의 신';
+  // 2. 픽업률 기반 페널티 (총 거래 5회 이상부터 적용)
+  if (totalTransactions >= 5) {
+    if (pickupRate < 50) {
+      return "참여 제한";
     }
-    if (pickupRate >= 95 && pickupCount >= 100) {
-        return '공구왕';
-    }
-    if (pickupRate >= 90 && pickupCount >= 30) {
-        return '공구요정';
-    }
-    
     if (pickupRate < 70) {
-        return '주의 요망';
+      return "주의 요망";
     }
+  }
 
-    return '공구새싹';
+  // 3. 픽업률과 누적 픽업 건수를 조합한 등급 상승 (상향된 기준 적용)
+  if (pickupRate >= 98 && pickupCount >= 250) {
+    return "공구의 신";
+  }
+  if (pickupRate >= 95 && pickupCount >= 100) {
+    return "공구왕";
+  }
+  if (pickupRate >= 90 && pickupCount >= 30) {
+    return "공구요정";
+  }
+
+  // 4. 위 조건에 모두 해당하지 않는 경우 '공구새싹'
+  return "공구새싹";
 };
 
 
@@ -674,10 +687,10 @@ export const searchOrdersByCustomer = onCall(
             
             const orders = Array.from(combinedResults.values())
               .sort((a, b) => {
-                  const timeA = a.createdAt as Timestamp;
-                  const timeB = b.createdAt as Timestamp;
-                  return timeB.toMillis() - timeA.toMillis();
-              });
+    const timeA = a.createdAt as Timestamp;
+    const timeB = b.createdAt as Timestamp;
+    return timeB.toMillis() - timeA.toMillis();
+});
 
             return { success: true, orders };
 
