@@ -2,39 +2,40 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    
-    <link rel="icon" type="image/png" href="/sodomall-logo.png" />
-    
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sodomall</title>
 
+    <title>Sodomall</title>
+    <link rel="icon" type="image/png" href="/sodomall-logo.png" />
+
+    <!-- Open Graph -->
     <meta property="og:title" content="소도몰 - 초특가 공동구매마켓" />
     <meta property="og:description" content="소비자도 도매가로!" />
     <meta property="og:image" content="https://www.sodo-songdo.store/sodomall_wel.png" />
     <meta property="og:url" content="https://www.sodo-songdo.store/" />
     <meta property="og:site_name" content="소도몰" />
     <meta property="og:type" content="website" />
-    
-    <!-- ✅ [추가] 폰트 프리로딩: 텍스트가 표시되기 전에 폰트 파일을 미리 다운로드하여
-         레이아웃 시프트(CLS)를 방지하고 텍스트 표시 속도를 개선합니다. -->
+
+    <!-- 네트워크 사전연결(핸드셰이크 단축) -->
+    <!-- Firebase/Storage/Functions, Kakao Map -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://asia-northeast3-sso-do.cloudfunctions.net" crossorigin>
+    <link rel="preconnect" href="https://dapi.kakao.com" crossorigin>
+
+    <!-- 폰트: 파일 자체 호스팅 + preload (렌더블록 방지: CSS에서 @font-face 정의가 있을 것으로 가정) -->
     <link rel="preload" href="/fonts/Pretendard-Regular.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
 
-    <script 
-      type="text/javascript" 
-      src="//dapi.kakao.com/v2/maps/sdk.js?appkey=d3d9ad6394a41f92ce4bb276a0448a6f&autoload=false"
-    ></script>
-    
+    <!-- 크리티컬 CSS: 초기 배경/레이아웃/스피너 -->
     <style>
-      /* ✅ [추가] Critical CSS: 초기 로딩 스피너 및 핵심 레이아웃 스타일 */
-      /* 이 스타일들은 사용자가 앱을 보는 순간부터 즉시 적용되어
-         로딩 중에도 화면이 깨지지 않고 자연스럽게 전환되도록 돕습니다. */
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      html, body, #root { height: 100%; }
+      body { margin: 0; background-color: #fff; }
+      /* 초기 로딩 인디케이터 */
       #app-loading-indicator {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        inset: 0;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -42,26 +43,29 @@
         z-index: 9999;
       }
       .initial-spinner {
-        width: 40px;
-        height: 40px;
-        border: 4px solid rgba(0, 0, 0, 0.1);
-        border-left-color: #4B8B3B; /* Primary color */
+        width: 40px; height: 40px;
+        border: 4px solid rgba(0,0,0,0.1);
+        border-left-color: #4B8B3B;
         border-radius: 50%;
         animation: spin 1s linear infinite;
       }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-      /* 여기에 앱의 헤더, 기본 배경색 등 최소한의 레이아웃 CSS를 추가합니다. */
-      body { margin: 0; background-color: #fff; }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
+
+    <!-- Kakao Maps SDK: 비차단 로드(defer) + autoload=false 유지 -->
+    <script
+      defer
+      src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3d9ad6394a41f92ce4bb276a0448a6f&autoload=false">
+    </script>
   </head>
   <body>
     <div id="root">
       <div id="app-loading-indicator">
-        <div class="initial-spinner"></div>
+        <div class="initial-spinner" aria-label="로딩 중"></div>
       </div>
     </div>
+
+    <!-- 앱 엔트리 (Vite) -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Product, SalesRound } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import SimpleProductCard from '@/components/customer/SimpleProductCard';
@@ -17,7 +15,6 @@ import type { ProductActionState } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
 import '@/styles/common.css';
-// ✅ [수정] getProductsWithStock 함수를 직접 import 합니다.
 import { getProductsWithStock } from '@/firebase/productService'; 
 
 dayjs.extend(isBetween);
@@ -30,14 +27,11 @@ interface ProductWithUIState extends Product {
   isEventProduct: boolean;
 }
 
-// ❌ [삭제] 페이지네이션 기반의 캐싱 로직은 더 이상 필요 없으므로 제거합니다.
-
 const SimpleOrderPage: React.FC = () => {
   const { userDocument } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ [수정] 상태 관리를 단순화합니다.
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,22 +39,17 @@ const SimpleOrderPage: React.FC = () => {
 
   const [visibleSection, setVisibleSection] = useState<'event' | 'primary' | 'secondary'>('primary');
 
-  // ❌ [삭제] 페이지네이션 관련 상태 및 ref들을 모두 제거합니다.
-  // const PAGE_SIZE = 10;
-  // const lastVisibleRef = useRef<number | null>(null);
-  // const hasMoreRef = useRef<boolean>(true);
-  // const isFetchingRef = useRef<boolean>(false);
+  const INITIAL_COUNT = 12;
+  const [showEvent, setShowEvent] = useState(INITIAL_COUNT);
+  const [showPrimary, setShowPrimary] = useState(INITIAL_COUNT);
+  const [showSecondary, setShowSecondary] = useState(INITIAL_COUNT);
 
   const raffleRef = useRef<HTMLDivElement>(null);
   const eventRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLDivElement>(null);
   const secondaryRef = useRef<HTMLDivElement>(null);
   const tabContainerRef = useRef<HTMLDivElement>(null);
-
-  // ❌ [삭제] getProductsPageCallable은 더 이상 사용하지 않습니다.
-
-  // ❌ [삭제] useInView 훅 (무한 스크롤 트리거)을 제거합니다.
-
+  
   const scrollToSection = useCallback((ref: React.RefObject<HTMLDivElement | null>, behavior: 'smooth' | 'auto' = 'smooth') => {
       if (!ref.current || !tabContainerRef.current) return;
       
@@ -74,7 +63,9 @@ const SimpleOrderPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let throttleTimeout: NodeJS.Timeout | null = null;
+    // ✅ [수정] setTimeout의 타입이 NodeJS.Timeout이 아닌 number를 반환하므로 타입을 변경
+    let throttleTimeout: number | null = null;
+
     const handleScroll = () => {
         if (!eventRef.current || !primaryRef.current || !secondaryRef.current || !tabContainerRef.current) return;
         
@@ -94,13 +85,14 @@ const SimpleOrderPage: React.FC = () => {
         });
     };
     const throttledHandleScroll = () => {
-      if (!throttleTimeout) {
-        throttleTimeout = setTimeout(() => {
-          handleScroll();
-          throttleTimeout = null;
-        }, 100);
-      }
-    };
+  if (!throttleTimeout) {
+    throttleTimeout = window.setTimeout(() => {
+      handleScroll();
+      throttleTimeout = null;
+    }, 100);
+  }
+};
+
     window.addEventListener('scroll', throttledHandleScroll);
     return () => {
       window.removeEventListener('scroll', throttledHandleScroll);
@@ -109,25 +101,25 @@ const SimpleOrderPage: React.FC = () => {
   }, [visibleSection]);
 
 
-  // ✅ [수정] fetchData 함수를 getProductsWithStock을 사용하도록 변경하고 단순화합니다.
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // getProductsWithStock은 페이지네이션 없이 모든 활성 상품과 재고를 가져옵니다.
       const { products: fetchedProducts } = await getProductsWithStock();
       startTransition(() => {
         setProducts(fetchedProducts || []);
       });
 
-      // 데이터 로드 후 스크롤 위치 조정
+      setShowEvent(INITIAL_COUNT);
+      setShowPrimary(INITIAL_COUNT);
+      setShowSecondary(INITIAL_COUNT);
+
       setTimeout(() => {
           const targetSection = location.state?.scrollToSection;
           if (targetSection === 'raffle' && raffleRef.current) {
               scrollToSection(raffleRef, 'auto');
               navigate(location.pathname, { replace: true, state: {} });
           } else if (primaryRef.current) {
-              // 기본적으로 첫 섹션으로 스크롤
               scrollToSection(primaryRef, 'auto');
           }
       }, 100);
@@ -140,13 +132,9 @@ const SimpleOrderPage: React.FC = () => {
     }
   }, [scrollToSection, location, navigate]);
 
-  // ✅ [수정] 컴포넌트 마운트 시 fetchData를 한 번만 호출합니다.
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-
-  // ❌ [삭제] 페이지네이션 및 캐싱 관련 useEffect들을 모두 제거합니다.
 
   const { raffleProducts, eventProducts, primarySaleProducts, secondarySaleProducts, generalPrimarySaleEndDate } = useMemo(() => {
     const now = dayjs();
@@ -179,7 +167,6 @@ const SimpleOrderPage: React.FC = () => {
 
       if (finalPhase === 'past' || finalPhase === 'onsite') return;
       
-      // getStockInfo가 이제 정확한 reservedCount를 받으므로 actionState가 올바르게 계산됩니다.
       const actionState = determineActionState(round as SalesRound, userDocument);
 
       const productWithState: ProductWithUIState = {
@@ -318,8 +305,15 @@ const SimpleOrderPage: React.FC = () => {
                     </h2>
                   </div>
                   <div className="simple-product-list">
-                    {eventProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    {eventProducts.slice(0, showEvent).map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
                   </div>
+                  {eventProducts.length > showEvent && (
+                    <div className="loadmore-area">
+                      <button className="loadmore-btn" onClick={() => setShowEvent(prev => prev + INITIAL_COUNT)}>
+                        더 보기
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="product-list-placeholder event-placeholder">
@@ -345,9 +339,18 @@ const SimpleOrderPage: React.FC = () => {
                   </div>
                 )}
                 {primarySaleProducts.length > 0 ? (
-                  <div className="simple-product-list">
-                    {primarySaleProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
-                  </div>
+                  <>
+                    <div className="simple-product-list">
+                      {primarySaleProducts.slice(0, showPrimary).map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    </div>
+                    {primarySaleProducts.length > showPrimary && (
+                      <div className="loadmore-area">
+                        <button className="loadmore-btn" onClick={() => setShowPrimary(prev => prev + INITIAL_COUNT)}>
+                          더 보기
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   !loading && <div className="product-list-placeholder">
                     <PackageSearch size={48} />
@@ -363,8 +366,15 @@ const SimpleOrderPage: React.FC = () => {
                             <span className="tab-icon">⏰</span> 추가예약 (픽업시작 전까지)
                         </h2>
                         <div className="simple-product-list">
-                            {secondarySaleProducts.map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                            {secondarySaleProducts.slice(0, showSecondary).map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
                         </div>
+                        {secondarySaleProducts.length > showSecondary && (
+                          <div className="loadmore-area">
+                            <button className="loadmore-btn" onClick={() => setShowSecondary(prev => prev + INITIAL_COUNT)}>
+                              더 보기
+                            </button>
+                          </div>
+                        )}
                     </>
                 )}
             </div>
@@ -390,8 +400,6 @@ const SimpleOrderPage: React.FC = () => {
               )}
             </div>
         </div>
-
-        {/* ❌ [삭제] 무한 스크롤 관련 로더를 제거합니다. */}
     </div>
   );
 };

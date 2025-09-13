@@ -2,16 +2,14 @@
 
 import React from 'react';
 import { NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
-import { X, ShoppingBag, MessageSquare, User, LogOut, Settings, Bell, Menu, Ticket, Gift } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 import './SideMenu.css';
 import { useNotifications } from '@/context/NotificationContext';
-import { formatDistanceToNow } from 'date-fns';
-import { ko } from 'date-fns/locale';
 import SideMenu from './SideMenu';
 import type { Notification, LoyaltyTier, NotificationType } from '@/types';
 import './Header.css';
+import { X, Bell, Menu } from 'lucide-react';
 
 // (NotificationModal과 다른 헬퍼 함수들은 여기에 위치합니다 - 생략)
 

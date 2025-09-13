@@ -1,6 +1,6 @@
-// src/components/common/OptimizedImage.tsx
+// src/components/common/OptimizedImage.tsx (교체)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 
 interface OptimizedImageProps {
@@ -9,7 +9,14 @@ interface OptimizedImageProps {
   alt: string;
   className?: string;
   loading?: 'lazy' | 'eager';
+  fetchPriority?: 'high' | 'low' | 'auto';
 }
+
+const sizeToWH: Record<OptimizedImageProps['size'], { w: number; h: number }> = {
+  '150x150': { w: 150, h: 150 },
+  '200x200': { w: 200, h: 200 },
+  '1080x1080': { w: 1080, h: 1080 },
+};
 
 const OptimizedImage: React.FC<OptimizedImageProps> = ({
   originalUrl,
@@ -17,22 +24,20 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   alt,
   className,
   loading = 'lazy',
+  fetchPriority = 'auto',
 }) => {
-  const optimizedUrl = getOptimizedImageUrl(originalUrl, size);
+  const optimizedUrl = useMemo(() => getOptimizedImageUrl(originalUrl, size), [originalUrl, size]);
   const [imageUrl, setImageUrl] = useState(optimizedUrl);
 
   useEffect(() => {
-    // originalUrl이 변경되면, 다시 optimizedUrl을 먼저 시도하도록 상태를 리셋합니다.
     setImageUrl(getOptimizedImageUrl(originalUrl, size));
   }, [originalUrl, size]);
 
   const handleError = () => {
-    // 최적화된 이미지 로딩에 실패하면 (예: 아직 생성되지 않은 경우)
-    // 원본 URL로 교체하여 이미지를 띄웁니다.
-    if (imageUrl !== originalUrl) {
-      setImageUrl(originalUrl);
-    }
+    if (imageUrl !== originalUrl) setImageUrl(originalUrl);
   };
+
+  const { w, h } = sizeToWH[size];
 
   return (
     <img
@@ -40,6 +45,10 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
       alt={alt}
       className={className}
       loading={loading}
+      decoding="async"
+      fetchPriority={fetchPriority}
+      width={w}
+      height={h}
       onError={handleError}
     />
   );

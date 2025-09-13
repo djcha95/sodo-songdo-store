@@ -188,3 +188,20 @@
 .tab-btn.primary-tab.active {
     border-bottom-color: #FF9800;
 }
+
+/* ✅ [추가] "더 보기" 버튼 스타일 */
+.loadmore-area {
+    display: flex;
+    justify-content: center;
+    margin: 12px 0 24px;
+}
+.loadmore-btn {
+    padding: 10px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+.loadmore-btn:hover {
+    background: #f7f7f7;
+}

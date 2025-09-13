@@ -753,3 +753,42 @@ export const getProductsWithStock = async (): Promise<GetProductsWithStockRespon
         throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
     }
 };
+
+// ✅ [신규 추가] 가벼운 페이지네이션 함수
+export type TabKey = 'event' | 'primary' | 'secondary';
+export async function getProductsPageLight(params: {
+  tab: TabKey;
+  page?: number;       // 기본 1
+  pageSize?: number;   // 기본 12
+}) {
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 12;
+
+  // 1) 지금은 임시: 기존 전체 조회를 그대로 쓰고…
+  const { products: all } = await getProductsWithStock(); // <-- 기존 함수 그대로 사용
+
+  // 2) 탭별 필터
+  const filtered = (all ?? []).filter((p: any) => {
+    // groupName에 따라 필터링하되, 대소문자 구분 없이 확인
+    const groupNameLower = (p.groupName || '').toLowerCase();
+    if (params.tab === 'event') {
+      return groupNameLower.includes('event') || groupNameLower.includes('이벤트');
+    }
+    if (params.tab === 'primary') {
+      return groupNameLower.includes('primary') || groupNameLower.includes('메인');
+    }
+    if (params.tab === 'secondary') {
+      return groupNameLower.includes('secondary') || groupNameLower.includes('서브');
+    }
+    return true;
+  });
+
+  // 3) 슬라이스
+  const start = (page - 1) * pageSize;
+  const items = filtered.slice(start, start + pageSize);
+
+  return {
+    items,
+    hasMore: start + pageSize < filtered.length,
+  };
+}
