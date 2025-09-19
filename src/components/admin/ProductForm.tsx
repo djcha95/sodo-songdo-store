@@ -3,7 +3,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
+// ✅ [추가] Firebase Functions 사용을 위한 import 구문
+import { httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import axios from 'axios';
+// ✅ [수정] 두 가지 Import 규칙에 따라 경로를 분리합니다.
+
+// 규칙 1: '핵심 기능'은 firebaseConfig에서 직접 가져옵니다.
+import { functions } from '@/firebase/firebaseConfig';
+
+// 규칙 2: '서비스 함수'들은 @/firebase (index.ts)를 통해 가져옵니다.
 import {
   addProductWithFirstRound,
   addNewSalesRound,
@@ -12,10 +20,8 @@ import {
   getProductById,
   updateSalesRound,
   updateProductCoreInfo,
-  functions,
   getReservedQuantitiesMap
-} from '@/firebase/firebaseConfig';
-import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
+} from '@/firebase';
 import type {
   Category,
   StorageType,
