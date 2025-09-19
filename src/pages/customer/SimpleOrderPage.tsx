@@ -1,6 +1,7 @@
 // src/pages/customer/SimpleOrderPage.tsx
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Product, SalesRound } from '@/types';
@@ -16,6 +17,8 @@ import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
 
 import { getProductsWithStock } from '@/firebase/productService'; 
+// ✅ [수정] 이제 이 import 구문이 정상적으로 동작합니다.
+import { productKeys } from '@/hooks/queryKeys';
 
 dayjs.extend(isBetween);
 dayjs.locale('ko');
@@ -32,11 +35,14 @@ const SimpleOrderPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState<string | null>(null);
+  const { data: productsData, isLoading, isError, error } = useQuery({
+    queryKey: productKeys.all,
+    queryFn: getProductsWithStock,
+    staleTime: 1000 * 60 * 5, 
+  });
+  const products = productsData?.products || [];
 
+  const [countdown, setCountdown] = useState<string | null>(null);
   const [visibleSection, setVisibleSection] = useState<'event' | 'primary' | 'secondary'>('primary');
 
   const INITIAL_COUNT = 12;
@@ -62,82 +68,58 @@ const SimpleOrderPage: React.FC = () => {
       window.scrollTo({ top: offsetPosition, behavior });
   }, []);
 
-useEffect(() => {
-  let throttleTimeout: number | null = null;
-
-  const handleScroll = () => {
-    if (!eventRef.current || !primaryRef.current || !secondaryRef.current || !tabContainerRef.current) return;
-
-    const triggerLine = tabContainerRef.current.offsetHeight + 60 + 15;
-    const eventTop = eventRef.current.getBoundingClientRect().top;
-    const primaryTop = primaryRef.current.getBoundingClientRect().top;
-    const secondaryTop = secondaryRef.current.getBoundingClientRect().top;
-
-    startTransition(() => {
-      if (eventTop <= triggerLine && primaryTop > triggerLine) {
-        if (visibleSection !== 'event') setVisibleSection('event');
-      } else if (primaryTop <= triggerLine && secondaryTop > triggerLine) {
-        if (visibleSection !== 'primary') setVisibleSection('primary');
-      } else if (secondaryTop <= triggerLine) {
-        if (visibleSection !== 'secondary') setVisibleSection('secondary');
-      }
-    });
-  };
-
-  const throttledHandleScroll = () => {
-    if (!throttleTimeout) {
-      throttleTimeout = window.setTimeout(() => {
-        handleScroll();
-        throttleTimeout = null;
-      }, 100);
-    }
-  };
-
-  // ✅ 타입 안전한 passive 옵션 (TS가 인식하는 AddEventListenerOptions 사용)
-  const listenerOpts: AddEventListenerOptions = { passive: true };
-
-  window.addEventListener('scroll', throttledHandleScroll, listenerOpts);
-  return () => {
-    window.removeEventListener('scroll', throttledHandleScroll, listenerOpts);
-    if (throttleTimeout) window.clearTimeout(throttleTimeout);
-  };
-}, [visibleSection]);
-
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { products: fetchedProducts } = await getProductsWithStock();
-      startTransition(() => {
-        setProducts(fetchedProducts || []);
-      });
-
-      setShowEvent(INITIAL_COUNT);
-      setShowPrimary(INITIAL_COUNT);
-      setShowSecondary(INITIAL_COUNT);
-
+  useEffect(() => {
+    if (!isLoading) {
       setTimeout(() => {
-          const targetSection = location.state?.scrollToSection;
-          if (targetSection === 'raffle' && raffleRef.current) {
-              scrollToSection(raffleRef, 'auto');
-              navigate(location.pathname, { replace: true, state: {} });
-          } else if (primaryRef.current) {
-              scrollToSection(primaryRef, 'auto');
-          }
+        const targetSection = location.state?.scrollToSection;
+        if (targetSection === 'raffle' && raffleRef.current) {
+          scrollToSection(raffleRef, 'auto');
+          navigate(location.pathname, { replace: true, state: {} });
+        } else if (targetSection === 'event' && eventRef.current) {
+            scrollToSection(eventRef, 'auto');
+            navigate(location.pathname, { replace: true, state: {} });
+        } else if (primaryRef.current) {
+          // window.scrollTo({ top: 0, behavior: 'auto' });
+        }
       }, 100);
-
-    } catch (err: any) {
-      setError('상품을 불러오는 중 오류가 발생했습니다.');
-      showToast('error', err?.message || '데이터 로딩 중 문제가 발생했습니다.');
-    } finally {
-      setLoading(false);
     }
-  }, [scrollToSection, location, navigate]);
+  }, [isLoading, location.state, navigate, scrollToSection]);
+
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let throttleTimeout: number | null = null;
+    const handleScroll = () => {
+      if (!eventRef.current || !primaryRef.current || !secondaryRef.current || !tabContainerRef.current) return;
+      const triggerLine = tabContainerRef.current.offsetHeight + 60 + 15;
+      const eventTop = eventRef.current.getBoundingClientRect().top;
+      const primaryTop = primaryRef.current.getBoundingClientRect().top;
+      const secondaryTop = secondaryRef.current.getBoundingClientRect().top;
+
+      startTransition(() => {
+        if (eventTop <= triggerLine && primaryTop > triggerLine) {
+          if (visibleSection !== 'event') setVisibleSection('event');
+        } else if (primaryTop <= triggerLine && secondaryTop > triggerLine) {
+          if (visibleSection !== 'primary') setVisibleSection('primary');
+        } else if (secondaryTop <= triggerLine) {
+          if (visibleSection !== 'secondary') setVisibleSection('secondary');
+        }
+      });
+    };
+    const throttledHandleScroll = () => {
+      if (!throttleTimeout) {
+        throttleTimeout = window.setTimeout(() => {
+          handleScroll();
+          throttleTimeout = null;
+        }, 100);
+      }
+    };
+    const listenerOpts: AddEventListenerOptions = { passive: true };
+    window.addEventListener('scroll', throttledHandleScroll, listenerOpts);
+    return () => {
+      window.removeEventListener('scroll', throttledHandleScroll, listenerOpts);
+      if (throttleTimeout) window.clearTimeout(throttleTimeout);
+    };
+  }, [visibleSection]);
 
   const { raffleProducts, eventProducts, primarySaleProducts, secondarySaleProducts, generalPrimarySaleEndDate } = useMemo(() => {
     const now = dayjs();
@@ -250,9 +232,11 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [generalPrimarySaleEndDate]);
 
-
-  if (loading) return <SodomallLoader />;
-  if (error) return <div className="error-message-container">{error}</div>;
+  if (isLoading) return <SodomallLoader />;
+  if (isError) {
+      showToast('error', (error as Error)?.message || '데이터 로딩 중 문제가 발생했습니다.');
+      return <div className="error-message-container">상품을 불러오는 중 오류가 발생했습니다.</div>;
+  }
 
   return (
     <div className="customer-page-container simple-order-page">
@@ -313,7 +297,6 @@ useEffect(() => {
                         key={`${p.id}-${p.displayRound.roundId}`}
                         product={p as Product & { displayRound: SalesRound }}
                         actionState={p.actionState}
-                        // ✅ [수정] LCP 최적화를 위해 첫 번째 카드 이미지를 우선 로드
                         imgLoading={i === 0 ? 'eager' : 'lazy'}
                         imgFetchPriority={i === 0 ? 'high' : 'auto'}
                       />
@@ -358,9 +341,8 @@ useEffect(() => {
                           key={`${p.id}-${p.displayRound.roundId}`}
                           product={p as Product & { displayRound: SalesRound }}
                           actionState={p.actionState}
-                          // ✅ [수정] LCP 최적화를 위해 첫 번째 카드 이미지를 우선 로드
-                          imgLoading={i === 0 ? 'eager' : 'lazy'}
-                          imgFetchPriority={i === 0 ? 'high' : 'auto'}
+                          imgLoading={i === 0 && eventProducts.length === 0 ? 'eager' : 'lazy'}
+                          imgFetchPriority={i === 0 && eventProducts.length === 0 ? 'high' : 'auto'}
                         />
                       ))}
                     </div>
@@ -373,7 +355,7 @@ useEffect(() => {
                     )}
                   </>
                 ) : (
-                  !loading && <div className="product-list-placeholder">
+                  !isLoading && <div className="product-list-placeholder">
                     <PackageSearch size={48} />
                     <p>현재 공동구매 상품이 없습니다.</p>
                   </div>
@@ -387,14 +369,13 @@ useEffect(() => {
                             <span className="tab-icon">⏰</span> 추가예약 (픽업시작 전까지)
                         </h2>
                         <div className="simple-product-list">
-                            {secondarySaleProducts.slice(0, showSecondary).map((p, i) => (
+                            {secondarySaleProducts.slice(0, showSecondary).map((p) => (
                               <SimpleProductCard
                                 key={`${p.id}-${p.displayRound.roundId}`}
                                 product={p as Product & { displayRound: SalesRound }}
                                 actionState={p.actionState}
-                                // ✅ [수정] LCP 최적화를 위해 첫 번째 카드 이미지를 우선 로드
-                                imgLoading={i === 0 ? 'eager' : 'lazy'}
-                                imgFetchPriority={i === 0 ? 'high' : 'auto'}
+                                imgLoading='lazy'
+                                imgFetchPriority='auto'
                               />
                             ))}
                         </div>

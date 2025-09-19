@@ -2,11 +2,10 @@
 
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation, type LoaderFunctionArgs } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
 import { MotionConfig } from 'framer-motion';
-// ✅ [추가] TanStack Query 관련 모듈 import
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import './index.css';
@@ -22,8 +21,13 @@ import { EncoreRequestProvider } from './context/EncoreRequestContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { LaunchProvider } from './context/LaunchContext';
+import { getProductsWithStock } from './firebase/productService';
 
-// --- 페이지 컴포넌트 lazy loading (기존과 동일) ---
+// ✅ [수정] 방금 생성한 파일에서 productKeys를 import 합니다.
+import { productKeys } from '@/hooks/queryKeys';
+
+
+// --- 페이지 컴포넌트 lazy loading ---
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
@@ -54,20 +58,30 @@ const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage')
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
 const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
 
-/**
- * ✅ [추가] QueryClient 인스턴스 생성
- * 앱 전역에서 사용할 쿼리 클라이언트를 만듭니다.
- * defaultOptions로 캐시 시간 등을 설정할 수 있습니다.
- */
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,      // 5분 동안 데이터를 '신선함'으로 간주 (재요청 X)
-      gcTime: 1000 * 60 * 30,       // 30분 동안 사용되지 않으면 캐시에서 제거
-      retry: 1,                     // API 요청 실패 시 1번 재시도
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 30,
+      retry: 1,
     },
   },
 });
+
+const productsLoader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const query = url.searchParams.get("q");
+
+  await queryClient.prefetchQuery({
+    queryKey: productKeys.all,
+    queryFn: () => getProductsWithStock(),
+    staleTime: 1000 * 60 * 5
+  });
+  
+  return { query };
+};
+
 
 const AuthLayout = () => {
   const { user, loading } = useAuth();
@@ -124,8 +138,7 @@ const router = createBrowserRouter([
               { path: 'prepaid-check', element: <PrepaidCheckPage /> },
               { path: 'products', element: <ProductListPageAdmin /> },
               { path: 'products/add', element: <ProductAddAdminPage /> },
-               { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
-              // ✅ [추가] 새로운 이벤트 관리 페이지 라우트
+              { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
               { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> },
               { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
               { path: 'orders', element: <OrderManagementPage /> },
@@ -138,6 +151,7 @@ const router = createBrowserRouter([
           },
           {
             element: <ProtectedRoute><CustomerLayout /></ProtectedRoute>,
+            loader: productsLoader,
             children: [
               { index: true, element: <SimpleOrderPage /> },
               { path: "cart", element: <CartPage /> },
@@ -172,9 +186,10 @@ const router = createBrowserRouter([
   },
 ]);
 
+// ❌ [제거] 파일 하단에 있던 productKeys 정의를 완전히 삭제합니다.
+
 const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const providers = [
-    // ✅ [추가] QueryClientProvider를 Context Provider 목록에 추가합니다.
     (props: { children: React.ReactNode }) => <QueryClientProvider client={queryClient} {...props} />,
     HelmetProvider,
     AuthProvider,

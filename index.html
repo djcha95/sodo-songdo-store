@@ -7,7 +7,6 @@
     <title>Sodomall</title>
     <link rel="icon" type="image/png" href="/sodomall-logo.png" />
 
-    <!-- Open Graph -->
     <meta property="og:title" content="소도몰 - 초특가 공동구매마켓" />
     <meta property="og:description" content="소비자도 도매가로!" />
     <meta property="og:image" content="https://www.sodo-songdo.store/sodomall_wel.png" />
@@ -15,18 +14,15 @@
     <meta property="og:site_name" content="소도몰" />
     <meta property="og:type" content="website" />
 
-    <!-- 네트워크 사전연결(핸드셰이크 단축) -->
-    <!-- Firebase/Storage/Functions, Kakao Map -->
     <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://asia-northeast3-sso-do.cloudfunctions.net" crossorigin>
     <link rel="preconnect" href="https://dapi.kakao.com" crossorigin>
 
-    <!-- 폰트: 파일 자체 호스팅 + preload (렌더블록 방지: CSS에서 @font-face 정의가 있을 것으로 가정) -->
     <link rel="preload" href="/fonts/Pretendard-Regular.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
 
-    <!-- 크리티컬 CSS: 초기 배경/레이아웃/스피너 -->
     <style>
       :root { color-scheme: light; }
       * { box-sizing: border-box; }
@@ -52,7 +48,6 @@
       @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 
-    <!-- Kakao Maps SDK: 비차단 로드(defer) + autoload=false 유지 -->
     <script
       defer
       src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3d9ad6394a41f92ce4bb276a0448a6f&autoload=false">
@@ -65,7 +60,6 @@
       </div>
     </div>
 
-    <!-- 앱 엔트리 (Vite) -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
