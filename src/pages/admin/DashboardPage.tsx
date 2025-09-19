@@ -13,6 +13,9 @@ import { TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy, Ticket } from
 import './DashboardPage.css';
 import { reportError } from '@/utils/logger';
 import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
+dayjs.extend(isBetween);
+
 
 interface EnrichedGroupItem {
   id: string;
@@ -23,14 +26,14 @@ interface EnrichedGroupItem {
   roundName: string;
   variantGroupId: string;
   variantGroupName: string;
-  uploadDate: string;
+  publishDate: string; // ✅ [수정] uploadDate -> publishDate
   confirmedReservedQuantity: number;
   pendingPrepaymentQuantity: number;
   waitlistedQuantity: number;
   configuredStock: number;
+  round: SalesRound; // ✅ [추가] 재고 확인 알림 로직을 위해 round 정보 포함
 }
 
-// ✅ [추가] 이벤트 정보를 담을 새로운 타입
 interface ActiveRaffleEvent {
     productId: string;
     roundId: string;
@@ -38,6 +41,49 @@ interface ActiveRaffleEvent {
     entryCount: number;
     deadlineDate: Timestamp;
 }
+
+// ✅ [추가] ProductListPageAdmin.tsx의 유틸리티 함수들을 가져와서 사용합니다.
+const safeToDate = (timestamp: any): Date | null => {
+  if (!timestamp) return null;
+  if (timestamp instanceof Date) return timestamp;
+  if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+  if (typeof timestamp.seconds === 'number' && typeof timestamp.nanoseconds === 'number') {
+    return new Timestamp(timestamp.seconds, timestamp.nanoseconds).toDate();
+  }
+  return null;
+};
+
+// ✅ [오류 수정] 사용하지 않는 secondaryDeadlineDate 관련 로직을 제거합니다.
+const getDeadlines = (round: SalesRound) => {
+    const primaryEnd = round.deadlineDate ? dayjs(safeToDate(round.deadlineDate)) : null;
+    return { primaryEnd };
+};
+
+const getDynamicStatusText = (round: SalesRound): string => {
+  if (round.eventType === 'RAFFLE') return '응모진행중';
+  if (round.manualStatus === 'sold_out') return "매진 (수동)";
+  if (round.manualStatus === 'ended') return "판매종료 (수동)";
+  if (round.isManuallyOnsite) return "현장판매 (수동)";
+
+  const now = dayjs();
+  const { primaryEnd } = getDeadlines(round);
+  const pickupStart = round.pickupDate ? dayjs(safeToDate(round.pickupDate)) : null;
+  const pickupDeadline = round.pickupDeadlineDate ? dayjs(safeToDate(round.pickupDeadlineDate)) : null;
+
+  if (primaryEnd && now.isAfter(primaryEnd)) {
+      if (pickupStart && pickupDeadline && now.isBetween(pickupStart, pickupDeadline, null, '[]')) {
+          return "픽업중";
+      }
+      if (pickupDeadline && now.isAfter(pickupDeadline)) {
+          return "현장판매중";
+      }
+      return "2차 공구중";
+  }
+  return "판매종료";
+};
+
 
 const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     const [copied, setCopied] = useState(false);
@@ -73,10 +119,8 @@ const formatDate = (date: Date): string => {
 const DashboardPage: React.FC = () => {
   useDocumentTitle('대시보드');
   const [loading, setLoading] = useState(true);
-  const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
+  const [initialData, setInitialData] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
-  const [editingStockId, setEditingStockId] = useState<string | null>(null);
-  // ✅ [추가] 활성 이벤트 상태
   const [activeRaffles, setActiveRaffles] = useState<ActiveRaffleEvent[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -94,26 +138,28 @@ const DashboardPage: React.FC = () => {
         const order = doc.data() as Order;
         (order.items || []).forEach((item: OrderItem) => {
           const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+          // ✅ [수정] 묶음 수량을 반영하여 실제 재고 차감량을 계산합니다.
+          const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
           
           if(order.status === 'RESERVED' && order.wasPrepaymentRequired) {
             const currentQty = pendingPrepaymentMap.get(groupKey) || 0;
-            pendingPrepaymentMap.set(groupKey, currentQty + item.quantity);
+            pendingPrepaymentMap.set(groupKey, currentQty + actualDeduction);
           } else {
             const currentQty = confirmedReservationMap.get(groupKey) || 0;
-            confirmedReservationMap.set(groupKey, currentQty + item.quantity);
+            confirmedReservationMap.set(groupKey, currentQty + actualDeduction);
           }
         });
       });
 
       const allDisplayItems: EnrichedGroupItem[] = [];
-      // ✅ [추가] 활성 래플 이벤트 목록을 담을 배열
       const currentActiveRaffles: ActiveRaffleEvent[] = [];
+      const initialStockValues: Record<string, string> = {};
 
       productsResponse.products.forEach((product: Product) => {
-        const uploadDate = product.createdAt && 'toDate' in product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
-
         product.salesHistory?.forEach((round: SalesRound) => {
-          // ✅ [추가] 진행중인 래플 이벤트인지 확인하고 목록에 추가
+          // ✅ [수정] 그룹화 기준을 상품 등록일에서 '판매 게시일'로 변경합니다.
+          const publishDate = round.publishAt && 'toDate' in round.publishAt ? formatDate(round.publishAt.toDate()) : '날짜 미지정';
+
           if (round.eventType === 'RAFFLE' && round.deadlineDate && Timestamp.now().toMillis() < round.deadlineDate.toMillis()) {
             currentActiveRaffles.push({
                 productId: product.id,
@@ -132,6 +178,8 @@ const DashboardPage: React.FC = () => {
             const hasGroupStock = groupStock !== -1;
             const representativeItemStock = vg.items?.[0]?.stock ?? -1;
             const finalConfiguredStock = hasGroupStock ? groupStock : representativeItemStock;
+            
+            initialStockValues[groupKey] = finalConfiguredStock === -1 ? '' : String(finalConfiguredStock);
 
             allDisplayItems.push({
               id: groupKey,
@@ -142,27 +190,30 @@ const DashboardPage: React.FC = () => {
               roundName: round.roundName,
               variantGroupId: groupId,
               variantGroupName: vg.groupName,
-              uploadDate: uploadDate,
+              publishDate: publishDate,
               confirmedReservedQuantity: confirmedReservationMap.get(groupKey) || 0,
               pendingPrepaymentQuantity: pendingPrepaymentMap.get(groupKey) || 0,
               waitlistedQuantity: round.waitlistCount || 0,
               configuredStock: finalConfiguredStock,
+              round: round,
             });
           });
         });
       });
 
       const grouped = allDisplayItems.reduce((acc, item) => {
-        const dateKey = item.uploadDate;
+        // ✅ [수정] publishDate를 기준으로 그룹화합니다.
+        const dateKey = item.publishDate;
         if (!acc[dateKey]) {
           acc[dateKey] = [];
         }
         acc[dateKey].push(item);
         return acc;
       }, {} as Record<string, EnrichedGroupItem[]>);
-
-      setGroupedItems(grouped);
-      setActiveRaffles(currentActiveRaffles); // ✅ [추가] 상태 업데이트
+      
+      setInitialData(grouped);
+      setStockInputs(initialStockValues);
+      setActiveRaffles(currentActiveRaffles);
 
     } catch (error) {
       reportError("대시보드 데이터 로딩 실패", error);
@@ -177,60 +228,55 @@ const DashboardPage: React.FC = () => {
   }, [fetchData]);
 
   const sortedDateKeys = useMemo(() => {
-    return Object.keys(groupedItems).sort((a, b) => b.localeCompare(a));
-  }, [groupedItems]);
+    return Object.keys(initialData).sort((a, b) => b.localeCompare(a));
+  }, [initialData]);
 
   const handleStockInputChange = (groupId: string, value: string) => {
     setStockInputs(prev => ({ ...prev, [groupId]: value }));
   };
-  
-  const handleStockEditStart = (itemId: string, currentStock: number) => {
-    setEditingStockId(itemId);
-    setStockInputs(prev => ({
-        ...prev,
-        [itemId]: currentStock === -1 ? '' : String(currentStock)
-    }));
-  };
 
-  const handleStockEditSave = useCallback(async (itemId: string) => {
-    setEditingStockId(null);
-    const newStockValue = stockInputs[itemId];
-    if (newStockValue === undefined) return;
+  // ✅ [추가] 변경된 재고를 한 번에 저장하는 함수
+  const handleBulkStockSave = useCallback(async () => {
+    const allItems = Object.values(initialData).flat();
+    const updatePayload: { productId: string; roundId: string; variantGroupId: string; newStock: number; }[] = [];
 
-    const allItems = Object.values(groupedItems).flat();
-    const itemToUpdate = allItems.find(i => i.id === itemId);
+    for (const item of allItems) {
+      const currentInputValue = stockInputs[item.id];
+      if (currentInputValue === undefined) continue;
 
-    if (!itemToUpdate) {
-        toast.error("업데이트할 상품 정보를 찾지 못했습니다.");
+      const newStock = currentInputValue.trim() === '' ? -1 : parseInt(currentInputValue, 10);
+      if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
+        toast.error(`'${item.productName} - ${item.variantGroupName}'의 재고 형식이 올바르지 않습니다.`);
         return;
-    }
-    
-    const newStock = newStockValue.trim() === '' ? -1 : parseInt(newStockValue, 10);
-    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
-        toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다.");
-        return;
+      }
+
+      if (newStock !== item.configuredStock) {
+        updatePayload.push({
+          productId: item.productId,
+          roundId: item.roundId,
+          variantGroupId: item.variantGroupId,
+          newStock: newStock
+        });
+      }
     }
 
-    if (newStock === itemToUpdate.configuredStock) return;
-
-    const updatePayload = [{
-        productId: itemToUpdate.productId,
-        roundId: itemToUpdate.roundId,
-        variantGroupId: itemToUpdate.variantGroupId,
-        newStock: newStock
-    }];
+    if (updatePayload.length === 0) {
+      toast.success("변경된 재고 내역이 없습니다.");
+      return;
+    }
 
     const promise = updateMultipleVariantGroupStocks(updatePayload);
-
+    
     toast.promise(promise, {
-        loading: `'${itemToUpdate.productName}' 재고 업데이트 중...`,
-        success: () => {
-            fetchData();
-            return "재고가 성공적으로 업데이트되었습니다.";
-        },
-        error: "재고 업데이트 중 오류가 발생했습니다."
+      loading: `${updatePayload.length}개 항목의 재고 업데이트 중...`,
+      success: () => {
+        fetchData(); // 성공 후 데이터 새로고침
+        return "재고가 성공적으로 업데이트되었습니다.";
+      },
+      error: "재고 업데이트 중 오류가 발생했습니다."
     });
-  }, [stockInputs, groupedItems, fetchData]);
+
+  }, [stockInputs, initialData, fetchData]);
 
   if (loading) return <SodomallLoader />;
 
@@ -241,9 +287,16 @@ const DashboardPage: React.FC = () => {
           <TrendingUp size={28} />
           <h1>통합 판매 현황 대시보드</h1>
         </div>
+        {/* ✅ [추가] 재고 일괄 저장 버튼 */}
+        <button 
+          onClick={handleBulkStockSave} 
+          className="dashboard-save-button"
+        >
+          <Check size={18} />
+          변경된 재고 일괄 저장
+        </button>
       </div>
       
-      {/* ✅ [추가] 진행중인 추첨 이벤트 섹션 */}
       {activeRaffles.length > 0 && (
           <div className="dashboard-group raffle-summary-group">
               <h2 className="group-title"><Ticket size={20} /> 진행중인 추첨 이벤트</h2>
@@ -271,7 +324,10 @@ const DashboardPage: React.FC = () => {
       {sortedDateKeys.length > 0 ? (
         sortedDateKeys.map(date => (
           <div key={date} className="dashboard-group">
-            <h2 className="group-title">{date} 업로드 상품</h2>
+            {/* ✅ [수정] 그룹 타이틀을 '판매 게시일' 기준으로 변경 */}
+            <h2 className="group-title">
+              {date === '날짜 미지정' ? '판매 게시일 미지정' : `${date} 판매 게시 상품`}
+            </h2>
             <div className="table-wrapper">
               <table className="dashboard-table">
                 <thead>
@@ -288,8 +344,13 @@ const DashboardPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedItems[date].map((item, index) => {
+                  {initialData[date].map((item, index) => {
                     const remainingStock = item.configuredStock === -1 ? item.configuredStock : item.configuredStock - item.confirmedReservedQuantity;
+                    
+                    // ✅ [추가] 1차 공구 마감 후 재고 확인이 필요한지 여부 판단
+                    const { primaryEnd } = getDeadlines(item.round);
+                    const statusText = getDynamicStatusText(item.round);
+                    const isConfirmationNeeded = primaryEnd && dayjs().isAfter(primaryEnd) && !['판매종료', '매진', '응모종료', '추첨완료'].includes(statusText);
                     
                     return (
                       <tr key={item.id}>
@@ -312,31 +373,15 @@ const DashboardPage: React.FC = () => {
                             ? <span className="unlimited-stock">무제한</span>
                             : `${remainingStock}`}
                         </td>
-                        <td className="stock-cell">
-                          {editingStockId === item.id ? (
-                            <input
-                              type="number"
-                              className="stock-input"
-                              value={stockInputs[item.id] || ''}
-                              onChange={(e) => handleStockInputChange(item.id, e.target.value)}
-                              onBlur={() => handleStockEditSave(item.id)}
-                              onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleStockEditSave(item.id);
-                                  if (e.key === 'Escape') setEditingStockId(null);
-                              }}
-                              autoFocus
-                            />
-                          ) : (
-                            <button
-                              className="stock-display-button"
-                              onClick={() => handleStockEditStart(item.id, item.configuredStock)}
-                              title="재고 수량을 클릭하여 수정"
-                            >
-                              {item.configuredStock === -1
-                                ? <span className="unlimited-stock">무제한</span>
-                                : `${item.configuredStock}`}
-                            </button>
-                          )}
+                        {/* ✅ [수정] 재고 셀을 항상 input으로 표시하고, 확인 필요시 스타일 적용 */}
+                        <td className={`stock-cell ${isConfirmationNeeded ? 'stock-confirmation-needed' : ''}`}>
+                          <input
+                            type="number"
+                            placeholder="무제한"
+                            className="stock-input"
+                            value={stockInputs[item.id] || ''}
+                            onChange={(e) => handleStockInputChange(item.id, e.target.value)}
+                          />
                         </td>
                         <td>
                           <CopyLinkButton productId={item.productId} />

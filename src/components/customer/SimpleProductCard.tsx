@@ -25,9 +25,11 @@ type Product = OriginalProduct & {
 interface SimpleProductCardProps {
     product: Product;
     actionState: ProductActionState;
+    imgLoading?: 'lazy' | 'eager';
+    imgFetchPriority?: 'high' | 'low' | 'auto';
 }
 
-const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionState }) => {
+const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionState, imgLoading = 'lazy', imgFetchPriority = 'auto' }) => {
     const navigate = useNavigate();
     const { user, userDocument, isSuspendedUser } = useAuth();
     const { isPreLaunch, launchDate } = useLaunch();
@@ -95,8 +97,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             });
             toast.dismiss(toastId);
             showToast('success', `${product.groupName} 이벤트 응모가 완료되었습니다!`);
-            // TODO: 응모 완료 상태를 UI에 반영하기 위해 userDocument를 새로고침하거나 상태를 관리해야 합니다.
-            // 이 예제에서는 간단히 버튼을 비활성화하는 것으로 처리합니다.
             e.currentTarget.setAttribute('disabled', 'true');
 
         } catch (error: any) {
@@ -440,7 +440,14 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             <div className={cardClassName} onClick={handleCardClick}>
                 <div className="simple-card-main-content">
                     <div className="simple-card-image-wrapper">
-                        <OptimizedImage originalUrl={product.imageUrls?.[0]} size='150x150' alt={product.groupName} className="simple-card-image" />
+                        <OptimizedImage
+                            originalUrl={product.imageUrls?.[0]}
+                            size='150x150'
+                            alt={product.groupName}
+                            className="simple-card-image"
+                            loading={imgLoading}
+                            fetchPriority={imgFetchPriority}
+                        />
                     </div>
                     <div className="simple-card-info">
                         <div className="info-line-1">

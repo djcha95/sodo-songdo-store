@@ -2,11 +2,8 @@
 
 .dashboard-container {
     padding: 24px 32px;
-    /* ❗ [제거] min-height와 background-color는 이제 AdminLayout에서 관리합니다. */
-    
-    /* ✅ [개선] 콘텐츠 가독성을 위해 최대 너비 설정 및 중앙 정렬 */
-    max-width: 1600px; /* 데스크탑에서 콘텐츠가 너무 넓어지는 것을 방지 */
-    margin: 0 auto; /* 중앙 정렬 */
+    max-width: 1600px;
+    margin: 0 auto;
     box-sizing: border-box;
 }
 
@@ -17,6 +14,9 @@
     padding-bottom: 16px;
     border-bottom: 1px solid #dee2e6;
     margin-bottom: 32px;
+    /* ✅ [추가] 버튼과 제목이 여러 줄로 나뉠 수 있도록 설정 */
+    flex-wrap: wrap;
+    gap: 16px;
 }
 
 .header-title-area {
@@ -32,7 +32,32 @@
     margin: 0;
 }
 
-/* --- ✅ [수정] 주문 검색 및 저장 버튼 관련 스타일 모두 제거 --- */
+/* ✅ [추가] 재고 일괄 저장 버튼 스타일 */
+.dashboard-save-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--primary-color);
+    color: var(--bg-color-white);
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--border-radius-md);
+    font-weight: var(--font-weight-bold);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--box-shadow-sm);
+}
+.dashboard-save-button:hover {
+    background-color: var(--primary-color-dark);
+    box-shadow: var(--box-shadow-md);
+}
+.dashboard-save-button:disabled {
+    background-color: var(--border-color-medium);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
 
 .dashboard-group {
     background-color: #ffffff;
@@ -146,44 +171,53 @@
 
 .stock-cell {
   text-align: center !important;
+  vertical-align: top !important; /* ✅ [추가] 라벨이 추가될 공간 확보 */
+  padding-top: 8px !important;
 }
-.stock-display-button {
-  background: none;
-  border: 1px dashed transparent;
-  border-radius: 6px;
-  padding: 0.5rem;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.95rem;
-  font-weight: 500;
-  width: 100%;
-  min-width: 60px;
-  text-align: center;
-  transition: all 0.2s ease;
-}
-.stock-display-button:hover {
-  border-color: var(--primary-color-light);
-  background-color: var(--primary-color-ultralight);
-}
+
+/* ✅ [수정] 재고 입력 필드 기본 스타일 */
 .stock-input {
   width: 80px;
   padding: 0.5rem;
   border-radius: 6px;
-  border: 1px solid var(--primary-color);
+  border: 1px solid #ced4da;
   text-align: center;
-  box-shadow: 0 0 0 2px var(--primary-color-light);
   outline: none;
+  transition: all 0.2s ease;
 }
+.stock-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-color-light);
+}
+
+/* ✅ [추가] 1차 공구 마감 후 재고 확인 필요 시 적용될 스타일 */
+.stock-cell.stock-confirmation-needed::before {
+  content: '⚠️ 재고 확인 필요';
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #d9480f; /* 주황색 계열 */
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.stock-cell.stock-confirmation-needed .stock-input {
+  background-color: #fff4e6; /* 연한 주황색 배경 */
+  border-color: #f76707; /* 주황색 테두리 */
+}
+.stock-cell.stock-confirmation-needed .stock-input:focus {
+  box-shadow: 0 0 0 2px #ffc078; /* 주황색 포커스링 */
+}
+
 
 @media (max-width: 768px) {
     .dashboard-container {
         padding: 16px;
-        /* ✅ [개선] 모바일에서는 최대 너비 제한 없이 꽉 채웁니다. */
         max-width: 100%;
     }
     .dashboard-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
         gap: 16px;
         margin-bottom: 24px;
     }
@@ -199,4 +233,67 @@
         padding: 10px 12px;
         font-size: 0.85rem;
     }
+}
+
+/* 이벤트 카드 관련 스타일 추가 */
+.raffle-summary-group .group-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.raffle-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 16px 24px;
+}
+
+.raffle-summary-card {
+    background-color: #fff;
+    border: 1px solid var(--border-color-medium);
+    border-radius: var(--border-radius-lg);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+.raffle-summary-card:hover {
+    box-shadow: var(--box-shadow-md);
+    border-color: var(--primary-color);
+}
+
+.raffle-product-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.raffle-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-color-medium);
+}
+
+.raffle-entry-count strong {
+    font-weight: 700;
+    color: var(--primary-color-dark);
+}
+
+.raffle-details-link {
+    background-color: var(--bg-color-light);
+    color: var(--text-color-dark);
+    text-align: center;
+    padding: 8px 12px;
+    border-radius: var(--border-radius-md);
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+.raffle-details-link:hover {
+    background-color: var(--primary-color);
+    color: #fff;
 }

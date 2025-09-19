@@ -3,7 +3,6 @@
 import React from 'react';
 import { NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import toast from 'react-hot-toast';
 import './SideMenu.css';
 import { useNotifications } from '@/context/NotificationContext';
 import SideMenu from './SideMenu';

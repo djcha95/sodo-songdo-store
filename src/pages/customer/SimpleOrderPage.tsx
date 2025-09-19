@@ -14,7 +14,7 @@ import { getDisplayRound, getDeadlines, determineActionState, safeToDate } from 
 import type { ProductActionState } from '@/utils/productUtils';
 import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
-import '@/styles/common.css';
+
 import { getProductsWithStock } from '@/firebase/productService'; 
 
 dayjs.extend(isBetween);
@@ -62,43 +62,46 @@ const SimpleOrderPage: React.FC = () => {
       window.scrollTo({ top: offsetPosition, behavior });
   }, []);
 
-  useEffect(() => {
-    // ✅ [수정] setTimeout의 타입이 NodeJS.Timeout이 아닌 number를 반환하므로 타입을 변경
-    let throttleTimeout: number | null = null;
+useEffect(() => {
+  let throttleTimeout: number | null = null;
 
-    const handleScroll = () => {
-        if (!eventRef.current || !primaryRef.current || !secondaryRef.current || !tabContainerRef.current) return;
-        
-        const triggerLine = tabContainerRef.current.offsetHeight + 60 + 15;
-        const eventTop = eventRef.current.getBoundingClientRect().top;
-        const primaryTop = primaryRef.current.getBoundingClientRect().top;
-        const secondaryTop = secondaryRef.current.getBoundingClientRect().top;
-        
-        startTransition(() => {
-            if (eventTop <= triggerLine && primaryTop > triggerLine) {
-                if (visibleSection !== 'event') setVisibleSection('event');
-            } else if (primaryTop <= triggerLine && secondaryTop > triggerLine) {
-                if (visibleSection !== 'primary') setVisibleSection('primary');
-            } else if (secondaryTop <= triggerLine) {
-                if (visibleSection !== 'secondary') setVisibleSection('secondary');
-            }
-        });
-    };
-    const throttledHandleScroll = () => {
-  if (!throttleTimeout) {
-    throttleTimeout = window.setTimeout(() => {
-      handleScroll();
-      throttleTimeout = null;
-    }, 100);
-  }
-};
+  const handleScroll = () => {
+    if (!eventRef.current || !primaryRef.current || !secondaryRef.current || !tabContainerRef.current) return;
 
-    window.addEventListener('scroll', throttledHandleScroll);
-    return () => {
-      window.removeEventListener('scroll', throttledHandleScroll);
-      if (throttleTimeout) clearTimeout(throttleTimeout);
-    };
-  }, [visibleSection]);
+    const triggerLine = tabContainerRef.current.offsetHeight + 60 + 15;
+    const eventTop = eventRef.current.getBoundingClientRect().top;
+    const primaryTop = primaryRef.current.getBoundingClientRect().top;
+    const secondaryTop = secondaryRef.current.getBoundingClientRect().top;
+
+    startTransition(() => {
+      if (eventTop <= triggerLine && primaryTop > triggerLine) {
+        if (visibleSection !== 'event') setVisibleSection('event');
+      } else if (primaryTop <= triggerLine && secondaryTop > triggerLine) {
+        if (visibleSection !== 'primary') setVisibleSection('primary');
+      } else if (secondaryTop <= triggerLine) {
+        if (visibleSection !== 'secondary') setVisibleSection('secondary');
+      }
+    });
+  };
+
+  const throttledHandleScroll = () => {
+    if (!throttleTimeout) {
+      throttleTimeout = window.setTimeout(() => {
+        handleScroll();
+        throttleTimeout = null;
+      }, 100);
+    }
+  };
+
+  // ✅ 타입 안전한 passive 옵션 (TS가 인식하는 AddEventListenerOptions 사용)
+  const listenerOpts: AddEventListenerOptions = { passive: true };
+
+  window.addEventListener('scroll', throttledHandleScroll, listenerOpts);
+  return () => {
+    window.removeEventListener('scroll', throttledHandleScroll, listenerOpts);
+    if (throttleTimeout) window.clearTimeout(throttleTimeout);
+  };
+}, [visibleSection]);
 
 
   const fetchData = useCallback(async () => {
@@ -305,7 +308,16 @@ const SimpleOrderPage: React.FC = () => {
                     </h2>
                   </div>
                   <div className="simple-product-list">
-                    {eventProducts.slice(0, showEvent).map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                    {eventProducts.slice(0, showEvent).map((p, i) => (
+                      <SimpleProductCard
+                        key={`${p.id}-${p.displayRound.roundId}`}
+                        product={p as Product & { displayRound: SalesRound }}
+                        actionState={p.actionState}
+                        // ✅ [수정] LCP 최적화를 위해 첫 번째 카드 이미지를 우선 로드
+                        imgLoading={i === 0 ? 'eager' : 'lazy'}
+                        imgFetchPriority={i === 0 ? 'high' : 'auto'}
+                      />
+                    ))}
                   </div>
                   {eventProducts.length > showEvent && (
                     <div className="loadmore-area">
@@ -341,7 +353,16 @@ const SimpleOrderPage: React.FC = () => {
                 {primarySaleProducts.length > 0 ? (
                   <>
                     <div className="simple-product-list">
-                      {primarySaleProducts.slice(0, showPrimary).map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                      {primarySaleProducts.slice(0, showPrimary).map((p, i) => (
+                        <SimpleProductCard
+                          key={`${p.id}-${p.displayRound.roundId}`}
+                          product={p as Product & { displayRound: SalesRound }}
+                          actionState={p.actionState}
+                          // ✅ [수정] LCP 최적화를 위해 첫 번째 카드 이미지를 우선 로드
+                          imgLoading={i === 0 ? 'eager' : 'lazy'}
+                          imgFetchPriority={i === 0 ? 'high' : 'auto'}
+                        />
+                      ))}
                     </div>
                     {primarySaleProducts.length > showPrimary && (
                       <div className="loadmore-area">
@@ -366,7 +387,16 @@ const SimpleOrderPage: React.FC = () => {
                             <span className="tab-icon">⏰</span> 추가예약 (픽업시작 전까지)
                         </h2>
                         <div className="simple-product-list">
-                            {secondarySaleProducts.slice(0, showSecondary).map(p => <SimpleProductCard key={`${p.id}-${p.displayRound.roundId}`} product={p as Product & { displayRound: SalesRound }} actionState={p.actionState} />)}
+                            {secondarySaleProducts.slice(0, showSecondary).map((p, i) => (
+                              <SimpleProductCard
+                                key={`${p.id}-${p.displayRound.roundId}`}
+                                product={p as Product & { displayRound: SalesRound }}
+                                actionState={p.actionState}
+                                // ✅ [수정] LCP 최적화를 위해 첫 번째 카드 이미지를 우선 로드
+                                imgLoading={i === 0 ? 'eager' : 'lazy'}
+                                imgFetchPriority={i === 0 ? 'high' : 'auto'}
+                              />
+                            ))}
                         </div>
                         {secondarySaleProducts.length > showSecondary && (
                           <div className="loadmore-area">
