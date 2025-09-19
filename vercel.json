@@ -16,7 +16,7 @@
   ],
   "rewrites": [
     {
-      "source": "/api/(?!og$|img$|product$)(.*)",
+      "source": "/api/((?!og$|img$|product$).*)",
       "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     },
     {
