@@ -1,44 +1,49 @@
 // src/pages/admin/EncoreAdminPage.tsx
 
 import { useState, useEffect } from 'react';
-import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../../firebase';
-import toast from 'react-hot-toast'; // [추가] react-hot-toast 임포트
+import useDocumentTitle from '@/hooks/useDocumentTitle';
+// ✅ [수정] onSnapshot -> getDocs
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
+import { db } from '@/firebase/firebaseConfig';
+import toast from 'react-hot-toast';
 import { Loader } from 'lucide-react';
 
 interface Product {
   id: string;
   name: string;
-  encoreCount?: number; // [수정] requestCount 대신 encoreCount 사용
+  encoreCount?: number;
   stock?: number;
 }
 
 const EncoreAdminPage = () => {
-   useDocumentTitle('앙코르 요청 관리'); // ✅ [추가]
+  useDocumentTitle('앙코르 요청 관리');
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // encoreCount가 있는 문서를 내림차순으로 정렬하여 쿼리합니다.
-    const q = query(collection(db, 'products'), orderBy('encoreCount', 'desc')); // [수정] encoreCount로 변경
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const productList = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Product))
-        // 요청이 1 이상인 상품만 화면에 표시합니다.
-        .filter(p => (p.encoreCount || 0) > 0); // [수정] encoreCount로 변경
-      setProducts(productList);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("앵콜 상품 목록 실시간 로딩 오류:", error);
-      toast.error("앵콜 상품 목록을 불러오는 데 실패했습니다."); // [추가] toast 알림
-      setIsLoading(false);
-    });
-    return () => unsubscribe();
+    // ✅ [수정] 1회성 데이터 조회로 변경
+    const fetchEncoreProducts = async () => {
+      setIsLoading(true);
+      try {
+        const q = query(collection(db, 'products'), orderBy('encoreCount', 'desc'));
+        const snapshot = await getDocs(q);
+        const productList = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Product))
+          .filter(p => (p.encoreCount || 0) > 0);
+        setProducts(productList);
+      } catch (error) {
+        console.error("앵콜 상품 목록 로딩 오류:", error);
+        toast.error("앵콜 상품 목록을 불러오는 데 실패했습니다.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchEncoreProducts();
   }, []);
 
   if (isLoading) return (
-    <div className="loading-overlay"> {/* 기존 로딩 스피너 컴포넌트 스타일 활용 */}
+    <div className="loading-overlay">
       <Loader size={48} className="spin" />
       <p>로딩 중...</p>
     </div>
@@ -62,7 +67,7 @@ const EncoreAdminPage = () => {
               <tr key={product.id}>
                 <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>{index + 1}</td>
                 <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>{product.name}</td>
-                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontWeight: 'bold' }}>{product.encoreCount || 0}</td> {/* [수정] encoreCount로 변경 */}
+                <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontWeight: 'bold' }}>{product.encoreCount || 0}</td>
                 <td style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>{product.stock === undefined ? 'N/A' : product.stock}</td>
               </tr>
             ))}

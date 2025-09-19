@@ -2,17 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { onSnapshot, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
+// ✅ [수정] onSnapshot -> getDocs
+import { getDocs, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { db } from '@/firebase';
+// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
+import { db } from '@/firebase/firebaseConfig';
 import type { Banner } from '@/types';
 import * as bannerService from '@/firebase/bannerService';
 
 import BannerForm from '@/pages/admin/components/BannerForm';
 import BannerList from '@/pages/admin/components/BannerList';
-// ✅ [삭제] 존재하지 않는 Notification 컴포넌트 import 제거
 import SodomallLoader from '@/components/common/SodomallLoader';
-
 import './BannerAdminPage.css';
 
 const BannerAdminPage: React.FC = () => {
@@ -21,27 +21,27 @@ const BannerAdminPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentBanner, setCurrentBanner] = useState<Banner | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // ✅ [삭제] 삭제된 Notification 컴포넌트와 연결된 state 제거
-  // const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
-    const unsubscribe = onSnapshot(q,
-      (snapshot) => {
+    // ✅ [수정] 1회성 데이터 조회로 변경
+    const fetchBanners = async () => {
+      setIsLoading(true);
+      try {
+        const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
+        const snapshot = await getDocs(q);
         const bannersData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         } as Banner));
         setBanners(bannersData);
-        setIsLoading(false);
-      },
-      (error) => {
+      } catch (error) {
         console.error("배너 데이터 로딩 오류:", error);
         toast.error("배너 목록을 불러오는 데 실패했습니다.");
+      } finally {
         setIsLoading(false);
       }
-    );
-    return () => unsubscribe();
+    };
+    fetchBanners();
   }, []);
 
   // react-hot-toast를 사용하므로 이 함수는 그대로 둡니다.

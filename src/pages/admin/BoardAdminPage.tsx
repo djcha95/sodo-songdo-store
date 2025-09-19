@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+// ✅ [수정] onSnapshot -> getDocs
+import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
-import { db } from '../../firebase';
+// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
+import { db } from '@/firebase/firebaseConfig';
 import './BoardAdminPage.css';
-// ✅ [추가] SodomallLoader import
 import SodomallLoader from '@/components/common/SodomallLoader';
+
 
 type RequestStatus = '요청' | '검토중' | '공구확정' | '반려';
 interface RequestPost {
@@ -29,22 +31,23 @@ const BoardAdminPage = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Firestore 'requests' 컬렉션을 'createdAt' 기준으로 내림차순 정렬하여 실시간으로 가져옴
-    const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
-    
-    // onSnapshot을 사용하여 실시간 업데이트를 구독
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const postList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestPost));
-      setPosts(postList);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("게시글 목록 실시간 로딩 오류:", error);
-      setIsLoading(false);
-    });
-
-    // 컴포넌트 언마운트 시 구독 해제
-    return () => unsubscribe();
+    // ✅ [수정] 1회성 데이터 조회로 변경
+    const fetchPosts = async () => {
+      setIsLoading(true);
+      try {
+        const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        const postList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestPost));
+        setPosts(postList);
+      } catch (error) {
+        console.error("게시글 목록 로딩 오류:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPosts();
   }, []);
+
 
   // 게시글 상태를 업데이트하는 비동기 함수
   const handleStatusChange = async (postId: string, newStatus: RequestStatus) => {

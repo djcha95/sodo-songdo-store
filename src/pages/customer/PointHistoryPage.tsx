@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { getPointHistory } from '@/firebase';
+import { getPointHistory } from '@/firebase/firebaseConfig';
 import type { PointLog } from '@/types';
 import { TrendingUp, TrendingDown, HelpCircle, ShoppingCart, History, X } from 'lucide-react';
 import Tippy from '@tippyjs/react';

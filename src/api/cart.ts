@@ -2,7 +2,7 @@
 
 import { collection, getDocs } from 'firebase/firestore';
 import type { DocumentData } from 'firebase/firestore';
-import { db, auth } from '@/firebase';
+import { db, auth } from '@/firebase/firebaseConfig';
 
 /**
  * 현재 로그인된 사용자의 장바구니 데이터를 Firestore에서 가져옵니다.

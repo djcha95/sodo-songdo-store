@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
 import {
 	Crown, Gem, Sparkles, ShieldAlert, ShieldX,
@@ -66,17 +66,22 @@ const UserListPage = () => {
 
 	useEffect(() => {
 		setIsLoading(true);
-		const usersQuery = query(collection(db, 'users'));
-		const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
-			const usersData = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser));
-			setAllUsers(usersData);
-			setIsLoading(false);
-		}, (error) => {
-			console.error("사용자 목록 로딩 오류:", error);
-			setIsLoading(false);
-		});
-		return () => unsubscribe();
+        // ✅ [수정] 1회성 데이터 조회로 변경
+        const fetchUsers = async () => {
+          try {
+            const usersQuery = query(collection(db, 'users'));
+            const snapshot = await getDocs(usersQuery);
+            const usersData = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser));
+            setAllUsers(usersData);
+          } catch(error) {
+            console.error("사용자 목록 로딩 오류:", error);
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        fetchUsers();
 	}, []);
+
 
 	useEffect(() => {
 		setCurrentPage(1);

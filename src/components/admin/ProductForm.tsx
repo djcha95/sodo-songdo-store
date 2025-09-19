@@ -14,7 +14,7 @@ import {
   updateProductCoreInfo,
   functions,
   getReservedQuantitiesMap
-} from '@/firebase';
+} from '@/firebase/firebaseConfig';
 import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import type {
   Category,

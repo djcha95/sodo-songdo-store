@@ -4,7 +4,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { signInWithCustomToken } from "firebase/auth";
 import type { UserCredential } from "firebase/auth";
-import { auth, processUserSignIn } from "@/firebase";
+import { auth } from "@/firebase/firebaseConfig";      // 규칙 1: 핵심 부품
+import { processUserSignIn } from "@/firebase"; // 규칙 2: 서비스 함수
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
 

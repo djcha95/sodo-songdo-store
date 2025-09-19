@@ -9,7 +9,7 @@ import { useTutorial } from '@/context/TutorialContext';
 import { useLaunch } from '@/context/LaunchContext';
 import { detailPageTourSteps } from '@/components/customer/AppTour';
 
-import { functions } from '@/firebase';
+import { functions } from '@/firebase/firebaseConfig';
 import { getApp } from 'firebase/app';
 
 import { Timestamp } from 'firebase/firestore';

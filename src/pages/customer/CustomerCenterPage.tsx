@@ -1,7 +1,7 @@
 // src/pages/customer/CustomerCenterPage.tsx
 
 import React, { useEffect, useState, useCallback, startTransition, Suspense } from 'react';
-import { getStoreInfo, updateStoreInfo } from '@/firebase';
+import { getStoreInfo, updateStoreInfo } from '@/firebase'; 
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { customerCenterTourSteps } from '@/components/customer/AppTour';

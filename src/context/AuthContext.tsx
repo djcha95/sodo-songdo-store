@@ -2,13 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-// ✅ [수정] getDoc을 import 합니다.
-import { doc, onSnapshot, getDoc, type Unsubscribe } from 'firebase/firestore';
-import { auth, db } from '../firebase/firebaseConfig';
-import { recordDailyVisit } from '@/firebase/pointService';
+import { doc, getDoc } from 'firebase/firestore';
+// ✅ [수정] 규칙에 맞게 import 경로를 분리합니다.
+import { auth, db } from '@/firebase/firebaseConfig';      // 규칙 1
+import { recordDailyVisit } from '@/firebase'; // 규칙 2
 import type { UserDocument } from '../types';
 
-// ✅ [수정] AuthContextType에 refreshUserDocument 함수 타입을 추가합니다.
+console.log('5. AuthContext가 로드될 때의 db:', db);
+
 interface AuthContextType {
   user: User | null;
   userDocument: UserDocument | null;
@@ -28,7 +29,6 @@ const AuthContext = createContext<AuthContextType>({
   isSuspendedUser: false,
   loading: true,
   logout: async () => {},
-  // ✅ 기본값을 추가합니다.
   refreshUserDocument: async () => {},
 });
 
@@ -39,41 +39,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userDocument, setUserDocument] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ [추가] 사용자 정보를 수동으로 새로고침하는 함수
   const refreshUserDocument = useCallback(async () => {
     if (auth.currentUser) {
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const userDocSnap = await getDoc(userRef);
       if (userDocSnap.exists()) {
-        setUserDocument(userDocSnap.data() as UserDocument);
+        setUserDocument({ uid: userDocSnap.id, ...userDocSnap.data() } as UserDocument);
       }
     }
   }, []);
 
   useEffect(() => {
-    let unsubscribeFromSnapshot: Unsubscribe | null = null;
-    const unsubscribeFromAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      if (unsubscribeFromSnapshot) {
-        unsubscribeFromSnapshot();
-      }
+    // ✅ [수정] onSnapshot을 사용하지 않는 1회성 조회 로직으로 변경
+    const unsubscribeFromAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
         setLoading(true);
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        unsubscribeFromSnapshot = onSnapshot(userRef, (doc) => {
-          if (doc.exists()) {
-            const userData = { uid: doc.id, ...doc.data() } as UserDocument;
+        try {
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userDocSnap = await getDoc(userRef);
+          if (userDocSnap.exists()) {
+            const userData = { uid: userDocSnap.id, ...userDocSnap.data() } as UserDocument;
             setUserDocument(userData);
             recordDailyVisit(firebaseUser.uid);
           } else {
             setUserDocument(null);
           }
+        } catch (error) {
+          console.error("사용자 문서 조회 오류:", error);
+          setUserDocument(null);
+        } finally {
           setLoading(false);
-        }, (error) => {
-            console.error("사용자 문서 스냅샷 오류:", error);
-            setUserDocument(null);
-            setLoading(false);
-        });
+        }
       } else {
         setUserDocument(null);
         setLoading(false);
@@ -81,9 +78,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     return () => {
       unsubscribeFromAuth();
-      if (unsubscribeFromSnapshot) {
-        unsubscribeFromSnapshot();
-      }
     };
   }, []);
   
@@ -108,7 +102,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isSuspendedUser,
       loading,
       logout,
-      // ✅ Context 값으로 refreshUserDocument 함수를 전달합니다.
       refreshUserDocument,
     };
   }, [user, userDocument, loading, logout, refreshUserDocument]);

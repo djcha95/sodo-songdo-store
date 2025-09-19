@@ -3,7 +3,7 @@
 import { 
   db, 
   storage 
-} from '@/firebase';
+} from './firebaseConfig';
 import { 
   collection, 
   addDoc, 
@@ -11,7 +11,7 @@ import {
   updateDoc, 
   deleteDoc, 
   getDocs,
-  getDoc, // [수정] getDoc 함수를 import 합니다.
+  getDoc,
   Timestamp,
   serverTimestamp
 } from 'firebase/firestore';
@@ -23,8 +23,6 @@ import {
 } from 'firebase/storage';
 import type { Banner } from '@/types';
 
-// Firestore 'banners' 컬렉션 참조
-const bannersCollectionRef = collection(db, 'banners');
 
 /**
  * 새 배너 추가
@@ -33,12 +31,13 @@ export const addBanner = async (
   bannerData: Omit<Banner, 'id' | 'imageUrl' | 'createdAt'>, 
   imageFile: File
 ): Promise<void> => {
-  // 1. 이미지 업로드
+  // ✅ [수정] 컬렉션 참조를 함수 내부에서 생성
+  const bannersCollectionRef = collection(db, 'banners');
+
   const imageRef = ref(storage, `banners/${Date.now()}_${imageFile.name}`);
   await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(imageRef);
 
-  // 2. Firestore에 데이터 추가
   const bannersSnapshot = await getDocs(bannersCollectionRef);
   const newOrder = bannersSnapshot.size; 
 
@@ -60,20 +59,17 @@ export const updateBanner = async (
 ): Promise<void> => {
   const bannerRef = doc(db, 'banners', bannerId);
   
-  // [수정] Firestore에서 직접 기존 문서 정보를 가져옵니다.
   const oldDocSnap = await getDoc(bannerRef);
   if (!oldDocSnap.exists()) {
     throw new Error("수정할 배너를 찾을 수 없습니다.");
   }
-  let imageUrl = oldDocSnap.data().imageUrl; // 기존 이미지 URL을 기본값으로 사용
+  let imageUrl = oldDocSnap.data().imageUrl;
 
   if (newImageFile) {
-    // 1. 새 이미지 업로드
     const newImageRef = ref(storage, `banners/${Date.now()}_${newImageFile.name}`);
     await uploadBytes(newImageRef, newImageFile);
     imageUrl = await getDownloadURL(newImageRef);
 
-    // 2. 기존 이미지 삭제
     const oldImageUrl = oldDocSnap.data().imageUrl;
     if (oldImageUrl) {
         try {
@@ -87,12 +83,10 @@ export const updateBanner = async (
     }
   }
 
-  // 3. Firestore 데이터 업데이트
   const dataToUpdate = {
     ...bannerData,
-    imageUrl, // 새 이미지가 있으면 교체된 URL, 없으면 기존 URL
+    imageUrl,
   };
-  // createdAt 필드는 수정 시 업데이트하지 않도록 Omit에서 제외된 그대로 둡니다.
   delete (dataToUpdate as any).createdAt; 
 
   await updateDoc(bannerRef, dataToUpdate);
@@ -105,15 +99,12 @@ export const updateBanner = async (
 export const deleteBanner = async (bannerId: string): Promise<void> => {
     const bannerRef = doc(db, 'banners', bannerId);
     
-    // [수정] .get() 대신 getDoc() 함수를 사용합니다.
     const bannerDoc = await getDoc(bannerRef); 
     const data = bannerDoc.data();
     const imageUrl = data?.imageUrl;
 
-    // Firestore 문서 삭제
     await deleteDoc(bannerRef);
 
-    // Storage에서 이미지 파일 삭제
     if (imageUrl) {
         const imageStorageRef = ref(storage, imageUrl);
         try {

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import toast from 'react-hot-toast';
 import { getAllUsersForQuickCheck } from '@/firebase/userService';
-import { getAllProducts } from '@/firebase';
+import { getAllProducts } from '@/firebase/firebaseConfig';
 // ✅ [수정] firebase 라이브러리가 아닌, 우리가 설정한 config 파일에서 'functions'를 가져옵니다.
 import { functions } from '@/firebase/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';

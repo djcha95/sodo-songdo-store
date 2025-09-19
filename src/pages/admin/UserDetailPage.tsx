@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase';
+// ✅ [수정] onSnapshot -> getDoc
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
+// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
+import { db } from '@/firebase/firebaseConfig';
 import { getPointHistory, deleteUserDocument } from '@/firebase/pointService';
 import { updateUserRole, adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';
@@ -73,18 +75,27 @@ const UserDetailPage = () => {
             return;
         }
         setIsLoadingUser(true);
-        const userRef = doc(db, 'users', userId);
-        const unsubscribeUser = onSnapshot(userRef, (doc) => {
-            if (doc.exists()) {
-                setUser({ uid: doc.id, ...doc.data() } as UserDocument);
+        // ✅ [수정] 1회성 데이터 조회로 변경
+        const fetchUser = async () => {
+          try {
+            const userRef = doc(db, 'users', userId);
+            const docSnap = await getDoc(userRef);
+            if (docSnap.exists()) {
+                setUser({ uid: docSnap.id, ...docSnap.data() } as UserDocument);
             } else {
                 toast.error("사용자 정보를 찾을 수 없습니다.");
                 navigate('/admin/users');
             }
+          } catch(error) {
+             toast.error("사용자 정보 조회에 실패했습니다.");
+             navigate('/admin/users');
+          } finally {
             setIsLoadingUser(false);
-        });
-        return () => unsubscribeUser();
+          }
+        };
+        fetchUser();
     }, [userId, navigate]);
+
 
     // --- 성능 최적화: 탭이 변경될 때 해당 탭의 데이터를 처음 한 번만 불러옵니다 ---
     useEffect(() => {

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
 import { mainTourSteps } from '@/components/customer/AppTour';
-import { getActiveBanners } from '@/firebase'; 
+import { getActiveBanners } from '@/firebase/firebaseConfig'; 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Product, Banner, SalesRound, VariantGroup } from '@/types';
