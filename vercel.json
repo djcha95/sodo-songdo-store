@@ -14,15 +14,13 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" }]
     }
   ],
-  "routes": [
-    { "src": "^/api/og$", "dest": "/api/og" },
-    { "src": "^/api/img$", "dest": "/api/img" },
-    { "src": "^/api/product$", "dest": "/api/product" },
-    { "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
-    { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
-    { "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|html|woff2?)$", "dest": "/$1.$2" },
+  "rewrites": [
     {
-      "src": "^/product/([A-Za-z0-9_-]+)$",
+      "source": "/api/(?!og$|img$|product$)(.*)",
+      "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
+    },
+    {
+      "source": "/product/:id",
       "has": [
         {
           "type": "header",
@@ -33,9 +31,11 @@
       "missing": [
         { "type": "header", "key": "sec-fetch-mode", "value": "navigate" }
       ],
-      "dest": "/api/og?id=$1"
+      "destination": "/api/og?id=:id"
     },
-    { "src": "^/product/.*$", "dest": "/index.html" },
-    { "src": "^(?!/api/).*$", "dest": "/index.html" }
+    {
+      "source": "/((?!api/|assets/|fonts/|_next/|favicon.ico|sw.js).*)",
+      "destination": "/index.html"
+    }
   ]
 }
