@@ -1,8 +1,9 @@
 // src/pages/customer/PointHistoryPage.tsx
 
+// ✅ [수정] React Hooks를 중괄호{}로 올바르게 import 합니다.
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { getPointHistory } from '@/firebase/firebaseConfig';
+import { getPointHistory } from '@/firebase';
 import type { PointLog } from '@/types';
 import { TrendingUp, TrendingDown, HelpCircle, ShoppingCart, History, X } from 'lucide-react';
 import Tippy from '@tippyjs/react';
@@ -111,7 +112,6 @@ const PointHistoryPage: React.FC = () => {
 
     useEffect(() => {
         if (user?.uid) {
-            // ✅ [수정] 불필요한 두 번째 인자 제거
             getPointHistory(user.uid)
                 .then(setHistory)
                 .catch(err => console.error("포인트 내역 로딩 실패:", err))
