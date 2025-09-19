@@ -3,15 +3,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import toast from 'react-hot-toast';
-import { getAllUsersForQuickCheck } from '@/firebase/userService';
-import { getAllProducts } from '@/firebase/firebaseConfig';
-// ✅ [수정] firebase 라이브러리가 아닌, 우리가 설정한 config 파일에서 'functions'를 가져옵니다.
+// ✅ [수정] 모든 서비스 함수는 @/firebase (index.ts)를 통해 가져옵니다.
+import { getAllUsersForQuickCheck, getAllProducts } from '@/firebase';
+// ✅ [수정] 핵심 기능인 functions는 firebaseConfig에서 직접 가져옵니다.
 import { functions } from '@/firebase/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, ProductItem } from '@/types';
 import { Search, User, Package, X, CheckCircle, PlusCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './CreateOrderPage.css';
+
 
 // ❌ const functions = getFunctions(); // 이 라인을 삭제하고
 // ✅ 우리가 만든 'functions' 인스턴스를 사용하도록 변경합니다.
