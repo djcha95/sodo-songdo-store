@@ -21,7 +21,7 @@ import { formatKRW } from '@/utils/number';
 import { reportError, reportInfo } from '@/utils/logger';
 
 import { getProductsWithStock } from '@/firebase/productService';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import { safeToDate, getDeadlines } from '@/utils/productUtils';
 
 

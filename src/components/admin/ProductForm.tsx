@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 // ✅ [추가] Firebase Functions 사용을 위한 import 구문
 import { httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import axios from 'axios';

@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-// ✅ [오류 수정] Typescript가 제안한 정확한 함수명 'getOrdersByPhoneLast4'로 수정
 import { getOrdersByPhoneLast4, updateMultipleOrderStatuses } from '../../firebase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import { Search, Phone, CheckCircle, XCircle, DollarSign, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// 날짜 관련 오류 해결을 위한 헬퍼 함수
 const safeToDate = (date: any): Date | null => {
     if (!date) return null;
     if (date instanceof Date) return date;
@@ -18,7 +16,6 @@ const safeToDate = (date: any): Date | null => {
     return null;
 };
 
-// 개별 주문 상품 아이템을 표시하는 컴포넌트
 interface OrderItemDisplayProps {
   item: OrderItem;
 }
@@ -37,7 +34,6 @@ const OrderItemDisplay: React.FC<OrderItemDisplayProps> = ({ item }) => {
   );
 };
 
-// 주문 카드 컴포넌트
 interface OrderCardProps {
   order: Order;
   onSelect: (orderId: string) => void;
@@ -141,7 +137,6 @@ const PickupProcessingPage: React.FC = () => {
     setSelectedOrderIds([]);
 
     try {
-      // ✅ [오류 수정] 함수명을 getOrdersByPhoneLast4로 수정
       const results = await getOrdersByPhoneLast4(phoneNumberLast4);
       if (results.length === 0) {
         toast('검색 결과가 없습니다.', { icon: '🔍' });
@@ -175,7 +170,6 @@ const PickupProcessingPage: React.FC = () => {
     const updatePromise = new Promise<void>(async (resolve, reject) => {
       try {
         await updateMultipleOrderStatuses(selectedOrderIds, status);
-        // ✅ [오류 수정] 함수명을 getOrdersByPhoneLast4로 수정
         const results = await getOrdersByPhoneLast4(phoneNumberLast4);
         setSearchResults(results);
         setSelectedOrderIds([]);
@@ -192,6 +186,7 @@ const PickupProcessingPage: React.FC = () => {
       'CANCELED': '취소',
       'NO_SHOW': '노쇼',
       'COMPLETED': '처리 완료',
+      'LATE_CANCELED': '지연 취소', // ✅ 이 줄을 추가합니다.
     };
     const successText = `${selectedOrderIds.length}개 주문이 '${statusTextMap[status] || status}' 처리되었습니다!`;
 

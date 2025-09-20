@@ -11,7 +11,7 @@ import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import useLongPress from '@/hooks/useLongPress';
 import type { Order, OrderItem, OrderStatus } from '@/types';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {

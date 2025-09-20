@@ -1,115 +1,212 @@
-// src/pages/admin/BoardAdminPage.tsx
+// src/pages/admin/BannerAdminPage.tsx
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-// ✅ [수정] onSnapshot -> getDocs
-import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
-import type { Timestamp } from 'firebase/firestore';
-// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
-import { db } from '@/firebase/firebaseConfig';
-import './BoardAdminPage.css';
+import { getDocs, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore/lite';
+import toast from 'react-hot-toast';
+import { getFirebaseServices } from '@/firebase/firebaseInit';
+import type { Banner } from '@/types';
+import * as bannerService from '@/firebase/bannerService';
+
+import BannerForm from '@/pages/admin/components/BannerForm';
+import BannerList from '@/pages/admin/components/BannerList';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import './BannerAdminPage.css';
 
-
-type RequestStatus = '요청' | '검토중' | '공구확정' | '반려';
-interface RequestPost {
-  id: string;
-  title: string;
-  authorName: string;
-  createdAt: Timestamp;
-  likes: number;
-  status: RequestStatus;
-}
-
-// ✅ [삭제] 기존 LoadingSpinner 컴포넌트 삭제
-
-
-const BoardAdminPage = () => {
-  useDocumentTitle('게시판 관리');
-
-  const [posts, setPosts] = useState<RequestPost[]>([]);
+const BannerAdminPage: React.FC = () => {
+  useDocumentTitle('배너 관리');
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentBanner, setCurrentBanner] = useState<Banner | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // ✅ [수정] 1회성 데이터 조회로 변경
-    const fetchPosts = async () => {
+    const fetchBanners = async () => {
       setIsLoading(true);
       try {
-        const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
+        const { db } = await getFirebaseServices();
+        const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
         const snapshot = await getDocs(q);
-        const postList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestPost));
-        setPosts(postList);
+        const bannersData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Banner));
+        setBanners(bannersData);
       } catch (error) {
-        console.error("게시글 목록 로딩 오류:", error);
+        console.error("배너 데이터 로딩 오류:", error);
+        toast.error("배너 목록을 불러오는 데 실패했습니다.");
       } finally {
         setIsLoading(false);
       }
     };
-    fetchPosts();
+    fetchBanners();
   }, []);
 
-
-  // 게시글 상태를 업데이트하는 비동기 함수
-  const handleStatusChange = async (postId: string, newStatus: RequestStatus) => {
-    try {
-      const postRef = doc(db, 'requests', postId);
-      await updateDoc(postRef, { status: newStatus });
-      console.log(`Post ${postId} status updated to ${newStatus}`);
-    } catch (error) {
-      console.error("게시글 상태 업데이트 실패:", error);
-      alert("상태 업데이트에 실패했습니다. 다시 시도해주세요.");
+  const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
+    switch (type) {
+      case 'success':
+        toast.success(message);
+        break;
+      case 'error':
+        toast.error(message);
+        break;
+      case 'info':
+        toast(message);
+        break;
     }
   };
-  
-  // ✅ [수정] LoadingSpinner를 SodomallLoader로 교체
+
+  const handleFormSubmit = async (formData: Omit<Banner, 'id' | 'imageUrl'>, imageFile?: File | null) => {
+    setIsSubmitting(true);
+    try {
+      if (currentBanner) {
+        await bannerService.updateBanner(currentBanner.id, formData, imageFile);
+        showNotification('배너가 성공적으로 수정되었습니다.', 'success');
+      } else {
+        await bannerService.addBanner(formData, imageFile as File);
+        showNotification('새 배너가 성공적으로 추가되었습니다.', 'success');
+      }
+      handleResetForm();
+    } catch (error) {
+      console.error('배너 처리 오류:', error);
+      showNotification(`오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = (banner: Banner) => {
+    setCurrentBanner(banner);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id: string) => {
+    const confirmationPromise = new Promise<boolean>((resolve) => {
+      toast(
+        (t) => (
+          <div className="custom-toast-container">
+            <p className="toast-message">
+              정말로 이 배너를 삭제하시겠습니까?
+              <br />
+              이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="toast-button-group">
+              <button
+                className="toast-button toast-button-cancel"
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  resolve(false);
+                }}
+              >
+                취소
+              </button>
+              <button
+                className="toast-button toast-button-confirm"
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  resolve(true);
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ),
+        {
+          duration: 6000,
+          style: {
+            background: 'white',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            padding: '16px',
+            borderRadius: '10px',
+            border: '1px solid #e0e0e0',
+            width: '350px',
+          },
+        }
+      );
+    });
+
+    const confirmed = await confirmationPromise;
+
+    if (confirmed) {
+      const deletePromise = bannerService.deleteBanner(id);
+      toast.promise(deletePromise, {
+        loading: '배너를 삭제하는 중...',
+        success: '배너가 성공적으로 삭제되었습니다.',
+        error: '배너 삭제에 실패했습니다.',
+      });
+      setBanners((prevBanners) => prevBanners.filter((b) => b.id !== id));
+    }
+  };
+
+  const handleToggleActive = async (banner: Banner) => {
+    const promise = bannerService.toggleBannerActive(banner.id, !banner.isActive);
+    toast.promise(promise, {
+      loading: '상태를 변경하는 중...',
+      success: `배너가 성공적으로 ${!banner.isActive ? '활성화' : '비활성화'}되었습니다.`,
+      error: '상태 변경에 실패했습니다.',
+    });
+  };
+
+  const handleReorder = async (activeId: string, overId: string | null) => {
+    if (!overId) return;
+
+    const oldIndex = banners.findIndex((b) => b.id === activeId);
+    const newIndex = banners.findIndex((b) => b.id === overId);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newBanners = Array.from(banners);
+    const [movedItem] = newBanners.splice(oldIndex, 1);
+    newBanners.splice(newIndex, 0, movedItem);
+    setBanners(newBanners);
+    
+    const { db } = await getFirebaseServices();
+    const batch = writeBatch(db);
+    newBanners.forEach((banner, index) => {
+      const bannerRef = doc(db, 'banners', banner.id);
+      batch.update(bannerRef, { order: index });
+    });
+
+    try {
+      await batch.commit();
+      toast.success('배너 순서가 저장되었습니다.');
+    } catch (error) {
+      console.error("순서 저장 오류:", error);
+      toast.error('순서 저장에 실패했습니다. 페이지를 새로고침해주세요.');
+      setBanners(banners);
+    }
+  };
+
+  const handleResetForm = () => {
+    setCurrentBanner(null);
+  };
+
   if (isLoading) {
-    return <SodomallLoader message="게시판 데이터를 불러오는 중..." />;
+    return <SodomallLoader />;
   }
 
   return (
-    <div className="board-admin-container">
-      <h1 className="board-admin-header">공구 요청 관리</h1>
-      <div className="board-table-wrapper">
-        {posts.length > 0 ? (
-          <table className="board-table">
-            <thead>
-              <tr>
-                <th>요청일</th>
-                <th>상품명</th>
-                <th>요청자</th>
-                <th>추천수</th>
-                <th>상태 변경</th>
-              </tr>
-            </thead>
-            <tbody>
-              {posts.map(post => (
-                <tr key={post.id}>
-                  <td>{post.createdAt?.toDate().toLocaleDateString('ko-KR')}</td>
-                  <td>{post.title}</td>
-                  <td>{post.authorName}</td>
-                  <td>{post.likes}</td>
-                  <td>
-                    <select
-                      value={post.status}
-                      onChange={(e) => handleStatusChange(post.id, e.target.value as RequestStatus)}
-                      className="board-table-select"
-                    >
-                      <option value="요청">요청</option>
-                      <option value="검토중">검토중</option>
-                      <option value="공구확정">공구확정</option>
-                      <option value="반려">반려</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="no-data-message">등록된 공구 요청 게시글이 없습니다.</p>
-        )}
+    <div className="banner-admin-page-container">
+      <h1>배너 관리</h1>
+      <div className="admin-page-grid-container">
+        <BannerForm
+          currentBanner={currentBanner}
+          isSubmitting={isSubmitting}
+          onSubmit={handleFormSubmit}
+          onReset={handleResetForm}
+        />
+        <BannerList
+          banners={banners}
+          currentBannerId={currentBanner?.id || null}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onToggleActive={handleToggleActive}
+          onReorder={handleReorder}
+        />
       </div>
     </div>
   );
 };
 
-export default BoardAdminPage;
+export default BannerAdminPage;

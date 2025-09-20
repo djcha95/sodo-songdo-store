@@ -1,10 +1,11 @@
-// src/context/TutorialContext.tsx (수정 완료)
+// src/context/TutorialContext.tsx
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { Step } from 'react-joyride';
 import { useAuth } from './AuthContext';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firebaseConfig';
+import { doc, updateDoc } from 'firebase/firestore/lite';
+// ✅ [수정] getFirebaseServices를 import 합니다.
+import { getFirebaseServices } from '@/firebase/firebaseInit';
 import type { UserTutorialProgress } from '@/types';
 
 // 🔥 1. 컨텍스트 타입에 tourSteps와 tourKey 추가
@@ -64,6 +65,8 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
       const newProgress = { ...userProgress, [pageKey]: true };
       
       try {
+        // ✅ 함수 내에서 db를 받아옵니다.
+        const { db } = await getFirebaseServices();
         const userRef = doc(db, 'users', user.uid);
         await updateDoc(userRef, {
           tutorialProgress: newProgress
@@ -85,7 +88,7 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({ children }) 
   };
 
   return (
-    // 🔥 4. 자식을 함수로 호출하는 대신, 받은 그대로 렌더링
+    // 🔥 4. 오타 수정: TutorialTutor -> TutorialContext
     <TutorialContext.Provider value={value}>
       {children}
     </TutorialContext.Provider>

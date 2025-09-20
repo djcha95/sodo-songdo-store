@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-// ✅ [수정] onSnapshot -> getDocs
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
-import { db } from '@/firebase/firebaseConfig';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
+import { getFirebaseServices } from '@/firebase/firebaseInit';
 import toast from 'react-hot-toast';
 import { Loader } from 'lucide-react';
 
@@ -22,10 +20,10 @@ const EncoreAdminPage = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // ✅ [수정] 1회성 데이터 조회로 변경
     const fetchEncoreProducts = async () => {
       setIsLoading(true);
       try {
+        const { db } = await getFirebaseServices();
         const q = query(collection(db, 'products'), orderBy('encoreCount', 'desc'));
         const snapshot = await getDocs(q);
         const productList = snapshot.docs

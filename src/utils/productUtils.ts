@@ -7,7 +7,7 @@ import type {
   VariantGroup as OriginalVariantGroup,
   LoyaltyTier,
 } from '@/types';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';

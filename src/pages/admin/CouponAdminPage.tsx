@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle'; // ✅ [추가]
-import { collection, addDoc, getDocs, query } from 'firebase/firestore';
-import type { Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query } from 'firebase/firestore/lite';
+import type { Timestamp } from 'firebase/firestore/lite';
 import { db } from '../../firebase';
 import toast from 'react-hot-toast'; // [추가] react-hot-toast 임포트
 

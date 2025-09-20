@@ -1,7 +1,7 @@
 // src/pages/admin/CouponAdminPage.tsx
 
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, query, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, Timestamp } from 'firebase/firestore/lite';
 import { db } from '../../firebase';
 
 interface Coupon {

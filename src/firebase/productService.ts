@@ -1,21 +1,20 @@
 // src/firebase/productService.ts
 
-import { db, storage } from './firebaseConfig';
-// ✅ [수정] Firebase App 및 Functions SDK import 추가
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
   collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
   writeBatch, increment, arrayUnion, where, orderBy, Timestamp,
-  runTransaction, startAfter, limit, getCountFromServer,
+  runTransaction, startAfter, limit,
   type DocumentData, type Query, type DocumentReference, type WriteBatch,
-} from 'firebase/firestore';
+} from 'firebase/firestore/lite';
 import { ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
 import type {
   Product, SalesRound, SalesRoundStatus, VariantGroup,
   ProductItem, CartItem, WaitlistInfo, PaginatedProductsResponse
 } from '@/types';
+import { getFirebaseServices } from './firebaseInit'; // ✅ firebaseInit import
 
 import { getReservedQuantitiesMap } from './orderService';
 import { getUserDocById } from './userService';
@@ -44,6 +43,7 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 // 상태/보관/카테고리 관련
 // ========================================================
 export const updateProductsStatus = async (productIds: string[], isArchived: boolean): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   productIds.forEach(id => {
     const productRef = doc(db, 'products', id);
@@ -57,6 +57,7 @@ export const moveProductsToCategory = async (productIds: string[], newCategoryNa
     return;
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   productIds.forEach(id => {
     const productRef = doc(db, 'products', id);
@@ -68,6 +69,7 @@ export const moveProductsToCategory = async (productIds: string[], newCategoryNa
 
 
 export const deleteProducts = async (productIds: string[]): Promise<void> => {
+  const { db, storage } = await getFirebaseServices(); // ✅ 함수 내에서 db, storage 호출
   const batch = writeBatch(db);
   for (const id of productIds) {
     const productRef = doc(db, 'products', id);
@@ -100,6 +102,7 @@ export const deleteProducts = async (productIds: string[]): Promise<void> => {
 // ========================================================
 export const searchProductsByName = async (name: string): Promise<Product[]> => {
   if (!name) return [];
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productsRef = collection(db, 'products');
   const q = query(
     productsRef,
@@ -117,6 +120,7 @@ export const addProductWithFirstRound = async (
   imageFiles: File[],
   creationDate: Date
 ): Promise<string> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const imageUrls = await uploadImages(imageFiles, 'products');
   const creationTimestamp = Timestamp.fromDate(creationDate);
 
@@ -142,6 +146,7 @@ export const addNewSalesRound = async (
   productId: string,
   newRoundData: Omit<SalesRound, 'roundId' | 'createdAt' | 'waitlist' | 'waitlistCount'>
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   const roundToAdd: SalesRound = {
     ...newRoundData,
@@ -161,6 +166,7 @@ export const updateSalesRound = async (
   roundId: string,
   updatedData: Partial<Omit<SalesRound, 'roundId' | 'createdAt'>>
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   await runTransaction(db, async (transaction) => {
     const productSnap = await transaction.get(productRef);
@@ -187,6 +193,7 @@ export const updateProductCoreInfo = async (
   existingImageUrls: string[],
   originalAllImageUrls: string[]
 ): Promise<void> => {
+  const { db, storage } = await getFirebaseServices(); // ✅ 함수 내에서 db, storage 호출
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   let finalImageUrls = existingImageUrls;
 
@@ -210,6 +217,7 @@ export const updateProductCoreInfo = async (
 };
 
 export const updateEncoreRequest = async (productId: string, userId: string): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   const userRef: DocumentReference<DocumentData> = doc(db, 'users', userId);
   const batch: WriteBatch = writeBatch(db);
@@ -227,6 +235,7 @@ export const updateEncoreRequest = async (productId: string, userId: string): Pr
 // 읽기(fetch) — 오버레이 적용 버전
 // ========================================================
 export const getProductById = async (productId: string): Promise<Product | null> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const docRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   const [docSnap, reservedMap] = await Promise.all([getDoc(docRef), getReservedQuantitiesMap()]);
   if (!docSnap.exists()) return null;
@@ -239,6 +248,7 @@ export const getProducts = async (
   pageSize: number = 10,
   lastVisible: DocumentData | null = null
 ): Promise<PaginatedProductsResponse> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   let productsQuery: Query<DocumentData> = query(
     collection(db, 'products'),
     where('isArchived', '==', archived),
@@ -270,6 +280,7 @@ export const getProductsByCategory = async (
   pageSize: number,
   lastVisible: DocumentData | null = null
 ): Promise<{ products: Product[], lastDoc: DocumentData | null, totalCount: number }> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productsRef = collection(db, 'products');
 
   let baseQuery: Query;
@@ -280,11 +291,11 @@ export const getProductsByCategory = async (
   }
 
   const [countSnapshot, reservedMap] = await Promise.all([
-    getCountFromServer(baseQuery),
+    getDocs(baseQuery), // ✅ getDocs로 대체
     getReservedQuantitiesMap(),
   ]);
 
-  const totalCount = countSnapshot.data().count;
+  const totalCount = countSnapshot.size; // ✅ .size로 개수 확인
 
   let paginatedQuery = query(baseQuery, orderBy('groupName'), limit(pageSize));
   if (lastVisible) {
@@ -301,6 +312,7 @@ export const getProductsByCategory = async (
 };
 
 export const getAllProducts = async (archived: boolean = false): Promise<Product[]> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productsQuery: Query<DocumentData> = query(
     collection(db, 'products'),
     where('isArchived', '==', archived),
@@ -378,6 +390,7 @@ export const checkProductAvailability = async (
 
 export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
   if (!userId) return [];
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const allProductsSnapshot = await getDocs(query(collection(db, 'products'), where('isArchived', '==', false)));
   const userWaitlist: WaitlistInfo[] = [];
 
@@ -433,6 +446,7 @@ export const cancelWaitlistEntry = async (
   userId: string,
   itemId: string
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productRef = doc(db, 'products', productId);
   await runTransaction(db, async (transaction) => {
     const productDoc = await transaction.get(productRef);
@@ -455,7 +469,7 @@ export const cancelWaitlistEntry = async (
 export const getWaitlistForRound = async (
   productId: string,
   roundId: string
-): Promise<(WaitlistInfo & {userName: string})[]> => {
+): Promise<(WaitlistInfo & { userName: string })[]> => {
   const product = await getProductById(productId);
   if (!product) throw new Error("상품 정보를 찾을 수 없습니다.");
 
@@ -496,6 +510,7 @@ export const getWaitlistForRound = async (
 export const getProductsByIds = async (productIds: string[]): Promise<Product[]> => {
   if (productIds.length === 0) return [];
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   // Firestore 'in' 쿼리 30개 제한 고려
   const chunks: string[][] = [];
   for (let i = 0; i < productIds.length; i += 30) {
@@ -529,6 +544,7 @@ export const getProductsByIds = async (productIds: string[]): Promise<Product[]>
 export const updateMultipleVariantGroupStocks = async (
   updates: { productId: string; roundId: string; variantGroupId: string; newStock: number; }[]
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
 
@@ -578,6 +594,7 @@ export const updateItemStock = async (
   itemId: string,
   newStock: number
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productRef = doc(db, 'products', productId);
   await runTransaction(db, async (transaction) => {
     const productSnap = await transaction.get(productRef);
@@ -607,6 +624,7 @@ export const updateSalesRoundStatus = async (
   roundId: string,
   newStatus: SalesRound['status']
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   await runTransaction(db, async (transaction) => {
     const productSnap = await transaction.get(productRef);
@@ -625,6 +643,7 @@ export const updateSalesRoundStatus = async (
 export const updateMultipleSalesRoundStatuses = async (
   updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
   for (const update of updates) {
@@ -660,6 +679,7 @@ export const updateMultipleSalesRoundStatuses = async (
 export const deleteSalesRounds = async (
   deletions: { productId: string; roundId: string }[]
 ): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   const productsToUpdate = new Map<string, { roundsToDelete: Set<string> }>();
 
@@ -695,6 +715,7 @@ export const getLiveStockForItems = async (
   items: CartItem[]
 ): Promise<Record<string, { itemStock: number; groupStock: number | null }>> => {
   if (items.length === 0) return {};
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const productIds = [...new Set(items.map(item => item.productId))];
   const productSnapshots = await Promise.all(productIds.map(id => getDoc(doc(db, 'products', id))));
   const productsMap = new Map<string, Product>();
@@ -733,33 +754,30 @@ interface GetProductsWithStockResponse {
   lastVisible: any;
 }
 
-// 아시아-서울 리전의 Firebase Functions 인스턴스를 가져옵니다.
-const functions = getFunctions(getApp(), 'asia-northeast3');
-
-// 'getProductsWithStock' Callable Function에 대한 참조를 생성합니다.
-const getProductsWithStockCallable = httpsCallable<void, GetProductsWithStockResponse>(functions, 'getProductsWithStock');
-
 /**
  * 재고 및 예약 수량이 모두 계산된 상품 목록을 가져옵니다.
  * 백엔드의 'getProductsWithStock' Cloud Function을 호출하여 복잡한 집계 작업을 서버에서 처리합니다.
  * @returns {Promise<GetProductsWithStockResponse>} 상품 목록과 페이지네이션 정보를 포함하는 객체
  */
 export const getProductsWithStock = async (): Promise<GetProductsWithStockResponse> => {
-    try {
-        const result = await getProductsWithStockCallable();
-        return result.data;
-    } catch (error) {
-        console.error("Error calling getProductsWithStock:", error);
-        throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
-    }
+  const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
+  // 'getProductsWithStock' Callable Function에 대한 참조를 생성합니다.
+  const getProductsWithStockCallable = httpsCallable<void, GetProductsWithStockResponse>(functions, 'getProductsWithStock');
+  try {
+    const result = await getProductsWithStockCallable();
+    return result.data;
+  } catch (error) {
+    console.error("Error calling getProductsWithStock:", error);
+    throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
+  }
 };
 
 // ✅ [신규 추가] 가벼운 페이지네이션 함수
 export type TabKey = 'event' | 'primary' | 'secondary';
 export async function getProductsPageLight(params: {
   tab: TabKey;
-  page?: number;       // 기본 1
-  pageSize?: number;   // 기본 12
+  page?: number; // 기본 1
+  pageSize?: number; // 기본 12
 }) {
   const page = params.page ?? 1;
   const pageSize = params.pageSize ?? 12;

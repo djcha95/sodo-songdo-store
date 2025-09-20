@@ -1,9 +1,6 @@
 // src/firebase/userService.ts
 
 
-import { auth, db, functions } from './firebaseConfig';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions'; 
 import {
   collection,
   query,
@@ -14,18 +11,21 @@ import {
   Timestamp,
   getDoc,
   updateDoc,
-} from 'firebase/firestore';
+} from 'firebase/firestore/lite';
 
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { UserDocument, PointLog, LoyaltyTier } from '@/types';
 import { POINT_POLICIES } from './pointService';
 import { calculateTier } from '@/utils/loyaltyUtils';
+import { getFirebaseServices } from './firebaseInit'; // ✅ firebaseInit import
+import { httpsCallable } from 'firebase/functions'; // ✅ httpsCallable import 추가
+
 
 // ---------------------------------------------------------------------------------
 // 👇👇👇 중요: 아래 두 값을 본인의 Firebase 프로젝트에 맞게 수정해주세요! 👇👇👇
 // ---------------------------------------------------------------------------------
 const FIREBASE_PROJECT_ID = 'sso-do'; // 예: sodomall-12345
-const FIREBASE_REGION = 'asia-northeast3';   // 예: asia-northeast3 (서울)
+const FIREBASE_REGION = 'asia-northeast3'; // 예: asia-northeast3 (서울)
 // ---------------------------------------------------------------------------------
 
 // Cloud Function URL을 동적으로 생성합니다.
@@ -48,72 +48,73 @@ const generateReferralCode = (length = 6): string => {
 /* 1. 로그인 시 사용자 문서 초기화 / 갱신                                */
 /* ------------------------------------------------------------------ */
 export const processUserSignIn = async (user: FirebaseUser, kakaoData: any | null): Promise<void> => {
-    const userRef = doc(db, 'users', user.uid);
-    const kakaoAccount = kakaoData?.kakao_account;
-    
-    const phoneNumber = kakaoAccount?.phone_number?.replace(/-/g, '') || null;
-    const phoneLast4 = phoneNumber ? phoneNumber.slice(-4) : undefined;
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
+  const userRef = doc(db, 'users', user.uid);
+  const kakaoAccount = kakaoData?.kakao_account;
 
-    await runTransaction(db, async (tx) => {
-        const snap = await tx.get(userRef);
-        if (snap.exists()) {
-            const userData = snap.data() as UserDocument;
-            const updates: Partial<UserDocument> = {
-                lastLoginDate: new Date().toISOString().split('T')[0],
-                photoURL: user.photoURL || userData.photoURL,
-                displayName: user.displayName || userData.displayName,
-                email: user.email || userData.email,
-            };
-            if (userData.referredBy === undefined) {
-                updates.referredBy = null;
-            }
-            if (phoneNumber && userData.phone !== phoneNumber) {
-                updates.phone = phoneNumber;
-                updates.phoneLast4 = phoneLast4;
-            } else if (!userData.phoneLast4 && phoneLast4) {
-                updates.phoneLast4 = phoneLast4;
-            }
-            tx.update(userRef, updates);
-        } else {
-            const signupPoints = POINT_POLICIES.NEW_USER_BASE.points;
-            const signupReason = POINT_POLICIES.NEW_USER_BASE.reason;
-            const now = new Date();
-            const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
+  const phoneNumber = kakaoAccount?.phone_number?.replace(/-/g, '') || null;
+  const phoneLast4 = phoneNumber ? phoneNumber.slice(-4) : undefined;
 
-            const initialPointLog: Omit<PointLog, 'id'> = {
-                amount: signupPoints,
-                reason: signupReason,
-                createdAt: Timestamp.now(),
-                expiresAt: Timestamp.fromDate(expirationDate),
-            };
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(userRef);
+    if (snap.exists()) {
+      const userData = snap.data() as UserDocument;
+      const updates: Partial<UserDocument> = {
+        lastLoginDate: new Date().toISOString().split('T')[0],
+        photoURL: user.photoURL || userData.photoURL,
+        displayName: user.displayName || userData.displayName,
+        email: user.email || userData.email,
+      };
+      if (userData.referredBy === undefined) {
+        updates.referredBy = null;
+      }
+      if (phoneNumber && userData.phone !== phoneNumber) {
+        updates.phone = phoneNumber;
+        updates.phoneLast4 = phoneLast4;
+      } else if (!userData.phoneLast4 && phoneLast4) {
+        updates.phoneLast4 = phoneLast4;
+      }
+      tx.update(userRef, updates);
+    } else {
+      const signupPoints = POINT_POLICIES.NEW_USER_BASE.points;
+      const signupReason = POINT_POLICIES.NEW_USER_BASE.reason;
+      const now = new Date();
+      const expirationDate = new Date(now.setFullYear(now.getFullYear() + 1));
 
-            const newDoc: UserDocument = {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                phone: phoneNumber,
-                phoneLast4: phoneLast4,
-                photoURL: user.photoURL,
-                role: 'customer',
-                createdAt: serverTimestamp(),
-                points: signupPoints,
-                loyaltyTier: '공구새싹',
-                pickupCount: 0,
-                noShowCount: 0,
-                lastLoginDate: new Date().toISOString().split('T')[0],
-                isSuspended: false,
-                gender: kakaoAccount?.gender || null,
-                ageRange: kakaoAccount?.age_range || null,
-                pointHistory: [initialPointLog as PointLog],
-                referralCode: generateReferralCode(),
-                referredBy: null,
-                nickname: '',
-                nicknameChanged: false,
-                hasCompletedTutorial: false,
-            };
-            tx.set(userRef, newDoc);
-        }
-    });
+      const initialPointLog: Omit<PointLog, 'id'> = {
+        amount: signupPoints,
+        reason: signupReason,
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromDate(expirationDate),
+      };
+
+      const newDoc: UserDocument = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        phone: phoneNumber,
+        phoneLast4: phoneLast4,
+        photoURL: user.photoURL,
+        role: 'customer',
+        createdAt: serverTimestamp(),
+        points: signupPoints,
+        loyaltyTier: '공구새싹',
+        pickupCount: 0,
+        noShowCount: 0,
+        lastLoginDate: new Date().toISOString().split('T')[0],
+        isSuspended: false,
+        gender: kakaoAccount?.gender || null,
+        ageRange: kakaoAccount?.age_range || null,
+        pointHistory: [initialPointLog as PointLog],
+        referralCode: generateReferralCode(),
+        referredBy: null,
+        nickname: '',
+        nicknameChanged: false,
+        hasCompletedTutorial: false,
+      };
+      tx.set(userRef, newDoc);
+    }
+  });
 };
 
 /* ------------------------------------------------------------------ */
@@ -123,6 +124,7 @@ export const submitReferralCode = async (code: string): Promise<string> => {
   if (!code) {
     throw new Error('초대 코드를 입력해주세요.');
   }
+  const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
   const processReferral = httpsCallable(functions, 'processReferralCode');
   try {
     const result = await processReferral({ code });
@@ -134,8 +136,9 @@ export const submitReferralCode = async (code: string): Promise<string> => {
 };
 
 export const skipReferralCode = async (userId: string): Promise<void> => {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { referredBy: '__SKIPPED__' });
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, { referredBy: '__SKIPPED__' });
 };
 
 /* ------------------------------------------------------------------ */
@@ -148,34 +151,36 @@ export const skipReferralCode = async (userId: string): Promise<void> => {
  * @param newRole 새로운 역할 ('customer', 'admin', 'master')
  */
 export const updateUserRole = async (targetUid: string, newRole: UserDocument['role']): Promise<string> => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-        throw new Error("인증된 관리자가 없습니다. 다시 로그인해주세요.");
-    }
+  const { auth } = await getFirebaseServices(); // ✅ 함수 내에서 auth 호출
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("인증된 관리자가 없습니다. 다시 로그인해주세요.");
+  }
 
-    // 1. 현재 로그인한 관리자의 ID 토큰을 가져옵니다. (서버 인증용)
-    const idToken = await currentUser.getIdToken();
+  // 1. 현재 로그인한 관리자의 ID 토큰을 가져옵니다. (서버 인증용)
+  const idToken = await currentUser.getIdToken();
 
-    // 2. 백엔드의 setUserRole HTTP 함수를 호출하여 실제 권한을 변경합니다.
-    const response = await fetch(`${setUserRoleUrl}?uid=${targetUid}&role=${newRole}`, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${idToken}`,
-        },
-    });
+  // 2. 백엔드의 setUserRole HTTP 함수를 호출하여 실제 권한을 변경합니다.
+  const response = await fetch(`${setUserRoleUrl}?uid=${targetUid}&role=${newRole}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${idToken}`,
+    },
+  });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Cloud Function Error:", errorText);
-        throw new Error(`역할 변경에 실패했습니다. (서버 응답: ${response.status})`);
-    }
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Cloud Function Error:", errorText);
+    throw new Error(`역할 변경에 실패했습니다. (서버 응답: ${response.status})`);
+  }
 
-    // 성공 메시지를 반환합니다.
-    return await response.text();
+  // 성공 메시지를 반환합니다.
+  return await response.text();
 };
 
 
 export const getUserDocById = async (userId: string): Promise<UserDocument | null> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const snap = await getDoc(doc(db, 'users', userId));
   return snap.exists() ? (snap.data() as UserDocument) : null;
 };
@@ -184,6 +189,7 @@ export const adjustUserCounts = async (userId: string, newPickupCount: number, n
   if (newPickupCount < 0 || newNoShowCount < 0) {
     throw new Error("횟수는 0 이상이어야 합니다.");
   }
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
   const newTier = calculateTier(newPickupCount, newNoShowCount);
   await updateDoc(userRef, {
@@ -195,6 +201,7 @@ export const adjustUserCounts = async (userId: string, newPickupCount: number, n
 };
 
 export const setManualTierForUser = async (userId: string, tier: LoyaltyTier | null): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
   if (tier) {
     await updateDoc(userRef, {
@@ -216,6 +223,7 @@ export const setManualTierForUser = async (userId: string, tier: LoyaltyTier | n
 
 export const getAllUsersForQuickCheck = async (): Promise<UserDocument[]> => {
   try {
+    const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
     const usersRef = collection(db, 'users');
     const querySnapshot = await getDocs(query(usersRef));
     const users = querySnapshot.docs.map(doc => ({
@@ -231,6 +239,7 @@ export const getAllUsersForQuickCheck = async (): Promise<UserDocument[]> => {
 
 export const runDataReaggregation = async (): Promise<{ success: boolean; message: string }> => {
   try {
+    const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
     const reaggregate = httpsCallable<void, { success: boolean; message: string }>(functions, 'reaggregateAllUserData');
     const result = await reaggregate();
     return result.data;
@@ -246,7 +255,7 @@ export const runDataReaggregation = async (): Promise<{ success: boolean; messag
 
 export const runGrant100PointsToAll = async (): Promise<{ success: boolean; message: string }> => {
   try {
-    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
     const grant = httpsCallable<void, { success: boolean; message: string }>(functions, 'grant100PointsToAllUsers');
     const result = await grant();
     return result.data;
@@ -262,6 +271,7 @@ export const runGrant100PointsToAll = async (): Promise<{ success: boolean; mess
 export const getUserById = async (userId: string): Promise<UserDocument | null> => {
   if (!userId) return null;
   try {
+    const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
 
@@ -269,7 +279,7 @@ export const getUserById = async (userId: string): Promise<UserDocument | null> 
       // 문서 데이터와 함께 문서 ID(uid)를 포함하여 반환합니다.
       return { uid: userSnap.id, ...userSnap.data() } as UserDocument;
     }
-    
+
     // 사용자를 찾지 못한 경우 null을 반환합니다.
     return null;
 

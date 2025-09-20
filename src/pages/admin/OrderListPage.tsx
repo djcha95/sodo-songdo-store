@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/common/Header';
 import { getUserOrders } from '../../firebase';
 import type { Order, OrderItem } from '../../types';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import "../customer/OrderHistoryPage.css";
 import { motion } from 'framer-motion';
 import { AiOutlineCheckCircle, AiOutlineCloseCircle, AiOutlineClockCircle, AiOutlineExclamationCircle } from 'react-icons/ai';

@@ -3,26 +3,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import toast from 'react-hot-toast';
-// ✅ [수정] 모든 서비스 함수는 @/firebase (index.ts)를 통해 가져옵니다.
 import { getAllUsersForQuickCheck, getAllProducts } from '@/firebase';
-// ✅ [수정] 핵심 기능인 functions는 firebaseConfig에서 직접 가져옵니다.
-import { functions } from '@/firebase/firebaseConfig';
+import { getFirebaseServices } from '@/firebase/firebaseInit';
 import { httpsCallable } from 'firebase/functions';
 import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, ProductItem } from '@/types';
 import { Search, User, Package, X, CheckCircle, PlusCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './CreateOrderPage.css';
 
-
-// ❌ const functions = getFunctions(); // 이 라인을 삭제하고
-// ✅ 우리가 만든 'functions' 인스턴스를 사용하도록 변경합니다.
-const createOrderAsAdminCallable = httpsCallable(functions, 'createOrderAsAdmin');
-
 const CreateOrderPage: React.FC = () => {
     useDocumentTitle('관리자 주문 생성');
 
-    // (이하 나머지 코드는 이전과 동일)
-    // State variables
     const [allUsers, setAllUsers] = useState<UserDocument[]>([]);
     const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -37,7 +28,11 @@ const CreateOrderPage: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<ProductItem | null>(null);
     const [quantity, setQuantity] = useState(1);
 
-    // Data fetching
+    const createOrderAsAdminCallable = useMemo(() => {
+        const functionsPromise = getFirebaseServices().then(services => services.functions);
+        return (payload: { targetUserId: string; item: OrderItem; }) => functionsPromise.then(functions => httpsCallable(functions, 'createOrderAsAdmin')(payload));
+    }, []);
+
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
@@ -57,7 +52,6 @@ const CreateOrderPage: React.FC = () => {
         fetchData();
     }, []);
 
-    // Memoized search results
     const filteredUsers = useMemo(() => {
         if (!userSearch) return [];
         return allUsers.filter(u =>
@@ -73,7 +67,6 @@ const CreateOrderPage: React.FC = () => {
         ).slice(0, 5);
     }, [productSearch, allProducts]);
 
-    // Reset functions
     const resetProductSelection = () => {
         setSelectedProduct(null);
         setSelectedRound(null);
@@ -88,7 +81,6 @@ const CreateOrderPage: React.FC = () => {
         setUserSearch('');
     };
     
-    // Handlers
     const handleSelectRound = (roundId: string) => {
         const round = selectedProduct?.salesHistory.find(r => r.roundId === roundId) || null;
         setSelectedRound(round);

@@ -2,13 +2,10 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-// ✅ [수정] 규칙에 맞게 import 경로를 분리합니다.
-import { auth, db } from '@/firebase/firebaseConfig';      // 규칙 1
-import { recordDailyVisit } from '@/firebase'; // 규칙 2
+import { doc, getDoc } from 'firebase/firestore/lite';
+import { getFirebaseServices } from '@/firebase/firebaseInit'; // ✅ firebaseInit 사용
+import { recordDailyVisit } from '@/firebase';
 import type { UserDocument } from '../types';
-
-console.log('5. AuthContext가 로드될 때의 db:', db);
 
 interface AuthContextType {
   user: User | null;
@@ -40,6 +37,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   const refreshUserDocument = useCallback(async () => {
+    const { auth, db } = await getFirebaseServices();
     if (auth.currentUser) {
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const userDocSnap = await getDoc(userRef);
@@ -50,39 +48,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   useEffect(() => {
-    // ✅ [수정] onSnapshot을 사용하지 않는 1회성 조회 로직으로 변경
-    const unsubscribeFromAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        setLoading(true);
-        try {
-          const userRef = doc(db, 'users', firebaseUser.uid);
-          const userDocSnap = await getDoc(userRef);
-          if (userDocSnap.exists()) {
-            const userData = { uid: userDocSnap.id, ...userDocSnap.data() } as UserDocument;
-            setUserDocument(userData);
-            recordDailyVisit(firebaseUser.uid);
-          } else {
+    let unsubscribe: (() => void) | undefined;
+
+    const initializeAuth = async () => {
+      const { auth, db } = await getFirebaseServices();
+      
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        setUser(firebaseUser);
+        if (firebaseUser) {
+          setLoading(true);
+          try {
+            const userRef = doc(db, 'users', firebaseUser.uid);
+            const userDocSnap = await getDoc(userRef);
+            if (userDocSnap.exists()) {
+              const userData = { uid: userDocSnap.id, ...userDocSnap.data() } as UserDocument;
+              setUserDocument(userData);
+              recordDailyVisit(firebaseUser.uid);
+            } else {
+              setUserDocument(null);
+            }
+          } catch (error) {
+            console.error("사용자 문서 조회 오류:", error);
             setUserDocument(null);
+          } finally {
+            setLoading(false);
           }
-        } catch (error) {
-          console.error("사용자 문서 조회 오류:", error);
+        } else {
           setUserDocument(null);
-        } finally {
           setLoading(false);
         }
-      } else {
-        setUserDocument(null);
-        setLoading(false);
-      }
-    });
+      });
+    };
+
+    initializeAuth();
+
     return () => {
-      unsubscribeFromAuth();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, []);
   
   const logout = useCallback(async () => {
     try {
+      const { auth } = await getFirebaseServices();
       await signOut(auth);
     } catch (error) {
       console.error("로그아웃 실패:", error);

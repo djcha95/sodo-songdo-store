@@ -2,7 +2,6 @@
 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from './firebaseConfig';
 import {
   collection,
   doc,
@@ -19,9 +18,10 @@ import {
   limit,
   startAfter,
   Timestamp,
-} from 'firebase/firestore';
-import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
+} from 'firebase/firestore/lite';
+import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore/lite';
 import type { Order, OrderStatus, OrderItem } from '@/types';
+import { getFirebaseServices } from './firebaseInit'; // ✅ firebaseInit import
 
 /**
  * @description 주문 생성 시 클라이언트가 사용자 정보를 직접 수정하지 않도록 변경합니다.
@@ -30,6 +30,7 @@ import type { Order, OrderStatus, OrderItem } from '@/types';
 export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
 ): Promise<{ orderId?: string }> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   let newOrderId: string | undefined = undefined;
 
   await runTransaction(db, async (transaction) => {
@@ -78,19 +79,19 @@ export const cancelOrder = async (
   options: { penaltyType: 'none' | 'late' } = { penaltyType: 'none' }
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
     const cancelOrderCallable = httpsCallable<
-        { orderId: string; penaltyType: 'none' | 'late' }, 
-        { success: boolean; message: string }
+      { orderId: string; penaltyType: 'none' | 'late' },
+      { success: boolean; message: string }
     >(functions, 'cancelOrder');
-    
-    const result = await cancelOrderCallable({ 
-      orderId: orderId, 
-      penaltyType: options.penaltyType 
+
+    const result = await cancelOrderCallable({
+      orderId: orderId,
+      penaltyType: options.penaltyType
     });
-    
+
     return result.data;
-  
+
   } catch (error: any) {
     console.error("Callable function 'cancelOrder' failed:", error);
     if (error.code && error.message) {
@@ -109,8 +110,9 @@ export const cancelOrder = async (
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
   if (orderIds.length === 0) return;
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
-  
+
   let timestampField: string | null = null;
   if (status === 'PICKED_UP') timestampField = 'pickedUpAt';
   if (status === 'PREPAID') timestampField = 'prepaidAt';
@@ -141,6 +143,7 @@ export const splitAndUpdateOrderStatus = async (
     throw new Error('픽업 수량은 1 이상이어야 합니다.');
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   await runTransaction(db, async (transaction) => {
     const originalOrderRef = doc(db, 'orders', originalOrderId);
     const originalOrderDoc = await transaction.get(originalOrderRef);
@@ -169,10 +172,10 @@ export const splitAndUpdateOrderStatus = async (
       splitFrom: originalOrderId,
       notes: `[${originalOrder.orderNumber}]에서 분할된 ${remainingStatus} 주문`,
     };
-    
+
     const newOrderRef = doc(collection(db, 'orders'));
     transaction.set(newOrderRef, remainingOrder);
-    
+
     const pickedUpItem: OrderItem = { ...originalItem, quantity: pickedUpQuantity };
     const pickedUpOrderUpdate = {
       items: [pickedUpItem],
@@ -181,7 +184,7 @@ export const splitAndUpdateOrderStatus = async (
       pickedUpAt: serverTimestamp(),
       notes: `[${newOrderRef.id}]로 ${remainingQuantity}개 분할 처리됨`,
     };
-    
+
     transaction.update(originalOrderRef, pickedUpOrderUpdate);
   });
 };
@@ -200,7 +203,7 @@ export const processPartialPickup = async (
   }
 
   try {
-    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
     const partialPickupCallable = httpsCallable<
       { orderId: string; pickedUpQuantity: number },
       { success: boolean; message: string }
@@ -229,11 +232,11 @@ export const splitBundledOrder = async (orderId: string): Promise<{ success: boo
   }
 
   try {
-    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
     const splitOrderCallable = httpsCallable<{ orderId: string }, { success: boolean, message: string }>(functions, 'splitBundledOrder');
-    
+
     const result = await splitOrderCallable({ orderId });
-    
+
     return result.data;
 
   } catch (error: any) {
@@ -255,14 +258,14 @@ export const revertFinalizedOrder = async (orderId: string, originalStatus: Orde
   }
 
   try {
-    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
     const revertOrderCallable = httpsCallable<
-      { orderId: string, originalStatus: OrderStatus }, 
+      { orderId: string, originalStatus: OrderStatus },
       { success: boolean, message: string }
     >(functions, 'revertFinalizedOrder');
-    
+
     const result = await revertOrderCallable({ orderId, originalStatus });
-    
+
     return result.data;
 
   } catch (error: any) {
@@ -281,6 +284,7 @@ export const revertFinalizedOrder = async (orderId: string, originalStatus: Orde
 
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   if (!userId) return [];
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const q = query(collection(db, 'orders'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
@@ -292,6 +296,7 @@ export const getUserOrdersPaginated = async (
   lastVisible: DocumentData | null
 ): Promise<{ orders: Order[], lastDoc: DocumentData | null }> => {
   if (!userId) return { orders: [], lastDoc: null };
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   let q = query(collection(db, 'orders'), where('userId', '==', userId), orderBy('createdAt', 'desc'), limit(pageSize));
   if (lastVisible) {
     q = query(collection(db, 'orders'), where('userId', '==', userId), orderBy('createdAt', 'desc'), startAfter(lastVisible), limit(pageSize));
@@ -307,6 +312,7 @@ export const getUserOrdersByPickupDatePaginated = async (
   orderDirection: OrderByDirection = 'desc', startDate?: string,
 ): Promise<{ orders: Order[], lastDoc: DocumentData | null }> => {
   if (!userId) return { orders: [], lastDoc: null };
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const baseConditions: any[] = [where('userId', '==', userId)];
   if (startDate) { baseConditions.push(where('pickupDate', '>=', new Date(startDate))); }
   let q = query(collection(db, 'orders'), ...baseConditions, orderBy('pickupDate', orderDirection), limit(pageSize));
@@ -320,6 +326,7 @@ export const getUserOrdersByPickupDatePaginated = async (
 };
 
 export const getAllOrdersForAdmin = async (): Promise<Order[]> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
@@ -327,12 +334,14 @@ export const getAllOrdersForAdmin = async (): Promise<Order[]> => {
 
 export const getOrdersByPhoneLast4 = async (phoneLast4: string): Promise<Order[]> => {
   if (!phoneLast4 || phoneLast4.length < 2) return [];
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const q = query(collection(db, 'orders'), where('customerInfo.phoneLast4', '==', phoneLast4), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
 
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const updateData: { status: OrderStatus; pickedUpAt?: FieldValue } = { status };
   if (status === 'PICKED_UP') { updateData.pickedUpAt = serverTimestamp(); }
   await updateDoc(doc(db, 'orders', orderId), updateData);
@@ -340,6 +349,7 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus): P
 
 export const updateOrderItemQuantity = async (orderId: string, itemId: string, newQuantity: number): Promise<void> => {
   if (newQuantity <= 0) { throw new Error("수량은 1 이상이어야 합니다."); }
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const orderRef = doc(db, 'orders', orderId);
   await runTransaction(db, async (transaction) => {
     const orderDoc = await transaction.get(orderRef);
@@ -357,11 +367,12 @@ export const updateOrderItemQuantity = async (orderId: string, itemId: string, n
 };
 
 export const revertOrderStatus = async (orderIds: string[], currentStatus: OrderStatus): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   orderIds.forEach(orderId => {
     const orderRef = doc(db, 'orders', orderId);
     const updateData: any = { status: 'RESERVED' };
-    if (currentStatus === 'PICKED_UP') { updateData.pickedUpAt = deleteField(); } 
+    if (currentStatus === 'PICKED_UP') { updateData.pickedUpAt = deleteField(); }
     else if (currentStatus === 'PREPAID') { updateData.prepaidAt = deleteField(); }
     batch.update(orderRef, updateData);
   });
@@ -369,19 +380,23 @@ export const revertOrderStatus = async (orderIds: string[], currentStatus: Order
 };
 
 export const updateOrderNotes = async (orderId: string, notes: string): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   await updateDoc(doc(db, 'orders', orderId), { notes });
 };
 
 export const toggleOrderBookmark = async (orderId: string, isBookmarked: boolean): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   await updateDoc(doc(db, 'orders', orderId), { isBookmarked });
 };
 
 export const deleteOrder = async (orderId: string): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const orderRef = doc(db, 'orders', orderId);
   await deleteDoc(orderRef);
 };
 
 export const deleteMultipleOrders = async (orderIds: string[]): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const batch = writeBatch(db);
   orderIds.forEach(orderId => {
     const orderRef = doc(db, 'orders', orderId);
@@ -392,6 +407,7 @@ export const deleteMultipleOrders = async (orderIds: string[]): Promise<void> =>
 
 export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> => {
   if (!searchTerm) return [];
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const isNumeric = /^\d+$/.test(searchTerm);
   const orderMap = new Map<string, Order>();
   if (isNumeric) {
@@ -419,6 +435,7 @@ export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> 
 };
 
 export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const quantitiesMap = new Map<string, number>();
   const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
   const querySnapshot = await getDocs(q);
@@ -437,6 +454,7 @@ export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> =
 };
 
 export const getPrepaidOrders = async (): Promise<Order[]> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const ordersRef = collection(db, 'orders');
   // 'PREPAID' 상태인 주문만 조회하고, 픽업 날짜 기준으로 오름차순 정렬합니다.
   const q = query(

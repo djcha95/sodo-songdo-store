@@ -4,8 +4,8 @@ import React from 'react';
 import Joyride, { type Step, type CallBackProps, STATUS, ACTIONS, EVENTS } from 'react-joyride'; // ✅ ACTIONS, EVENTS 추가
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firebaseConfig';
+import { doc, updateDoc } from 'firebase/firestore/lite';
+import { getFirebaseServices } from '@/firebase/firebaseInit'; // ✅ '관리자' 함수 import
 
 // 1. 메인 페이지 (ProductListPage) 튜토리얼 단계
 export const mainTourSteps: Step[] = [
@@ -193,9 +193,11 @@ const AppTour: React.FC<AppTourProps> = ({ steps, tourKey }) => {
       // ✅ 기존 로직 유지: 메인 튜토리얼을 한 번이라도 완료했는지 기록
       if (user?.uid && userDocument && !userDocument.hasCompletedTutorial) {
         try {
+          const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 받아오기
           const userRef = doc(db, 'users', user.uid);
           await updateDoc(userRef, { hasCompletedTutorial: true });
         } catch (error) {
+
           console.error("튜토리얼 완료 상태 업데이트 실패:", error);
         }
       }

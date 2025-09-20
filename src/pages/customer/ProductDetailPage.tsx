@@ -12,7 +12,7 @@ import { detailPageTourSteps } from '@/components/customer/AppTour';
 import { functions } from '@/firebase/firebaseConfig';
 import { getApp } from 'firebase/app';
 
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRound as OriginalSalesRound, OrderItem } from '@/types';

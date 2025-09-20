@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore/lite';
 import { db } from '@/firebase/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { useTutorial } from '@/context/TutorialContext';

@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-// ✅ [수정] onSnapshot -> getDoc
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
-// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
-import { db } from '@/firebase/firebaseConfig';
+import { doc, getDoc, updateDoc } from 'firebase/firestore/lite'; 
+import { getFirebaseServices } from '@/firebase/firebaseInit';
 import { getPointHistory, deleteUserDocument } from '@/firebase/pointService';
 import { updateUserRole, adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';
@@ -21,7 +19,7 @@ import {
 import PointManagementModal from '@/components/admin/PointManagementModal';
 import { formatPhoneNumber } from '@/utils/formatUtils';
 import type { UserDocument, PointLog, LoyaltyTier, Order, WaitlistInfo, OrderStatus } from '@/types';
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp } from 'firebase/firestore/lite';
 import './UserDetailPage.css';
 import { useAuth } from '@/context/AuthContext';
 
@@ -41,7 +39,6 @@ const orderStatusInfo: Record<OrderStatus, { label: string; className: string }>
     COMPLETED: { label: '처리완료', className: 'status-picked-up' },
     CANCELED: { label: '취소', className: 'status-canceled' },
     NO_SHOW: { label: '노쇼', className: 'status-no-show' },
-    // ✅ [추가] LATE_CANCELED 상태에 대한 정의 추가
     LATE_CANCELED: { label: '마감임박취소', className: 'status-canceled' },
 };
 
@@ -57,7 +54,6 @@ const UserDetailPage = () => {
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [activeTab, setActiveTab] = useState<Tab>('profile');
 
-    // --- 성능 최적화: 각 탭별 데이터 및 로딩 상태 분리 ---
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoadingOrders, setIsLoadingOrders] = useState(false);
     const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
@@ -68,16 +64,15 @@ const UserDetailPage = () => {
 
     useDocumentTitle(user ? `${user.displayName || '고객'}님의 정보` : '고객 정보');
 
-    // --- 성능 최적화: 초기에는 사용자 정보만 불러옵니다 ---
     useEffect(() => {
         if (!userId) {
             navigate('/admin/users');
             return;
         }
         setIsLoadingUser(true);
-        // ✅ [수정] 1회성 데이터 조회로 변경
         const fetchUser = async () => {
           try {
+            const { db } = await getFirebaseServices();
             const userRef = doc(db, 'users', userId);
             const docSnap = await getDoc(userRef);
             if (docSnap.exists()) {
@@ -97,7 +92,6 @@ const UserDetailPage = () => {
     }, [userId, navigate]);
 
 
-    // --- 성능 최적화: 탭이 변경될 때 해당 탭의 데이터를 처음 한 번만 불러옵니다 ---
     useEffect(() => {
         if (!userId || fetchedTabs.has(activeTab)) return;
 
@@ -169,9 +163,6 @@ const UserDetailPage = () => {
     );
 };
 
-
-// --- 서브 컴포넌트들 ---
-
 const UserDetailHeader: React.FC<{ user: UserDocument }> = ({ user }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const userTier = user.loyaltyTier || '공구새싹';
@@ -180,6 +171,7 @@ const UserDetailHeader: React.FC<{ user: UserDocument }> = ({ user }) => {
     const handleToggleSuspension = async () => {
         const newStatus = !user.isSuspended;
         const text = newStatus ? "제한" : "제한 해제";
+        const { db } = await getFirebaseServices();
         const promise = updateDoc(doc(db, 'users', user.uid), { isSuspended: newStatus });
         toast.promise(promise, { loading: `계정을 ${text} 처리하는 중...`, success: `계정이 성공적으로 ${text} 처리되었습니다.`, error: `계정 ${text} 처리에 실패했습니다.` });
     };
@@ -325,6 +317,7 @@ const UserInfoCard: React.FC<{ user: UserDocument }> = ({ user }) => {
             toast.error("닉네임은 7자 이하로 입력해주세요.");
             return;
         }
+        const { db } = await getFirebaseServices();
         const userRef = doc(db, 'users', user.uid);
         const promise = updateDoc(userRef, { nickname: nickname.trim() });
         toast.promise(promise, {
@@ -492,7 +485,6 @@ const OrderTable: React.FC<{ title: string; orders: Order[] }> = ({ title, order
                                 <td>{(order.createdAt as Timestamp)?.toDate().toLocaleDateString('ko-KR')}</td>
                                 <td>{order.items.map(item => item.productName).join(', ')}</td>
                                 <td>{order.items.reduce((acc, item) => acc + item.quantity, 0)}</td>
-                                {/* ✅ [수정] order.totalPrice가 undefined일 경우를 대비하여 기본값 0 설정 */}
                                 <td>{(order.totalPrice || 0).toLocaleString()}원</td>
                                 <td>{(order.pickupDate as Timestamp)?.toDate().toLocaleDateString('ko-KR')}</td>
                                 <td><span className={`status-badge-inline ${orderStatusInfo[order.status]?.className || ''}`}>{orderStatusInfo[order.status]?.label || order.status}</span></td>

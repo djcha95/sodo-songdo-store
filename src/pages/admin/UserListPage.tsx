@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { Link } from 'react-router-dom';
-import { collection, getDocs, query, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase/firebaseConfig';
+import { collection, getDocs, query, Timestamp } from 'firebase/firestore/lite';
+import { getFirebaseServices } from '@/firebase/firebaseInit';
 import {
 	Crown, Gem, Sparkles, ShieldAlert, ShieldX,
 	Search, ArrowUpDown, Database, ChevronsLeft, ChevronsRight
@@ -66,9 +66,9 @@ const UserListPage = () => {
 
 	useEffect(() => {
 		setIsLoading(true);
-        // ✅ [수정] 1회성 데이터 조회로 변경
         const fetchUsers = async () => {
           try {
+            const { db } = await getFirebaseServices();
             const usersQuery = query(collection(db, 'users'));
             const snapshot = await getDocs(usersQuery);
             const usersData = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser));
@@ -107,7 +107,6 @@ const UserListPage = () => {
 			const { key, direction } = sortConfig;
 			const dir = direction === 'asc' ? 1 : -1;
 
-			// ✅ [수정] points와 noShowCount를 명시적으로 숫자로 변환하여 정렬 오류를 근본적으로 해결
 			if (key === 'points' || key === 'noShowCount') {
 				const numA = Number(a[key as 'points' | 'noShowCount'] || 0);
 				const numB = Number(b[key as 'points' | 'noShowCount'] || 0);

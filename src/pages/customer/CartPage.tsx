@@ -10,7 +10,7 @@ import { cartPageTourSteps } from '@/components/customer/AppTour';
 import type { CartItem, OrderItem  } from '@/types';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import { ShoppingCart as CartIcon,  Plus, Minus, CalendarDays, Hourglass, Info, RefreshCw, XCircle, AlertTriangle, ShieldX, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';

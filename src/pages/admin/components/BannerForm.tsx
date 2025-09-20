@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Banner } from '../../../types';
 import { UploadCloud, Link2, ToggleLeft, ToggleRight, ImageIcon } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 
 interface BannerFormProps {
   currentBanner: Banner | null;

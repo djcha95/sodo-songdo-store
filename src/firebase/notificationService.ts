@@ -1,9 +1,12 @@
 // src/firebase/notificationService.ts
 
-import { db } from './firebaseConfig';
-// ✅ [수정] Firebase v9 SDK에 맞는 정확한 import 경로로 수정합니다.
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
+import {
+  collection,
+  addDoc,
+  serverTimestamp
+} from 'firebase/firestore/lite';
 import type { NotificationType as OriginalNotificationType } from '@/types';
+import { getFirebaseServices } from './firebaseInit'; // ✅ firebaseInit import
 
 // ✅ [수정] 대기 확정 알림 타입을 추가합니다. (이전 수정사항 유지)
 type NotificationType = OriginalNotificationType | 'WAITLIST_CONFIRMED';
@@ -27,8 +30,9 @@ export const createNotification = async (
   }
 
   try {
+    const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
     const notificationsColRef = collection(db, 'users', userId, 'notifications');
-    
+
     // ✅ [수정] 오타(notificationsColleRef -> notificationsColRef)를 수정합니다.
     await addDoc(notificationsColRef, {
       message,

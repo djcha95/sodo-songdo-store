@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-// ✅ [수정] onSnapshot -> getDocs
-import { getDocs, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
+import { getDocs, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore/lite';
 import toast from 'react-hot-toast';
-// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
-import { db } from '@/firebase/firebaseConfig';
+import { getFirebaseServices } from '@/firebase/firebaseInit';
 import type { Banner } from '@/types';
 import * as bannerService from '@/firebase/bannerService';
 
@@ -23,10 +21,10 @@ const BannerAdminPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // ✅ [수정] 1회성 데이터 조회로 변경
     const fetchBanners = async () => {
       setIsLoading(true);
       try {
+        const { db } = await getFirebaseServices();
         const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
         const snapshot = await getDocs(q);
         const bannersData = snapshot.docs.map(doc => ({
@@ -44,7 +42,6 @@ const BannerAdminPage: React.FC = () => {
     fetchBanners();
   }, []);
 
-  // react-hot-toast를 사용하므로 이 함수는 그대로 둡니다.
   const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
     switch (type) {
       case 'success':
@@ -129,7 +126,6 @@ const BannerAdminPage: React.FC = () => {
       );
     });
 
-    // toast.promise는 확인/취소 로직에는 적합하지 않아, boolean 결과를 직접 처리합니다.
     const confirmed = await confirmationPromise;
 
     if (confirmed) {
@@ -164,7 +160,8 @@ const BannerAdminPage: React.FC = () => {
     const [movedItem] = newBanners.splice(oldIndex, 1);
     newBanners.splice(newIndex, 0, movedItem);
     setBanners(newBanners);
-
+    
+    const { db } = await getFirebaseServices();
     const batch = writeBatch(db);
     newBanners.forEach((banner, index) => {
       const bannerRef = doc(db, 'banners', banner.id);
@@ -208,7 +205,6 @@ const BannerAdminPage: React.FC = () => {
           onReorder={handleReorder}
         />
       </div>
-      {/* ✅ [삭제] 삭제된 Notification 컴포넌트를 렌더링하는 부분 제거 */}
     </div>
   );
 };

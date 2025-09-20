@@ -1,10 +1,9 @@
 // src/context/NotificationContext.tsx
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-// ✅ [수정] db를 firebaseConfig에서 직접 가져옵니다 (lite 버전 사용)
-import { db } from '@/firebase/firebaseConfig';
-// ✅ [수정] onSnapshot -> getDocs
-import { collection, query, getDocs, orderBy, limit, doc, writeBatch, updateDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+// ✅ [수정] getFirebaseServices를 import 합니다.
+import { getFirebaseServices } from '@/firebase/firebaseInit';
+import { collection, query, getDocs, orderBy, limit, doc, writeBatch, updateDoc } from 'firebase/firestore/lite';
 import type { Notification } from '@/types';
 import { useAuth } from './AuthContext';
 
@@ -26,7 +25,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // ✅ [수정] 1회성으로 알림을 가져오는 함수
   const fetchNotifications = useCallback(async () => {
     if (!user?.uid) {
         setNotifications([]);
@@ -37,6 +35,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     setLoading(true);
     try {
+        // ✅ 함수 내에서 db를 받아옵니다.
+        const { db } = await getFirebaseServices();
         const notificationsRef = collection(db, 'users', user.uid, 'notifications');
         const q = query(notificationsRef, orderBy('timestamp', 'desc'), limit(50));
         const snapshot = await getDocs(q);
@@ -64,10 +64,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const markOneAsRead = useCallback(async (id: string) => {
     if (!user) return;
-    const notifRef = doc(db, 'users', user.uid, 'notifications', id);
     try {
+      // ✅ 함수 내에서 db를 받아옵니다.
+      const { db } = await getFirebaseServices();
+      const notifRef = doc(db, 'users', user.uid, 'notifications', id);
       await updateDoc(notifRef, { read: true });
-      // UI 즉시 반영
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
@@ -77,18 +78,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const markAllAsRead = useCallback(async () => {
     if (!user || unreadCount === 0) return;
-
-    const batch = writeBatch(db);
-    notifications.forEach(notification => {
-      if (!notification.read) {
-        const notifRef = doc(db, 'users', user.uid, 'notifications', notification.id);
-        batch.update(notifRef, { read: true });
-      }
-    });
-
+    
     try {
+      // ✅ 함수 내에서 db를 받아옵니다.
+      const { db } = await getFirebaseServices();
+      const batch = writeBatch(db);
+      notifications.forEach(notification => {
+        if (!notification.read) {
+          const notifRef = doc(db, 'users', user.uid, 'notifications', notification.id);
+          batch.update(notifRef, { read: true });
+        }
+      });
       await batch.commit();
-      // UI 즉시 반영
       setNotifications(prev => prev.map(n => ({...n, read: true})));
       setUnreadCount(0);
     } catch (error) {

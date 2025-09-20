@@ -4,8 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService'; 
-import { db } from '@/firebase/firebaseConfig';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { getFirebaseServices } from '@/firebase/firebaseInit';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore/lite';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
@@ -42,7 +42,6 @@ interface ActiveRaffleEvent {
     deadlineDate: Timestamp;
 }
 
-// ✅ [추가] ProductListPageAdmin.tsx의 유틸리티 함수들을 가져와서 사용합니다.
 const safeToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   if (timestamp instanceof Date) return timestamp;
@@ -55,7 +54,6 @@ const safeToDate = (timestamp: any): Date | null => {
   return null;
 };
 
-// ✅ [오류 수정] 사용하지 않는 secondaryDeadlineDate 관련 로직을 제거합니다.
 const getDeadlines = (round: SalesRound) => {
     const primaryEnd = round.deadlineDate ? dayjs(safeToDate(round.deadlineDate)) : null;
     return { primaryEnd };
@@ -126,6 +124,7 @@ const DashboardPage: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const { db } = await getFirebaseServices();
       const [productsResponse, allPendingOrders] = await Promise.all([
         getProducts(false, 9999),
         getDocs(query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))),
@@ -138,7 +137,6 @@ const DashboardPage: React.FC = () => {
         const order = doc.data() as Order;
         (order.items || []).forEach((item: OrderItem) => {
           const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-          // ✅ [수정] 묶음 수량을 반영하여 실제 재고 차감량을 계산합니다.
           const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
           
           if(order.status === 'RESERVED' && order.wasPrepaymentRequired) {
@@ -157,7 +155,6 @@ const DashboardPage: React.FC = () => {
 
       productsResponse.products.forEach((product: Product) => {
         product.salesHistory?.forEach((round: SalesRound) => {
-          // ✅ [수정] 그룹화 기준을 상품 등록일에서 '판매 게시일'로 변경합니다.
           const publishDate = round.publishAt && 'toDate' in round.publishAt ? formatDate(round.publishAt.toDate()) : '날짜 미지정';
 
           if (round.eventType === 'RAFFLE' && round.deadlineDate && Timestamp.now().toMillis() < round.deadlineDate.toMillis()) {
@@ -202,7 +199,6 @@ const DashboardPage: React.FC = () => {
       });
 
       const grouped = allDisplayItems.reduce((acc, item) => {
-        // ✅ [수정] publishDate를 기준으로 그룹화합니다.
         const dateKey = item.publishDate;
         if (!acc[dateKey]) {
           acc[dateKey] = [];
@@ -235,7 +231,6 @@ const DashboardPage: React.FC = () => {
     setStockInputs(prev => ({ ...prev, [groupId]: value }));
   };
 
-  // ✅ [추가] 변경된 재고를 한 번에 저장하는 함수
   const handleBulkStockSave = useCallback(async () => {
     const allItems = Object.values(initialData).flat();
     const updatePayload: { productId: string; roundId: string; variantGroupId: string; newStock: number; }[] = [];
@@ -270,7 +265,7 @@ const DashboardPage: React.FC = () => {
     toast.promise(promise, {
       loading: `${updatePayload.length}개 항목의 재고 업데이트 중...`,
       success: () => {
-        fetchData(); // 성공 후 데이터 새로고침
+        fetchData(); 
         return "재고가 성공적으로 업데이트되었습니다.";
       },
       error: "재고 업데이트 중 오류가 발생했습니다."
@@ -287,7 +282,6 @@ const DashboardPage: React.FC = () => {
           <TrendingUp size={28} />
           <h1>통합 판매 현황 대시보드</h1>
         </div>
-        {/* ✅ [추가] 재고 일괄 저장 버튼 */}
         <button 
           onClick={handleBulkStockSave} 
           className="dashboard-save-button"
@@ -324,7 +318,6 @@ const DashboardPage: React.FC = () => {
       {sortedDateKeys.length > 0 ? (
         sortedDateKeys.map(date => (
           <div key={date} className="dashboard-group">
-            {/* ✅ [수정] 그룹 타이틀을 '판매 게시일' 기준으로 변경 */}
             <h2 className="group-title">
               {date === '날짜 미지정' ? '판매 게시일 미지정' : `${date} 판매 게시 상품`}
             </h2>
@@ -347,7 +340,6 @@ const DashboardPage: React.FC = () => {
                   {initialData[date].map((item, index) => {
                     const remainingStock = item.configuredStock === -1 ? item.configuredStock : item.configuredStock - item.confirmedReservedQuantity;
                     
-                    // ✅ [추가] 1차 공구 마감 후 재고 확인이 필요한지 여부 판단
                     const { primaryEnd } = getDeadlines(item.round);
                     const statusText = getDynamicStatusText(item.round);
                     const isConfirmationNeeded = primaryEnd && dayjs().isAfter(primaryEnd) && !['판매종료', '매진', '응모종료', '추첨완료'].includes(statusText);
@@ -373,7 +365,6 @@ const DashboardPage: React.FC = () => {
                             ? <span className="unlimited-stock">무제한</span>
                             : `${remainingStock}`}
                         </td>
-                        {/* ✅ [수정] 재고 셀을 항상 input으로 표시하고, 확인 필요시 스타일 적용 */}
                         <td className={`stock-cell ${isConfirmationNeeded ? 'stock-confirmation-needed' : ''}`}>
                           <input
                             type="number"

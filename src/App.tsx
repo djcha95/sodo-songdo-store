@@ -56,6 +56,13 @@ const App: React.FC = () => {
     return () => clearTimeout(preloadTimer);
   }, [queryClient]); // ✅ [수정] 의존성 배열에 queryClient 추가
 
+  useEffect(() => {
+    console.log('--- Vercel 환경 변수 진단 시작 ---');
+    console.log('Project ID:', import.meta.env.VITE_FIREBASE_PROJECT_ID);
+    console.log('API Key (첫 5글자):', import.meta.env.VITE_FIREBASE_API_KEY?.substring(0, 5));
+    console.log('--- Vercel 환경 변수 진단 끝 ---');
+  }, []);
+
 
   return (
     <>

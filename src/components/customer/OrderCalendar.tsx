@@ -23,7 +23,7 @@ import { showPromiseToast } from '@/utils/toastUtils';
 // ✅ [수정] date-holidays 라이브러리를 제거하고 date-fns만 사용합니다.
 import { format, isSameDay, isSameMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore/lite';
 import type { Order, OrderStatus, UserDocument } from '../../types';
 import toast from 'react-hot-toast';
 import {

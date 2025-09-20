@@ -1,6 +1,5 @@
 // src/firebase/pointService.ts
 
-import { db } from './firebaseConfig';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
@@ -11,16 +10,17 @@ import {
   deleteDoc,
   getDoc,
   collection,
-} from 'firebase/firestore';
+} from 'firebase/firestore/lite';
 // ✅ [수정] OrderStatus에 'LATE_CANCELED' 타입을 추가해야 합니다 (types.ts 파일에서).
 import type { UserDocument, Order, OrderStatus, PointLog, LoyaltyTier } from '@/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
+import { getFirebaseServices } from './firebaseInit'; // ✅ firebaseInit import
 
 
 /**
  * @description 연속 출석 보상 정책
  */
-export const ATTENDANCE_MILESTONES: { [key: number]: { points: number; reason:string } } = {
+export const ATTENDANCE_MILESTONES: { [key: number]: { points: number; reason: string } } = {
   7: { points: 10, reason: '7일 연속 출석 달성!' },
   15: { points: 25, reason: '15일 연속 출석 달성!' },
   30: { points: 70, reason: '30일 연속 출석! (한달)' },
@@ -71,15 +71,15 @@ export const MISSION_REWARDS: { [missionId: string]: { points: number; reason: s
  * @description 주문 상태 변경에 따라 변경될 사용자 데이터를 계산하여 반환하는 함수
  * @important `types.ts` 파일에서 `UserDocument`의 `noShowCount` 타입을 `number`로 변경해야 합니다.
  */
-export const calculateUserUpdateByStatus = (
+export const calculateUserUpdateByStatus = async (
   userDoc: UserDocument,
   order: Order,
   newStatus: OrderStatus
-): {
-    updateData: Partial<UserDocument>;
-    pointLog: PointLog | null;
-    tierChange: { from: LoyaltyTier; to: LoyaltyTier } | null;
-} | null => {
+): Promise<{
+  updateData: Partial<UserDocument>;
+  pointLog: PointLog | null;
+  tierChange: { from: LoyaltyTier; to: LoyaltyTier } | null;
+} | null> => {
   let policy: { points: number; reason: string } | null = null;
   let pickupCountIncrement = 0;
   // ✅ [수정] 0.5 노쇼를 반영하기 위해 number 타입으로 변경
@@ -127,21 +127,26 @@ export const calculateUserUpdateByStatus = (
 
   let tierChange: { from: LoyaltyTier, to: LoyaltyTier } | null = null;
   if (oldTier !== newTier) {
-      tierChange = { from: oldTier, to: newTier };
+    tierChange = { from: oldTier, to: newTier };
   }
 
   const now = new Date();
   const expirationDate = new Date(now);
   expirationDate.setFullYear(expirationDate.getFullYear() + 1);
 
-  const pointLog: PointLog | null = policy ? {
-    id: doc(collection(db, 'users')).id,
-    amount: policy.points,
-    reason: policy.reason,
-    createdAt: Timestamp.now(),
-    orderId: order.id,
-    expiresAt: policy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
-  } : null;
+  const pointLog: PointLog | null = await (async () => {
+    if (!policy) return null;
+
+    const { db } = await getFirebaseServices();
+    return {
+      id: doc(collection(db, 'users')).id,
+      amount: policy.points,
+      reason: policy.reason,
+      createdAt: Timestamp.now(),
+      orderId: order.id,
+      expiresAt: policy.points > 0 ? Timestamp.fromDate(expirationDate) : null,
+    };
+  })();
 
   // ✅ [수정] noShowCount가 number 타입이어야 함 (types.ts에서 수정 필요)
   const updateData: Partial<UserDocument> & { pointHistory?: any } = {
@@ -161,18 +166,18 @@ export const calculateUserUpdateByStatus = (
 /**
  * @description 미션 완료 보상을 지급하는 Cloud Function 호출 함수
  */
-export const claimMissionReward = async (missionId: string, uniquePeriodId: string): Promise<{success: boolean, message: string}> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
+export const claimMissionReward = async (missionId: string, uniquePeriodId: string): Promise<{ success: boolean, message: string }> => {
+  const { functions } = await getFirebaseServices(); // ✅ 함수 내에서 functions 호출
   const claimReward = httpsCallable(functions, 'claimMissionReward');
 
   try {
     const result = await claimReward({ missionId, uniquePeriodId });
-    return (result.data as {success: boolean, message: string});
-  } catch(error: any) {
+    return (result.data as { success: boolean, message: string });
+  } catch (error: any) {
     console.error("미션 보상 요청 함수 호출 실패:", error);
     if (error.code && error.message) {
-        const message = (error.details as any)?.message || error.message;
-        throw new Error(message);
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
     }
     throw new Error('미션 보상을 요청하는 중 알 수 없는 오류가 발생했습니다.');
   }
@@ -194,6 +199,7 @@ export const adjustUserPoints = async (
     throw new Error('포인트 조정 값은 0이 될 수 없습니다.');
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
 
   await runTransaction(db, async (transaction) => {
@@ -237,6 +243,7 @@ export const updatePointLog = async (
     throw new Error('사용자 ID와 로그 ID는 필수입니다.');
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
 
   await runTransaction(db, async (transaction) => {
@@ -273,6 +280,7 @@ export const deletePointLog = async (userId: string, logId: string): Promise<voi
     throw new Error('사용자 ID와 로그 ID는 필수입니다.');
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
   await runTransaction(db, async (transaction) => {
     const userDoc = await transaction.get(userRef);
@@ -302,6 +310,7 @@ export const deleteMultiplePointLogs = async (userId: string, logIds: string[]):
     throw new Error('사용자 ID와 로그 ID 목록은 필수입니다.');
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
   await runTransaction(db, async (transaction) => {
     const userDoc = await transaction.get(userRef);
@@ -309,7 +318,7 @@ export const deleteMultiplePointLogs = async (userId: string, logIds: string[]):
 
     const userData = userDoc.data() as UserDocument;
     const history = (userData.pointHistory || []) as PointLog[];
-    
+
     let pointsToDeduct = 0;
     const logsToDelete = new Set(logIds);
 
@@ -322,11 +331,11 @@ export const deleteMultiplePointLogs = async (userId: string, logIds: string[]):
     });
 
     if (pointsToDeduct === 0 && newHistory.length === history.length) {
-        throw new Error('삭제할 포인트 내역을 찾을 수 없습니다.');
+      throw new Error('삭제할 포인트 내역을 찾을 수 없습니다.');
     }
 
     const newPoints = (userData.points || 0) - pointsToDeduct;
-    
+
     transaction.update(userRef, {
       points: newPoints,
       pointHistory: newHistory
@@ -344,6 +353,7 @@ export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
     return [];
   }
 
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userRef = doc(db, 'users', userId);
   const userDoc = await getDoc(userRef);
 
@@ -374,6 +384,7 @@ export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
  * @description 사용자의 일일 방문을 기록하고 포인트와 등급을 업데이트합니다.
  */
 export const recordDailyVisit = async (userId: string): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const todayStr = new Date().toISOString().split('T')[0];
   const userRef = doc(db, 'users', userId);
 
@@ -452,6 +463,7 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
  * @description 사용자 문서를 Firestore에서 삭제합니다. (주의: Authentication 계정은 직접 삭제하지 않음)
  */
 export const deleteUserDocument = async (userId: string): Promise<void> => {
+  const { db } = await getFirebaseServices(); // ✅ 함수 내에서 db 호출
   const userDocRef = doc(db, 'users', userId);
   await deleteDoc(userDocRef);
 };

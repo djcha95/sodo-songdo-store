@@ -1,6 +1,6 @@
 // src/firebase/generalService.ts
 
-import { db, storage } from './firebaseConfig'; // ✅ [수정] 경로를 직접 참조로 변경
+import { getFirebaseServices } from './firebaseInit'; // ✅ '관리자' 함수를 import
 import {
   collection,
   query,
@@ -12,9 +12,9 @@ import {
   writeBatch,
   addDoc,
   updateDoc,
-  getDocFromServer,
-} from 'firebase/firestore';
-import type { DocumentData, Query, DocumentReference } from 'firebase/firestore';
+  getDoc,
+} from 'firebase/firestore/lite';
+import type { DocumentData, Query, DocumentReference } from 'firebase/firestore/lite';
 import {
   ref,
   uploadBytes,
@@ -29,6 +29,7 @@ import type {
 
 // --- Helper Functions ---
 export const uploadImages = async (files: File[], path: string): Promise<string[]> => {
+  const { storage } = await getFirebaseServices(); // ✅ storage 인스턴스 받아오기
   const uploadPromises = files.map(file => {
     const storageRef: StorageReference = ref(storage, `${path}/${uuidv4()}-${file.name}`);
     return uploadBytes(storageRef, file).then(snapshot => getDownloadURL(snapshot.ref));
@@ -38,6 +39,7 @@ export const uploadImages = async (files: File[], path: string): Promise<string[
 
 // --- Category Functions ---
 export const getCategories = async (): Promise<Category[]> => {
+    const { db } = await getFirebaseServices(); // ✅ db 인스턴스 받아오기
     const q: Query<DocumentData> = query(collection(db, 'categories'));
     const snapshot = await getDocs(q);
     const categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
@@ -51,15 +53,18 @@ export const getCategories = async (): Promise<Category[]> => {
 };
 
 export const addCategory = async (categoryData: Omit<Category, 'id'>) => {
+    const { db } = await getFirebaseServices();
     await addDoc(collection(db, 'categories'), categoryData);
 };
 
 export const updateCategory = async (categoryId: string, categoryData: Partial<Category>) => {
+    const { db } = await getFirebaseServices();
     const categoryRef: DocumentReference<DocumentData> = doc(db, 'categories', categoryId);
     await updateDoc(categoryRef, categoryData);
 };
 
 export const updateCategoriesOrder = async (categories: Category[]) => {
+    const { db } = await getFirebaseServices();
     const batch = writeBatch(db);
     categories.forEach((category, index) => {
         const categoryRef = doc(db, 'categories', category.id);
@@ -69,6 +74,7 @@ export const updateCategoriesOrder = async (categories: Category[]) => {
 };
 
 export const deleteCategory = async (categoryId: string, categoryName: string) => {
+    const { db } = await getFirebaseServices();
     const batch = writeBatch(db);
 
     const categoryRef = doc(db, 'categories', categoryId);
@@ -89,6 +95,7 @@ export const deleteCategory = async (categoryId: string, categoryName: string) =
 };
 
 export const getProductsCountByCategory = async (): Promise<Record<string, number>> => {
+  const { db } = await getFirebaseServices();
   const productsQuery = query(collection(db, 'products'), where('isArchived', '==', false));
   const snapshot = await getDocs(productsQuery);
   
@@ -106,6 +113,7 @@ export const getProductsCountByCategory = async (): Promise<Record<string, numbe
 
 // --- Banner Functions ---
 export const getActiveBanners = async (): Promise<Banner[]> => {
+    const { db } = await getFirebaseServices();
     const q: Query<DocumentData> = query(collection(db, 'banners'), where('isActive', '==', true), orderBy('order', 'asc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Banner));
@@ -115,18 +123,21 @@ export const getActiveBanners = async (): Promise<Banner[]> => {
 const STORE_INFO_DOC_ID = 'main'; // 매장 정보는 하나의 문서로 관리
 
 export const getStoreInfo = async (): Promise<StoreInfo | null> => {
+    const { db } = await getFirebaseServices();
     const docRef = doc(db, 'storeInfo', STORE_INFO_DOC_ID);
-    const docSnap = await getDocFromServer(docRef);
+    const docSnap = await getDoc(docRef); // ✅ getDoc으로 변경
     return docSnap.exists() ? docSnap.data() as StoreInfo : null;
 };
 
 export const updateStoreInfo = async (storeData: StoreInfo): Promise<void> => {
+    const { db } = await getFirebaseServices();
     const docRef = doc(db, 'storeInfo', STORE_INFO_DOC_ID);
     await setDoc(docRef, storeData, { merge: true });
 };
 
 // DailyDashboardModal 컴포넌트에서 사용할 데이터 조회 함수
 export const getDailyDashboardData = async () => {
+    const { db } = await getFirebaseServices();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);

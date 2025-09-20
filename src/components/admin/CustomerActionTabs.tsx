@@ -1,7 +1,7 @@
 // src/components/admin/CustomerActionTabs.tsx
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp } from 'firebase/firestore/lite';
 import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatus } from '@/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {

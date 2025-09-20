@@ -1,12 +1,12 @@
 // src/types.ts
 
 // ✅ 프론트엔드용 import (src/types.ts 에서 사용)
-import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore';
+import type { Timestamp, FieldValue, DocumentData } from 'firebase/firestore/lite';
 
 /*
 // ✅ 백엔드용 import (functions/src/types.ts 에서 사용)
 import type { Timestamp, FieldValue } from "firebase-admin/firestore";
-import type { DocumentData } from "firebase/firestore"; // DocumentData는 클라이언트 SDK에서 가져오는 것이 유용할 때가 있습니다.
+import type { DocumentData } from "firebase/firestore/lite"; // DocumentData는 클라이언트 SDK에서 가져오는 것이 유용할 때가 있습니다.
 */
 
 
