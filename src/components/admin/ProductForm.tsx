@@ -29,7 +29,7 @@ import type {
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift, Ticket
+  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift, Ticket // ✅ Ticket 아이콘 추가
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
@@ -258,7 +258,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [pickupDate, setPickupDate] = useState<Date | null>(null);
   const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
-  const [raffleDrawDate, setRaffleDrawDate] = useState<Date | null>(null);
+  const [raffleDrawDate, setRaffleDrawDate] = useState<Date | null>(null); // ✅ [추가] 추첨일 상태
 
   const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -270,10 +270,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isParsingWithAI, setIsParsingWithAI] = useState(false);
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'RAFFLE'>('NONE');
-
-  // ✅ [수정] updateOrdersForPickupDateChange callable 함수 추가
-  const updateOrdersForPickupDateChange = useMemo(() => httpsCallable(functions, 'updateOrdersForPickupDateChange'), [functions]);
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'RAFFLE'>('NONE'); // ✅ [수정] 이벤트 타입 확장
 
 
   useEffect(() => {
@@ -401,7 +398,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             setDeadlineDate(convertToDate(roundData.deadlineDate));
             setPickupDate(convertToDate(roundData.pickupDate));
             setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate));
-            setRaffleDrawDate(convertToDate(roundData.raffleDrawDate));
+            setRaffleDrawDate(convertToDate(roundData.raffleDrawDate)); // ✅ [추가] 추첨일 로드
           }
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
@@ -430,7 +427,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   }, [mode, variantGroups.length]);
 
   useEffect(() => {
-    if (mode === 'editRound' || eventType === 'RAFFLE') return;
+    if (mode === 'editRound' || eventType === 'RAFFLE') return; // ✅ [수정] 수정 모드 및 추첨 이벤트에서는 자동 변경 안 함
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
@@ -446,7 +443,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     const finalDeadline = deadline.hour(13).minute(0).second(0).millisecond(0).toDate();
 
     setDeadlineDate(finalDeadline);
-  }, [publishDate, mode, eventType]);
+  }, [publishDate, mode, eventType]); // ✅ [수정] eventType 의존성 추가
 
     // ✅ [추가] 추첨 이벤트 선택 시 날짜 자동 설정
     useEffect(() => {
@@ -757,9 +754,9 @@ const settingsSummary = useMemo(() => {
     const pickupText = pickupDate ? toYmd(pickupDate) : '미설정';
     const pickupDeadlineText = pickupDeadlineDate ? toYmd(pickupDeadlineDate) : '미설정';
    const participationText = isSecretProductEnabled ? `${secretTiers.join(', ')} 등급만` : '모두 참여 가능';
-    const raffleDrawText = raffleDrawDate ? toDateTimeLocal(raffleDrawDate).replace('T', ' ') : '미설정';
+    const raffleDrawText = raffleDrawDate ? toDateTimeLocal(raffleDrawDate).replace('T', ' ') : '미설정'; // ✅ [추가]
    return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText, raffleDrawText };
- }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers, raffleDrawDate]);
+ }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers, raffleDrawDate]); // ✅ [추가]
 
   const handleSubmit = async (isDraft: boolean = false) => {
     setIsSubmitting(true);
@@ -799,7 +796,7 @@ const settingsSummary = useMemo(() => {
         roundName: roundName.trim(),
         status,
         eventType: eventType === 'NONE' ? null : eventType,
-        raffleDrawDate: eventType === 'RAFFLE' && raffleDrawDate ? Timestamp.fromDate(raffleDrawDate) : null,
+        raffleDrawDate: eventType === 'RAFFLE' && raffleDrawDate ? Timestamp.fromDate(raffleDrawDate) : null, // ✅ [추가]
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
@@ -821,13 +818,13 @@ const settingsSummary = useMemo(() => {
             id: vg.id || generateUniqueId(),
             groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
             totalPhysicalStock: finalTotalPhysicalStock,
-            stockUnitType: eventType === 'RAFFLE' ? '명' : vg.stockUnitType,
+            stockUnitType: eventType === 'RAFFLE' ? '명' : vg.stockUnitType, // ✅ [수정]
             items: vg.items.map(item => ({
               id: item.id || generateUniqueId(),
               name: item.name,
-              price: eventType === 'RAFFLE' ? 0 : (Number(item.price) || 0),
+              price: eventType === 'RAFFLE' ? 0 : (Number(item.price) || 0), // ✅ [수정]
               stock: -1,
-              limitQuantity: eventType === 'RAFFLE' ? 1 : (item.limitQuantity === '' ? null : Number(item.limitQuantity)),
+              limitQuantity: eventType === 'RAFFLE' ? 1 : (item.limitQuantity === '' ? null : Number(item.limitQuantity)), // ✅ [수정]
               expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
               stockDeductionAmount: Number(item.deductionAmount) || 1
             }))
@@ -868,29 +865,12 @@ const settingsSummary = useMemo(() => {
         if (initialProduct?.category !== currentCategoryName) changes.push(`카테고리: ${initialProduct?.category} -> ${currentCategoryName}`);
 
         if (initialRound?.roundName !== salesRoundData.roundName) changes.push(`회차명: ${initialRound?.roundName} -> ${salesRoundData.roundName}`);
-        
-        // ✅ [수정] 픽업 날짜 변경 감지 및 주문 내역 업데이트 로직
-        const isPickupDateChanged = toYmd(convertToDate(initialRound?.pickupDate)) !== toYmd(salesRoundData.pickupDate?.toDate() || null);
-        const isPickupDeadlineChanged = toYmd(convertToDate(initialRound?.pickupDeadlineDate)) !== toYmd(salesRoundData.pickupDeadlineDate?.toDate() || null);
-        
-        if (isPickupDateChanged) changes.push(`픽업 시작일 변경`);
-        if (isPickupDeadlineChanged) changes.push(`픽업 마감일 변경`);
-
+        if (toYmd(convertToDate(initialRound?.pickupDate)) !== toYmd(convertToDate(salesRoundData.pickupDate))) changes.push(`픽업 시작일 변경`);
+        if (toYmd(convertToDate(initialRound?.pickupDeadlineDate)) !== toYmd(convertToDate(salesRoundData.pickupDeadlineDate))) changes.push(`픽업 마감일 변경`);
         if (JSON.stringify(initialRound?.variantGroups) !== JSON.stringify(salesRoundData.variantGroups)) changes.push('가격/옵션 정보 변경');
 
         if (changes.length > 0 && !isDraft) {
             try {
-                // ✅ [수정] 픽업 날짜 변경 시 주문 내역 업데이트 함수 호출
-                if (isPickupDateChanged || isPickupDeadlineChanged) {
-                    await updateOrdersForPickupDateChange({
-                        productId,
-                        roundId,
-                        newPickupDate: salesRoundData.pickupDate,
-                        newPickupDeadlineDate: salesRoundData.pickupDeadlineDate,
-                    });
-                    toast.success('주문 내역의 픽업 날짜가 자동으로 업데이트되었습니다.');
-                }
-                
                 const notifyUsersOfProductUpdate = httpsCallable(functions, 'notifyUsersOfProductUpdate');
                 await notifyUsersOfProductUpdate({
                     productId,
