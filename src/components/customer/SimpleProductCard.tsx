@@ -95,8 +95,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             });
             toast.dismiss(toastId);
             showToast('success', `${product.groupName} 이벤트 응모가 완료되었습니다!`);
-            // TODO: 응모 완료 상태를 UI에 반영하기 위해 userDocument를 새로고침하거나 상태를 관리해야 합니다.
-            // 이 예제에서는 간단히 버튼을 비활성화하는 것으로 처리합니다.
             e.currentTarget.setAttribute('disabled', 'true');
 
         } catch (error: any) {
@@ -307,13 +305,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             );
         }
 
-        if (displayRound.eventType === 'CHUSEOK') {
-            return (
-                <span className="stock-badge event-badge-chuseok">
-                    <Star size={12} /> 추석특가 상품
-                </span>
-            );
-        }
+        // ✅ [삭제] 'CHUSEOK' 이벤트 배지 렌더링 로직을 제거합니다.
 
         if (isMultiOption) {
             const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
@@ -431,7 +423,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         ? `추첨: ${dayjs(safeToDate(cardData.displayRound.raffleDrawDate)).locale('ko').format('M/D(ddd) HH:mm')}`
         : dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');
 
-    const isEventProduct = cardData.displayRound.eventType === 'CHUSEOK' || cardData.displayRound.eventType === 'RAFFLE';
+    // ✅ [수정] isEventProduct가 이제 raffle 이벤트만 감지합니다.
+    const isEventProduct = cardData.displayRound.eventType === 'RAFFLE';
     const cardClassName = `simple-product-card ${isEventProduct ? `event-card-${cardData.displayRound.eventType?.toLowerCase()}` : ''}`;
 
 

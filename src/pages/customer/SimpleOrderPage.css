@@ -34,10 +34,7 @@
     line-height: 1.2;
 }
 
-.tab-btn.event-tab.active {
-    color: #DAA520;
-    border-bottom-color: #FFD700;
-}
+/* ✅ [삭제] event-tab 관련 스타일을 제거합니다. */
 .tab-btn.primary-tab.active {
     color: #E65100;
     border-bottom-color: #FF9800;
