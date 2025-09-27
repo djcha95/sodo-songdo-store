@@ -4,53 +4,60 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
-// ✅ [추가] App Check 관련 모듈 import
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
-
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 /**
- * 프로덕션 배포 환경에서 .env 변수를 불러오지 못했을 경우를 대비한 안전장치(Fallback) 데이터입니다.
+ * 프로덕션에서 환경변수 누락 시 대비한 Fallback
+ * (가능하면 모든 값은 .env로 제공하세요)
  */
 const FALLBACK = {
   apiKey: "AIzaSyBLN5zX4RT8AHIuNQjvPCdz2qXRJpjzWCs",
   authDomain: "sso-do.firebaseapp.com",
   projectId: "sso-do",
-  storageBucket: "sso-do.firebasestorage.app",
+  storageBucket: "sso-do.appspot.com",
   messagingSenderId: "891505365318",
   appId: "1:891505365318:web:32a1ba57ca360f288c9547",
+  region: "asia-northeast3",
 };
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? FALLBACK.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? FALLBACK.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? FALLBACK.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? FALLBACK.storageBucket,
+  messagingSenderId:
+    import.meta.env.VITE_FIREBASE_SENDER_ID ?? FALLBACK.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? FALLBACK.appId,
+};
+
+export const app = initializeApp(firebaseConfig);
 
 /**
- * Firebase 설정 객체입니다.
+ * App Check 초기화 (브라우저에서 한 번만)
+ * - 반드시 v3 사이트키(.env: VITE_APP_CHECK_SITE_KEY) 사용
+ * - 중복 초기화 방지 플래그 추가
  */
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || (import.meta.env.PROD ? FALLBACK.apiKey : ""),
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (import.meta.env.PROD ? FALLBACK.authDomain : ""),
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || (import.meta.env.PROD ? FALLBACK.projectId : ""),
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (import.meta.env.PROD ? FALLBACK.storageBucket : ""),
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (import.meta.env.PROD ? FALLBACK.messagingSenderId : ""),
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || (import.meta.env.PROD ? FALLBACK.appId : ""),
-};
-
-// Firebase 앱 초기화
-const app = initializeApp(firebaseConfig);
-
-// ✅ [추가] App Check 초기화 코드
-// 중요: 이 코드는 다른 Firebase 서비스(auth, firestore 등)를 초기화하기 전에 위치하는 것이 좋습니다.
-if (typeof window !== 'undefined') {
-  // 2단계에서 발급받은 '사이트 키'를 여기에 붙여넣으세요.
-  // 키는 따옴표 안에 문자열로 넣어야 합니다.
-  const appCheck = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider('6LfS38ErAAAAAKQYHGcIieHQ4PeMpdx4DZx7JYIp'),
-    isTokenAutoRefreshEnabled: true
-  });
+if (typeof window !== "undefined") {
+  const w = window as unknown as { __appCheckInited?: boolean };
+  if (!w.__appCheckInited) {
+    const siteKey = import.meta.env.VITE_APP_CHECK_SITE_KEY;
+    if (!siteKey) {
+      // 개발 중 확인용 로그 (배포 후 콘솔에 남기고 싶지 않으면 제거)
+      console.warn("[AppCheck] VITE_APP_CHECK_SITE_KEY is missing.");
+    } else {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(siteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      w.__appCheckInited = true;
+    }
+  }
 }
 
-
-// 다른 파일에서 사용할 수 있도록 Firebase 서비스들을 내보냅니다.
+// Firebase 서비스 export
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const functions = getFunctions(app, "asia-northeast3");
+export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_REGION ?? FALLBACK.region);
 
 export default app;

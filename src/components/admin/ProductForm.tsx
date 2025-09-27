@@ -1,9 +1,10 @@
 // src/components/admin/ProductForm.tsx
 
+// [수정] 'a,' 오타를 제거하고 React Hooks를 올바르게 import 합니다.
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
-import axios from 'axios';
+// import axios from 'axios'; // 사용되지 않으므로 제거
 import {
   addProductWithFirstRound,
   addNewSalesRound,
@@ -29,7 +30,7 @@ import type {
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift, Ticket // ✅ Ticket 아이콘 추가
+  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift, Ticket
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
@@ -258,7 +259,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [pickupDate, setPickupDate] = useState<Date | null>(null);
   const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
-  const [raffleDrawDate, setRaffleDrawDate] = useState<Date | null>(null); // ✅ [추가] 추첨일 상태
+  const [raffleDrawDate, setRaffleDrawDate] = useState<Date | null>(null);
 
   const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -270,7 +271,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isParsingWithAI, setIsParsingWithAI] = useState(false);
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'RAFFLE'>('NONE'); // ✅ [수정] 이벤트 타입 확장
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'RAFFLE'>('NONE');
 
 
   useEffect(() => {
@@ -398,7 +399,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             setDeadlineDate(convertToDate(roundData.deadlineDate));
             setPickupDate(convertToDate(roundData.pickupDate));
             setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate));
-            setRaffleDrawDate(convertToDate(roundData.raffleDrawDate)); // ✅ [추가] 추첨일 로드
+            setRaffleDrawDate(convertToDate(roundData.raffleDrawDate));
           }
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
@@ -427,7 +428,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   }, [mode, variantGroups.length]);
 
   useEffect(() => {
-    if (mode === 'editRound' || eventType === 'RAFFLE') return; // ✅ [수정] 수정 모드 및 추첨 이벤트에서는 자동 변경 안 함
+    if (mode === 'editRound' || eventType === 'RAFFLE') return;
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
@@ -443,19 +444,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     const finalDeadline = deadline.hour(13).minute(0).second(0).millisecond(0).toDate();
 
     setDeadlineDate(finalDeadline);
-  }, [publishDate, mode, eventType]); // ✅ [수정] eventType 의존성 추가
+  }, [publishDate, mode, eventType]);
 
-    // ✅ [추가] 추첨 이벤트 선택 시 날짜 자동 설정
     useEffect(() => {
         if (eventType === 'RAFFLE') {
             const baseDate = dayjs(publishDate);
-            // 금요일 발행 기준, 다음 주 월요일 오전 12시(정오)로 마감일 설정
             const deadline = baseDate.day(8).hour(12).minute(0).second(0).millisecond(0);
             setDeadlineDate(deadline.toDate());
-            // 추첨일은 마감일과 동일하게 설정 (관리자가 추후 변경 가능)
             setRaffleDrawDate(deadline.toDate());
 
-            // 가격 0원, 단일 옵션으로 강제
             setVariantGroups(prev => {
                 const firstVg = prev[0] || {
                     id: generateUniqueId(), groupName: groupName || '', totalPhysicalStock: 70, stockUnitType: '명', expirationDate: null, items: []
@@ -572,7 +569,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    const files = Array.from(e.target.files).filter(file => {
+    // [수정] 콜백 함수의 file 파라미터에 File 타입을 명시하여 타입 추론 오류를 해결합니다.
+    const files = Array.from(e.target.files).filter((file: File) => {
       if (file.size > MAX_FILE_SIZE) {
         toast.error(`'${file.name}' 파일 크기가 너무 큽니다 (최대 5MB).`);
         return false;
@@ -585,7 +583,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     setImagePreviews(prev => {
       const next = [...prev];
       const nextMap = new Map(previewUrlToFile);
-      files.forEach(file => {
+      // [수정] 콜백 함수의 file 파라미터에 File 타입을 명시합니다.
+      files.forEach((file: File) => {
         const url = URL.createObjectURL(file);
         next.push(url);
         nextMap.set(url, file);
@@ -738,8 +737,10 @@ const handleAIParse = async () => {
     applyParsed(data);
     toast.success('AI 분석 완료! 자동 입력 내용을 확인해주세요.');
   } catch (err: any) {
-    const msg = err?.message || err?.details?.message || 'AI 분석 중 오류가 발생했습니다.';
-    toast.error(msg);
+    // [수정] 오류 객체에서 더 상세한 메시지를 추출하여 보여줍니다.
+    const errorMessage = err?.details?.message || err.message || 'AI 분석 중 오류가 발생했습니다.';
+    const finalMessage = `AI 분석 실패: ${errorMessage}`;
+    toast.error(finalMessage);
     reportError('ProductForm.handleAIParse', err);
   } finally {
     setIsParsingWithAI(false);
@@ -754,9 +755,9 @@ const settingsSummary = useMemo(() => {
     const pickupText = pickupDate ? toYmd(pickupDate) : '미설정';
     const pickupDeadlineText = pickupDeadlineDate ? toYmd(pickupDeadlineDate) : '미설정';
    const participationText = isSecretProductEnabled ? `${secretTiers.join(', ')} 등급만` : '모두 참여 가능';
-    const raffleDrawText = raffleDrawDate ? toDateTimeLocal(raffleDrawDate).replace('T', ' ') : '미설정'; // ✅ [추가]
+    const raffleDrawText = raffleDrawDate ? toDateTimeLocal(raffleDrawDate).replace('T', ' ') : '미설정';
    return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText, raffleDrawText };
- }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers, raffleDrawDate]); // ✅ [추가]
+ }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers, raffleDrawDate]);
 
   const handleSubmit = async (isDraft: boolean = false) => {
     setIsSubmitting(true);
@@ -796,7 +797,7 @@ const settingsSummary = useMemo(() => {
         roundName: roundName.trim(),
         status,
         eventType: eventType === 'NONE' ? null : eventType,
-        raffleDrawDate: eventType === 'RAFFLE' && raffleDrawDate ? Timestamp.fromDate(raffleDrawDate) : null, // ✅ [추가]
+        raffleDrawDate: eventType === 'RAFFLE' && raffleDrawDate ? Timestamp.fromDate(raffleDrawDate) : null,
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
@@ -818,13 +819,13 @@ const settingsSummary = useMemo(() => {
             id: vg.id || generateUniqueId(),
             groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
             totalPhysicalStock: finalTotalPhysicalStock,
-            stockUnitType: eventType === 'RAFFLE' ? '명' : vg.stockUnitType, // ✅ [수정]
+            stockUnitType: eventType === 'RAFFLE' ? '명' : vg.stockUnitType,
             items: vg.items.map(item => ({
               id: item.id || generateUniqueId(),
               name: item.name,
-              price: eventType === 'RAFFLE' ? 0 : (Number(item.price) || 0), // ✅ [수정]
+              price: eventType === 'RAFFLE' ? 0 : (Number(item.price) || 0),
               stock: -1,
-              limitQuantity: eventType === 'RAFFLE' ? 1 : (item.limitQuantity === '' ? null : Number(item.limitQuantity)), // ✅ [수정]
+              limitQuantity: eventType === 'RAFFLE' ? 1 : (item.limitQuantity === '' ? null : Number(item.limitQuantity)),
               expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
               stockDeductionAmount: Number(item.deductionAmount) || 1
             }))

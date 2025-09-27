@@ -1,28 +1,40 @@
 // functions/src/firebase/admin.ts
-
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
-// ✅ [최종 수정] admin 라이브러리를 불러오는 방식을 변경합니다.
-// 'import * as admin' 대신 default export를 가져옵니다.
+import { getAppCheck } from "firebase-admin/app-check";
 import admin from "firebase-admin";
 
-// 앱 초기화 (반드시 한 번만 실행)
+// 중복 초기화 방지
 if (admin.apps.length === 0) {
   initializeApp();
 }
 
-// 다른 파일에서 사용할 Firebase 서비스들을 export
 export const authAdmin = getAuth();
 export const dbAdmin = getFirestore();
 
-// CORS 설정도 이 파일에서 함께 관리
 export const allowedOrigins = [
   "http://localhost:5173",
   "https://sodomall.vercel.app",
   "https://sodo-songdo.store",
-  "https://www.sodo-songdo.store"
+  "https://www.sodo-songdo.store",
 ];
 
-// ✅ [수정] 다른 파일에서 FieldValue 등을 사용하기 위해 admin 객체를 export합니다.
+// onRequest 핸들러에서 App Check 검증이 필요할 때 사용
+export async function verifyAppCheckFromRequest(req: { header(name: string): string | undefined }) {
+  const token = req.header("X-Firebase-AppCheck");
+  if (!token) {
+    const err = new Error("NO_APPCHECK");
+    (err as any).status = 401;
+    throw err;
+  }
+  try {
+    await getAppCheck().verifyToken(token);
+  } catch {
+    const err = new Error("INVALID_APPCHECK");
+    (err as any).status = 401;
+    throw err;
+  }
+}
+
 export { admin };
