@@ -19,9 +19,9 @@ import type { Product, ProductItem, CartItem, LoyaltyTier, StorageType, SalesRou
 import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getStockInfo, getMaxPurchasableQuantity } from '@/utils/productUtils';
 import type { ProductActionState, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
-import PrepaymentModal from '@/components/common/PrepaymentModal'; // ✅ [추가] 전용 모달 import
+import PrepaymentModal from '@/components/common/PrepaymentModal';
 
-import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon, Clock, Ticket } from 'lucide-react'; // ✅ Ticket 아이콘 추가
+import { X, Minus, Plus, ShoppingCart, Lock, Star, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, Info, AlertTriangle, Banknote, Inbox, Moon, Clock, Ticket } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -42,7 +42,6 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
 
-// ✅ [수정] src/utils/productUtils의 SalesRound가 아닌 src/types의 SalesRound를 사용합니다.
 import type { SalesRound } from '@/types';
 
 
@@ -62,7 +61,6 @@ const formatDateWithDay = (dateInput: Date | Timestamp | null | undefined): stri
     return `${date.format('M.D')}(${days[date.day()]})`;
 };
 
-// ✅ [추가] 날짜/시간 포맷 함수
 const formatDateTimeWithDay = (dateInput: Date | Timestamp | null | undefined): string => {
     if (!dateInput) return '미정';
     const date = dayjs(safeToDate(dateInput));
@@ -215,22 +213,18 @@ const Lightbox: React.FC<{
 const ProductImageSlider: React.FC<{ images: string[]; productName: string; onImageClick: (index: number) => void; }> = React.memo(({ images, productName, onImageClick }) => (<div className="product-swiper-container"><Swiper modules={[Pagination, Navigation]} spaceBetween={0} slidesPerView={1} navigation pagination={{ clickable: true, dynamicBullets: true }} className="product-swiper">{images.map((url, index) => (<SwiperSlide key={index} onClick={() => onImageClick(index)}><OptimizedImage originalUrl={url} size="1080x1080" alt={`${productName} 이미지 ${index + 1}`} /></SwiperSlide>))}</Swiper><div className="image-zoom-indicator"><Search size={16} /><span>클릭해서 크게 보기</span></div></div>));
 
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
-// ✅ [수정] RAFFLE 추가
 type SalesPhase = 'PRIMARY' | 'SECONDARY' | 'ON_SITE' | 'RAFFLE' | 'UNKNOWN';
 
-// ✅ [수정] countdown prop 추가
 const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState | 'ON_SITE_SALE'; expirationDateInfo: ExpirationDateInfo; salesPhase: SalesPhase; countdown: string | null; }> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown }) => {
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate = safeToDate(round.arrivalDate);
     const isMultiGroup = round.variantGroups.length > 1;
-    // ✅ [수정] 이벤트 상품 여부 확인에 RAFFLE 추가
     const isEventProduct = round.eventType === 'CHUSEOK' || round.eventType === 'RAFFLE';
 
     return (
         <>
             <div className="product-header-content">
                 <h1 className="product-name">{product.groupName}</h1>
-                {/* ✅ [수정] 추첨 이벤트는 카운트다운 제외 */}
                 {round.eventType !== 'RAFFLE' && countdown && (
                     <div className="countdown-timer-detail">
                         <Clock size={18} />
@@ -251,7 +245,6 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
             )}
 
             <div className="product-key-info" data-tutorial-id="detail-key-info">
-                {/* ✅ [추가] 추첨 이벤트 정보 렌더링 */}
                 {round.eventType === 'RAFFLE' ? (
                     <>
                         <div className="info-row">
@@ -381,8 +374,8 @@ const OptionSelector: React.FC<{
 
                     const representativePrice = vg.items?.[0]?.price;
                     const priceText = typeof representativePrice === 'number'
-                        ? ` (${representativePrice.toLocaleString()}원)`
-                        : '';
+    ? ` (${representativePrice.toLocaleString()}원)`
+    : ''; // <--- 이렇게 수정하면 됩니다.
 
                     const statusText = isSoldOut
                         ? (actionState === 'WAITLISTABLE' ? ' (대기 가능)' : ' (품절)')
@@ -451,9 +444,26 @@ const ItemSelector: React.FC<{
 });
 
 
-const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<React.SetStateAction<number>>; maxQuantity: number | null; }> = React.memo(({ quantity, setQuantity, maxQuantity }) => {
-    const increment = useCallback(() => setQuantity(q => (maxQuantity === null || q < maxQuantity) ? q + 1 : q), [setQuantity, maxQuantity]);
-    const decrement = useCallback(() => setQuantity(q => q > 1 ? q - 1 : 1), [setQuantity]);
+const QuantityInput: React.FC<{
+    quantity: number;
+    setQuantity: React.Dispatch<React.SetStateAction<number>>;
+    maxQuantity: number | null;
+    step?: number;
+}> = React.memo(({ quantity, setQuantity, maxQuantity, step = 1 }) => {
+    const increment = useCallback(() => setQuantity(q => {
+        if (isNaN(q)) return 1;
+        const nextVal = q + step;
+        if (maxQuantity !== null && nextVal > maxQuantity) {
+            return q;
+        }
+        return nextVal;
+    }), [setQuantity, maxQuantity, step]);
+    
+    const decrement = useCallback(() => setQuantity(q => {
+        const nextVal = q - step;
+        return nextVal >= 1 ? nextVal : 1;
+    }), [setQuantity, step]);
+
     const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 });
     const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 });
 
@@ -468,18 +478,43 @@ const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<Re
     }, [setQuantity]);
 
     const handleInputBlur = useCallback(() => {
-        if (isNaN(quantity) || quantity < 1) {
-            setQuantity(1);
-        } else if (maxQuantity !== null && quantity > maxQuantity) {
-            setQuantity(maxQuantity);
+        let correctedQuantity = isNaN(quantity) || quantity < 1 ? 1 : Math.floor(quantity);
+
+        if (step > 1) {
+            const remainder = (correctedQuantity - 1) % step;
+            if (remainder !== 0) {
+                // 유효한 수량 단위로 내림하여 보정
+                correctedQuantity = correctedQuantity - remainder;
+            }
         }
-    }, [quantity, maxQuantity, setQuantity]);
+        
+        if (correctedQuantity < 1) {
+            correctedQuantity = 1;
+        }
+
+        if (maxQuantity !== null && correctedQuantity > maxQuantity) {
+            correctedQuantity = maxQuantity;
+            // 최대 수량에 맞춘 후, 다시 수량 단위에 맞게 보정
+            if (step > 1) {
+                const remainder = (correctedQuantity - 1) % step;
+                if (remainder !== 0) {
+                    correctedQuantity = correctedQuantity - remainder;
+                }
+            }
+        }
+        
+        if (correctedQuantity < 1) {
+             correctedQuantity = 1;
+        }
+
+        setQuantity(correctedQuantity);
+    }, [quantity, maxQuantity, setQuantity, step]);
 
     const displayedQuantity = isNaN(quantity) ? '' : quantity;
 
     return (
         <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls">
-            <button {...longPressDecrementHandlers} className="quantity-btn" disabled={quantity <= 1 || isNaN(quantity)}>
+            <button {...longPressDecrementHandlers} className="quantity-btn" disabled={isNaN(quantity) || quantity <= 1}>
                 <Minus />
             </button>
             <input
@@ -490,7 +525,7 @@ const QuantityInput: React.FC<{ quantity: number; setQuantity: React.Dispatch<Re
                 onBlur={handleInputBlur}
                 onClick={(e) => e.stopPropagation()}
             />
-            <button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && quantity >= maxQuantity}>
+            <button {...longPressIncrementHandlers} className="quantity-btn" disabled={maxQuantity !== null && !isNaN(quantity) && (quantity + step > maxQuantity)}>
                 <Plus />
             </button>
         </div>
@@ -504,15 +539,25 @@ const PurchasePanel: React.FC<{
     selectedItem: ProductItem | null;
     quantity: number;
     setQuantity: React.Dispatch<React.SetStateAction<number>>;
-    onPurchaseAction: (status: 'RESERVATION' | 'WAITLIST' | 'RAFFLE_ENTRY') => void; // ✅ [수정]
+    onPurchaseAction: (status: 'RESERVATION' | 'WAITLIST' | 'RAFFLE_ENTRY') => void;
     onEncore: () => void;
     isEncoreRequested: boolean;
     isEncoreLoading: boolean;
     isProcessing: boolean;
-    isRaffleEntered: boolean; // ✅ [추가]
+    isRaffleEntered: boolean;
 }> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onPurchaseAction, onEncore, isEncoreRequested, isEncoreLoading, isProcessing, isRaffleEntered }) => {
+    // ✅ [추가] 모바일 기기인지 확인하는 로직
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        // 클라이언트 측에서만 실행되도록 보장하여 SSR 오류를 방지합니다.
+        const mobileCheck = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        setIsMobile(mobileCheck);
+    }, []);
+
+    // ✅ [수정] 모바일일 때만 상품의 quantityStep을 적용하고, PC에서는 1로 고정합니다.
+    const quantityStep = isMobile ? ((selectedItem as any)?.quantityStep ?? 1) : 1;
+
     const renderContent = () => {
-        // ✅ [추가] 추첨 이벤트 로직
         if (round.eventType === 'RAFFLE') {
             const isEnded = dayjs().isAfter(dayjs(safeToDate(round.deadlineDate)));
             if (isEnded) {
@@ -529,12 +574,11 @@ const PurchasePanel: React.FC<{
                 return <div className="action-notice"><Box size={20} /><div><p><strong>현장 판매 진행 중</strong></p><span>매장에서 직접 구매 가능합니다.</span></div></div>;
             case 'PURCHASABLE':
                 if (!selectedItem || !selectedVariantGroup) return <button className="add-to-cart-btn-fixed" disabled><span>구매 가능한 옵션이 없습니다</span></button>;
-                // ✅ [수정] null 체크 추가 및 getMaxPurchasableQuantity 함수 사용
                 const maxQuantity = selectedVariantGroup && selectedItem ? getMaxPurchasableQuantity(selectedVariantGroup, selectedItem) : null;
-                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} /><button onClick={() => onPurchaseAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button" disabled={isProcessing}>{isProcessing ? '처리 중...' : '예약하기'}</button></div> );
+                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={maxQuantity} step={quantityStep} /><button onClick={() => onPurchaseAction('RESERVATION')} className="add-to-cart-btn-fixed" data-tutorial-id="detail-action-button" disabled={isProcessing}>{isProcessing ? '처리 중...' : '예약하기'}</button></div> );
             case 'WAITLISTABLE':
                 const waitlistMax = selectedItem?.limitQuantity ?? 99;
-                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} /><button onClick={() => onPurchaseAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button" disabled={!selectedItem || isProcessing}>{isProcessing ? '처리 중...' : <><Hourglass size={20} /><span>대기 신청하기</span></>}</button></div> );
+                return ( <div className="purchase-action-row"><QuantityInput quantity={quantity} setQuantity={setQuantity} maxQuantity={waitlistMax} step={quantityStep} /><button onClick={() => onPurchaseAction('WAITLIST')} className="waitlist-btn-fixed" data-tutorial-id="detail-action-button" disabled={!selectedItem || isProcessing}>{isProcessing ? '처리 중...' : <><Hourglass size={20} /><span>대기 신청하기</span></>}</button></div> );
             case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" onClick={() => showToast('info', '페이지 하단에서 옵션을 먼저 선택해주세요!')}><Box size={20} /><span>옵션을 선택해주세요</span></button>;
             case 'ENDED': case 'ENCORE_REQUESTABLE':
                 if (isEncoreLoading) return <button className="encore-request-btn-fixed" disabled><Hourglass size={18} className="spinner"/><span>요청 중...</span></button>;
@@ -574,9 +618,8 @@ const ProductDetailPage: React.FC = () => {
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [countdown, setCountdown] = useState<string | null>(null);
-    const [isRaffleEntered, setIsRaffleEntered] = useState(false); // ✅ [추가]
+    const [isRaffleEntered, setIsRaffleEntered] = useState(false);
 
-    // ✅ [추가] 선입금 모달 상태 관리
     const [isPrepaymentModalOpen, setPrepaymentModalOpen] = useState(false);
     const [prepaymentPrice, setPrepaymentPrice] = useState(0);
 
@@ -589,7 +632,7 @@ const ProductDetailPage: React.FC = () => {
     const validateCartCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'validateCart'), [functionsInstance]);
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'submitOrder'), [functionsInstance]);
     const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'addWaitlistEntry'), [functionsInstance]);
-    const enterRaffleEventCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'enterRaffleEvent'), [functionsInstance]); // ✅ [추가]
+    const enterRaffleEventCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'enterRaffleEvent'), [functionsInstance]);
 
     const handleClose = useCallback(() => {
         if (location.key === 'default' || window.history.length <= 1) {
@@ -602,11 +645,9 @@ const ProductDetailPage: React.FC = () => {
 
     const displayRound = useMemo(() => {
         if (!product) return null;
-        // ✅ [수정] productUtils의 SalesRound가 아닌 types의 SalesRound로 타입 캐스팅
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
 
-    // ✅ [수정] 이벤트 상품 카운트다운 로직에 RAFFLE 제외
     useEffect(() => {
         if (!displayRound || displayRound.eventType === 'RAFFLE') {
             setCountdown(null);
@@ -669,7 +710,6 @@ const ProductDetailPage: React.FC = () => {
                 if (userDocument) {
                     const round = getDisplayRound(normalized);
                     if (round) {
-                        // ✅ [추가] 추첨 이벤트 응모 여부 확인
                         setIsRaffleEntered(userDocument.enteredRaffleIds?.includes(round.roundId) || false);
                     }
                     const alreadyRequested = userDocument.encoreRequestedProductIds?.includes(productId) || false;
@@ -716,7 +756,6 @@ const ProductDetailPage: React.FC = () => {
 
     const salesPhase = useMemo<SalesPhase>(() => {
         if (!displayRound) return 'UNKNOWN';
-        // ✅ [추가] 추첨 이벤트 페이즈
         if (displayRound.eventType === 'RAFFLE') return 'RAFFLE';
         const { primaryEnd } = getDeadlines(displayRound);
         const pickupEnd = displayRound.pickupDate
@@ -733,7 +772,6 @@ const ProductDetailPage: React.FC = () => {
         if (!displayRound) return 'LOADING';
 
         if (salesPhase === 'ON_SITE') return 'ON_SITE_SALE';
-        // ✅ [추가] 추첨 이벤트는 별도 상태 관리
         if (displayRound.eventType === 'RAFFLE') {
             const isEnded = dayjs().isAfter(dayjs(safeToDate(displayRound.deadlineDate)));
             return isEnded ? 'ENDED' : 'PURCHASABLE'; // 'PURCHASABLE'을 임시로 사용
@@ -785,7 +823,6 @@ const ProductDetailPage: React.FC = () => {
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
-    // ✅ [추가] 추첨 이벤트 응모 함수
     const handleRaffleEntry = async () => {
         if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
         if (isSuspendedUser) { showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
@@ -800,7 +837,7 @@ const ProductDetailPage: React.FC = () => {
             });
             toast.dismiss(toastId);
             showToast('success', `${product.groupName} 이벤트 응모가 완료되었습니다!`);
-            setIsRaffleEntered(true); // UI 상태 업데이트
+            setIsRaffleEntered(true);
         } catch (error: any) {
             toast.dismiss(toastId);
             showToast('error', error.message || '응모 처리 중 오류가 발생했습니다.');
@@ -818,12 +855,11 @@ const ProductDetailPage: React.FC = () => {
         const toastId = toast.loading('예약 처리 중...');
 
         try {
-            // ✅ [수정] validateCart 호출 시 variantGroupId를 명시적으로 추가합니다.
             const validationResult = await validateCartCallable({
                 items: [{
                     productId: product.id,
                     roundId: displayRound.roundId,
-                    variantGroupId: selectedVariantGroup.id, // 👈 이 부분이 핵심 수정 사항입니다.
+                    variantGroupId: selectedVariantGroup.id,
                     itemId: selectedItem.id,
                     quantity: quantity,
                     ...selectedItem
@@ -862,7 +898,6 @@ const ProductDetailPage: React.FC = () => {
             toast.dismiss(toastId);
 
             if (prepaymentRequired) {
-                // ✅ [수정] toast.custom 대신 전용 모달 상태 업데이트
                 setPrepaymentPrice(totalPrice);
                 setPrepaymentModalOpen(true);
             } else {
@@ -873,7 +908,6 @@ const ProductDetailPage: React.FC = () => {
             toast.dismiss(toastId);
             showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
         } finally {
-            // ✅ [수정] 모달을 띄우는 경우에도 processing 상태는 해제
             setIsProcessing(false);
         }
     };
@@ -904,11 +938,9 @@ const ProductDetailPage: React.FC = () => {
         }
     };
 
-    // ✅ [수정] RAFFLE_ENTRY 추가
     const handlePurchaseAction = useCallback((status: 'RESERVATION' | 'WAITLIST' | 'RAFFLE_ENTRY') => {
         if (isPreLaunch) { showToast('info', `상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`); return; }
         
-        // ✅ [추가] 추첨 이벤트 응모 로직
         if (status === 'RAFFLE_ENTRY') {
             handleRaffleEntry();
             return;
@@ -982,7 +1014,6 @@ const ProductDetailPage: React.FC = () => {
     const ogImage = originalImageUrls[0] || 'https://www.sodo-songdo.store/sodomall-preview.png';
     const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
-    // ✅ [수정] RAFFLE 이벤트도 처리하도록 수정
     const isEventProduct = displayRound.eventType === 'CHUSEOK' || displayRound.eventType === 'RAFFLE';
     const modalContentClassName = `product-detail-modal-content ${isEventProduct && displayRound.eventType ? `event-detail-${displayRound.eventType.toLowerCase()}` : ''}`;
 
@@ -1023,7 +1054,6 @@ const ProductDetailPage: React.FC = () => {
                         </div>
                     </div>
                     <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
-                        {/* ✅ [수정] 추첨 이벤트는 옵션 선택기 제외 */}
                         {displayRound.eventType !== 'RAFFLE' && (
                             <>
                                 <OptionSelector
@@ -1070,7 +1100,6 @@ const ProductDetailPage: React.FC = () => {
             </div>
             <Lightbox isOpen={isLightboxOpen} onClose={handleCloseLightbox} images={originalImageUrls} startIndex={lightboxStartIndex} />
 
-            {/* ✅ [추가] 전용 모달 렌더링 */}
             <PrepaymentModal
                 isOpen={isPrepaymentModalOpen}
                 totalPrice={prepaymentPrice}

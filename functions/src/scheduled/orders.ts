@@ -7,10 +7,11 @@ import { Timestamp } from "firebase-admin/firestore";
 
 /**
  * =================================================================
- * 자동 노쇼 처리 스케줄러: markOverdueOrdersAsNoShow (✅ 신규 추가)
+ * 자동 노쇼 처리 스케줄러: markOverdueOrdersAsNoShow (✅ 수정됨)
  * =================================================================
  * 매일 새벽 3시에 실행되어, 픽업 마감일이 지났지만 여전히
- * '예약' 또는 '선입금' 상태인 주문을 '노쇼'로 자동 변경합니다.
+ * '예약' 상태인 주문을 '노쇼'로 자동 변경합니다.
+ * '선입금' 상태의 주문은 더 이상 이 스케줄러의 영향을 받지 않습니다.
  */
 export const markOverdueOrdersAsNoShow = onSchedule(
   {
@@ -30,9 +31,10 @@ export const markOverdueOrdersAsNoShow = onSchedule(
     todayStart.setHours(0, 0, 0, 0);
     const yesterdayEnd = Timestamp.fromMillis(todayStart.getTime() - 1);
 
+    // ✅ [수정] '선입금(PREPAID)' 상태를 제외하고, '예약(RESERVED)' 상태의 주문만 조회하도록 변경
     const overdueOrdersQuery = db
       .collection("orders")
-      .where("status", "in", ["RESERVED", "PREPAID"])
+      .where("status", "==", "RESERVED")
       .where("pickupDeadlineDate", "<=", yesterdayEnd);
 
     try {

@@ -1,4 +1,5 @@
 // functions/src/utils/gemini.ts
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
@@ -10,14 +11,14 @@ let _model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null = null;
 function getModel() {
   if (_model) return _model;
 
-  const key = process.env.GEMINI_API_KEY; // v2 Secret (실행 시점에만 접근)
+  const key = process.env.GEMINI_API_KEY; 
   if (!key) {
-    // 실제 호출 시점에만 키 검증
-    throw new Error("GEMINI_API_KEY is not set");
+    throw new Error("GEMINI_API_KEY is not set. For local development, check /functions/.env file. For deployed functions, check secrets.");
   }
 
   const genAI = new GoogleGenerativeAI(key);
-  _model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); // 필요시 모델명 조정
+  // ✅ [수정] 'gemini-1.5-pro'를 안정 버전인 'gemini-pro'로 변경합니다.
+  _model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
   return _model;
 }
 

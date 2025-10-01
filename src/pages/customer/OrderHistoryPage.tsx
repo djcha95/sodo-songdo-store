@@ -9,7 +9,8 @@ import { cancelOrder } from '@/firebase/orderService';
 import { getUserWaitlist, cancelWaitlistEntry } from '@/firebase/productService';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import useLongPress from '@/hooks/useLongPress';
+// useLongPress 제거
+// import useLongPress from '@/hooks/useLongPress';
 import type { Order, OrderItem, OrderStatus } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -59,7 +60,7 @@ const SafeThumb: React.FC<{
   const original = useMemo(() => (src && src.trim()) ? src : PLACEHOLDER, [src]);
 
   const optimized = useMemo(() => {
-    if (original === PLACEHOLDER) return PLACEHOLDER;
+    if (original === PLACEHOLDER) return PLACEHOLDER; // 💡 [오류 수정] PLACEHOLDEr -> PLACEHOLDER
     return getOptimizedImageUrl(original, size);
   }, [original, size]);
 
@@ -147,6 +148,16 @@ const formatSimpleDate = (date: Date): string => {
   const week = ['일', '월', '화', '수', '목', '금', '토'];
   const dayOfWeek = week[date.getDay()];
   return `${month}/${day}(${dayOfWeek})`;
+};
+
+// ✅ [수정] 픽업일 헤더 포맷 변경 (예: 10/1(수) 픽업상품)
+const formatPickupDateHeader = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const week = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = week[date.getDay()];
+  return `${month}/${day}(${dayOfWeek}) 픽업상품`;
 };
 
 const formatPickupDateShort = (date: Date): string => {
@@ -280,8 +291,12 @@ const usePaginatedData = <T,>(
   return { data, setData, loading: loading || loadingMore, hasMore, loadMore };
 };
 
-const DateHeader: React.FC<{ date: Date }> = React.memo(({ date }) => (
-  <h2 className="date-header">{formatSimpleDate(date)}</h2>
+// ✅ [수정] DateHeader 로직 변경
+const DateHeader: React.FC<{ date: Date, viewMode: 'pickup' | 'waitlist' }> = React.memo(({ date, viewMode }) => (
+  <h2 className="date-header">
+    {/* viewMode === 'orders' 로직 제거 */}
+    {viewMode === 'pickup' ? formatPickupDateHeader(date) : formatSimpleDate(date)} 
+  </h2>
 ));
 
 const EmptyHistory: React.FC<{ type?: 'order' | 'waitlist' | 'pickup' }> = React.memo(({ type = 'order' }) => {
@@ -362,11 +377,11 @@ const QuantityControls: React.FC<{
   
   return (
     <div className="quantity-controls">
-      <button onClick={() => handleQuantityChange(currentQuantity - 1)} disabled={isUpdating || currentQuantity <= 1}>
+      <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(currentQuantity - 1); }} disabled={isUpdating || currentQuantity <= 1}>
         <Minus size={20} />
       </button>
       <span className="quantity-value">{isUpdating ? '...' : currentQuantity}</span>
-      <button onClick={() => handleQuantityChange(currentQuantity + 1)} disabled={isUpdating || (max !== undefined && currentQuantity >= max)}>
+      <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(currentQuantity + 1); }} disabled={isUpdating || (max !== undefined && currentQuantity >= max)}>
         <Plus size={20} />
       </button>
     </div>
@@ -376,26 +391,25 @@ const QuantityControls: React.FC<{
 
 const AggregatedItemCard: React.FC<{
   item: AggregatedItem;
-  displayDateInfo?: { type: 'pickup' | 'order'; date: Date };
+  // displayDateInfo props는 픽업일순으로 고정되므로 제거
   isSelected: boolean;
   onSelect: (id: string) => void;
   onQuantityUpdate: (orderId: string, newQuantity: number) => void;
   maxQuantity?: number;
   onStockLimitDiscovered: (orderId: string, max: number) => void;
-}> = React.memo(({ item, displayDateInfo, isSelected, onSelect, onQuantityUpdate, maxQuantity, onStockLimitDiscovered }) => {
+}> = React.memo(({ item, isSelected, onSelect, onQuantityUpdate, maxQuantity, onStockLimitDiscovered }) => {
 
   const { statusText, StatusIcon, statusClass } = useMemo(() => {
     if (item.wasPrepaymentRequired && item.status === 'RESERVED') {
       return { statusText: '선입금 필요', StatusIcon: CreditCard, statusClass: 'status-prepayment_required' };
     }
-    // ✅ [수정] 'NO_SHOW' 상태에 대한 텍스트와 아이콘 추가
     const textMap: Record<OrderStatus, string> = { 
         RESERVED: '예약 완료', 
         PREPAID: '선입금 완료', 
         PICKED_UP: '픽업 완료', 
         COMPLETED: '처리 완료', 
         CANCELED: '취소됨', 
-        NO_SHOW: '픽업 기간 만료', // '노쇼' 대신 고객에게 더 부드러운 표현 사용
+        NO_SHOW: '픽업 기간 만료', 
         LATE_CANCELED: '취소됨' 
     };
     const iconMap: Record<OrderStatus, React.ElementType> = { 
@@ -404,7 +418,7 @@ const AggregatedItemCard: React.FC<{
         PICKED_UP: PackageCheck, 
         COMPLETED: CircleCheck, 
         CANCELED: PackageX, 
-        NO_SHOW: AlertCircle, // 'NO_SHOW' 상태 아이콘
+        NO_SHOW: AlertCircle, 
         LATE_CANCELED: PackageX 
     };
     return {
@@ -418,7 +432,6 @@ const AggregatedItemCard: React.FC<{
   const { cancellable, isEvent } = useMemo(() => getCancellationDetails(item), [item]);
   const isQuantityEditable = (item.status === 'RESERVED' || item.status === 'PREPAID') && item.originalOrders.length === 1;
 
-  // ✅ [수정] 'NO_SHOW' 상태일 때도 취소된 것처럼 보이도록 처리
   const isCanceledOrNoShow = useMemo(() => 
     item.status === 'CANCELED' || item.status === 'LATE_CANCELED' || item.status === 'NO_SHOW', 
     [item.status]
@@ -434,27 +447,30 @@ const AggregatedItemCard: React.FC<{
     [isEvent, item.originalOrders, item.itemName]
   );
     
-  const handleClick = useCallback(() => {
-    if (isCanceledOrNoShow) return; // 취소되거나 노쇼된 항목은 선택 불가
+  // ✅ [수정] useLongPress 제거 및 일반 onClick으로 변경
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (isCanceledOrNoShow) return; 
     if (cancellable || (item.status === 'RESERVED' || item.status === 'PREPAID')) {
+      e.preventDefault(); // 드래그 후 클릭 오인 방지를 위해
       onSelect(item.id);
     }
   }, [cancellable, item.status, item.id, onSelect, isCanceledOrNoShow]);
-
-  const handlers = useLongPress(() => {}, handleClick, { initialDelay: 500 });
-
-  let displayDateText = '';
-  if (displayDateInfo?.date) {
-    const formattedDate = formatPickupDateShort(displayDateInfo.date);
-    displayDateText = displayDateInfo.type === 'pickup' ? `픽업 ${formattedDate}` : ``;
-  }
+  
+  // 픽업일순으로 통일되어 displayDateInfo가 필요 없어짐
+  // let displayDateText = '';
+  // if (displayDateInfo?.date) {
+  //   const formattedDate = formatPickupDateShort(displayDateInfo.date);
+  //   displayDateText = displayDateInfo.type === 'pickup' ? `픽업 ${formattedDate}` : ``;
+  // }
+  
+  // 주문일순 탭이 제거되어 픽업일 정보는 이제 헤더에서 보여지므로 카드 내부에는 불필요
 
   return (
     <motion.div
-      className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''} ${isCanceledOrNoShow ? 'canceled-order' : ''}`} // ✅ isCanceled -> isCanceledOrNoShow
+      className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isEvent ? 'event-item' : ''} ${isCanceledOrNoShow ? 'canceled-order' : ''}`}
       layoutId={item.stableId}
       key={item.id}
-      {...handlers}
+      onClick={handleClick} // ✅ onClick으로 변경
       whileTap={cancellable && !isCanceledOrNoShow ? { scale: 0.98 } : {}}
       transition={{ duration: 0.2, ease: "easeInOut" }}
     >
@@ -493,7 +509,9 @@ const AggregatedItemCard: React.FC<{
                 />
               </div>
             ) : (
-              displayDateText && <span className="date-info-badge">{displayDateText}</span>
+              // displayDateText && <span className="date-info-badge">{displayDateText}</span>
+              // 픽업일순으로 통일되어 카드 내부의 날짜 정보는 제거
+              null
             )}
           </div>
         </div>
@@ -509,17 +527,19 @@ const WaitlistItemCard: React.FC<{
 }> = React.memo(({ item, isSelected, onSelect }) => {
   const stableId = useMemo(() => item.timestamp.toMillis().toString(), [item.timestamp]);
   
-  const handleSelect = useCallback(() => {
+  const handleSelect = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); // 드래그 후 클릭 오인 방지를 위해
     onSelect(stableId);
   }, [stableId, onSelect]);
 
-  const handlers = useLongPress(() => {}, handleSelect, { initialDelay: 500 });
+  // useLongPress 제거
+  // const handlers = useLongPress(() => {}, handleSelect, { initialDelay: 500 });
 
   return (
     <motion.div 
       className={`waitlist-card ${isSelected ? 'selected' : ''}`} 
       layout 
-      {...handlers} 
+      onClick={handleSelect} // ✅ onClick으로 변경
       whileTap={{ scale: 0.98 }} 
       transition={{ duration: 0.2, ease: "easeInOut" }}
     >
@@ -557,7 +577,8 @@ type CancellationRequest = {
 const OrderHistoryPage: React.FC = () => {
   const { user, userDocument } = useAuth();
   const { runPageTourIfFirstTime } = useTutorial();
-  const [viewMode, setViewMode] = useState<'orders' | 'pickup' | 'waitlist'>('pickup'); 
+  // ✅ [수정] viewMode 기본값을 'pickup'으로 고정하고 'orders' 옵션 제거
+  const [viewMode, setViewMode] = useState<'pickup' | 'waitlist'>('pickup'); 
   const [waitlist, setWaitlist] = useState<WaitlistInfo[]>([]);
   const [loadingWaitlist, setLoadingWaitlist] = useState(false);
   
@@ -572,7 +593,8 @@ const OrderHistoryPage: React.FC = () => {
   const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
   const getUserOrdersCallable = useMemo(() => httpsCallable(functions, 'getUserOrders'), [functions]);
 
-  const handleViewChange = (mode: 'orders' | 'pickup' | 'waitlist') => {
+  // ✅ [수정] viewMode 변경 함수에서 'orders' 제거
+  const handleViewChange = (mode: 'pickup' | 'waitlist') => {
     setViewMode(mode);
     setSelectedOrderKeys(new Set());
     setSelectedWaitlistKeys(new Set());
@@ -580,19 +602,19 @@ const OrderHistoryPage: React.FC = () => {
 
   const basePayload = useMemo(() => {
     const payload = { userId: user?.uid };
-    if (viewMode === 'pickup') {
-      return { 
+    
+    // ✅ [최종 수정] '주문일순' 제거, '픽업일순'이 메인: 과거/미래 모두 픽업일 기준으로 정렬
+    return { 
         ...payload, 
         orderByField: 'pickupDate', 
-        orderDirection: 'asc',
-        filterStatuses: ['RESERVED', 'PREPAID'] 
+        orderDirection: 'desc', // 최근 픽업일이 위에 오도록 내림차순 정렬
+        filterStatuses: null // 모든 주문 상태를 가져옴
       };
-    }
-    return { ...payload, orderByField: 'createdAt', orderDirection: 'desc' };
-  }, [viewMode, user]);
+  }, [user]);
 
+  // viewMode는 'pickup'으로 고정하거나 'waitlist'일 때만 isActive를 true로 설정
   const { data: orders, setData: setOrders, loading: ordersLoading, hasMore: hasMoreOrders, loadMore: loadMoreOrders } =
-    usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'orders' || viewMode === 'pickup');
+    usePaginatedData<Order>(user?.uid, getUserOrdersCallable, basePayload, viewMode === 'pickup'); // viewMode === 'orders' 로직 제거
 
   useEffect(() => {
     if (userDocument) {
@@ -630,7 +652,8 @@ const OrderHistoryPage: React.FC = () => {
   const aggregatedItems = useMemo(() => {
     const aggregated: { [key: string]: AggregatedItem } = {};
     orders.forEach(order => {
-      const date = viewMode === 'orders' ? safeToDate(order.createdAt) : safeToDate(order.pickupDate);
+      // ✅ [수정] 픽업일(pickupDate) 기준으로 고정
+      const date = safeToDate(order.pickupDate);
       if (!date) return;
       (order.items || []).forEach((item: OrderItem) => {
         // 각 주문이 고유한 카드로 표시되도록 aggregation key를 주문 ID 기반으로 설정
@@ -656,24 +679,29 @@ const OrderHistoryPage: React.FC = () => {
       });
     });
     Object.values(aggregated).forEach(item => {
-      item.originalOrders.sort((a, b) => (safeToDate(b.createdAt)?.getTime() || 0) - (safeToDate(a.createdAt)?.getTime() || 0));
+      // 주문 생성일(createdAt)이 아니라 픽업일(pickupDate) 기준으로 정렬해야 함 (다수 주문 취급 시)
+      item.originalOrders.sort((a, b) => (safeToDate(b.pickupDate)?.getTime() || 0) - (safeToDate(a.pickupDate)?.getTime() || 0));
     });
     const groupedByDate: { [date: string]: AggregatedItem[] } = {};
     Object.values(aggregated).forEach(item => {
       const firstOrder = item.originalOrders[0];
       if (!firstOrder) return;
-      const date = viewMode === 'orders' ? safeToDate(firstOrder.createdAt) : safeToDate(firstOrder.pickupDate);
+      // ✅ [수정] 픽업일(pickupDate) 기준으로 고정
+      const date = safeToDate(firstOrder.pickupDate);
       if (!date) return;
       const dateStr = dayjs(date).format('YYYY-MM-DD');
       if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
+      // AggregatedItemCard에 필요한 정보를 추가적으로 정렬하는 로직은 여기서는 생략
       groupedByDate[dateStr].push(item);
     });
     return groupedByDate;
-  }, [orders, viewMode]);
+    // viewMode는 'pickup'으로 고정되었으므로 의존성 배열에서 제거
+  }, [orders]);
 
   const handleScroll = useCallback(() => {
     const isAtBottom = window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200;
-    if (isAtBottom && (viewMode === 'orders' || viewMode === 'pickup') && !ordersLoading && hasMoreOrders) {
+    // ✅ [수정] viewMode === 'orders' 로직 제거
+    if (isAtBottom && viewMode === 'pickup' && !ordersLoading && hasMoreOrders) {
       loadMoreOrders();
     }
   }, [viewMode, ordersLoading, hasMoreOrders, loadMoreOrders]);
@@ -875,10 +903,8 @@ const OrderHistoryPage: React.FC = () => {
         duration: Infinity, 
         style: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 } 
     });
-    // ✅ 토스트가 띄워진 후 상태 초기화 방지
-    // return () => {
-    //   toast.dismiss(toastId);
-    // };
+    
+    // 💡 [오류 수정] 622번째 줄 근처의 불필요한 return 블록 제거
   }, [cancellationRequest, executeCancellation]);
 
   const renderOrderContent = () => {
@@ -886,12 +912,11 @@ const OrderHistoryPage: React.FC = () => {
     if (isFirstLoading) { return <div className="loading-spinner-container"><InlineSodomallLoader /></div>; }
 
     const ordersExist = orders.length > 0;
-    if (!ordersExist && !ordersLoading) { return <EmptyHistory type={viewMode === 'pickup' ? 'pickup' : 'order'} />; }
+    if (!ordersExist && !ordersLoading) { return <EmptyHistory type='pickup' />; } // ✅ type='pickup'으로 고정
 
-    const sortedDates = Object.keys(aggregatedItems).sort((a, b) => {
-      const dateA = new Date(a).getTime(); const dateB = new Date(b).getTime();
-      return viewMode === 'orders' ? dateB - dateA : dateA - dateB;
-    });
+    // ✅ [수정] 정렬: 픽업일(YYYY-MM-DD) 기준으로 내림차순(최신 픽업일이 위로)
+    const sortedDates = Object.keys(aggregatedItems).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
 
     return (
       <div className="orders-list">
@@ -901,8 +926,9 @@ const OrderHistoryPage: React.FC = () => {
             return (
               <motion.div key={dateStr} layout>
                 <div className="date-header-container">
-                  <DateHeader date={new Date(dateStr)} />
-                  {index === 0 && (viewMode === 'orders' || viewMode === 'pickup') && (
+                  {/* ✅ [수정] viewMode를 DateHeader에 전달하여 '픽업상품' 헤더 포맷 사용 */}
+                  <DateHeader date={new Date(dateStr)} viewMode="pickup" />
+                  {index === 0 && (
                     <div className="cancel-instruction" data-tutorial-id="history-cancel-info">
                       <Info size={14} /><span>카드를 클릭하여 취소할 항목을 선택하세요.</span>
                     </div>
@@ -910,18 +936,14 @@ const OrderHistoryPage: React.FC = () => {
                 </div>
                 <div className="order-cards-grid">
                   {aggregatedItems[dateStr].map(item => {
-                    const pickupDate = safeToDate(item.originalOrders[0]?.pickupDate);
+                    // 픽업일순으로 고정되었으므로 displayDateInfo는 AggregatedItemCard 내부에서 필요 없음.
                     return (
                       <AggregatedItemCard
                         key={item.id}
                         item={item}
                         isSelected={selectedOrderKeys.has(item.id)}
                         onSelect={(id) => handleItemSelect(id, 'order')}
-                        displayDateInfo={
-                          viewMode === 'orders' && pickupDate
-                            ? { type: 'pickup', date: pickupDate }
-                            : undefined
-                        }
+                        // displayDateInfo props 제거
                         onQuantityUpdate={handleQuantityUpdate}
                         maxQuantity={maxQuantities[item.originalOrders[0]?.id]}
                         onStockLimitDiscovered={handleStockLimitDiscovered}
@@ -966,8 +988,8 @@ const OrderHistoryPage: React.FC = () => {
     <div className="customer-page-container">
       <div className="order-history-page">
         <div className="view-toggle-container" data-tutorial-id="history-view-toggle">
-          <button className={`toggle-btn ${viewMode === 'orders' ? 'active' : ''}`} onClick={() => handleViewChange('orders')}> <ListOrdered size={18} /> 주문일순 </button>
-          <button className={`toggle-btn ${viewMode === 'pickup' ? 'active' : ''}`} onClick={() => handleViewChange('pickup')}> <Truck size={18} /> 픽업일순 </button>
+          {/* ✅ [수정] 주문일순 탭 제거, 픽업 예약 내역 탭을 기본 활성화 상태로 유지 */}
+          <button className={`toggle-btn ${viewMode === 'pickup' ? 'active' : ''}`} onClick={() => handleViewChange('pickup')}> <Truck size={18} /> 픽업 예약 내역 </button>
           <button className={`toggle-btn ${viewMode === 'waitlist' ? 'active' : ''}`} onClick={() => handleViewChange('waitlist')}> <Hourglass size={18} /> 대기목록 </button>
         </div>
         
@@ -976,11 +998,12 @@ const OrderHistoryPage: React.FC = () => {
             {viewMode === 'waitlist' ? renderWaitlistContent() : renderOrderContent()}
           </motion.div>
         </AnimatePresence>
-        {(viewMode === 'orders' || viewMode === 'pickup') && ordersLoading && orders.length > 0 && (<div className="loading-more-spinner"><InlineSodomallLoader /></div>)}
-        {(viewMode === 'orders' || viewMode === 'pickup') && !hasMoreOrders && orders.length > 0 && (<div className="end-of-list-message">모든 내역을 불러왔습니다.</div>)}
+        {/* ✅ [수정] viewMode === 'orders' 로직 제거 */}
+        {viewMode === 'pickup' && ordersLoading && orders.length > 0 && (<div className="loading-more-spinner"><InlineSodomallLoader /></div>)}
+        {viewMode === 'pickup' && !hasMoreOrders && orders.length > 0 && (<div className="end-of-list-message">모든 내역을 불러왔습니다.</div>)}
         
         <AnimatePresence>
-          {(((viewMode === 'orders' || viewMode === 'pickup') && selectedOrderKeys.size > 0) ||
+          {((viewMode === 'pickup' && selectedOrderKeys.size > 0) ||
            (viewMode === 'waitlist' && selectedWaitlistKeys.size > 0)) && (
             <motion.div
               className="fab-container"

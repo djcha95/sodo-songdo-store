@@ -1,6 +1,5 @@
 // src/components/admin/QuickCheckOrderCard.tsx
 
-// ✅ [수정] useState와 useEffect를 import 목록에 추가합니다.
 import React, { useState, useEffect } from 'react';
 import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/types';
 import toast from 'react-hot-toast';
@@ -9,14 +8,14 @@ import useLongPress from '@/hooks/useLongPress';
 import './QuickCheckOrderCard.css';
 import { formatKRW } from '@/utils/number';
 
-
 interface OrderCardProps {
   group: AggregatedOrderGroup;
   onSelect: (groupKey: string) => void;
   isSelected: boolean;
   onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
   isFuture: boolean;
-  onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
+  // ✅ [수정] '노쇼 처리' 버튼이 제거되었으므로 더 이상 onMarkAsNoShow prop이 필요하지 않습니다.
+  // onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
 }
 
 // 개별 품목 행: 수량 편집 UX/에러 처리 강화
@@ -105,7 +104,7 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
     isSelected, 
     onQuantityChange, 
     isFuture,
-    onMarkAsNoShow 
+    // onMarkAsNoShow // ✅ [수정] prop 제거
 }) => {
   const { groupKey, status, item, totalPrice, customerInfo, pickupDate, pickupDeadlineDate, totalQuantity } = group;
 
@@ -159,34 +158,8 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
   const handleItemQuantityUpdate = (newQuantity: number) => {
     onQuantityChange(group, newQuantity);
   };
-
-  const handleNoShowClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    toast((t) => (
-        <div>
-            <p><b>{customerInfo.name}</b>님의 주문을 정말 '노쇼' 처리하시겠습니까?</p>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                <button
-                    className="common-button button-secondary button-small"
-                    onClick={() => toast.dismiss(t.id)}
-                >
-                    취소
-                </button>
-                <button
-                    className="common-button button-danger button-small"
-                    onClick={() => {
-                        onMarkAsNoShow(group);
-                        toast.dismiss(t.id);
-                    }}
-                >
-                    노쇼 처리
-                </button>
-            </div>
-        </div>
-    ), { duration: 6000 });
-  };
-
-  const canBeMarkedAsNoShow = status === 'RESERVED' || status === 'PREPAID';
+  
+  // ✅ [수정] '노쇼 처리' 버튼과 관련된 핸들러 및 상태 변수들이 제거되었습니다.
 
   return (
     <div 
@@ -221,15 +194,10 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
             <span>노쇼 처리됨</span>
         </div>
       )}
+      {/* ✅ [핵심 수정] '노쇼 처리' 버튼을 제거하고 항상 가격을 표시하도록 수정 */}
       <div className="qco-bottom-row">
         <span className="qco-customer-name" title={`전화번호: ${customerInfo.phone}`}>{customerInfo.name}</span>
-        {canBeMarkedAsNoShow ? (
-            <button className="qco-noshow-button" onClick={handleNoShowClick}>
-                노쇼 처리
-            </button>
-        ) : (
-            <span className="qco-total-price">{formatKRW(totalPrice)}원</span>
-        )}
+        <span className="qco-total-price">{formatKRW(totalPrice)}원</span>
       </div>
     </div>
   );

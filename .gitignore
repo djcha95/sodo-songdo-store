@@ -70,3 +70,6 @@ ui-debug.log
 # =================================================================
 /coverage/ # ✅ [추가] 테스트 커버리지 리포트
 *.tgz # ✅ [추가] npm pack 압축 파일
+
+# Local secret environment variables
+/functions/.env
