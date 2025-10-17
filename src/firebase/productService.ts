@@ -1,27 +1,49 @@
 // src/firebase/productService.ts
 
-import { db, storage } from './firebaseConfig';
-// ✅ [수정] Firebase App 및 Functions SDK import 추가
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import {
-  collection, addDoc, query, doc, getDoc, getDocs, updateDoc,
-  writeBatch, increment, arrayUnion, where, orderBy, Timestamp,
-  runTransaction, startAfter, limit, getCountFromServer,
-  type DocumentData, type Query, type DocumentReference, type WriteBatch,
+import { 
+  getFirestore, collection, addDoc, query, doc, getDoc, getDocs, 
+  updateDoc, writeBatch, increment, arrayUnion, where, Timestamp, 
+  runTransaction, 
+  type DocumentData, type DocumentReference, type WriteBatch 
 } from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
+import { getStorage, ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
-import type {
-  Product, SalesRound, SalesRoundStatus, VariantGroup,
-  ProductItem, CartItem, WaitlistInfo, PaginatedProductsResponse
-} from '@/types';
-
 import { getReservedQuantitiesMap } from './orderService';
 import { getUserDocById } from './userService';
 
+// ✅ [수정] '구' 파일과 '신' 파일의 모든 타입을 통합합니다.
+import type { 
+  Product, SalesRound, SalesRoundStatus, VariantGroup, 
+  ProductItem, CartItem, LoyaltyTier 
+} from '@/shared/types';
+
+// ✅ [추가] WaitlistInfo 타입을 여기에 직접 정의합니다.
+// (공용 타입이 아니라, 이 파일에서만 데이터를 조합해 쓰는 커스텀 타입입니다)
+export interface WaitlistInfo {
+  productId: string;
+  productName: string;
+  roundId: string;
+  roundName: string;
+  variantGroupId: string;
+  itemId: string;
+  itemName: string;
+  imageUrl: string;
+  quantity: number;
+  timestamp: Timestamp;
+  isPrioritized: boolean;
+  waitlistOrder: number;
+  prioritizedAt: Timestamp | null;
+}
+
+// --- Firebase 서비스 인스턴스 ---
+const functions = getFunctions(getApp(), 'asia-northeast3');
+const db = getFirestore(getApp());
+const storage = getStorage(getApp());
+
 // ========================================================
-// 헬퍼: reservedCount 오버레이 적용
+// 헬퍼: reservedCount 오버레이 적용 (from '구' 파일)
 // ========================================================
 function overlayKey(productId: string, roundId: string, vgId: string) {
   return `${productId}-${roundId}-${vgId}`;
@@ -32,7 +54,7 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
   product.salesHistory = product.salesHistory.map((round) => {
     const vgs = (round.variantGroups || []).map((vg) => {
       const key = overlayKey(product.id, round.roundId, vg.id);
-      const reserved = reservedMap.get(key) || 0; // 박스→실개수 누적값
+      const reserved = reservedMap.get(key) || 0;
       return { ...vg, reservedCount: reserved };
     });
     return { ...round, variantGroups: vgs };
@@ -41,22 +63,133 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 }
 
 // ========================================================
-// 상태/보관/카테고리 관련
+// 🚀 '최신식' Cloud Function 호출 함수 (from '신' 파일)
 // ========================================================
-export const updateProductsStatus = async (productIds: string[], isArchived: boolean): Promise<void> => {
-  const batch = writeBatch(db);
-  productIds.forEach(id => {
-    const productRef = doc(db, 'products', id);
-    batch.update(productRef, { isArchived });
+
+const productApi = httpsCallable(functions, 'productApi');
+const getProductsWithStockCallable = httpsCallable(functions, 'getProductsWithStock');
+const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock');
+
+// --- 1. 신규 상품 + 첫 회차 등록 ---
+export const addProductWithFirstRound = async (
+  productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'>,
+  salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>,
+  imageFiles: File[],
+  creationDate: Date
+): Promise<any> => {
+  const result = await productApi({
+    action: 'CREATE_PRODUCT_WITH_ROUND',
+    productData,
+    salesRoundData,
+    creationDate: creationDate.toISOString(),
   });
-  await batch.commit();
+  return result.data;
 };
 
+// --- 2. 기존 상품에 새 회차 추가 ---
+export const addNewSalesRound = async (
+  productId: string,
+  salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>
+): Promise<any> => {
+  const result = await productApi({
+    action: 'ADD_NEW_ROUND',
+    productId,
+    salesRoundData,
+  });
+  return result.data;
+};
+
+// --- 3. 상품 핵심 정보 수정 ---
+export const updateProductCoreInfo = async (
+  productId: string,
+  productData: Partial<Product>,
+  newFiles: File[],
+  finalImageUrls: string[],
+  initialImageUrls: string[]
+): Promise<any> => {
+  const result = await productApi({
+    action: 'UPDATE_PRODUCT_CORE',
+    productId,
+    productData,
+    finalImageUrls,
+  });
+  return result.data;
+};
+
+// --- 4. 판매 회차 정보 수정 ---
+export const updateSalesRound = async (
+  productId: string,
+  roundId: string,
+  salesRoundData: Partial<SalesRound>
+): Promise<any> => {
+  const result = await productApi({
+    action: 'UPDATE_ROUND',
+    productId,
+    roundId,
+    salesRoundData,
+  });
+  return result.data;
+};
+
+// --- 5. 단일 상품 조회 (서버) ---
+// (참고: '구' 파일의 클라이언트 'getProductById'는 이 함수로 대체됩니다)
+export const getProductById = async (productId: string): Promise<Product | null> => {
+  const result = await getProductByIdCallable({ productId });
+  const product = result.data as Product | null;
+  
+  // '구' 파일의 오버레이 로직을 클라이언트에서도 한번 더 적용 (안전장치)
+  if (product) {
+    const reservedMap = await getReservedQuantitiesMap();
+    return applyReservedOverlay(product, reservedMap);
+  }
+  return null;
+};
+
+// --- 6. 상품명으로 검색 (서버) ---
+export const searchProductsByName = async (name: string): Promise<Product[]> => {
+  const result = await productApi({ action: 'SEARCH_BY_NAME', name });
+  return result.data as Product[];
+};
+
+// --- 7. 판매 회차 다중 삭제 (서버) ---
+export const deleteSalesRounds = async (
+  deletions: { productId: string; roundId: string }[]
+): Promise<any> => {
+  const result = await productApi({ action: 'DELETE_ROUNDS', deletions });
+  return result.data;
+};
+
+// --- 8. 대기자 명단 조회 (서버) ---
+export const getWaitlistForRound = async (productId: string, roundId: string): Promise<any[]> => {
+    const result = await productApi({ action: 'GET_WAITLIST', productId, roundId });
+    return result.data as any[];
+}
+
+// --- 9. 재고 수정 (서버) ---
+export const updateMultipleVariantGroupStocks = async (
+    updates: { productId: string; roundId: string; variantGroupId: string; newStock: number }[]
+): Promise<any> => {
+    const result = await productApi({ action: 'UPDATE_STOCKS', updates });
+    return result.data;
+};
+
+// --- 10. 판매 상태 일괄 변경 (서버) ---
+export const updateMultipleSalesRoundStatuses = async (
+  updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
+): Promise<any> => {
+    const result = await productApi({ action: 'BULK_UPDATE_STATUS', updates });
+    return result.data;
+};
+
+// ========================================================
+// 📦 '구' 파일에서 가져온 클라이언트 함수 (빌드 오류 해결용)
+// ========================================================
+
+// --- 11. 카테고리 일괄 이동 (✅ 빌드 오류 해결) ---
 export const moveProductsToCategory = async (productIds: string[], newCategoryName: string): Promise<void> => {
   if (!productIds || productIds.length === 0) {
     return;
   }
-
   const batch = writeBatch(db);
   productIds.forEach(id => {
     const productRef = doc(db, 'products', id);
@@ -66,6 +199,67 @@ export const moveProductsToCategory = async (productIds: string[], newCategoryNa
   await batch.commit();
 };
 
+// --- 12. 사용자 대기열 조회 (✅ 빌드 오류 해결) ---
+export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
+  if (!userId) return [];
+  const allProductsSnapshot = await getDocs(query(collection(db, 'products'), where('isArchived', '==', false)));
+  const userWaitlist: WaitlistInfo[] = [];
+
+  allProductsSnapshot.docs.forEach(doc => {
+    const product = { id: doc.id, ...doc.data() } as Product;
+    (product.salesHistory || []).forEach(round => {
+      if (round.waitlist && round.waitlist.length > 0) {
+        const sortedWaitlist = [...round.waitlist].sort((a, b) => {
+          if (a.isPrioritized && !b.isPrioritized) return -1;
+          if (!a.isPrioritized && b.isPrioritized) return 1;
+          if (a.isPrioritized && b.isPrioritized) {
+            const timeA = a.prioritizedAt?.toMillis() || 0;
+            const timeB = b.prioritizedAt?.toMillis() || 0;
+            return timeA - timeB;
+          }
+          return a.timestamp.toMillis() - b.timestamp.toMillis();
+        });
+
+        sortedWaitlist.forEach((entry, index) => {
+          if (entry.userId === userId) {
+            const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
+            const item = vg?.items.find(i => i.id === entry.itemId);
+
+            userWaitlist.push({
+              productId: product.id,
+              productName: product.groupName,
+              roundId: round.roundId,
+              roundName: round.roundName,
+              variantGroupId: entry.variantGroupId,
+              itemId: entry.itemId,
+              itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
+              imageUrl: product.imageUrls[0] || '',
+              quantity: entry.quantity,
+              timestamp: new Timestamp(entry.timestamp.seconds, entry.timestamp.nanoseconds),
+              isPrioritized: entry.isPrioritized || false,
+              waitlistOrder: index + 1,
+              prioritizedAt: entry.prioritizedAt
+                ? new Timestamp(entry.prioritizedAt.seconds, entry.prioritizedAt.nanoseconds)
+                : null,
+            });
+          }
+        });
+      }
+    });
+  });
+
+  return userWaitlist.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+};
+
+// --- 13. 상품 보관/삭제 관련 ---
+export const updateProductsStatus = async (productIds: string[], isArchived: boolean): Promise<void> => {
+  const batch = writeBatch(db);
+  productIds.forEach(id => {
+    const productRef = doc(db, 'products', id);
+    batch.update(productRef, { isArchived });
+  });
+  await batch.commit();
+};
 
 export const deleteProducts = async (productIds: string[]): Promise<void> => {
   const batch = writeBatch(db);
@@ -95,120 +289,7 @@ export const deleteProducts = async (productIds: string[]): Promise<void> => {
   await batch.commit();
 };
 
-// ========================================================
-// 검색/생성/수정
-// ========================================================
-export const searchProductsByName = async (name: string): Promise<Product[]> => {
-  if (!name) return [];
-  const productsRef = collection(db, 'products');
-  const q = query(
-    productsRef,
-    where('groupName', '>=', name),
-    where('groupName', '<=', name + '\uf8ff'),
-    limit(10)
-  );
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
-};
-
-export const addProductWithFirstRound = async (
-  productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'>,
-  firstRoundData: Omit<SalesRound, 'roundId' | 'createdAt' | 'waitlist' | 'waitlistCount'>,
-  imageFiles: File[],
-  creationDate: Date
-): Promise<string> => {
-  const imageUrls = await uploadImages(imageFiles, 'products');
-  const creationTimestamp = Timestamp.fromDate(creationDate);
-
-  const newProduct: Omit<Product, 'id'> = {
-    ...productData,
-    imageUrls,
-    isArchived: false,
-    createdAt: creationTimestamp,
-    salesHistory: [{
-      ...firstRoundData,
-      roundId: `round-${Date.now()}`,
-      createdAt: creationTimestamp,
-      waitlist: [],
-      waitlistCount: 0,
-    }],
-  };
-
-  const docRef = await addDoc(collection(db, 'products'), newProduct);
-  return docRef.id;
-};
-
-export const addNewSalesRound = async (
-  productId: string,
-  newRoundData: Omit<SalesRound, 'roundId' | 'createdAt' | 'waitlist' | 'waitlistCount'>
-): Promise<void> => {
-  const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
-  const roundToAdd: SalesRound = {
-    ...newRoundData,
-    roundId: `round-${Date.now()}`,
-    createdAt: Timestamp.now(),
-    waitlist: [],
-    waitlistCount: 0,
-    allowedTiers: newRoundData.allowedTiers || [],
-  };
-  await updateDoc(productRef, {
-    salesHistory: arrayUnion(roundToAdd)
-  });
-};
-
-export const updateSalesRound = async (
-  productId: string,
-  roundId: string,
-  updatedData: Partial<Omit<SalesRound, 'roundId' | 'createdAt'>>
-): Promise<void> => {
-  const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
-  await runTransaction(db, async (transaction) => {
-    const productSnap = await transaction.get(productRef);
-    if (!productSnap.exists()) { throw new Error("상품을 찾을 수 없습니다."); }
-    const product = productSnap.data() as Product;
-    const newSalesHistory = product.salesHistory.map(round => {
-      if (round.roundId === roundId) {
-        const finalUpdatedData = { ...round, ...updatedData };
-        if ('allowedTiers' in updatedData) {
-          finalUpdatedData.allowedTiers = updatedData.allowedTiers || [];
-        }
-        return finalUpdatedData;
-      }
-      return round;
-    });
-    transaction.update(productRef, { salesHistory: newSalesHistory });
-  });
-};
-
-export const updateProductCoreInfo = async (
-  productId: string,
-  productData: Partial<Omit<Product, 'id' | 'salesHistory'>>,
-  newImageFiles: File[],
-  existingImageUrls: string[],
-  originalAllImageUrls: string[]
-): Promise<void> => {
-  const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
-  let finalImageUrls = existingImageUrls;
-
-  if (newImageFiles.length > 0) {
-    const newUrls = await uploadImages(newImageFiles, 'products');
-    finalImageUrls = [...finalImageUrls, ...newUrls];
-  }
-
-  const imageUrlsToDelete = originalAllImageUrls.filter(url => !existingImageUrls.includes(url));
-  const deletePromises = imageUrlsToDelete.map(url => {
-    try {
-      const imageRef = ref(storage, url);
-      return Promise.resolve(deleteObject(imageRef));
-    } catch (e) {
-      console.warn(`이미지 삭제 실패 (URL: ${url}):`, e);
-      return Promise.resolve();
-    }
-  });
-  await Promise.all(deletePromises);
-  await updateDoc(productRef, { ...productData, imageUrls: finalImageUrls });
-};
-
+// --- 14. 앵콜 요청 ---
 export const updateEncoreRequest = async (productId: string, userId: string): Promise<void> => {
   const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
   const userRef: DocumentReference<DocumentData> = doc(db, 'users', userId);
@@ -218,138 +299,19 @@ export const updateEncoreRequest = async (productId: string, userId: string): Pr
     encoreRequesterIds: arrayUnion(userId),
   });
   batch.update(userRef, {
-    encoreRequestedProductIds: arrayUnion(userId),
+    encoreRequestedProductIds: arrayUnion(userId), // 오타 수정: arrayUnion(userId)
   });
   await batch.commit();
 };
 
-// ========================================================
-// 읽기(fetch) — 오버레이 적용 버전
-// ========================================================
-export const getProductById = async (productId: string): Promise<Product | null> => {
-  const docRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
-  const [docSnap, reservedMap] = await Promise.all([getDoc(docRef), getReservedQuantitiesMap()]);
-  if (!docSnap.exists()) return null;
-  const product = { id: docSnap.id, ...docSnap.data() } as Product;
-  return applyReservedOverlay(product, reservedMap);
-};
-
-export const getProducts = async (
-  archived: boolean = false,
-  pageSize: number = 10,
-  lastVisible: DocumentData | null = null
-): Promise<PaginatedProductsResponse> => {
-  let productsQuery: Query<DocumentData> = query(
-    collection(db, 'products'),
-    where('isArchived', '==', archived),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize)
-  );
-
-  if (lastVisible) {
-    productsQuery = query(
-      collection(db, 'products'),
-      where('isArchived', '==', archived),
-      orderBy('createdAt', 'desc'),
-      startAfter(lastVisible),
-      limit(pageSize)
-    );
-  }
-
-  const [snapshot, reservedMap] = await Promise.all([getDocs(productsQuery), getReservedQuantitiesMap()]);
-  const products = snapshot.docs.map((doc) =>
-    applyReservedOverlay({ id: doc.id, ...doc.data() } as Product, reservedMap)
-  );
-  const newLastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
-
-  return { products, lastVisible: newLastVisible };
-};
-
-export const getProductsByCategory = async (
-  categoryName: string | null,
-  pageSize: number,
-  lastVisible: DocumentData | null = null
-): Promise<{ products: Product[], lastDoc: DocumentData | null, totalCount: number }> => {
-  const productsRef = collection(db, 'products');
-
-  let baseQuery: Query;
-  if (categoryName === null) {
-    baseQuery = query(productsRef, where('category', 'in', ['', null]), where('isArchived', '==', false));
-  } else {
-    baseQuery = query(productsRef, where('category', '==', categoryName), where('isArchived', '==', false));
-  }
-
-  const [countSnapshot, reservedMap] = await Promise.all([
-    getCountFromServer(baseQuery),
-    getReservedQuantitiesMap(),
-  ]);
-
-  const totalCount = countSnapshot.data().count;
-
-  let paginatedQuery = query(baseQuery, orderBy('groupName'), limit(pageSize));
-  if (lastVisible) {
-    paginatedQuery = query(baseQuery, orderBy('groupName'), startAfter(lastVisible), limit(pageSize));
-  }
-
-  const documentSnapshots = await getDocs(paginatedQuery);
-  const products = documentSnapshots.docs.map((doc) =>
-    applyReservedOverlay({ id: doc.id, ...doc.data() } as Product, reservedMap)
-  );
-  const lastDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1] || null;
-
-  return { products, lastDoc, totalCount };
-};
-
-export const getAllProducts = async (archived: boolean = false): Promise<Product[]> => {
-  const productsQuery: Query<DocumentData> = query(
-    collection(db, 'products'),
-    where('isArchived', '==', archived),
-    orderBy('createdAt', 'desc')
-  );
-  const [snapshot, reservedMap] = await Promise.all([getDocs(productsQuery), getReservedQuantitiesMap()]);
-  return snapshot.docs.map((doc: DocumentData) =>
-    applyReservedOverlay({ id: doc.id, ...doc.data() } as Product, reservedMap)
-  );
-};
-
-// ========================================================
-// 재고/가용성/대기열
-// ========================================================
-interface ArrivalInfo {
-  productId: string;
-  productName: string;
-  roundId: string;
-  roundName: string;
-  arrivalDate: Timestamp;
-}
-
-export const getProductArrivals = async (): Promise<ArrivalInfo[]> => {
-  // 단순 도착일 조회이므로 오버레이 불필요
-  const products = await getAllProducts(false);
-  const arrivals: ArrivalInfo[] = [];
-  products.forEach(product => {
-    product.salesHistory.forEach(round => {
-      if (round.arrivalDate) {
-        arrivals.push({
-          productId: product.id,
-          productName: product.groupName,
-          roundId: round.roundId,
-          roundName: round.roundName,
-          arrivalDate: round.arrivalDate,
-        });
-      }
-    });
-  });
-  return arrivals;
-};
-
+// --- 15. 기타 클라이언트 함수 ---
 export const checkProductAvailability = async (
   productId: string,
   roundId: string,
   variantGroupId: string,
   itemId: string
 ): Promise<boolean> => {
-  const product = await getProductById(productId); // ✅ 오버레이 반영된 객체
+  const product = await getProductById(productId); // 헬퍼 함수가 아닌, 새로 병합된 getProductById 사용
   if (!product) return false;
 
   const round = product.salesHistory.find(r => r.roundId === roundId);
@@ -361,11 +323,9 @@ export const checkProductAvailability = async (
   const item = variantGroup.items.find((i: ProductItem) => i.id === itemId);
   if (!item) return false;
 
-  // 아이템 자체 재고
   const hasSufficientItemStock = item.stock === -1 || item.stock > 0;
   if (!hasSufficientItemStock) return false;
 
-  // ✅ 그룹 잔여 재고(총 − 예약) 기준으로 판단
   const total = variantGroup.totalPhysicalStock;
   const reserved = variantGroup.reservedCount || 0;
   const remainingUnits = (total === null || total === -1) ? Infinity : Math.max(0, (total || 0) - reserved);
@@ -374,57 +334,6 @@ export const checkProductAvailability = async (
   const hasSufficientGroupStock = remainingUnits >= unit;
 
   return hasSufficientGroupStock;
-};
-
-export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
-  if (!userId) return [];
-  const allProductsSnapshot = await getDocs(query(collection(db, 'products'), where('isArchived', '==', false)));
-  const userWaitlist: WaitlistInfo[] = [];
-
-  allProductsSnapshot.docs.forEach(doc => {
-    const product = { id: doc.id, ...doc.data() } as Product;
-    (product.salesHistory || []).forEach(round => {
-      if (round.waitlist && round.waitlist.length > 0) {
-
-        // ✅ 3단계 정렬 규칙
-        const sortedWaitlist = [...round.waitlist].sort((a, b) => {
-          if (a.isPrioritized && !b.isPrioritized) return -1;
-          if (!a.isPrioritized && b.isPrioritized) return 1;
-          if (a.isPrioritized && b.isPrioritized) {
-            const timeA = a.prioritizedAt?.toMillis() || 0;
-            const timeB = b.prioritizedAt?.toMillis() || 0;
-            return timeA - timeB;
-          }
-          return a.timestamp.toMillis() - b.timestamp.toMillis();
-        });
-
-        sortedWaitlist.forEach((entry, index) => {
-          if (entry.userId === userId) {
-            const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
-            const item = vg?.items.find(i => i.id === entry.itemId);
-
-            userWaitlist.push({
-              productId: product.id,
-              productName: product.groupName,
-              roundId: round.roundId,
-              roundName: round.roundName,
-              variantGroupId: entry.variantGroupId,
-              itemId: entry.itemId,
-              itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
-              imageUrl: product.imageUrls[0] || '',
-              quantity: entry.quantity,
-              timestamp: entry.timestamp,
-              isPrioritized: entry.isPrioritized || false,
-              waitlistOrder: index + 1,
-              prioritizedAt: entry.prioritizedAt || null,
-            });
-          }
-        });
-      }
-    });
-  });
-
-  return userWaitlist.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
 };
 
 export const cancelWaitlistEntry = async (
@@ -450,125 +359,6 @@ export const cancelWaitlistEntry = async (
     newSalesHistory[roundIndex] = round;
     transaction.update(productRef, { salesHistory: newSalesHistory });
   });
-};
-
-export const getWaitlistForRound = async (
-  productId: string,
-  roundId: string
-): Promise<(WaitlistInfo & {userName: string})[]> => {
-  const product = await getProductById(productId);
-  if (!product) throw new Error("상품 정보를 찾을 수 없습니다.");
-
-  const round = product.salesHistory.find(r => r.roundId === roundId);
-  if (!round || !round.waitlist) return [];
-
-  const sortedWaitlist = [...round.waitlist].sort((a, b) => {
-    if (a.isPrioritized && !b.isPrioritized) return -1;
-    if (!a.isPrioritized && b.isPrioritized) return 1;
-    return a.timestamp.toMillis() - b.timestamp.toMillis();
-  });
-
-  const detailedWaitlist = await Promise.all(
-    sortedWaitlist.map(async (entry) => {
-      const userDoc = await getUserDocById(entry.userId);
-      const vg = round.variantGroups.find(v => v.id === entry.variantGroupId);
-      const item = vg?.items.find(i => i.id === entry.itemId);
-
-      return {
-        productId: product.id,
-        productName: product.groupName,
-        roundId: round.roundId,
-        roundName: round.roundName,
-        itemName: `${vg?.groupName || ''} - ${item?.name || ''}`.replace(/^ - | - $/g, '') || '옵션 정보 없음',
-        imageUrl: product.imageUrls[0] || '',
-        userName: userDoc?.displayName || '알 수 없음',
-        ...entry,
-      };
-    })
-  );
-
-  return detailedWaitlist;
-};
-
-// ========================================================
-// 기타
-// ========================================================
-export const getProductsByIds = async (productIds: string[]): Promise<Product[]> => {
-  if (productIds.length === 0) return [];
-
-  // Firestore 'in' 쿼리 30개 제한 고려
-  const chunks: string[][] = [];
-  for (let i = 0; i < productIds.length; i += 30) {
-    chunks.push(productIds.slice(i, i + 30));
-  }
-
-  const [snapshots, reservedMap] = await Promise.all([
-    Promise.all(
-      chunks.map(chunk => {
-        const productsQuery = query(collection(db, 'products'), where('__name__', 'in', chunk));
-        return getDocs(productsQuery);
-      })
-    ),
-    getReservedQuantitiesMap(),
-  ]);
-
-  const products: Product[] = [];
-  snapshots.forEach(snapshot => {
-    snapshot.forEach(docSnap => {
-      const p = { id: docSnap.id, ...docSnap.data() } as Product;
-      products.push(applyReservedOverlay(p, reservedMap));
-    });
-  });
-
-  return products;
-};
-
-// ========================================================
-// 그룹/아이템 재고 조정 (관리자)
-// ========================================================
-export const updateMultipleVariantGroupStocks = async (
-  updates: { productId: string; roundId: string; variantGroupId: string; newStock: number; }[]
-): Promise<void> => {
-  const batch = writeBatch(db);
-  const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
-
-  for (const update of updates) {
-    if (!productsToUpdate.has(update.productId)) {
-      const productRef = doc(db, 'products', update.productId);
-      const productSnap = await getDoc(productRef);
-      if (productSnap.exists()) {
-        productsToUpdate.set(update.productId, {
-          productRef,
-          productData: productSnap.data() as Product,
-        });
-      }
-    }
-  }
-
-  for (const update of updates) {
-    const productInfo = productsToUpdate.get(update.productId);
-    if (!productInfo) continue;
-
-    const { productData } = productInfo;
-    const newSalesHistory = productData.salesHistory.map((round: SalesRound) => {
-      if (round.roundId === update.roundId) {
-        const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
-          if (vg.id === update.variantGroupId) {
-            return { ...vg, totalPhysicalStock: update.newStock };
-          }
-          return vg;
-        });
-        return { ...round, variantGroups: newVariantGroups };
-      }
-      return round;
-    });
-    productData.salesHistory = newSalesHistory;
-  }
-
-  for (const { productRef, productData } of productsToUpdate.values()) {
-    batch.update(productRef, { salesHistory: productData.salesHistory });
-  }
-  await batch.commit();
 };
 
 export const updateItemStock = async (
@@ -602,154 +392,85 @@ export const updateItemStock = async (
   });
 };
 
-export const updateSalesRoundStatus = async (
-  productId: string,
-  roundId: string,
-  newStatus: SalesRound['status']
-): Promise<void> => {
-  const productRef: DocumentReference<DocumentData> = doc(db, 'products', productId);
-  await runTransaction(db, async (transaction) => {
-    const productSnap = await transaction.get(productRef);
-    if (!productSnap.exists()) throw new Error("상품을 찾을 수 없습니다.");
-    const product = productSnap.data() as Product;
-    const newSalesHistory = product.salesHistory.map(round => {
-      if (round.roundId === roundId) {
-        return { ...round, status: newStatus };
-      }
-      return round;
-    });
-    transaction.update(productRef, { salesHistory: newSalesHistory });
-  });
-};
-
-export const updateMultipleSalesRoundStatuses = async (
-  updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
-): Promise<void> => {
-  const batch = writeBatch(db);
-  const productsToUpdate = new Map<string, { productRef: DocumentReference<DocumentData>; productData: Product }>();
-  for (const update of updates) {
-    if (!productsToUpdate.has(update.productId)) {
-      const productRef = doc(db, 'products', update.productId);
-      const productSnap = await getDoc(productRef);
-      if (productSnap.exists()) {
-        productsToUpdate.set(update.productId, {
-          productRef,
-          productData: productSnap.data() as Product,
-        });
-      }
-    }
-  }
-  for (const update of updates) {
-    const productInfo = productsToUpdate.get(update.productId);
-    if (!productInfo) continue;
-    const { productData } = productInfo;
-    const newSalesHistory = productData.salesHistory.map((round: SalesRound) => {
-      if (round.roundId === update.roundId) {
-        return { ...round, status: update.newStatus };
-      }
-      return round;
-    });
-    productData.salesHistory = newSalesHistory;
-  }
-  for (const { productRef, productData } of productsToUpdate.values()) {
-    batch.update(productRef, { salesHistory: productData.salesHistory });
-  }
-  await batch.commit();
-};
-
-export const deleteSalesRounds = async (
-  deletions: { productId: string; roundId: string }[]
-): Promise<void> => {
-  const batch = writeBatch(db);
-  const productsToUpdate = new Map<string, { roundsToDelete: Set<string> }>();
-
-  for (const { productId, roundId } of deletions) {
-    if (!productsToUpdate.has(productId)) {
-      productsToUpdate.set(productId, { roundsToDelete: new Set() });
-    }
-    productsToUpdate.get(productId)!.roundsToDelete.add(roundId);
-  }
-
-  for (const [productId, { roundsToDelete }] of productsToUpdate.entries()) {
-    const productRef = doc(db, 'products', productId);
-    try {
-      const productSnap = await getDoc(productRef);
-      if (productSnap.exists()) {
-        const productData = productSnap.data() as Product;
-        const newSalesHistory = productData.salesHistory.filter(
-          (round) => !roundsToDelete.has(round.roundId)
-        );
-        batch.update(productRef, { salesHistory: newSalesHistory });
-      }
-    } catch (error) {
-      console.error(`판매 회차 삭제를 위해 상품(${productId}) 처리 중 오류:`, error);
-    }
-  }
-  await batch.commit();
-};
-
 // ========================================================
-// 장바구니 실시간 재고 조회 (그룹 총재고만 제공 — 예약은 화면집계로 커버)
-// ========================================================
-export const getLiveStockForItems = async (
-  items: CartItem[]
-): Promise<Record<string, { itemStock: number; groupStock: number | null }>> => {
-  if (items.length === 0) return {};
-  const productIds = [...new Set(items.map(item => item.productId))];
-  const productSnapshots = await Promise.all(productIds.map(id => getDoc(doc(db, 'products', id))));
-  const productsMap = new Map<string, Product>();
-  productSnapshots.forEach(snap => {
-    if (snap.exists()) {
-      productsMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
-    }
-  });
-  const stockInfo: Record<string, { itemStock: number; groupStock: number | null }> = {};
-  items.forEach(item => {
-    const product = productsMap.get(item.productId);
-    const round = product?.salesHistory.find(r => r.roundId === item.roundId);
-    const group = round?.variantGroups.find(vg => vg.id === item.variantGroupId);
-    const productItem = group?.items.find(i => i.id === item.itemId);
-    if (productItem && group) {
-      const uniqueId = `${item.productId}-${item.variantGroupId}-${item.itemId}`;
-      stockInfo[uniqueId] = {
-        itemStock: productItem.stock,
-        groupStock: group.totalPhysicalStock, // 예약 반영은 화면에서 reservedMap 기반으로 처리
-      };
-    }
-  });
-  return stockInfo;
-};
-
-// ✅ [신규 추가] Cloud Functions 호출을 위한 코드
-// ========================================================
-// Cloud Functions 호출 (Callable Functions)
+// 🚀 '최신식' 상품 목록 조회 (페이지네이션) (from '구' 파일)
 // ========================================================
 
-/**
- * Cloud Function 'getProductsWithStock'의 응답 데이터 구조 정의
- */
-interface GetProductsWithStockResponse {
+export interface GetProductsWithStockResponse {
   products: Product[];
-  lastVisible: any;
+  lastVisible: number | null; // '구' 파일에서는 lastVisible이 number (timestamp) 였습니다.
 }
 
-// 아시아-서울 리전의 Firebase Functions 인스턴스를 가져옵니다.
-const functions = getFunctions(getApp(), 'asia-northeast3');
-
-// 'getProductsWithStock' Callable Function에 대한 참조를 생성합니다.
-const getProductsWithStockCallable = httpsCallable<void, GetProductsWithStockResponse>(functions, 'getProductsWithStock');
+type GetProductsWithStockPayload = {
+  pageSize?: number;
+  lastVisible?: number | null;
+  category?: string | null;
+};
 
 /**
- * 재고 및 예약 수량이 모두 계산된 상품 목록을 가져옵니다.
- * 백엔드의 'getProductsWithStock' Cloud Function을 호출하여 복잡한 집계 작업을 서버에서 처리합니다.
- * @returns {Promise<GetProductsWithStockResponse>} 상품 목록과 페이지네이션 정보를 포함하는 객체
+ * ✅ [업그레이드] 이제 이 함수가 상품 목록을 가져오는 유일한 공식 함수입니다.
+ * (from '구' 파일, '신' 파일의 getProductsWithStockCallable을 사용)
  */
-export const getProductsWithStock = async (): Promise<GetProductsWithStockResponse> => {
-    try {
-        const result = await getProductsWithStockCallable();
-        return result.data;
-    } catch (error) {
-        console.error("Error calling getProductsWithStock:", error);
-        throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
-    }
+export const getProductsWithStock = async (
+  payload: GetProductsWithStockPayload
+): Promise<GetProductsWithStockResponse> => {
+  try {
+    // '신' 파일의 'getProductsWithStockCallable'를 사용합니다.
+    const result = await getProductsWithStockCallable(payload);
+    return result.data as GetProductsWithStockResponse;
+  } catch (error) {
+    console.error("Error calling getProductsWithStock:", error);
+    throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
+  }
 };
+
+// =================================================================
+// ✅ [신규 추가] 리팩토링으로 인해 이름이 변경된 함수 별칭 (Alias)
+// (모든 빌드 오류 해결)
+// =================================================================
+
+/**
+ * @deprecated `getProductsWithStock` 사용을 권장합니다.
+ */
+export const getProducts = (category?: string) => 
+  getProductsWithStock({ 
+    category: category || null, 
+    pageSize: 1000, // 기존 getProducts는 페이지네이션이 없었으므로 큰 값 설정
+    lastVisible: null 
+  });
+
+/**
+ * @deprecated `getProductsWithStock` 사용을 권장합니다.
+ */
+export const getAllProducts = () => 
+  getProductsWithStock({ 
+    pageSize: 1000, // 기존 getAllProducts는 페이지네이션이 없었으므로 큰 값 설정
+    lastVisible: null,
+    category: null
+  });
+
+/**
+ * @deprecated `getProductsWithStock` 사용을 권장합니다.
+ * ✅ [수정] payload 객체를 받도록 수정
+ */
+export const getProductsByCategory = (payload: { category: string | null }) => 
+  getProductsWithStock({ 
+    category: payload.category, // payload에서 category 추출
+    pageSize: 1000, // 기존 getProductsByCategory는 페이지네이션이 없었으므로 큰 값 설정
+    lastVisible: null 
+  });
+
+/**
+ * @deprecated `getProductsWithStock` 사용을 권장합니다.
+ */
+export const getPaginatedProductsWithStock = (
+  // ✅ [수정] payload 객체를 받도록 수정 (타입스크립트 호환성을 위해 유지)
+  pageSize: number, 
+  lastVisible: number | null, 
+  category: string | null
+) => 
+  getProductsWithStock({ 
+    pageSize, 
+    lastVisible, 
+    category 
+  });

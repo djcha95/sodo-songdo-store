@@ -2,7 +2,7 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-import { UserDocument } from "../types.js";
+import { UserDocument } from "@/shared/types";
 
 export const searchUsers = onCall({
   region: "asia-northeast3",

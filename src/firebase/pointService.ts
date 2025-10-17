@@ -13,7 +13,7 @@ import {
   collection,
 } from 'firebase/firestore';
 // ✅ [수정] OrderStatus에 'LATE_CANCELED' 타입을 추가해야 합니다 (types.ts 파일에서).
-import type { UserDocument, Order, OrderStatus, PointLog, LoyaltyTier } from '@/types';
+import type { UserDocument, Order, OrderStatus, PointLog, LoyaltyTier } from '@/shared/types';
 import { calculateTier } from '@/utils/loyaltyUtils';
 
 

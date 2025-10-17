@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { addCategory, getCategories, updateCategory, deleteCategory, updateCategoriesOrder, getProductsCountByCategory } from '../../firebase';
-import type { Category } from '../../types';
+import type { Category } from '../../root-types';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
 import { PlusCircle, Edit, Trash2, X, Check, GripVertical } from 'lucide-react';

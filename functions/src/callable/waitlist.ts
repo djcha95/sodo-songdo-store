@@ -3,7 +3,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp, Transaction } from "firebase-admin/firestore";
-import type { Product, SalesRound, WaitlistEntry } from "../types.js";
+import type { Product, SalesRound, WaitlistEntry } from "@/shared/types";
 
 // 클라이언트에서 대기 신청을 처리하기 위한 함수
 export const addWaitlistEntry = onCall({

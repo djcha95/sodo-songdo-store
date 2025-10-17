@@ -26,7 +26,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { 
     Banner, StoreInfo, Category, Product, Order, OrderItem,
     TodayStockItem, TodayOrderItem, TodayPickupItem 
-} from '@/types'; 
+} from '@/shared/types'; 
 
 // --- Helper Functions ---
 export const uploadImages = async (files: File[], path: string): Promise<string[]> => {

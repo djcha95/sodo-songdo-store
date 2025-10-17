@@ -1,7 +1,7 @@
 // src/pages/admin/components/BannerList.tsx
 
 import React from 'react';
-import type { Banner } from '../../../types';
+import type { Banner } from '../../../root-types';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Edit3, Trash2, ToggleRight, ToggleLeft, GripVertical, Calendar } from 'lucide-react';

@@ -3,17 +3,23 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+// ⚠️ [변경] path는 더 이상 필요 없으므로 제거해도 됩니다.
+// import path from 'path'; 
+import tsconfigPaths from 'vite-tsconfig-paths'; // ✅ [추가] 플러그인을 import 합니다.
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
+  // ✅ [수정] plugins 배열에 tsconfigPaths()를 추가합니다.
+  plugins: [react(), tsconfigPaths()],
 
+  // ⚠️ [제거] tsconfigPaths 플러그인이 자동으로 처리하므로 이 부분은 제거합니다.
+  // resolve: {
+  //   alias: {
+  //     '@': path.resolve(__dirname, './src'),
+  //   },
+  // },
+
+  // --- 이하 기존 설정은 그대로 유지합니다 ---
   cacheDir: '../../node_modules/.vite/sodomall-app-cache',
   
   server: {
@@ -31,11 +37,10 @@ export default defineConfig({
     },
   },
 
-  // ✅ [추가] Vitest 테스트 환경 설정
   test: {
-    globals: true, // describe, it, expect 등을 import 없이 사용
-    environment: 'jsdom', // 브라우저 DOM 환경 시뮬레이션
-    setupFiles: './src/setupTests.ts', // 테스트 실행 전 설정 파일 지정
-    css: true, // CSS 파일 처리 활성화
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.ts',
+    css: true,
   },
 });

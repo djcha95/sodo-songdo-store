@@ -4,7 +4,7 @@ import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, FirestoreEvent
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
-import type { Order, UserDocument, PointLog, LoyaltyTier } from "../types.js";
+import type { Order, UserDocument, PointLog, LoyaltyTier } from "@/shared/types";
 
 const POINT_POLICIES = {
   FRIEND_INVITED: { points: 100, reason: '친구 초대 성공' },

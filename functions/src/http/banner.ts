@@ -8,7 +8,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import dayjs from "dayjs";
 import isBetween from "dayjs/plugin/isBetween";
 
-import type { Product, SalesRound, VariantGroup, Order, OrderItem } from "../types.js";
+import type { Product, SalesRound, VariantGroup, Order, OrderItem } from "@/shared/types";
 
 dayjs.extend(isBetween);
 

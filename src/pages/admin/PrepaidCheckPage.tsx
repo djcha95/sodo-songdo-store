@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { Wallet, User, Package, Box, Ban, CheckCheck, ChevronsDown, ChevronsUp } from 'lucide-react';
 import { getPrepaidOrders, updateMultipleOrderStatuses, revertOrderStatus } from '@/firebase/orderService';
-import type { Order, OrderStatus, GroupedPrepaidData, AggregatedProductInfo } from '@/types';
+import type { Order, OrderStatus } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import PrepaidListTable from '@/components/admin/PrepaidListTable';
 import './PrepaidCheckPage.css';
@@ -12,6 +12,20 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 
 dayjs.locale('ko');
+
+export interface AggregatedProductInfo {
+  id: string;
+  productName: string;
+  variantName: string;
+  totalQuantity: number;
+  customers: { name: string; phoneLast4: string; quantity: number }[];
+}
+
+export interface GroupedPrepaidData {
+  groupKey: string;
+  orders: Order[];
+  products: AggregatedProductInfo[];
+}
 
 const PrepaidCheckPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);

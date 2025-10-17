@@ -6,49 +6,34 @@ import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } fr
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
 import { MotionConfig } from 'framer-motion';
-// ✅ [추가] TanStack Query 관련 모듈 import
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import './index.css';
-import './styles/variables.css';
-import './styles/common.css';
 
 import App from './App';
-import ProtectedRoute from './components/common/ProtectedRoute';
-import SodomallLoader from '@/components/common/SodomallLoader'; 
-
+import SodomallLoader from '@/components/common/SodomallLoader';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { CartProvider } from './context/CartContext';
-import { SelectionProvider } from './context/SelectionContext';
-import { EncoreRequestProvider } from './context/EncoreRequestContext';
-import { NotificationProvider } from './context/NotificationContext';
-import { TutorialProvider } from './context/TutorialContext';
-import { LaunchProvider } from './context/LaunchContext';
 
-// --- 페이지 컴포넌트 lazy loading (기존과 동일) ---
+// --- 페이지 컴포넌트 lazy loading ---
+
+// 1. 고객용 페이지
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
-const AdminLayout = React.lazy(() => import('./components/admin/AdminLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
 const SimpleOrderPage = React.lazy(() => import('./pages/customer/SimpleOrderPage'));
 const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetailPage'));
-const CartPage = React.lazy(() => import('./pages/customer/CartPage'));
-const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
-const CustomerCenterPage = React.lazy(() => import('./pages/customer/CustomerCenterPage'));
-const PointHistoryPage = React.lazy(() => import('./pages/customer/PointHistoryPage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./pages/customer/PrivacyPolicyPage'));
-const OrderCalendarPage = React.lazy(() => import('@/components/customer/OrderCalendar'));
-const EncorePage = React.lazy(() => import('./pages/customer/EncorePage'));
-const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));
-const ProductListPageAdmin = React.lazy(() => import('@/pages/admin/ProductListPageAdmin'));
+
+// 2. ✅ [복원] 관리자용 페이지
+const AdminLayout = React.lazy(() => import('@/components/admin/AdminLayout')); // ✅ 이렇게 수정해주세요.
+const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));const ProductListPageAdmin = React.lazy(() => import('@/pages/admin/ProductListPageAdmin'));
 const ProductAddAdminPage = React.lazy(() => import('@/pages/admin/ProductAddAdminPage'));
 const SalesRoundEditPage = React.lazy(() => import('@/pages/admin/SalesRoundEditPage'));
 const RaffleEventAdminPage = React.lazy(() => import('@/pages/admin/RaffleEventAdminPage'));
 const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
 const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage'));
-const CategoryManagementPage = React.lazy(() => import('@/pages/admin/CategoryManagementPage'));
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
 const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
@@ -56,50 +41,43 @@ const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage')
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
 const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
 
-/**
- * ✅ [추가] QueryClient 인스턴스 생성
- * 앱 전역에서 사용할 쿼리 클라이언트를 만듭니다.
- * defaultOptions로 캐시 시간 등을 설정할 수 있습니다.
- */
+
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,      // 5분 동안 데이터를 '신선함'으로 간주 (재요청 X)
-      gcTime: 1000 * 60 * 30,       // 30분 동안 사용되지 않으면 캐시에서 제거
-      retry: 1,                     // API 요청 실패 시 1번 재시도
-    },
+    queries: { staleTime: 1000 * 60 * 5, gcTime: 1000 * 60 * 30, retry: 1, },
   },
 });
 
+// --- 접근 제어 레이아웃 ---
+
+// 1. 로그인이 필요한 모든 사용자를 위한 레이아웃
 const AuthLayout = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
-
-  if (loading) {
-    return <SodomallLoader />;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-  
+  if (loading) return <SodomallLoader />;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   return <Outlet />;
 };
 
+// 2. 로그인하지 않은 사용자만 접근 가능한 레이아웃
 const PublicLayout = () => {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return <SodomallLoader />;
-  }
-
-  if (user) {
-    return <Navigate to="/" replace />;
-  }
-
+  if (loading) return <SodomallLoader />;
+  if (user) return <Navigate to="/" replace />;
   return <Outlet />;
 };
 
+// 3. ✅ [수정] 관리자만 접근 가능한 레이아웃
+const AdminRoute = () => {
+  const { user, isAdmin, loading } = useAuth();
+  if (loading) return <SodomallLoader />;
+  // AuthLayout에서 이미 user를 확인하지만, 이중으로 보호
+  if (!user || !isAdmin) return <Navigate to="/" replace />; 
+  return <AdminLayout />; // 관리자용 레이아웃을 렌더링
+};
+
+
+// --- ✅ [수정] 최종 라우터 설정 ---
 const router = createBrowserRouter([
   {
     element: <PublicLayout />,
@@ -116,76 +94,53 @@ const router = createBrowserRouter([
       {
         element: <App />,
         children: [
+          // --- 고객용 경로 ---
           {
-            path: "admin",
-            element: <ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>,
-            children: [
-              { index: true, element: <DashboardPage /> },
-              { path: 'dashboard', element: <DashboardPage /> },
-              { path: 'quick-check', element: <QuickCheckPage /> },
-              { path: 'prepaid-check', element: <PrepaidCheckPage /> },
-              { path: 'products', element: <ProductListPageAdmin /> },
-              { path: 'products/add', element: <ProductAddAdminPage /> },
-               { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
-              // ✅ [추가] 새로운 이벤트 관리 페이지 라우트
-              { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> },
-              { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
-              { path: 'orders', element: <OrderManagementPage /> },
-              { path: 'create-order', element: <CreateOrderPage /> },
-              { path: 'users', element: <UserListPage /> },
-              { path: 'users/:userId', element: <UserDetailPage /> },
-              { path: 'banners', element: <BannerAdminPage /> },
-              { path: 'data-tools', element: <DataAdminPage /> }
-            ],
-          },
-          {
-            element: <ProtectedRoute><CustomerLayout /></ProtectedRoute>,
+            element: <CustomerLayout />,
             children: [
               { index: true, element: <SimpleOrderPage /> },
-              { path: "cart", element: <CartPage /> },
-              { path: "customer-center", element: <CustomerCenterPage /> },
-              { path: "encore", element: <EncorePage /> },
-              {
-                path: "mypage",
-                children: [
-                  { index: true, element: <MyPage /> },
-                  { path: "history", element: <OrderHistoryPage /> },
-                  { path: "points", element: <PointHistoryPage /> },
-                  { path: "orders", element: <OrderCalendarPage /> },
-                ]
-              },
+              { path: "mypage/history", element: <OrderHistoryPage /> },
             ]
           },
+          { path: "product/:productId", element: <ProductDetailPage /> },
+          
+          // --- ✅ [복원] 관리자용 전체 경로 ---
           {
-            path: "product/:productId",
-            element: <ProtectedRoute><ProductDetailPage /></ProtectedRoute>,
-          },
+            path: "admin",
+            element: <AdminRoute />, // 관리자 접근 제어
+            children: [
+                { index: true, element: <DashboardPage /> },
+                { path: 'dashboard', element: <DashboardPage /> },
+                { path: 'quick-check', element: <QuickCheckPage /> },
+                { path: 'prepaid-check', element: <PrepaidCheckPage /> },
+                { path: 'products', element: <ProductListPageAdmin /> },
+                { path: 'products/add', element: <ProductAddAdminPage /> },
+                { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
+                { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> },
+                { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
+                { path: 'orders', element: <OrderManagementPage /> },
+                { path: 'create-order', element: <CreateOrderPage /> },
+                { path: 'users', element: <UserListPage /> },
+                { path: 'users/:userId', element: <UserDetailPage /> },
+                { path: 'banners', element: <BannerAdminPage /> },
+                { path: 'data-tools', element: <DataAdminPage /> },
+            ]
+          }
         ]
       },
     ]
   },
-  {
-    path: "*",
-    element: (
-      <div style={{ padding: '50px', textAlign: 'center', fontSize: '1.5rem', color: '#666' }}>
-        404 - 페이지를 찾을 수 없습니다.
-      </div>
-    ),
-  },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
+
+// --- ✅ [수정] 간소화된 AppProviders ---
 const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Cart, Tutorial, Encore 등 불필요한 Provider는 모두 제외
   const providers = [
-    // ✅ [추가] QueryClientProvider를 Context Provider 목록에 추가합니다.
     (props: { children: React.ReactNode }) => <QueryClientProvider client={queryClient} {...props} />,
     HelmetProvider,
     AuthProvider,
-    LaunchProvider,
-    TutorialProvider,
-    NotificationProvider,
-    CartProvider,
-    SelectionProvider,
-    EncoreRequestProvider,
   ];
 
   return (
@@ -193,38 +148,24 @@ const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       <MotionConfig reducedMotion="always">
         <Toaster
           position="top-center"
-          toastOptions={{
-            style: {
-              background: '#fff',
-              color: 'var(--text-color-dark, #343a40)',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-              borderRadius: '10px',
-              border: '1px solid #f0f0f0',
-              padding: '12px 16px',
-              fontSize: '1rem',
-              fontWeight: '500',
-            },
-            success: { iconTheme: { primary: 'var(--accent-color, #28a745)', secondary: '#fff' } },
-            error: { iconTheme: { primary: 'var(--danger-color, #dc3545)', secondary: '#fff' } },
-          }}
+          toastOptions={{ /* ... toast options ... */ }}
           containerStyle={{ zIndex: 9999 }}
         />
       </MotionConfig>
-
-      {providers.reduceRight((acc, Provider) => {
-        return <Provider>{acc}</Provider>;
-      }, children)}
+      {providers.reduceRight((acc, Provider) => <Provider>{acc}</Provider>, children)}
     </>
   );
 };
 
-
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <AppProviders>
-      <Suspense fallback={<SodomallLoader />}>
-        <RouterProvider router={router} />
-      </Suspense>
-    </AppProviders>
-  </React.StrictMode>
-);
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  createRoot(rootElement).render(
+    <React.StrictMode>
+      <AppProviders>
+        <Suspense fallback={<SodomallLoader />}>
+          <RouterProvider router={router} />
+        </Suspense>
+      </AppProviders>
+    </React.StrictMode>
+  );
+}

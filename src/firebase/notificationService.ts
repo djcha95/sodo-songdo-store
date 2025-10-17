@@ -3,7 +3,7 @@
 import { db } from './firebaseConfig';
 // ✅ [수정] Firebase v9 SDK에 맞는 정확한 import 경로로 수정합니다.
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
-import type { NotificationType as OriginalNotificationType } from '@/types';
+import type { NotificationType as OriginalNotificationType } from '@/shared/types';
 
 // ✅ [수정] 대기 확정 알림 타입을 추가합니다. (이전 수정사항 유지)
 type NotificationType = OriginalNotificationType | 'WAITLIST_CONFIRMED';

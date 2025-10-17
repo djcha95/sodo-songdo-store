@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 // [수정] 실제 데이터 구조에 맞는 타입들을 가져옵니다.
-import type { Product, SalesRound, VariantGroup, ProductItem } from '../../types';
+import type { Product, SalesRound, VariantGroup, ProductItem } from '../../root-types';
 
 // [수정] 모달이 받을 props 타입을 현재 데이터 구조에 맞게 변경합니다.
 interface EditProductModalProps {

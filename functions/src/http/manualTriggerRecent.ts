@@ -3,7 +3,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { sendAlimtalk } from "../utils/nhnApi.js";
-import type { Order, UserDocument } from "../types.js";
+import type { Order, UserDocument } from "@/shared/types";
 
 export const manualSendRecentReminders = onRequest(
   {

@@ -1,52 +1,87 @@
 /* src/components/common/SodomallLoader.css */
 
-.Sodomall-loader-overlay {
+/* --- 1. 전체 화면 로더 스타일 (기존) --- */
+.loader-container {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(255, 255, 255, 0.8);
   display: flex;
   justify-content: center;
   align-items: center;
+  background-color: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(4px);
   z-index: 9999;
 }
 
-.Sodomall-loader-container {
-  text-align: center;
+.loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
 }
 
-.Sodomall-loader-text {
-  font-size: 3rem;
-  font-weight: 800;
-  color: var(--primary-color, #3b82f6);
+.spinner-full {
+  width: 48px;
+  height: 48px;
+  border: 5px solid #f3f3f3; /* Light grey */
+  border-top: 5px solid var(--primary-color, #3b82f6); /* Blue */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.Sodomall-loader-text span {
-  display: inline-block;
-  animation: wave 1.6s infinite;
-  animation-delay: var(--delay);
-}
-
-/* 글자별로 애니메이션 지연 시간 설정 */
-.Sodomall-loader-text span:nth-child(1) { --delay: 0.1s; }
-.Sodomall-loader-text span:nth-child(2) { --delay: 0.2s; }
-.Sodomall-loader-text span:nth-child(3) { --delay: 0.3s; }
-
-.Sodomall-loader-message {
-  margin-top: 1.5rem;
-  font-size: 1.1rem;
-  color: #495057;
+.loader-text {
+  font-size: 1rem;
   font-weight: 500;
+  color: #555;
 }
 
-/* 웨이브 애니메이션 키프레임 */
-@keyframes wave {
-  0%, 40%, 100% {
-    transform: translateY(0);
-  }
-  20% {
-    transform: translateY(-20px);
-  }
+
+/* --- 2. ✅ [신규] 인라인(페이지 하단용) 로더 스타일 --- */
+.loader-inline {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 1rem;
+}
+
+/* 귀여운 로딩 모션 애니메이션 */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  position: relative;
+  animation: rotate 1s linear infinite;
+}
+
+.spinner::before {
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0px;
+  border-radius: 50%;
+  border: 3px solid #e0e0e0;
+}
+
+.spinner::after {
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0px;
+  border-radius: 50%;
+  border-top: 3px solid var(--primary-color, #3b82f6);
+  border-right: 3px solid transparent; /* 반원처럼 보이게 하는 효과 */
+}
+
+
+/* --- 3. 공용 애니메이션 --- */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes rotate {
+  100% { transform: rotate(360deg); }
 }

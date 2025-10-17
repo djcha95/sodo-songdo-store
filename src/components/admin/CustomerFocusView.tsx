@@ -4,7 +4,7 @@ import React from 'react';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import toast from 'react-hot-toast';
-import type { UserDocument, Order, AggregatedOrderGroup } from '@/types';
+import type { UserDocument, Order, AggregatedOrderGroup } from '@/shared/types';
 import CustomerProfileSummary from './CustomerProfileSummary';
 import CustomerActionTabs from './CustomerActionTabs';
 import { ArrowLeft } from 'lucide-react';

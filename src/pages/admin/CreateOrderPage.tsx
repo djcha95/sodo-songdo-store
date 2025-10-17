@@ -8,7 +8,7 @@ import { getAllProducts } from '@/firebase';
 // ✅ [수정] firebase 라이브러리가 아닌, 우리가 설정한 config 파일에서 'functions'를 가져옵니다.
 import { functions } from '@/firebase/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, ProductItem } from '@/types';
+import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, ProductItem } from '@/shared/types';
 import { Search, User, Package, X, CheckCircle, PlusCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './CreateOrderPage.css';

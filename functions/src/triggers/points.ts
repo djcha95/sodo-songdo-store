@@ -5,7 +5,7 @@ import * as logger from "firebase-functions/logger";
 // ✅ [수정] dbAdmin을 db라는 별칭으로 가져옵니다.
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue } from "firebase-admin/firestore";
-import type { PointLog } from "../types.js";
+import type { PointLog } from "@/shared/types";
 
 export const createNotificationOnPointChange = onDocumentCreated(
   {

@@ -10,7 +10,7 @@ import { useCart } from '@/context/CartContext';
 import { useEncoreRequest } from '@/context/EncoreRequestContext';
 import { useLaunch } from '@/context/LaunchContext';
 import toast from 'react-hot-toast';
-import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/types'; 
+import type { Product as OriginalProduct, CartItem, StorageType, SalesRound as OriginalSalesRound } from '@/shared/types'; 
 import useLongPress from '@/hooks/useLongPress';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
 import './ProductCard.css';

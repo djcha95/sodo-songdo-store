@@ -1,7 +1,7 @@
 // functions/src/utils/helpers.ts
 
 // ✅ [수정] 클라이언트와 서버의 로직을 완전히 일치시키기 위해 전체적으로 업데이트합니다.
-import type { LoyaltyTier } from "../types.js";
+import type { LoyaltyTier } from "@/shared/types";
 
 /**
  * @description ✅ [사용자 요청 반영] 상향된 등급 기준(250/100/30회)을 적용합니다.

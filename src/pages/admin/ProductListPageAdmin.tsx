@@ -2,14 +2,15 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-// ✅ [추가] useSearchParams 훅을 import 합니다.
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, deleteSalesRounds, updateSalesRound } from '../../firebase';
-import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType, WaitlistEntry } from '../../types';
+// ✅ [수정] firebase/index.ts 에서 모든 함수를 가져오도록 통일합니다.
+import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, getWaitlistForRound, deleteSalesRounds, updateSalesRound, getProductsWithStock } from '@/firebase';
+// ✅ [수정] 올바른 경로에서 모든 타입을 가져옵니다.
+import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType, WaitlistEntry } from '@/shared/types';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Store, MoreVertical, Ticket } from 'lucide-react';
+import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Store, MoreVertical } from 'lucide-react';
+// ✅ [수정] 중복된 import를 하나로 합칩니다.
 import SodomallLoader from '@/components/common/SodomallLoader';
-import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import './ProductListPageAdmin.css';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
@@ -20,10 +21,8 @@ import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/funct
 import { formatKRW } from '@/utils/number';
 import { reportError, reportInfo } from '@/utils/logger';
 
-import { getProductsWithStock } from '@/firebase/productService';
 import { Timestamp } from 'firebase/firestore';
 import { safeToDate, getDeadlines } from '@/utils/productUtils';
-
 
 // =================================================================
 // 📌 타입 정의 및 헬퍼 함수
@@ -81,18 +80,7 @@ interface WaitlistProcessResult {
 
 
 const getDynamicStatus = (round: SalesRound, remainingStock: number): DynamicStatus => {
-  // ✅ [수정] 추첨 완료 상태 추가
-  if (round.status === 'DRAW_COMPLETED') {
-    return { text: "추첨완료", className: "ended" };
-  }
-  if (round.eventType === 'RAFFLE') {
-    const now = dayjs();
-    const deadline = safeToDate(round.deadlineDate);
-    if (deadline && now.isAfter(deadline)) {
-      return { text: "응모종료", className: "ended" };
-    }
-    return { text: "응모진행중", className: "selling-raffle" };
-  }
+  // ✅ [수정] 추첨 관련 'if' 블록 2개 모두 삭제
   if (round.manualStatus === 'sold_out') return { text: "매진 (수동)", className: "manual-sold-out" };
   if (round.manualStatus === 'ended') return { text: "판매종료 (수동)", className: "manual-ended" };
   if (round.isManuallyOnsite) return { text: "현장판매 (수동)", className: "manual-onsite-sale" };
@@ -173,6 +161,7 @@ const translateStorageType = (storageType: StorageType): string => {
     return typeMap[storageType] || storageType;
 };
 
+// ✅ [수정] VariantGroup의 모든 속성을 포함하도록 타입을 수정합니다.
 interface EnrichedVariantGroup extends VariantGroup {
     reservedCount: number;
     pickedUpCount: number;
@@ -287,19 +276,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
     const isExpandable = item.enrichedVariantGroups.length > 1;
 
     const renderReserveAndWaitlistCell = (vg: EnrichedVariantGroup | null, isMasterRow: boolean = false) => {
-        if (item.round.eventType === 'RAFFLE') {
-            if (isMasterRow || !isExpandable) {
-                return (
-                    <td className="quantity-cell" style={{textAlign: isMasterRow ? 'center' : 'left'}}>
-                        <Link to={`/admin/events/${item.productId}/${item.round.roundId}`} className="waitlist-count-button">
-                            <Ticket size={14} /> {item.round.entryCount || 0}명
-                        </Link>
-                    </td>
-                );
-            } else {
-                return <td className="quantity-cell" style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
-            }
-        }
+        // ✅ [수정] 추첨 관련 'if' 블록 전체 삭제
         
         if (isMasterRow) {
             const totalWaitlistCount = item.enrichedVariantGroups.reduce((sum, v) => sum + v.waitlistCount, 0);
@@ -395,12 +372,22 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                   <td className="sub-row-name"> └ {subVg.groupName}</td>
                   <td><span className={`status-badge ${subStatus.className}`} title={`Status: ${subStatus.text}`}>{subStatus.text}</span></td>
                   <td style={{textAlign: 'right'}}>{subVg.items[0]?.price != null ? `${formatKRW(subVg.items[0].price)} 원` : '–'}</td>
-                  <td>{formatDate(getEarliestExpirationDateForGroup(subVg))}</td>
                   {renderReserveAndWaitlistCell(subVg, false)}
                   <td className="quantity-cell">{subVg.pickedUpCount}</td>
                   <td className="stock-cell">
                       {editingStockId === subVgUniqueId ? (
-                        <input type="number" className="stock-input" value={stockInputs[subVgUniqueId] || ''} onChange={(e) => onSetStockInputs(prev => ({...prev, [subVgUniqueId]: e.target.value}))} onBlur={() => onStockEditSave(subVgUniqueId, item)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onStockEditSave(subVgUniqueId, item); if (e.key === 'Escape') onStockEditStart('', 0); }} />
+                        <input 
+                          type="number" 
+                          className="stock-input" 
+                          value={stockInputs[subVgUniqueId] || ''} 
+                          onChange={(e) => onSetStockInputs(prev => ({...prev, [subVgUniqueId]: e.target.value}))} 
+                          onBlur={() => onStockEditSave(subVgUniqueId, item)} 
+                          autoFocus 
+                          onKeyDown={(e) => { 
+                            if (e.key === 'Enter') onStockEditSave(subVgUniqueId, item); // ✅ [수정] vgUniqueId -> subVgUniqueId
+                            if (e.key === 'Escape') onStockEditStart('', 0); 
+                          }} 
+                        />
                       ) : subVg.configuredStock === -1 ? (
                         <button className="stock-display-button unlimited-badge" onClick={() => onStockEditStart(subVgUniqueId, subVg.configuredStock)} title="재고 수량을 클릭하여 수정">무제한</button>
                       ) : (
@@ -437,7 +424,8 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
                       userId: item.userId || `${index}`, 
                       userName: '사용자',
                       quantity: item.quantity, 
-                      timestamp: item.timestamp,
+                      // ✅ [수정] UniversalTimestamp를 클라이언트 Timestamp로 변환
+                      timestamp: new Timestamp(item.timestamp.seconds, item.timestamp.nanoseconds),
                       variantGroupId: item.variantGroupId,
                     }));
                     setWaitlist(processedWaitlist);
@@ -480,7 +468,7 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
                     <span>({data.roundName} / <strong>{data.variantGroupName}</strong>)</span>
                     <button onClick={onClose} className="modal-close-button">&times;</button>
                 </div>
-                <div className="waitlist-modal-body">{loading && <div className="modal-inline-loader"><InlineSodomallLoader /></div>}{error && <p className="error-text">{error}</p>}{!loading && !error && (waitlist.length > 0 ? (<table><thead><tr><th>순번</th><th>신청자</th><th>신청수량</th><th>신청일시</th></tr></thead><tbody>{waitlist.map((entry, index) => (<tr key={entry.userId + entry.timestamp.seconds}><td>{index + 1}</td><td>{entry.userName}</td><td>{entry.quantity}</td><td>{formatTimestamp(entry.timestamp)}</td></tr>))}</tbody></table>) : <p>이 옵션의 대기자가 없습니다.</p>)}</div>
+                <div className="waitlist-modal-body">{loading && <div className="modal-inline-loader"><SodomallLoader /></div>}{error && <p className="error-text">{error}</p>}{!loading && !error && (waitlist.length > 0 ? (<table><thead><tr><th>순번</th><th>신청자</th><th>신청수량</th><th>신청일시</th></tr></thead><tbody>{waitlist.map((entry, index) => (<tr key={entry.userId + entry.timestamp.seconds}><td>{index + 1}</td><td>{entry.userName}</td><td>{entry.quantity}</td><td>{formatTimestamp(entry.timestamp)}</td></tr>))}</tbody></table>) : <p>이 옵션의 대기자가 없습니다.</p>)}</div>
                 <div className="waitlist-modal-footer"><input type="number" value={stockToAdd} onChange={e => setStockToAdd(e.target.value)} placeholder="추가할 재고 수량" className="stock-add-input"/><button onClick={handleConfirm} className="stock-add-confirm-btn" disabled={!stockToAdd || parseInt(stockToAdd, 10) <= 0}>재고 추가 및 자동 전환</button></div>
             </div>
         </div>
@@ -532,7 +520,8 @@ const ProductListPageAdmin: React.FC = () => {
     try {
         const [categoriesData, productsData] = await Promise.all([
             getCategories(),
-            getProductsWithStock()
+            // ✅ [수정] getProductsWithStock 함수 인자에 빈 payload 전달 (모든 상품을 가져오도록 설정)
+            getProductsWithStock({ pageSize: 1000, lastVisible: null, category: null })
         ]);
 
         setPageData({
@@ -609,15 +598,9 @@ const ProductListPageAdmin: React.FC = () => {
     if (searchQuery) flatRounds = flatRounds.filter(item => item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || item.round.roundName.toLowerCase().includes(searchQuery.toLowerCase()));
     if (filterCategory !== 'all') flatRounds = flatRounds.filter(item => item.category === filterCategory);
     
-    // ✅ [수정] 필터 로직 수정
+    // ✅ [수정] 필터 로직 수정 (RAFFLE 관련 필터 제거)
     if (filterStatus !== 'all') {
-        if (filterStatus === 'event') {
-            // 'event' 필터일 경우, eventType이 RAFFLE인 것만 필터링
-            flatRounds = flatRounds.filter(item => item.round.eventType === 'RAFFLE');
-        } else {
-            // 그 외에는 기존처럼 상태 텍스트로 필터링
-            flatRounds = flatRounds.filter(item => item.dynamicStatus.text === filterStatus);
-        }
+        flatRounds = flatRounds.filter(item => item.dynamicStatus.text === filterStatus);
     }
 
     return flatRounds.sort((a, b) => {
@@ -823,15 +806,10 @@ const ProductListPageAdmin: React.FC = () => {
                     <div className="control-group"><Filter size={16} /><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="control-select"><option value="all">모든 카테고리</option>{pageData.categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select>
                     <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="control-select">
                         <option value="all">모든 상태</option>
-                        {/* ✅ [추가] 필터 옵션에 '이벤트' 추가 */}
-                        <option value="event">이벤트</option>
+                        {/* ✅ [수정] 추첨 관련 필터 옵션 모두 삭제 */}
                         <option value="1차 공구중">1차 공구중</option>
                         <option value="2차 공구중">2차 공구중</option>
                         <option value="대기접수중">대기접수중</option>
-                        <option value="응모진행중">응모진행중</option>
-                        <option value="응모종료">응모종료</option>
-                        {/* ✅ [추가] '추첨완료' 상태 필터 옵션 추가 */}
-                        <option value="추첨완료">추첨완료</option>
                         <option value="픽업중">픽업중</option>
                         <option value="현장판매중">현장판매중</option>
                         <option value="현장판매 (수동)">현장판매 (수동)</option>
@@ -861,7 +839,7 @@ const ProductListPageAdmin: React.FC = () => {
                     <th>상태</th>
                     <th>가격</th>
                     <th className="sortable-header" onClick={() => handleSortChange('expirationDate')}>유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
-                    <th title="예약된 수량 / 대기자 수 또는 응모자 수">예약/대기(응모)</th>
+                    <th title="예약된 수량 / 대기자 수">예약/대기</th>
                     <th title="픽업 완료된 수량">픽업</th>
                     <th>재고</th>
                     <th>관리</th>

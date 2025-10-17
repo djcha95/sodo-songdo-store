@@ -16,8 +16,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import './MyPage.css';
 import toast from 'react-hot-toast';
-import type { LoyaltyTier, UserDocument } from '@/types';
-import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
+import type { LoyaltyTier, UserDocument } from '@/shared/types';
+import SodomallLoader from '@/components/common/SodomallLoader';
 
 // ✅ [추가] 새로 만든 컴포넌트를 import 합니다.
 import ReferralCodeInputSection from '@/components/customer/ReferralCodeInputSection';
@@ -298,7 +298,7 @@ const MyPage = () => {
   if (!user || !userDocument) {
     return (
       <div className="mypage-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-        <InlineSodomallLoader />
+        <SodomallLoader />
       </div>
     )
   }

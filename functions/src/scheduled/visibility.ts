@@ -4,7 +4,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue } from "firebase-admin/firestore";
-import type { Product, SalesRound } from "../types.js";
+import type { Product, SalesRound } from "@/shared/types";
 import dayjs from "dayjs";
 
 /**

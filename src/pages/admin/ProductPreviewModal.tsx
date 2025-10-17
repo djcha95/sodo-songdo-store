@@ -2,7 +2,7 @@
 
 import React from 'react';
 // [수정] ProductItem, VariantGroup 타입만 중앙 types.ts에서 가져옵니다.
-import type { ProductItem, VariantGroup } from '../../types';
+import type { ProductItem, VariantGroup } from '../../root-types';
 
 // [수정] 컴포넌트가 받는 product prop의 정확한 형태를 정의하는 로컬 인터페이스를 추가합니다.
 // 이 데이터는 폼에서 만들어진 임시 객체이므로, DB의 Product 타입과 구조가 다릅니다.

@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react';
 import { getCategories } from '@/firebase/generalService';
 import { getProductsByCategory, moveProductsToCategory } from '@/firebase/productService';
-import type { Product, Category } from '@/types';
+import type { Product, Category } from '@/shared/types';
 import toast from 'react-hot-toast';
 import { ArrowLeftRight, Search, ChevronsRight, FileWarning, FolderSymlink } from 'lucide-react';
 // ✅ [수정] 경로를 찾지 못하는 문제를 해결하기 위해 절대 경로 별칭 대신 상대 경로를 사용합니다.
 import SodomallLoader from '../../components/common/SodomallLoader';
-import InlineSodomallLoader from '../../components/common/InlineSodomallLoader';
 import './ProductCategoryBatchPage.css';
 
 // '분류 없음'을 나타내는 특수 상수
@@ -37,7 +36,8 @@ const ProductCategoryBatchPage = () => {
       try {
         const [categoriesData, unassignedProductsResult] = await Promise.all([
           getCategories(),
-          getProductsByCategory(null, 1000)
+          // ✅ [수정] payload 객체로 전달
+          getProductsByCategory({ category: null })
         ]);
         setCategories(categoriesData);
         setProducts(unassignedProductsResult.products);
@@ -61,10 +61,10 @@ const ProductCategoryBatchPage = () => {
     setSearchTerm('');
 
     try {
-      const productsResult = await getProductsByCategory(
-        categoryName === UNASSIGNED_CATEGORY_KEY ? null : categoryName,
-        1000
-      );
+      // ✅ [수정] payload 객체로 전달
+      const productsResult = await getProductsByCategory({
+        category: categoryName === UNASSIGNED_CATEGORY_KEY ? null : categoryName
+      });
       setProducts(productsResult.products);
     } catch (err) {
       console.error("상품 목록 로딩 실패:", err);
@@ -190,7 +190,7 @@ const ProductCategoryBatchPage = () => {
         </div>
         <div className="product-table-container">
           {loadingProducts ? (
-            <InlineSodomallLoader message="상품 목록을 불러오는 중..." />
+            <SodomallLoader message="상품 목록을 불러오는 중..." />
           ) : filteredProducts.length === 0 ? (
             <div className="empty-list-indicator">
               <FileWarning size={40} />

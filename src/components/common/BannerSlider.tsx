@@ -1,6 +1,6 @@
 // src/components/BannerSlider.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { Banner } from '../../types';
+import type { Banner } from '../../root-types';
 import './BannerSlider.css';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';

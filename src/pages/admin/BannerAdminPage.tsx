@@ -5,7 +5,7 @@ import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { onSnapshot, collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { db } from '@/firebase';
-import type { Banner } from '@/types';
+import type { Banner } from '@/shared/types';
 import * as bannerService from '@/firebase/bannerService';
 
 import BannerForm from '@/pages/admin/components/BannerForm';

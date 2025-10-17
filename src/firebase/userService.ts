@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 
 import type { User as FirebaseUser } from 'firebase/auth';
-import type { UserDocument, PointLog, LoyaltyTier } from '@/types';
+import type { UserDocument, PointLog, LoyaltyTier } from '@/shared/types';
 import { POINT_POLICIES } from './pointService';
 import { calculateTier } from '@/utils/loyaltyUtils';
 

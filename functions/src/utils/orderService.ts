@@ -2,7 +2,7 @@
 
 import { dbAdmin as db } from '../firebase/admin.js';
 import { Timestamp, Transaction } from 'firebase-admin/firestore';
-import type { Order, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument } from '../types.js';
+import type { Order, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument } from '../functions-types.js';
 import * as logger from "firebase-functions/logger";
 
 /**

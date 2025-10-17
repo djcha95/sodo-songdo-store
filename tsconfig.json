@@ -1,25 +1,24 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/shared/*": ["src/shared/*"]          // ✅ 추가
+    },
     "target": "ES2021",
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
-
-    // 당장 에러를 빨리 잠재우려면 아래 두 줄을 이렇게 둡니다
     "noImplicitAny": false,
     "skipLibCheck": true,
-
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "types": ["vite/client", "react", "react-dom"],
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    "types": ["vite/client", "react", "react-dom"]
   },
   "include": ["src", "env.d.ts"],
   "exclude": ["node_modules", "dist"]

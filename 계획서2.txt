@@ -23,7 +23,7 @@
 **3. 로딩창을 '소도몰 춤추는 캐릭터'로 변경**
 * **(난이도: 하)**
 * **세부 설명:** `README.md`에 명시된 공용 로더 컴포넌트의 애니메이션을 새로운 '춤추는 소도몰' GIF 또는 Lottie 애니메이션으로 교체합니다.
-* **핵심 파일:** `src/components/common/SodomallLoader.tsx`, `src/components/common/InlineSodomallLoader.tsx`
+* **핵심 파일:** `src/components/common/SodomallLoader.tsx`, `src/components/common/SodomallLoader.tsx`
 * **구현 방안:** 기존 로딩 애니메이션 코드를 새로운 이미지나 애니메이션 컴포넌트로 교체합니다.
 
 **4. 장바구니 페이지 - '예약 확정하기' 버튼 하단 고정**

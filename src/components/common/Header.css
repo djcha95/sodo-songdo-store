@@ -1,312 +1,135 @@
 /* src/components/common/Header.css */
 
-/* --- 새로운 헤더 레이아웃 스타일 --- */
-.main-header.customer-header-sticky {
-    position: sticky;
-    top: 0;
-    width: 100%;
-    background-color: #fff;
-    z-index: 100;
-    padding: 0 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid var(--border-color);
-    min-height: 60px;
-    box-sizing: border-box;
+.new-customer-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #f0f0f0;
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 1010;
+  height: 60px;
+  transition: top 0.3s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
 }
 
-.header-left,
-.header-right {
-    display: flex;
-    align-items: center;
-    flex: 1;
-    gap: 8px;
-    /* ✅ [추가] 모바일에서 로고와 겹치지 않도록 최대 너비 설정 */
-    max-width: 35%;
+.new-customer-header.visible { top: 0; }
+.new-customer-header.hidden { top: -65px; }
+
+.header-content {
+  max-width: var(--max-width, 1200px);
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.header-right {
-    justify-content: flex-end;
+.header-left, .header-right {
+  display: flex;
+  align-items: center;
+  height: 100%;
 }
 
-.header-center {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: -1; 
-    display: flex;
-    justify-content: center;
+/* --- 페이지 탭 (공동구매, 추가예약) --- */
+.header-page-tabs {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: 100%;
 }
 
-.brand-text-logo-container {
-    --brand-name-font-size: 1.5rem;
-    --store-name-font-size: 0.85rem;
-    text-decoration: none;
-    color: inherit;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-.brand-name {
-    font-size: var(--brand-name-font-size);
-    font-weight: 700;
-    color: var(--primary-color);
-    line-height: 1.2;
-}
-.store-name { 
-    font-size: var(--store-name-font-size);
-    color: var(--text-color-light);
-    margin-top: -6px;
+.page-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 100%;
+  padding: 0 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #888;
+  position: relative;
+  transition: color 0.2s ease-in-out;
 }
 
-
-.header-action-btn {
-    background: none;
-    border: none;
-    padding: 8px;
-    margin: 0;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-color-dark);
-    position: relative;
-    border-radius: 50%;
-    width: auto;
-    height: 40px;
-    transition: background-color 0.2s, color 0.2s;
-    text-decoration: none;
+.page-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: transparent;
+  transform: scaleX(0);
+  transition: transform 0.3s ease, background-color 0.3s ease;
 }
 
-.header-action-btn:hover {
-    background-color: var(--background-light-dark);
+.page-tab.active {
+  color: var(--text-color-dark);
 }
 
-.notification-badge-header {
-    position: absolute;
-    top: 4px;
-    right: 0px;
-    background-color: var(--danger-color);
-    color: white;
-    font-size: 10px;
-    font-weight: bold;
-    border-radius: 50%;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border: 2px solid white;
+.page-tab.active::after {
+  transform: scaleX(1);
 }
 
+.page-tab.primary.active { color: #f97316; }
+.page-tab.primary.active::after { background-color: #f97316; }
 
-/* --- Mobile Notification Modal 스타일 --- */
-.notification-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    animation: fadeIn 0.3s ease;
+.page-tab.secondary.active { color: #3b82f6; } 
+.page-tab.secondary.active::after { background-color: #3b82f6; }
+
+/* --- 브랜드 로고 --- */
+.header-brand .brand-link {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-color-dark);
+  text-decoration: none;
 }
 
-.notification-modal-content {
-    background-color: #fff;
-    width: 90%;
-    max-width: 400px;
-    max-height: 80vh;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    animation: slideUp 0.3s ease-out;
+/* --- 오른쪽 네비게이션 --- */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* 버튼 사이 간격 */
 }
 
-.notification-modal-header {
-    padding: 16px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* '예약내역' 버튼 기본 스타일 */
+.header-nav .nav-item {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #555;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background-color 0.2s, color 0.2s;
 }
 
-.notification-modal-header h4 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 600;
+.header-nav .nav-item:hover {
+  background-color: #f3f4f6;
 }
 
-.modal-close-button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 4px;
-    color: var(--text-color-light);
+.header-nav .nav-item.active {
+  background-color: #111827;
+  color: #ffffff;
 }
 
-.notification-modal-body {
-    padding: 8px 16px;
-    overflow-y: auto;
-    flex-grow: 1;
+/* ✅ [수정] 관리자 버튼에만 적용될 더 구체적인 스타일 규칙 */
+.header-nav .nav-item.admin-link {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #fffbeB; /* 부드러운 노란색 배경 */
+  color: #b45309; /* 진한 주황색 텍스트 */
+  border: 1px solid #fde68a; /* 노란색 테두리 */
 }
 
-.mark-all-read-btn-mobile {
-    width: 100%;
-    text-align: right;
-    background: none;
-    border: none;
-    color: var(--primary-color);
-    font-size: 0.85rem;
-    padding: 8px 0;
-    cursor: pointer;
+.header-nav .nav-item.admin-link:hover {
+  background-color: #fef3c7;
 }
 
-.notification-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-.notification-item {
-    display: flex;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid #f2f2f2;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.notification-item:hover {
-    background-color: #f9f9f9;
-}
-.notification-item.read { opacity: 0.6; }
-.notification-item:last-child { border-bottom: none; }
-.notification-item-icon {
-    flex-shrink: 0;
-    margin-top: 2px;
-}
-.notification-item-content {
-    flex-grow: 1;
-}
-.notification-message {
-    font-size: 0.9rem;
-    margin: 0 0 4px;
-    line-height: 1.4;
-}
-.notification-time {
-    font-size: 0.75rem;
-    color: var(--text-color-light);
-}
-
-.notification-item.no-notifications {
-    text-align: center;
-    padding: 40px 0;
-    color: #999;
-    display: flex; 
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
-
-.notification-modal-footer {
-    padding: 16px;
-    border-top: 1px solid #eee;
-    background-color: #f7f7f7;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    border-bottom-left-radius: 12px;
-    border-bottom-right-radius: 12px;
-}
-
-.footer-points-section, .footer-tier-section {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.9rem;
-}
-.footer-tier-section strong { color: var(--tier-color); }
-
-
-/* Animation keyframes */
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slideUp { from { transform: translateY(20px); opacity: 0.7; } to { transform: translateY(0); opacity: 1; } }
-
-/* 아이콘 색상 (기존 코드에서 가져옴) */
-.icon-success { color: #28a745; }
-.icon-info { color: #17a2b8; }
-.icon-warning { color: #ffc107; }
-.icon-danger { color: #dc3545; }
-.icon-tier-up { color: #ffc107; }
-.icon-tier-down { color: #ff9800; }
-
-.header-order-history-btn {
-    display: flex;
-    align-items: center;
-    text-decoration: none !important;
-    border-bottom: none !important;
-    outline: none !important;
-}
-
-.order-history-badge {
-    color: white;
-    font-size: 0.8rem;
-    font-weight: 700;
-    padding: 7px 8px;
-    border-radius: 16px;
-    white-space: nowrap;
-    transition: all 0.2s ease-in-out;
-}
-
-.header-order-history-btn.order-now .order-history-badge {
-    background-color: #14b8a6; 
-}
-
-.header-order-history-btn.view-history .order-history-badge {
-    background-color: #3b82f6; 
-}
-
-.header-order-history-btn:hover .order-history-badge {
-    opacity: 0.9;
-    transform: scale(1.03); 
-}
-
-/* ✅ [삭제] 기존 이벤트 버튼 스타일 제거 */
-/* .header-event-btn, .event-badge ... */
-
-/* ✅ [추가] 새로운 블링블링 이벤트 버튼 스타일 */
-@keyframes bling-effect {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 3px #ff4757, 0 0 6px #ff6b81, 0 0 9px #ff6b81;
-    }
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 6px #ff4757, 0 0 12px #ff6b81, 0 0 18px #ff6b81;
-    }
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 3px #ff4757, 0 0 6px #ff6b81, 0 0 9px #ff6b81;
-    }
-}
-
-.header-bling-event-btn {
-    background-color: #e53935; /* 밝은 빨강 */
-    color: white;
-    border-radius: 20px;
-    padding: 0 10px !important; /* 내부 패딩 */
-    font-size: 0.8rem;
-    font-weight: 700;
-    gap: 4px;
-    animation: bling-effect 2s ease-in-out infinite;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    height: 32px !important;
-}
-
-.header-bling-event-btn:hover {
-    background-color: #d32f2f !important; /* 호버 시 약간 어둡게 */
+/* ✅ [수정] .active 상태일 때도 우선순위를 높여서 적용 */
+.header-nav .nav-item.admin-link.active {
+  background-color: #f59e0b; /* 활성화 시 진한 주황색 */
+  color: #ffffff;
+  border-color: #f59e0b;
 }

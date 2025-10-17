@@ -5,7 +5,8 @@ import { useLocation } from 'react-router-dom';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import ProductForm from '@/components/admin/ProductForm';
 import type { ProductFormMode } from '@/components/admin/ProductForm';
-import type { SalesRound } from '@/types';
+// ✅ [경로 정상] tsconfig.json 수정 후 이 경로는 정상 작동합니다.
+import type { SalesRound } from '@/shared/types';
 
 const ProductAddAdminPage: React.FC = () => {
     const location = useLocation();

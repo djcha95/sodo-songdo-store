@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event'; // ✅ [추가] 사용자 액션을 위한 라이브러리
 import { MemoryRouter } from 'react-router-dom';
 import ProductCard from './ProductCard';
-import type { Product } from '@/types';
+import type { Product } from '@/shared/types';
 import { Timestamp } from 'firebase/firestore';
 
 vi.mock('react-router-dom', async (importOriginal) => {

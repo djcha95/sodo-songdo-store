@@ -7,9 +7,9 @@ import { mainTourSteps } from '@/components/customer/AppTour';
 import { getActiveBanners } from '@/firebase'; 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import type { Product, Banner, SalesRound, VariantGroup } from '@/types';
+import type { Product, Banner, SalesRound, VariantGroup } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
-import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import ProductSection from '@/components/customer/ProductSection';
 import BannerSlider from '@/components/common/BannerSlider';
 import ProductCard from '@/components/customer/ProductCard';
@@ -338,7 +338,7 @@ const ProductListPage: React.FC = () => {
         </div>
 
         <div ref={loadMoreRef} className="infinite-scroll-loader">
-          {loadingMore && <InlineSodomallLoader />}
+          {loadingMore && <SodomallLoader />}
           {!hasMoreRef.current && products.length > PAGE_SIZE && (
             <div className="end-of-list-message"><p>모든 상품을 확인했어요!</p></div>
           )}

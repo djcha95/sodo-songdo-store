@@ -1,7 +1,7 @@
 // src/components/admin/UserSearchResult.tsx
 
 import React from 'react';
-import type { UserDocument } from '@/types';
+import type { UserDocument } from '@/shared/types';
 import './UserSearchResult.css';
 
 interface UserSearchResultProps {

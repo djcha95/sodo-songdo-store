@@ -4,46 +4,25 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
-// ✅ [수정] OrderStatus 타입을 import 목록에 추가합니다.
-import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo } from "../types.js";
 import { getAuth } from "firebase-admin/auth";
-import type { LoyaltyTier } from "../types.js";
+// ✅ [수정] AdminTimestamp 타입을 shared/types에서 직접 가져옵니다.
+import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo, LoyaltyTier, AdminTimestamp } from "@/shared/types";
 
+// ✅ [복원] 관리자 기능에 필요한 등급 계산, 포인트 정책 로직을 복원합니다.
 const POINT_POLICIES = {
   LATE_CANCEL_PENALTY: { points: -50, reason: '마감 임박 취소 (0.5 노쇼)' },
-  // ✅ [추가] 부분 픽업 페널티 정책 추가
   PARTIAL_PICKUP_PENALTY: { points: -50, reason: '부분 픽업 (0.5 노쇼)' },
 } as const;
 
-
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    // [수정] 등급 계산 로직을 프론트엔드(loyaltyUtils.ts)와 일치시킴
     const totalTransactions = pickupCount + noShowCount;
-
-    if (noShowCount >= 3) {
-        return '참여 제한';
-    }
-
-    if (totalTransactions === 0) {
-        return '공구새싹';
-    }
-
+    if (noShowCount >= 3) return '참여 제한';
+    if (totalTransactions === 0) return '공구새싹';
     const pickupRate = (pickupCount / totalTransactions) * 100;
-
-    if (pickupRate >= 98 && pickupCount >= 250) {
-        return '공구의 신';
-    }
-    if (pickupRate >= 95 && pickupCount >= 100) {
-        return '공구왕';
-    }
-    if (pickupRate >= 90 && pickupCount >= 30) {
-        return '공구요정';
-    }
-    
-    if (pickupRate < 70) {
-        return '주의 요망';
-    }
-
+    if (pickupRate >= 98 && pickupCount >= 250) return '공구의 신';
+    if (pickupRate >= 95 && pickupCount >= 100) return '공구왕';
+    if (pickupRate >= 90 && pickupCount >= 30) return '공구요정';
+    if (pickupRate < 70) return '주의 요망';
     return '공구새싹';
 };
 
@@ -407,7 +386,6 @@ export const cancelOrder = onCall(
         const requesterId = request.auth.uid;
         
         try {
-            // ✅ [수정] 사용하지 않는 updatedUser 변수 제거
             const { message } = await db.runTransaction(async (transaction) => {
                 const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
                 const orderDoc = await transaction.get(orderRef);
@@ -420,7 +398,7 @@ export const cancelOrder = onCall(
                      throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
                 }
 
-                const userRef = db.collection('users').withConverter(userConverter).doc(order.userId);
+                const userRef = db.collection('users').doc(order.userId);
                 const userSnap = await transaction.get(userRef);
                 if (!userSnap.exists) {
                     throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
@@ -437,12 +415,11 @@ export const cancelOrder = onCall(
                     throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다.");
                 }
 
-                const userData = userSnap.data();
+                const userData = userSnap.data() as UserDocument;
                 if(!userData) {
                     throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
                 }
 
-                let userUpdateData: any = {};
                 let finalMessage = "주문이 성공적으로 취소되었습니다.";
 
                 if (penaltyType === 'late') {
@@ -459,7 +436,7 @@ export const cancelOrder = onCall(
                         expiresAt: null,
                     };
                     
-                    userUpdateData = {
+                    const userUpdateData: any = {
                         points: FieldValue.increment(penalty.points),
                         noShowCount: newNoShowCount,
                         loyaltyTier: newTier,
@@ -479,7 +456,6 @@ export const cancelOrder = onCall(
                     notes: order.notes ? `${order.notes}\n[취소] ${finalMessage}` : `[취소] ${finalMessage}`
                 });
                 
-
                 return { message: finalMessage };
             });
             
@@ -494,87 +470,73 @@ export const cancelOrder = onCall(
     }
 );
 
-
 // ... (파일의 나머지 부분은 변경 없음)
 export const getUserOrders = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
-        const requesterId = request.auth?.uid;
-        if (!requesterId) {
-            throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
-        }
-
-        const {
-          userId: targetUserId,
-          pageSize = 10,
-          lastVisible: lastVisibleDocData,
-          orderByField,
-          orderDirection = 'desc',
-          filterStatuses,
-        } = request.data as {
-          userId: string;
-          pageSize?: number;
-          lastVisible?: any;
-          orderByField: 'createdAt' | 'pickupDate';
-          orderDirection?: 'asc' | 'desc';
-          filterStatuses?: OrderStatus[];
+        const { targetUserId, pageSize, lastVisibleDocData } = request.data as {
+            targetUserId: string;
+            pageSize: number;
+            lastVisibleDocData?: { [key: string]: any };
         };
 
-        const userClaims = (await getAuth().getUser(requesterId)).customClaims;
-        const isAdmin = userClaims?.role === 'admin' || userClaims?.role === 'master';
-
-        if (!isAdmin && requesterId !== targetUserId) {
-            throw new HttpsError("permission-denied", "자신의 주문 내역만 조회할 수 있습니다.");
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "A login is required.");
         }
-    
-        try {
-          // ✅ [수정] 문제를 일으켰던 isArchived 필터를 제거합니다.
-          let queryBuilder = db.collection('orders')
-            .withConverter(orderConverter)
-            .where('userId', '==', targetUserId);
-            // .where('isArchived', '!=', true); // 👈 이 줄을 삭제했습니다!
-          
-          if (Array.isArray(filterStatuses) && filterStatuses.length > 0) {
-            queryBuilder = queryBuilder.where('status', 'in', filterStatuses);
-          }
-    
-          if (orderByField === 'pickupDate') {
-            queryBuilder = queryBuilder.orderBy('pickupDate', orderDirection);
-          } else {
-            queryBuilder = queryBuilder.orderBy('createdAt', orderDirection);
-          }
-          
-          queryBuilder = queryBuilder.limit(pageSize);
-    
-          if (lastVisibleDocData) {
-            const cursorFieldData = lastVisibleDocData[orderByField];
-            
-            if (cursorFieldData) {
-                let cursorValue;
-                if (typeof cursorFieldData === 'object' && cursorFieldData !== null && cursorFieldData.hasOwnProperty('_seconds')) {
-                     cursorValue = new Timestamp(cursorFieldData._seconds, cursorFieldData._nanoseconds);
-                } else {
-                     cursorValue = cursorFieldData;
-                }
-                queryBuilder = queryBuilder.startAfter(cursorValue);
+        if (request.auth.uid !== targetUserId) {
+            const user = await getAuth().getUser(request.auth.uid);
+            if (user.customClaims?.role !== 'admin' && user.customClaims?.role !== 'master') {
+                throw new HttpsError("permission-denied", "You can only fetch your own orders.");
             }
-          }
-    
-          const snapshot = await queryBuilder.get();
-          const orders = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-          
-          const lastDocSnapshot = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
-          const lastDocPayload = lastDocSnapshot ? { ...lastDocSnapshot.data(), id: lastDocSnapshot.id } : null;
-    
-          return { data: orders, lastDoc: lastDocPayload };
-    
+        }
+
+        try {
+            let queryBuilder = db.collection('orders')
+                .withConverter(orderConverter)
+                .where('userId', '==', targetUserId)
+                .orderBy('pickupDate', 'desc')
+                .limit(pageSize);
+
+            if (lastVisibleDocData) {
+                const cursorFieldData = lastVisibleDocData['pickupDate'];
+                if (cursorFieldData?._seconds) {
+    const cursorValue = new Timestamp(cursorFieldData._seconds, cursorFieldData._nanoseconds); // '-' 오타 수정
+    queryBuilder = queryBuilder.startAfter(cursorValue);
+}
+            }
+
+            const snapshot = await queryBuilder.get();
+
+            const orders = snapshot.docs.map(doc => {
+                const data = doc.data();
+                // ✅ [오류 해결] 이제 AdminTimestamp 타입을 정상적으로 인식합니다.
+                const createdAt = data.createdAt as AdminTimestamp;
+                const pickupDate = data.pickupDate as AdminTimestamp;
+                return {
+                    id: doc.id,
+                    userId: data.userId,
+                    orderNumber: data.orderNumber,
+                    items: data.items,
+                    totalPrice: data.totalPrice,
+                    status: data.status,
+                    customerInfo: data.customerInfo,
+                    wasPrepaymentRequired: data.wasPrepaymentRequired,
+                    createdAt: { _seconds: createdAt.seconds, _nanoseconds: createdAt.nanoseconds },
+                    pickupDate: { _seconds: pickupDate.seconds, _nanoseconds: pickupDate.nanoseconds },
+                };
+            });
+
+            const lastDocSnapshot = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+            const lastDocPayload = lastDocSnapshot ? { ...lastDocSnapshot.data(), id: lastDocSnapshot.id } : null;
+
+            return { data: orders, lastDoc: lastDocPayload };
+
         } catch (error: any) {
-          logger.error('Error fetching user orders:', error);
-          throw new HttpsError('internal', error.message || '주문 내역을 불러오는 중 오류가 발생했습니다.');
+            logger.error('Error fetching user orders:', error);
+            throw new HttpsError('internal', error.message || '주문 내역을 불러오는 중 오류가 발생했습니다.');
         }
     }
 );
-
 
 export const getUserWaitlist = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },

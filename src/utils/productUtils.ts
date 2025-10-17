@@ -5,8 +5,7 @@ import type {
   SalesRound as OriginalSalesRound,
   UserDocument,
   VariantGroup as OriginalVariantGroup,
-  LoyaltyTier,
-} from '@/types';
+} from '@/shared/types';
 import { Timestamp } from 'firebase/firestore';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
@@ -125,61 +124,45 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
 
 // ✅ [수정] determineActionState의 round 파라미터 타입을 OriginalSalesRound로 명시
 export const determineActionState = (round: OriginalSalesRound, userDocument: UserDocument | null): ProductActionState => {
-  const userTier = userDocument?.loyaltyTier;
-  const allowedTiers = round.allowedTiers || [];
-  if (allowedTiers.length > 0 && (!userTier || !allowedTiers.includes(userTier as LoyaltyTier))) {
-    return 'INELIGIBLE';
-  }
-
+  // 1. 판매 기간 확인
   const now = dayjs();
   const publishAt = safeToDate(round.publishAt);
   const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
+  // 아직 판매 시작 전이면 '판매 예정'
   if (publishAt && now.isBefore(publishAt)) {
     return 'SCHEDULED';
   }
 
+  // 모든 판매 기간(2차 포함)이 종료되었으면 '판매 종료'
+  const salesHasEnded = (secondaryEnd && now.isAfter(secondaryEnd)) || (!secondaryEnd && primaryEnd && now.isAfter(primaryEnd));
+  if (salesHasEnded) {
+    return 'ENDED';
+  }
+
+  // 2. 재고 확인
   const isAllOptionsSoldOut = () => {
     if (!round.variantGroups || round.variantGroups.length === 0) return true;
     return round.variantGroups.every(vg => {
-      const stockInfo = getStockInfo(vg as VariantGroup); // 캐스팅 필요
+      const stockInfo = getStockInfo(vg as VariantGroup);
       return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
     });
   };
 
-  const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
-
-  if (primaryEnd && now.isBefore(primaryEnd)) {
-    if (isAllOptionsSoldOut()) {
+  // 3. 재고 상태와 판매 기간에 따라 상태 결정
+  if (isAllOptionsSoldOut()) {
+    // 재고가 없지만, 1차 판매 기간이라면 '대기 가능'
+    if (primaryEnd && now.isBefore(primaryEnd)) {
       return 'WAITLISTABLE';
     }
-    return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
-  }
-
-  if (primaryEnd && secondaryEnd && now.isBetween(primaryEnd, secondaryEnd, null, '(]')) {
-    const wasUnlimitedInPrimary = round.variantGroups.some(vg => {
-        const stockInfo = getStockInfo(vg as VariantGroup); // 캐스팅 필요
-        return !stockInfo.isLimited;
-    });
-
-    if (wasUnlimitedInPrimary) {
-        return 'AWAITING_STOCK';
-    }
-    
-    if (isAllOptionsSoldOut()) {
-      return 'ENCORE_REQUESTABLE';
-    }
-    return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
-  }
-
-  const salesEnd = secondaryEnd || primaryEnd;
-  if (salesEnd && now.isAfter(salesEnd)) {
-    return 'ENCORE_REQUESTABLE';
+    // 재고가 없고, 1차 판매 기간이 지났다면 '판매 종료'
+    return 'ENDED';
   }
   
-  return 'ENDED';
+  // 4. 재고가 있다면, 옵션 선택 필요 여부에 따라 상태 결정
+  const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
+  return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
 };
-
 
 export const sortProductsForDisplay = (a: { displayRound: OriginalSalesRound }, b: { displayRound: OriginalSalesRound }): number => {
     const roundA = a.displayRound;

@@ -1,7 +1,7 @@
 // src/components/admin/BannerAddModal.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Banner, Product, SalesRound } from '@/types';
+import type { Banner, Product, SalesRound } from '@/shared/types';
 import { Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 import './BannerAddModal.css';

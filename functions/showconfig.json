@@ -1,0 +1,81 @@
+﻿{
+    "compilerOptions": {
+        "target": "es2022",
+        "lib": [
+            "es2022"
+        ],
+        "strict": true,
+        "skipLibCheck": true,
+        "baseUrl": "..",
+        "paths": {
+            "@/*": [
+                "src/*"
+            ]
+        },
+        "module": "commonjs",
+        "moduleResolution": "node10",
+        "rootDir": "./src",
+        "outDir": "./lib",
+        "types": [
+            "node"
+        ],
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "allowSyntheticDefaultImports": true,
+        "useDefineForClassFields": true,
+        "noImplicitAny": true,
+        "noImplicitThis": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "strictBuiltinIteratorReturn": true,
+        "alwaysStrict": true,
+        "useUnknownInCatchVariables": true
+    },
+    "files": [
+        "./src/backfillUsers.ts",
+        "./src/index.ts",
+        "./src/setup.ts",
+        "./src/types.ts",
+        "./src/callable/missions.ts",
+        "./src/callable/orders.ts",
+        "./src/callable/points.ts",
+        "./src/callable/products.ts",
+        "./src/callable/referrals.ts",
+        "./src/callable/stock.ts",
+        "./src/callable/testAlimtalk.ts",
+        "./src/callable/users.ts",
+        "./src/callable/waitlist.ts",
+        "./src/firebase/admin.ts",
+        "./src/http/auth.ts",
+        "./src/http/banner.ts",
+        "./src/http/manualTrigger.ts",
+        "./src/http/manualTriggerRecent.ts",
+        "./src/http/migration.ts",
+        "./src/http/product.ts",
+        "./src/http/testNotifications.ts",
+        "./src/scheduled/notificationService.ts",
+        "./src/scheduled/notifications.ts",
+        "./src/scheduled/orders.ts",
+        "./src/scheduled/points.ts",
+        "./src/scheduled/visibility.ts",
+        "./src/shared/types.ts",
+        "./src/triggers/orders.ts",
+        "./src/triggers/points.ts",
+        "./src/triggers/products.ts",
+        "./src/triggers/users.ts",
+        "./src/utils/helpers.ts",
+        "./src/utils/nhnApi.ts",
+        "./src/utils/notificationService.ts",
+        "./src/utils/orderService.ts",
+        "./src/utils/pointService.ts"
+    ],
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "lib"
+    ]
+}

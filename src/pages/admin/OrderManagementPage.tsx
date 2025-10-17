@@ -12,7 +12,7 @@ import {
 } from '../../firebase';
 import { functions } from '@/firebase/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import type { Order, OrderItem, OrderStatus } from '../../types';
+import type { Order, OrderItem, OrderStatus } from '@/shared/types';
 import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight, ClipboardCopy, GitMerge } from 'lucide-react';

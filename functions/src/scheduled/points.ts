@@ -6,7 +6,7 @@ import { dbAdmin as db } from "../firebase/admin.js";
 // ✅ [수정] Firestore 타입을 import 합니다.
 import { Timestamp, QueryDocumentSnapshot, DocumentData } from "firebase-admin/firestore";
 import { calculateTier } from "../utils/helpers.js";
-import type { UserDocument, PointLog } from "../types.js";
+import type { UserDocument, PointLog } from "@/shared/types";
 
 // ✅ [추가] UserDocument에 대한 Firestore 데이터 변환기(Converter)를 정의합니다.
 const userConverter = {

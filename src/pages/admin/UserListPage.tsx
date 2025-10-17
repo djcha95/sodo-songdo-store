@@ -12,7 +12,7 @@ import {
 import SodomallLoader from '@/components/common/SodomallLoader';
 import PointManagementModal from '@/components/admin/PointManagementModal';
 import { formatPhoneNumber } from '@/utils/formatUtils';
-import type { UserDocument as AppUser, LoyaltyTier } from '@/types';
+import type { UserDocument as AppUser, LoyaltyTier } from '@/shared/types';
 import './UserListPage.css';
 
 type SortKey = 'createdAt' | 'points' | 'displayName' | 'nickname' | 'noShowCount' | 'loyaltyTier' | 'role' | 'isSuspended';

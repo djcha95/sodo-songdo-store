@@ -5,7 +5,7 @@ import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/common/Header';
 import { getUserOrders } from '../../firebase';
-import type { Order, OrderItem } from '../../types';
+import type { Order, OrderItem } from '../../root-types';
 import { Timestamp } from 'firebase/firestore';
 import "../customer/OrderHistoryPage.css";
 import { motion } from 'framer-motion';

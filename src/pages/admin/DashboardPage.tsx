@@ -6,7 +6,7 @@ import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService'; 
 import { db } from '@/firebase/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
-import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/types';
+import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import toast from 'react-hot-toast';
 import { TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy, Ticket } from 'lucide-react';

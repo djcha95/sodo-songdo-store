@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { CheckSquare, ChevronDown } from 'lucide-react';
-import type { GroupedPrepaidData } from '@/types';
+import type { GroupedPrepaidData } from '@/shared/types';
 import './PrepaidListTable.css';
 
 interface PrepaidListTableProps {

@@ -21,7 +21,7 @@ import {
   getDownloadURL, 
   deleteObject 
 } from 'firebase/storage';
-import type { Banner } from '@/types';
+import type { Banner } from '@/shared/types';
 
 // Firestore 'banners' 컬렉션 참조
 const bannersCollectionRef = collection(db, 'banners');

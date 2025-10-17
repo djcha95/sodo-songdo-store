@@ -1,7 +1,7 @@
 // src/pages/admin/QuickCheckPage.tsx
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { UserDocument, Order } from '@/types';
+import type { UserDocument, Order } from '@/shared/types';
 // [수정] getUserById를 orderService가 아닌 userService에서 가져오도록 경로를 수정합니다.
 import { getAllUsersForQuickCheck, getUserById } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';

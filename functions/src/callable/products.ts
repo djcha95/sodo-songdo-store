@@ -16,82 +16,76 @@ import type {
   VariantGroup,
   UserDocument,
   CustomerInfo // ✅ CustomerInfo 타입 추가
-} from "../types.js";
+} from "@/shared/types";
 
-
-import { analyzeProductTextWithAI } from "../utils/gemini.js";
-
-/** --------------------------------
- * (유틸) 카테고리 이름 리스트 로드
- * --------------------------------- */
-async function getCategoryNames(): Promise<string[]> {
-  const snap = await db.collection("categories").orderBy("order", "asc").get();
-  return snap.docs
-    .map((d) => String(d.get("name") ?? "").trim())
-    .filter(Boolean);
-}
-
-/** --------------------------------
- * 1) AI 파싱: parseProductText
- * --------------------------------- */
-export const parseProductText = onCall(
-  {
-    region: "asia-northeast3",
-    cors: allowedOrigins,
-    memory: "512MiB",
-    timeoutSeconds: 60,
-    secrets: ["GEMINI_API_KEY"],
-  },
-  async (request) => {
-    try {
-      const text = String(request.data?.text ?? "").trim();
-      const categoriesHint: string[] = Array.isArray(request.data?.categories)
-        ? request.data.categories
-        : [];
-
-      if (!text) {
-        throw new HttpsError("invalid-argument", "분석할 텍스트가 비었습니다.");
-      }
-
-      const categories =
-        categoriesHint.length > 0 ? categoriesHint : await getCategoryNames();
-
-      const result = await analyzeProductTextWithAI(text, categories);
-      
-      return {
-        groupName: result?.groupName ?? "",
-        cleanedDescription: result?.cleanedDescription ?? text,
-        categoryName: result?.categoryName ?? (categories[0] ?? "기타"),
-        storageType: result?.storageType ?? "ROOM",
-        productType: result?.productType ?? "GENERAL",
-        variantGroups: Array.isArray(result?.variantGroups) ? result!.variantGroups : [],
-        hashtags: Array.isArray(result?.hashtags) ? result.hashtags : [],
-      };
-    } catch (error: any) {
-      logger.error("parseProductText error:", error?.message || error);
-      if (error instanceof HttpsError) throw error;
-      throw new HttpsError("internal", "상품 텍스트 분석 중 오류가 발생했습니다.");
-    }
-  }
-);
+const convertToClientProduct = (product: Product & { id: string }): Product => {
+  // 프론트엔드의 types.ts에 정의된 Product 구조와 정확히 일치시킵니다.
+  return {
+    id: product.id,
+    groupName: product.groupName,
+    description: product.description,
+    imageUrls: product.imageUrls,
+    storageType: product.storageType,
+    salesHistory: (product.salesHistory || []).map(round => ({
+      roundId: round.roundId,
+      roundName: round.roundName,
+      status: round.status,
+      variantGroups: (round.variantGroups || []).map(vg => ({
+        id: vg.id,
+        groupName: vg.groupName,
+        items: vg.items,
+        totalPhysicalStock: vg.totalPhysicalStock,
+        stockUnitType: vg.stockUnitType,
+        reservedCount: vg.reservedCount, // 재고 계산을 위해 이 필드는 유지
+        pickedUpCount: vg.pickedUpCount,
+      })),
+      publishAt: round.publishAt,
+      deadlineDate: round.deadlineDate,
+      pickupDate: round.pickupDate,
+      pickupDeadlineDate: round.pickupDeadlineDate,
+      arrivalDate: round.arrivalDate,
+      createdAt: round.createdAt,
+      isPrepaymentRequired: round.isPrepaymentRequired,
+      manualStatus: round.manualStatus,
+      isManuallyOnsite: round.isManuallyOnsite,
+    })),
+    isArchived: product.isArchived,
+    createdAt: product.createdAt,
+    // ❌ category, encoreCount, tags, hashtags, eventType, allowedTiers 등
+    // 프론트엔드에서 사용하지 않는 모든 필드를 여기서 제거합니다.
+  };
+};
 
 /** --------------------------------
- * 2) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock (✅ 수정됨)
+ * 2) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock (✅ 페이지네이션 적용으로 수정됨)
  * --------------------------------- */
 export const getProductsWithStock = onCall(
   {
     region: "asia-northeast3",
     cors: allowedOrigins,
-    memory: "1GiB", // 전체 상품 조회를 위해 메모리 상향
+    memory: "1GiB",
     timeoutSeconds: 60,
     enforceAppCheck: false,
   },
   async (request) => {
     try {
-      const query = db
+      // ✅ [추가] 프론트엔드로부터 페이지 크기와 마지막 항목(커서) 정보를 받습니다.
+      const { pageSize = 10, lastVisible: lastVisibleDocData } = request.data || {};
+
+      // ✅ [수정] 쿼리를 페이지네이션에 맞게 수정합니다.
+      let query = db
         .collection("products")
         .where("isArchived", "==", false)
-        .orderBy("createdAt", "desc");
+        .orderBy("createdAt", "desc")
+        .limit(pageSize);
+
+      // 만약 마지막 항목 정보가 있다면, 그 지점부터 쿼리를 시작합니다.
+      if (lastVisibleDocData?.id) {
+        const lastVisibleDoc = await db.collection("products").doc(lastVisibleDocData.id).get();
+        if(lastVisibleDoc.exists) {
+            query = query.startAfter(lastVisibleDoc);
+        }
+      }
 
       const productsSnapshot = await query.get();
       const products = productsSnapshot.docs.map((doc) => ({
@@ -99,68 +93,53 @@ export const getProductsWithStock = onCall(
         id: doc.id,
       })) as (Product & { id: string })[];
 
+      // ... (예약/픽업 수량 계산 로직은 기존과 동일)
       const ordersSnap = await db
         .collection("orders")
         .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
-
-      // ✅ [수정] claimedMap은 픽업 포함 전체 판매량을, pickedUpMap은 픽업 완료된 수량만 계산
       const claimedMap = new Map<string, number>();
       const pickedUpMap = new Map<string, number>();
-
       ordersSnap.docs.forEach((od) => {
         const order = od.data() as Order;
-        const items: OrderItem[] = Array.isArray(order.items) ? order.items : [];
-        items.forEach((it) => {
+        (order.items || []).forEach((it) => {
           if (!it.productId || !it.roundId || !it.variantGroupId) return;
           const key = `${it.productId}-${it.roundId}-${it.variantGroupId}`;
-          
           const quantityToDeduct = (it.quantity || 0) * (it.stockDeductionAmount || 1);
           if (!quantityToDeduct) return;
-
-          // 전체 판매량 계산
           claimedMap.set(key, (claimedMap.get(key) || 0) + quantityToDeduct);
-
-          // 픽업 완료량만 별도 계산
           if (order.status === "PICKED_UP") {
             pickedUpMap.set(key, (pickedUpMap.get(key) || 0) + quantityToDeduct);
           }
         });
       });
-
+      
       const productsWithClaimedData = products.map((product) => {
-        if (!Array.isArray(product.salesHistory)) {
-          return product;
-        }
+        if (!Array.isArray(product.salesHistory)) return product;
         const newSalesHistory: SalesRound[] = product.salesHistory.map((round) => {
-          if (!Array.isArray(round.variantGroups)) {
-            return round;
-          }
+          if (!Array.isArray(round.variantGroups)) return round;
           const newVariantGroups: VariantGroup[] = round.variantGroups.map((vg) => {
             const key = `${product.id}-${round.roundId}-${vg.id}`;
-            // ✅ [수정] reservedCount와 pickedUpCount를 모두 반환
             return {
               ...vg,
               reservedCount: claimedMap.get(key) || 0,
               pickedUpCount: pickedUpMap.get(key) || 0,
             };
           });
-
-          return {
-            ...round,
-            variantGroups: newVariantGroups,
-          };
+          return { ...round, variantGroups: newVariantGroups };
         });
-
-        return {
-          ...product,
-          salesHistory: newSalesHistory,
-        };
+        return { ...product, salesHistory: newSalesHistory };
       });
       
+      const clientFriendlyProducts = productsWithClaimedData.map(p => convertToClientProduct(p));
+
+      // ✅ [추가] 다음 페이지 조회를 위한 '마지막 항목' 정보를 생성합니다.
+      const lastDoc = productsSnapshot.docs[productsSnapshot.docs.length - 1];
+      const nextLastVisible = lastDoc ? { id: lastDoc.id, createdAt: lastDoc.data().createdAt } : null;
+
       return {
-        products: productsWithClaimedData,
-        lastVisible: null, 
+        products: clientFriendlyProducts, // ✅ 이렇게 수정해주세요.
+        lastVisible: nextLastVisible, // 다음 페이지 커서를 반환
       };
     } catch (error) {
       logger.error("getProductsWithStock error:", error);
@@ -169,7 +148,6 @@ export const getProductsWithStock = onCall(
     }
   }
 );
-
 
 
 /** --------------------------------
@@ -242,7 +220,9 @@ export const getProductByIdWithStock = onCall(
         });
       }
 
-      return { product };
+      const clientFriendlyProduct = convertToClientProduct(product);
+
+      return { product: clientFriendlyProduct };
 
     } catch (error) {
       logger.error("getProductByIdWithStock error:", error);
@@ -571,6 +551,7 @@ export const validateCart = onCall({
  * 9) 추첨 이벤트 응모: enterRaffleEvent (✅ 수정됨)
  * =================================================================
  */
+/*
 export const enterRaffleEvent = onCall(
   {
     region: "asia-northeast3",
@@ -664,13 +645,14 @@ export const enterRaffleEvent = onCall(
     }
   }
 );
-
+*/
 
 /**
  * =================================================================
  * 10) 추첨 이벤트 응모자 목록 조회: getRaffleEntrants (✅ 신규 추가)
  * =================================================================
  */
+/*
 export const getRaffleEntrants = onCall(
     {
         region: "asia-northeast3",
@@ -703,7 +685,7 @@ export const getRaffleEntrants = onCall(
             const entryDataMap = new Map(entriesSnapshot.docs.map(doc => [doc.id, doc.data()]));
             
             // Firestore 'in' 쿼리는 최대 30개의 ID만 지원하므로, userIds 배열을 30개씩 나눕니다.
-            const chunks = [];
+            const chunks: string[][] = [];
             for (let i = 0; i < userIds.length; i += 30) {
                 chunks.push(userIds.slice(i, i + 30));
             }
@@ -738,12 +720,14 @@ export const getRaffleEntrants = onCall(
         }
     }
 );
+*/
 
 /**
  * =================================================================
  * 11) 당첨자 추첨 실행: drawRaffleWinners (✅ 신규 추가)
  * =================================================================
  */
+/*
 export const drawRaffleWinners = onCall(
   {
       region: "asia-northeast3",
@@ -890,3 +874,4 @@ export const drawRaffleWinners = onCall(
       }
   }
 );
+*/

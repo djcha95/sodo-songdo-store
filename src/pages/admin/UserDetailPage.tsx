@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import PointManagementModal from '@/components/admin/PointManagementModal';
 import { formatPhoneNumber } from '@/utils/formatUtils';
-import type { UserDocument, PointLog, LoyaltyTier, Order, WaitlistInfo, OrderStatus } from '@/types';
+import type { UserDocument, PointLog, LoyaltyTier, Order, OrderStatus } from '@/shared/types';
 import type { Timestamp } from 'firebase/firestore';
 import './UserDetailPage.css';
 import { useAuth } from '@/context/AuthContext';
@@ -43,6 +43,18 @@ const orderStatusInfo: Record<OrderStatus, { label: string; className: string }>
     LATE_CANCELED: { label: '마감임박취소', className: 'status-canceled' },
 };
 
+interface WaitlistInfo {
+  productId: string;
+  productName: string;
+  roundId: string;
+  roundName: string;
+  variantGroupId: string;
+  itemId: string;
+  itemName: string;
+  imageUrl: string;
+  quantity: number;
+  timestamp: Timestamp;
+}
 
 type Tab = 'profile' | 'orders' | 'waitlist' | 'points';
 
@@ -134,7 +146,7 @@ const UserDetailPage = () => {
                     : <PointTimeline title="포인트 활동" history={pointHistory} />;
             case 'profile':
             default:
-                return <ProfileTab user={user} currentAdmin={currentAdmin} />;
+                return <ProfileTab user={user} currentAdmin={currentAdmin as any} />;
         }
     };
     

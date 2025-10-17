@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getDailyDashboardData } from '../../firebase';
-import type { TodayStockItem, TodayOrderItem, TodayPickupItem } from '../../types';
+import type { TodayStockItem, TodayOrderItem, TodayPickupItem } from '../../root-types';
 import { X, Truck, CalendarCheck } from 'lucide-react';
 import './DailyDashboardModal.css';
 

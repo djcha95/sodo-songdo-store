@@ -185,3 +185,20 @@
 .tab-btn.primary-tab.active {
     border-bottom-color: #FF9800;
 }
+
+/* ... (기존 CSS 코드) ... */
+
+/* ✅ [추가] 인피니트 스크롤 관련 스타일 */
+.infinite-scroll-trigger {
+  padding: 2rem 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80px;
+}
+
+.end-of-list {
+  color: var(--text-color-light);
+  font-size: 0.9rem;
+  font-weight: 500;
+}

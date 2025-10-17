@@ -5,7 +5,7 @@ import { adjustUserPoints, getPointHistory, updatePointLog, deletePointLog, dele
 import { createNotification } from '@/firebase/notificationService';
 import { X, Loader2, Edit, Save, Trash2, XCircle, AlertTriangle, Search, GripVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { PointLog, UserDocument as AppUser } from '@/types';
+import type { PointLog, UserDocument as AppUser } from '@/shared/types';
 import type { Timestamp } from 'firebase/firestore';
 import './PointManagementModal.css';
 

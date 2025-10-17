@@ -2,7 +2,7 @@
 import { useState, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
-import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
+import SodomallLoader from '@/components/common/SodomallLoader';
 import './AdminLayout.css';
 
 const AdminLayout = () => {
@@ -23,7 +23,7 @@ const AdminLayout = () => {
         toggleSidebar={toggleSidebar}
       />
       <main className="admin-main-content">
-        <Suspense fallback={<InlineSodomallLoader />}>
+        <Suspense fallback={<SodomallLoader />}>
           <Outlet />
         </Suspense>
       </main>

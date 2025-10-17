@@ -1,10 +1,8 @@
 // src/components/admin/ProductForm.tsx
 
-// [수정] 'a,' 오타를 제거하고 React Hooks를 올바르게 import 합니다.
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Timestamp } from 'firebase/firestore';
-// import axios from 'axios'; // 사용되지 않으므로 제거
 import {
   addProductWithFirstRound,
   addNewSalesRound,
@@ -17,6 +15,7 @@ import {
   getReservedQuantitiesMap
 } from '@/firebase';
 import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
+// ✅ [수정] 올바른 경로에서 모든 타입을 가져옵니다.
 import type {
   Category,
   StorageType,
@@ -26,17 +25,17 @@ import type {
   VariantGroup,
   ProductItem,
   LoyaltyTier
-} from '@/types';
+} from '@/shared/types';
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift, Ticket
+  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
 
+// ✅ [수정] 중복된 import를 하나로 합칩니다.
 import SodomallLoader from '@/components/common/SodomallLoader';
-import InlineSodomallLoader from '@/components/common/InlineSodomallLoader';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import '@/pages/admin/ProductAddAdminPage.css';
@@ -259,7 +258,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [pickupDate, setPickupDate] = useState<Date | null>(null);
   const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
-  const [raffleDrawDate, setRaffleDrawDate] = useState<Date | null>(null);
 
   const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -271,7 +269,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isParsingWithAI, setIsParsingWithAI] = useState(false);
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'RAFFLE'>('NONE');
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK'>('NONE');
 
 
   useEffect(() => {
@@ -358,7 +356,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
           if (mode === 'editRound') setRoundName(roundData.roundName);
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
-          setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK' | 'RAFFLE');
+          setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK');
 
           const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
@@ -399,8 +397,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             setDeadlineDate(convertToDate(roundData.deadlineDate));
             setPickupDate(convertToDate(roundData.pickupDate));
             setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate));
-            setRaffleDrawDate(convertToDate(roundData.raffleDrawDate));
+            // setRaffleDrawDate 줄 삭제
           }
+          setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
           setPreOrderTiers(roundData.preOrderTiers || ['공구의 신', '공구왕']);
@@ -428,7 +427,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   }, [mode, variantGroups.length]);
 
   useEffect(() => {
-    if (mode === 'editRound' || eventType === 'RAFFLE') return;
+    if (mode === 'editRound' || eventType === 'CHUSEOK') return;
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
@@ -445,29 +444,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
     setDeadlineDate(finalDeadline);
   }, [publishDate, mode, eventType]);
-
-    useEffect(() => {
-        if (eventType === 'RAFFLE') {
-            const baseDate = dayjs(publishDate);
-            const deadline = baseDate.day(8).hour(12).minute(0).second(0).millisecond(0);
-            setDeadlineDate(deadline.toDate());
-            setRaffleDrawDate(deadline.toDate());
-
-            setVariantGroups(prev => {
-                const firstVg = prev[0] || {
-                    id: generateUniqueId(), groupName: groupName || '', totalPhysicalStock: 70, stockUnitType: '명', expirationDate: null, items: []
-                };
-                const firstItem = firstVg.items[0] || { id: generateUniqueId(), name: '응모권', limitQuantity: 1, deductionAmount: 1 };
-                return [{
-                    ...firstVg,
-                    items: [{ ...firstItem, price: 0, isBundleOption: false }]
-                }];
-            });
-            setProductType('single');
-
-        }
-    }, [eventType, publishDate, groupName]);
-
 
   useEffect(() => {
     if (!pickupDate) { setPickupDeadlineDate(null); return; }
@@ -755,9 +731,9 @@ const settingsSummary = useMemo(() => {
     const pickupText = pickupDate ? toYmd(pickupDate) : '미설정';
     const pickupDeadlineText = pickupDeadlineDate ? toYmd(pickupDeadlineDate) : '미설정';
    const participationText = isSecretProductEnabled ? `${secretTiers.join(', ')} 등급만` : '모두 참여 가능';
-    const raffleDrawText = raffleDrawDate ? toDateTimeLocal(raffleDrawDate).replace('T', ' ') : '미설정';
-   return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText, raffleDrawText };
- }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers, raffleDrawDate]);
+   // raffleDrawText 변수 삭제
+   return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText };
+ }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]); // 의존성 배열에서 raffleDrawDate 삭제
 
   const handleSubmit = async (isDraft: boolean = false) => {
     setIsSubmitting(true);
@@ -774,7 +750,6 @@ const settingsSummary = useMemo(() => {
       { date: deadlineDate, name: '마감일' },
       { date: pickupDate, name: '픽업 시작일' },
       { date: pickupDeadlineDate, name: '픽업 마감일' },
-      { date: raffleDrawDate, name: '추첨일' },
       ...variantGroups.map((vg, i) => ({ date: vg.expirationDate, name: `옵션 ${i + 1}의 유통기한` }))
     ];
     for (const { date, name } of allDates) {
@@ -783,8 +758,7 @@ const settingsSummary = useMemo(() => {
 
     if (!isDraft) {
       if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error('대표 이미지를 1개 이상 등록해주세요.'); setIsSubmitting(false); return; }
-      if (eventType !== 'RAFFLE' && (!deadlineDate || !pickupDate || !pickupDeadlineDate)) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
-      if (eventType === 'RAFFLE' && (!deadlineDate || !raffleDrawDate)) { toast.error('응모 마감일과 추첨일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
+      if (!isDraft && (!deadlineDate || !pickupDate || !pickupDeadlineDate)) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
       if (isSecretProductEnabled && secretTiers.length === 0) { toast.error('시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요.'); setIsSubmitting(false); return; }
     }
 
@@ -797,7 +771,7 @@ const settingsSummary = useMemo(() => {
         roundName: roundName.trim(),
         status,
         eventType: eventType === 'NONE' ? null : eventType,
-        raffleDrawDate: eventType === 'RAFFLE' && raffleDrawDate ? Timestamp.fromDate(raffleDrawDate) : null,
+        // raffleDrawDate 줄 삭제
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
@@ -819,13 +793,13 @@ const settingsSummary = useMemo(() => {
             id: vg.id || generateUniqueId(),
             groupName: productType === 'single' ? groupName.trim() : vg.groupName.trim(),
             totalPhysicalStock: finalTotalPhysicalStock,
-            stockUnitType: eventType === 'RAFFLE' ? '명' : vg.stockUnitType,
+            stockUnitType: vg.stockUnitType,
             items: vg.items.map(item => ({
               id: item.id || generateUniqueId(),
               name: item.name,
-              price: eventType === 'RAFFLE' ? 0 : (Number(item.price) || 0),
+              price: (Number(item.price) || 0),
               stock: -1,
-              limitQuantity: eventType === 'RAFFLE' ? 1 : (item.limitQuantity === '' ? null : Number(item.limitQuantity)),
+              limitQuantity: (item.limitQuantity === '' ? null : Number(item.limitQuantity)),
               expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
               stockDeductionAmount: Number(item.deductionAmount) || 1
             }))
@@ -919,7 +893,7 @@ const settingsSummary = useMemo(() => {
 
   if (isLoading) return <SodomallLoader message="상품 정보를 불러오는 중입니다..." />;
 
-  const isRaffleEvent = eventType === 'RAFFLE';
+  // isRaffleEvent 변수 삭제됨
 
   return (
     <>
@@ -944,7 +918,7 @@ const settingsSummary = useMemo(() => {
                 <FileText size={18} /> 임시저장
               </button>
               <button type="submit" disabled={isSubmitting} className="save-button">
-                {isSubmitting ? <InlineSodomallLoader /> : <Save size={18} />}
+                {isSubmitting ? <SodomallLoader /> : <Save size={18} />}
                 {submitButtonText}
               </button>
             </div>
@@ -958,8 +932,8 @@ const settingsSummary = useMemo(() => {
                 </div>
                 {mode === 'newProduct' && (
                   <div className="product-type-toggle-inline">
-                    <button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')} disabled={isRaffleEvent}>단일</button>
-                    <button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')} disabled={isRaffleEvent}>그룹</button>
+                    <button type="button" className={productType === 'single' ? 'active' : ''} onClick={() => handleProductTypeChange('single')}>단일</button>
+                    <button type="button" className={productType === 'group' ? 'active' : ''} onClick={() => handleProductTypeChange('group')}>그룹</button>
                   </div>
                 )}
               </div>
@@ -1127,27 +1101,25 @@ const settingsSummary = useMemo(() => {
                     </div>
                     <div className="form-group">
                       <label>
-                        <Tippy content={isRaffleEvent ? "총 당첨 인원을 입력합니다." : (mode === 'editRound' ? "현재 남은 재고 수량입니다. 여기에 추가할 수량을 더해서 입력하면 됩니다." : "판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다.")}>
-                          <span>{isRaffleEvent ? '총 당첨 인원' : (mode === 'editRound' ? '남은 재고' : '총 재고')}</span>
+                        <Tippy content={mode === 'editRound' ? "현재 남은 재고 수량입니다. 여기에 추가할 수량을 더해서 입력하면 됩니다." : "판매 기간 전체에 적용될 물리적인 재고 수량입니다. 비워두면 무제한 판매됩니다."}>
+                          <span>{mode === 'editRound' ? '남은 재고' : '총 재고'}</span>
                         </Tippy>
                       </label>
                       <div className="stock-input-wrapper">
-                        <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder={isRaffleEvent ? "예: 70" : "무제한"} />
-                        <span className="stock-unit-addon">{isRaffleEvent ? '명' : (vg.stockUnitType || '개')}</span>
+                        <input type="number" value={vg.totalPhysicalStock} onChange={e => handleVariantGroupChange(vg.id, 'totalPhysicalStock', e.target.value)} placeholder="무제한" />
+                        <span className="stock-unit-addon">{(vg.stockUnitType || '개')}</span>
                       </div>
                     </div>
-                    {!isRaffleEvent && (
-                        <div className="form-group">
-                          <label>유통기한</label>
-                          <input
-                            type="date"
-                            className="date-input-native"
-                            value={toYmd(vg.expirationDate)}
-                            onChange={e => handleVariantGroupChange(vg.id, 'expirationDate', fromYmd(e.target.value))}
-                          />
-                        </div>
-                    )}
-                    {productType === 'group' && !isRaffleEvent && (
+                    <div className="form-group">
+                      <label>유통기한</label>
+                      <input
+                        type="date"
+                        className="date-input-native"
+                        value={toYmd(vg.expirationDate)}
+                        onChange={e => handleVariantGroupChange(vg.id, 'expirationDate', fromYmd(e.target.value))}
+                      />
+                    </div>
+                    {productType === 'group' && (
                       <button type="button" onClick={() => removeVariantGroup(vg.id)} className="remove-variant-group-btn" disabled={variantGroups.length <= 1} title={variantGroups.length <= 1 ? '마지막 그룹은 삭제할 수 없습니다.' : '그룹 삭제'}>
                         <Trash2 size={16} />
                       </button>
@@ -1159,39 +1131,39 @@ const settingsSummary = useMemo(() => {
                       <div className="option-item-grid-2x2">
                         <div className="form-group-grid item-name">
                           <label>선택지 *</label>
-                          <input type="text" value={item.name} onChange={e => handleItemChange(vg.id, item.id, 'name', e.target.value)} required disabled={isRaffleEvent} />
+                          <input type="text" value={item.name} onChange={e => handleItemChange(vg.id, item.id, 'name', e.target.value)} required />
                         </div>
                         <div className="form-group-grid item-price">
                           <label>가격 *</label>
                           <div className="price-input-wrapper">
-                            <input type="text" value={formatKRW(item.price)} onChange={e => handlePriceChange(vg.id, item.id, e.target.value)} required disabled={isRaffleEvent}/>
+                            <input type="text" value={formatKRW(item.price)} onChange={e => handlePriceChange(vg.id, item.id, e.target.value)} required/>
                             <span>원</span>
                           </div>
                         </div>
                         <div className="form-group-grid item-limit">
                           <label className="tooltip-container"><span>구매 제한</span></label>
-                          <input type="number" value={item.limitQuantity} onChange={e => handleItemChange(vg.id, item.id, 'limitQuantity', e.target.value)} placeholder="없음" disabled={isRaffleEvent}/>
+                          <input type="number" value={item.limitQuantity} onChange={e => handleItemChange(vg.id, item.id, 'limitQuantity', e.target.value)} placeholder="없음"/>
                         </div>
                         <div className="form-group-grid item-deduction">
                           <label className="tooltip-container"><span>차감 단위 *</span></label>
-                          <input type="number" value={item.deductionAmount} onChange={e => handleItemChange(vg.id, item.id, 'deductionAmount', e.target.value)} required disabled={isRaffleEvent} />
+                          <input type="number" value={item.deductionAmount} onChange={e => handleItemChange(vg.id, item.id, 'deductionAmount', e.target.value)} required />
                         </div>
                       </div>
-                      {!isRaffleEvent && (<button type="button" onClick={() => removeItem(vg.id, item.id)} className="remove-item-btn" disabled={vg.items.length <= 1} title={vg.items.length <= 1 ? '마지막 옵션은 삭제할 수 없습니다.' : '옵션 삭제'}>
+                      <button type="button" onClick={() => removeItem(vg.id, item.id)} className="remove-item-btn" disabled={vg.items.length <= 1} title={vg.items.length <= 1 ? '마지막 옵션은 삭제할 수 없습니다.' : '옵션 삭제'}>
                         <Trash2 size={14} />
-                      </button>)}
+                      </button>
                     </div>
                   ))}
 
-                  {!isRaffleEvent && (<div className="option-item-actions">
+                  <div className="option-item-actions">
                     <button type="button" onClick={() => addNewItem(vg.id)} className="add-item-btn">구매 옵션 추가</button>
-                  </div>)}
+                  </div>
                 </div>
               ))}
 
               <div className="variant-controls-footer">
                 <div className="add-group-btn-wrapper">
-                  {productType === 'group' && variantGroups.length < 5 && !isRaffleEvent && (
+                  {productType === 'group' && variantGroups.length < 5 && (
                     <button type="button" onClick={addNewVariantGroup} className="add-group-btn">하위 상품 그룹 추가</button>
                   )}
                 </div>
@@ -1208,10 +1180,10 @@ const settingsSummary = useMemo(() => {
                 <label>이벤트 타입</label>
                 <div className="input-with-icon">
                   <Gift size={16} className="input-icon" />
-                  <select value={eventType} onChange={e => setEventType(e.target.value as any)}>
+                  <select value={eventType} onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK')}>
                     <option value="NONE">일반 상품</option>
                     <option value="CHUSEOK">🌕 추석 특집</option>
-                    <option value="RAFFLE">🎟️ 주말 추첨 이벤트</option>
+                    {/* RAFFLE 옵션 삭제 */}
                   </select>
                 </div>
               </div>
@@ -1220,7 +1192,7 @@ const settingsSummary = useMemo(() => {
                 <label>판매 옵션</label>
                 <div className="settings-option-group">
                   <Tippy content="선입금 필수 상품으로 설정합니다.">
-                    <button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)} disabled={isRaffleEvent}>
+                    <button type="button" className={`settings-option-btn ${isPrepaymentRequired ? 'active' : ''}`} onClick={() => setIsPrepaymentRequired(!isPrepaymentRequired)}>
                       <Save size={16} /> 선입금
                     </button>
                   </Tippy>
@@ -1244,7 +1216,7 @@ const settingsSummary = useMemo(() => {
               </div>
 
               <div className="form-group">
-                <label>{isRaffleEvent ? '응모 마감일 *' : '공동구매 마감일 *'}</label>
+                <label>공동구매 마감일 *</label>
                 <input
                   type="datetime-local"
                   value={toDateTimeLocal(deadlineDate)}
@@ -1253,35 +1225,25 @@ const settingsSummary = useMemo(() => {
                 />
               </div>
 
-              {isRaffleEvent && (
-                <div className="form-group">
-                    <label>추첨 예정일 *</label>
-                    <input
-                        type="datetime-local"
-                        value={toDateTimeLocal(raffleDrawDate)}
-                        onChange={e => setRaffleDrawDate(e.target.value ? new Date(e.target.value) : null)}
-                        required
-                    />
-                </div>
-              )}
+              {/* 추첨 예정일 <div> 블록 삭제됨 */}
 
               <div className="form-group">
-                <label>{isRaffleEvent ? '(당첨자) 픽업 시작일' : '픽업 시작일 *'}</label>
+                <label>픽업 시작일 *</label>
                 <input
                   type="date"
                   value={toYmd(pickupDate)}
                   onChange={e => setPickupDate(fromYmd(e.target.value))}
-                  required={!isRaffleEvent}
+                  required={true}
                 />
               </div>
 
               <div className="form-group">
-                <label>{isRaffleEvent ? '(당첨자) 픽업 마감일' : '픽업 마감일 *'}</label>
+                <label>픽업 마감일 *</label>
                 <input
                   type="date"
                   value={toYmd(pickupDeadlineDate)}
                   onChange={e => setPickupDeadlineDate(fromYmd(e.target.value))}
-                  required={!isRaffleEvent}
+                  required={true}
                 />
               </div>
 
@@ -1289,12 +1251,8 @@ const settingsSummary = useMemo(() => {
                 <h4 className="summary-title"><Info size={16} /> 설정 요약</h4>
                 <ul>
                   <li><strong>발행:</strong> {settingsSummary.publishText}</li>
-                  <li><strong>{isRaffleEvent ? '응모 마감' : '공구 마감'}:</strong> {settingsSummary.deadlineText}</li>
-                  {isRaffleEvent ? (
-                    <li><strong>추첨 예정:</strong> {settingsSummary.raffleDrawText}</li>
-                  ) : (
-                    <li><strong>픽업:</strong> {settingsSummary.pickupText} - {settingsSummary.pickupDeadlineText}</li>
-                  )}
+                  <li><strong>공구 마감:</strong> {settingsSummary.deadlineText}</li>
+                  <li><strong>픽업:</strong> {settingsSummary.pickupText} - {settingsSummary.pickupDeadlineText}</li>
                   <li><strong>참여 조건:</strong> {settingsSummary.participationText}</li>
                 </ul>
               </div>

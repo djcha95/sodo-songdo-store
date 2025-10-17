@@ -6,6 +6,7 @@
 .env.*
 *.local
 functions/.env
+# Local secret environment variables (중복 제거)
 
 # Firebase Admin SDK 키 파일 (외부 유출 시 프로젝트 전체 권한 탈취 가능)
 serviceAccountKey.json
@@ -26,8 +27,8 @@ sodomall-service-key.json
 /dist
 /build
 .vite/
-/functions/lib # ✅ [추가] TypeScript Cloud Functions의 컴파일 결과 폴더
-/functions/dist # ✅ [추가] TypeScript Cloud Functions의 컴파일 결과 폴더 (대체)
+/functions/lib # ✅ TypeScript Cloud Functions 컴파일 결과
+/functions/dist # ✅ 빌드 결과 폴더 (필요시 추가)
 
 
 # =================================================================
@@ -40,7 +41,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-firebase-debug.log* # ✅ [추가] Firebase CLI 디버그 로그
+firebase-debug.log* # ✅ Firebase CLI 디버그 로그
 
 
 # =================================================================
@@ -60,16 +61,32 @@ ui-debug.log
 # =================================================================
 # IDE 및 시스템 파일 (OS/Editor Specific)
 # =================================================================
+# macOS
 .DS_Store
+
+# Windows
+Thumbs.db
+
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ / WebStorm
 .idea/
-.vscode/
+
+# Visual Studio
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 
 # =================================================================
 # 기타 (Etc)
 # =================================================================
-/coverage/ # ✅ [추가] 테스트 커버리지 리포트
-*.tgz # ✅ [추가] npm pack 압축 파일
-
-# Local secret environment variables
-/functions/.env
+/coverage/ # ✅ 테스트 커버리지 리포트
+*.tgz # ✅ npm pack 압축 파일

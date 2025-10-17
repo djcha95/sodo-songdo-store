@@ -1,7 +1,7 @@
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import type { NotificationType } from "../types.js";
+import type { NotificationType } from "@/shared/types";
 
 /**
  * 특정 사용자에게 앱 내 알림(Firestore 문서)을 생성하는 공통 함수

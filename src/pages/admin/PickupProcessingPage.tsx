@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 // ✅ [오류 수정] Typescript가 제안한 정확한 함수명 'getOrdersByPhoneLast4'로 수정
 import { getOrdersByPhoneLast4, updateMultipleOrderStatuses } from '../../firebase';
-import type { Order, OrderItem, OrderStatus } from '../../types';
+import type { Order, OrderItem, OrderStatus } from '@/shared/types';
 import { Timestamp } from 'firebase/firestore';
 import { Search, Phone, CheckCircle, XCircle, DollarSign, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -192,6 +192,8 @@ const PickupProcessingPage: React.FC = () => {
       'CANCELED': '취소',
       'NO_SHOW': '노쇼',
       'COMPLETED': '처리 완료',
+      // ✅ [추가] 누락된 상태 추가
+      'LATE_CANCELED': '임박 취소', 
     };
     const successText = `${selectedOrderIds.length}개 주문이 '${statusTextMap[status] || status}' 처리되었습니다!`;
 

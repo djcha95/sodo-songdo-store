@@ -5,7 +5,7 @@ import { useParams, Link } from 'react-router-dom';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
-import type { Product, SalesRound } from '@/types';
+import type { Product, SalesRound } from '@/shared/types';
 import toast from 'react-hot-toast';
 import { Ticket, Users, Trophy, Clock, Download, AlertTriangle, ArrowLeft, CheckCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';

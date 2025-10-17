@@ -2,22 +2,18 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-// ✅ [수정] getDoc을 import 합니다.
-import { doc, onSnapshot, getDoc, type Unsubscribe } from 'firebase/firestore';
+import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '../firebase/firebaseConfig';
-import { recordDailyVisit } from '@/firebase/pointService';
-import type { UserDocument } from '../types';
+import type { UserDocument } from '../root-types';
 
-// ✅ [수정] AuthContextType에 refreshUserDocument 함수 타입을 추가합니다.
+// ❌ refreshUserDocument, isSuspendedUser 제거
 interface AuthContextType {
   user: User | null;
   userDocument: UserDocument | null;
   isAdmin: boolean;
   isMaster: boolean;
-  isSuspendedUser: boolean;
   loading: boolean;
   logout: () => Promise<void>;
-  refreshUserDocument: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -25,11 +21,8 @@ const AuthContext = createContext<AuthContextType>({
   userDocument: null,
   isAdmin: false,
   isMaster: false,
-  isSuspendedUser: false,
   loading: true,
   logout: async () => {},
-  // ✅ 기본값을 추가합니다.
-  refreshUserDocument: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -39,16 +32,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userDocument, setUserDocument] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ [추가] 사용자 정보를 수동으로 새로고침하는 함수
-  const refreshUserDocument = useCallback(async () => {
-    if (auth.currentUser) {
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      const userDocSnap = await getDoc(userRef);
-      if (userDocSnap.exists()) {
-        setUserDocument(userDocSnap.data() as UserDocument);
-      }
-    }
-  }, []);
+  // ❌ 수동 새로고침 함수(refreshUserDocument) 제거
 
   useEffect(() => {
     let unsubscribeFromSnapshot: Unsubscribe | null = null;
@@ -64,7 +48,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (doc.exists()) {
             const userData = { uid: doc.id, ...doc.data() } as UserDocument;
             setUserDocument(userData);
-            recordDailyVisit(firebaseUser.uid);
+            // ❌ 포인트 관련 함수 호출(recordDailyVisit) 제거
           } else {
             setUserDocument(null);
           }
@@ -98,20 +82,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const value = useMemo(() => {
     const isAdmin = userDocument?.role === 'admin' || userDocument?.role === 'master';
     const isMaster = userDocument?.role === 'master';
-    const isSuspendedUser = userDocument?.loyaltyTier === '참여 제한';
+    // ❌ 'loyaltyTier'를 사용하는 'isSuspendedUser' 로직 제거
     
     return {
       user,
       userDocument,
       isAdmin,
       isMaster,
-      isSuspendedUser,
       loading,
       logout,
-      // ✅ Context 값으로 refreshUserDocument 함수를 전달합니다.
-      refreshUserDocument,
+      // ❌ refreshUserDocument 제거
     };
-  }, [user, userDocument, loading, logout, refreshUserDocument]);
+  }, [user, userDocument, loading, logout]);
 
   return (
     <AuthContext.Provider value={value}>

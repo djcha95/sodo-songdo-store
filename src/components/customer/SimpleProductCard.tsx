@@ -1,22 +1,28 @@
 // src/components/customer/SimpleProductCard.tsx
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { Flame, Minus, Plus, ChevronRight, ShieldX, Banknote, AlertTriangle, Info, Calendar, Hourglass, Star, Ticket, CheckCircle } from 'lucide-react';
+import { Flame, Minus, Plus, ChevronRight, AlertTriangle, Info, Hourglass, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useLaunch } from '@/context/LaunchContext';
-import toast from 'react-hot-toast';
+import toast from 'react-hot-toast'; // react-hot-toast는 여전히 confirmation에 사용되므로 유지
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, OrderItem, VariantGroup as OriginalVariantGroup } from '@/types';
-import { getStockInfo, getMaxPurchasableQuantity, safeToDate, getDeadlines } from '@/utils/productUtils';
+import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, OrderItem, VariantGroup as OriginalVariantGroup } from '@/shared/types';
+import { getStockInfo, getMaxPurchasableQuantity, getDeadlines } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import { showToast } from '@/utils/toastUtils';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
 import './SimpleProductCard.css';
+
+const safeToDate = (date: any): Date | null => {
+  if (!date) return null;
+  if (date instanceof Date) return date; // 이미 Date 객체이면 그대로 반환
+  if (typeof date.toDate === 'function') return date.toDate(); // Timestamp 객체이면 변환
+  return null;
+};
 
 type Product = OriginalProduct & {
     displayRound: OriginalSalesRound;
@@ -29,19 +35,19 @@ interface SimpleProductCardProps {
 
 const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionState }) => {
     const navigate = useNavigate();
-    const { user, userDocument, isSuspendedUser } = useAuth();
-    const { isPreLaunch, launchDate } = useLaunch();
+    const { user, userDocument } = useAuth();
 
     const [quantity, setQuantity] = useState(1);
-    const [isProcessing, setIsProcessing] = useState(false);
     const [isPrepaymentModalOpen, setPrepaymentModalOpen] = useState(false);
     const [prepaymentPrice, setPrepaymentPrice] = useState(0);
 
+    // ✅ 예약 상태를 관리하기 위한 새 state
+    const [reservationStatus, setReservationStatus] = useState<'idle' | 'processing' | 'success'>('idle');
+
     const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-    const validateCartCallable = useMemo(() => httpsCallable<any, any>(functions, 'validateCart'), [functions]);
+    // ❌ validateCartCallable 제거
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functions, 'submitOrder'), [functions]);
     const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functions, 'addWaitlistEntry'), [functions]);
-    const enterRaffleEventCallable = useMemo(() => httpsCallable<any, any>(functions, 'enterRaffleEvent'), [functions]);
 
     const cardData = useMemo(() => {
         const { displayRound } = product;
@@ -57,6 +63,17 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             price: singleOptionItem?.price ?? displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0,
         };
     }, [product]);
+
+    // ✅ 예약 성공 후 버튼 상태를 되돌리기 위한 useEffect
+    useEffect(() => {
+        if (reservationStatus === 'success') {
+            const timer = setTimeout(() => {
+                setReservationStatus('idle');
+                setQuantity(1); // 수량을 1로 리셋
+            }, 2000); // 2초 후 '예약하기'로 복귀
+            return () => clearTimeout(timer);
+        }
+    }, [reservationStatus]);
 
     const handleCardClick = () => {
         navigate(`/product/${product.id}`);
@@ -78,71 +95,27 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         e.stopPropagation();
         if (isNaN(quantity) || quantity < 1) { setQuantity(1); }
     };
-
-    const handleRaffleEntry = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
-        if (isSuspendedUser) { showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
-        if (isProcessing || !cardData) return;
-
-        setIsProcessing(true);
-        const toastId = toast.loading('응모 처리 중...');
-
-        try {
-            await enterRaffleEventCallable({
-                productId: product.id,
-                roundId: cardData.displayRound.roundId,
-            });
-            toast.dismiss(toastId);
-            showToast('success', `${product.groupName} 이벤트 응모가 완료되었습니다!`);
-            e.currentTarget.setAttribute('disabled', 'true');
-
-        } catch (error: any) {
-            toast.dismiss(toastId);
-            showToast('error', error.message || '응모 처리 중 오류가 발생했습니다.');
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
+    
+    // ✅ handleImmediateOrder 함수 로직 수정
     const handleImmediateOrder = async () => {
         if (!user || !userDocument) {
             showToast('error', '로그인이 필요합니다.');
             navigate('/login');
             return;
         }
-        if (isSuspendedUser) {
-            showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.');
-            return;
-        }
-        if (isProcessing || !cardData) return;
+        if (reservationStatus !== 'idle' || !cardData) return;
 
         const finalVariant = cardData.singleOptionItem;
-        if (!finalVariant) {
-            return;
-        }
-
-        setIsProcessing(true);
-        const toastId = toast.loading('예약 처리 중...');
-
         const vg = cardData.singleOptionVg;
-        if (!vg) {
-            toast.dismiss(toastId);
+        if (!finalVariant || !vg) {
             showToast('error', '상품 정보를 찾을 수 없습니다.');
-            setIsProcessing(false);
             return;
         }
 
-        const itemToValidate = { ...finalVariant, productId: product.id, roundId: cardData.displayRound.roundId, quantity: quantity };
+        setReservationStatus('processing');
 
         try {
-            const validationResult = await validateCartCallable({ items: [itemToValidate] });
-            if (!validationResult.data.summary.sufficient) {
-                throw new Error(validationResult.data.summary.reason || '재고가 부족하거나 예약할 수 없는 상품입니다.');
-            }
-
-            const isWarningUser = userDocument?.loyaltyTier === '주의 요망';
-            const prepaymentRequired = isWarningUser || cardData.displayRound.isPrepaymentRequired;
+            const prepaymentRequired = cardData.displayRound.isPrepaymentRequired;
             const totalPrice = finalVariant.price * quantity;
 
             const orderItem: OrderItem = {
@@ -176,31 +149,36 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 notes: '즉시 예약'
             };
 
-            await submitOrderCallable(orderPayload);
-            toast.dismiss(toastId);
+            const result = await submitOrderCallable(orderPayload);
+
+            // 백엔드 응답에서 'orderIds'를 확인합니다.
+            if (!result.data.orderIds || result.data.orderIds.length === 0) {
+                // 이 에러는 클라우드 함수 내부 검증 오류일 가능성이 높음
+                throw new Error(result.data.message || '예약 생성에 실패했습니다. (재고 부족 또는 유효성 검사 실패)');
+            }
+
+            setReservationStatus('success');
 
             if (prepaymentRequired) {
                 setPrepaymentPrice(totalPrice);
                 setPrepaymentModalOpen(true);
             } else {
-                showToast('success', `${product.groupName} 예약이 완료되었습니다!`);
+                // 예약 완료 메시지는 success 상태 후 2초 뒤에 자연스럽게 사라지므로,
+                // 별도의 success toast는 필요하지 않음.
             }
 
         } catch (error: any) {
-            toast.dismiss(toastId);
             showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
-        } finally {
-            setIsProcessing(false);
+            setReservationStatus('idle');
             setQuantity(1);
         }
     };
 
     const handleWaitlistRequest = async () => {
         if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
-        if (isSuspendedUser) { showToast('error', '반복적인 약속 불이행으로 참여가 제한됩니다.'); return; }
-        if (isProcessing || !cardData?.singleOptionItem || !cardData.singleOptionVg) return;
+        if (reservationStatus !== 'idle' || !cardData?.singleOptionItem || !cardData.singleOptionVg) return;
 
-        setIsProcessing(true);
+        setReservationStatus('processing');
         const toastId = toast.loading('대기 신청 처리 중...');
 
         const waitlistPayload = {
@@ -215,19 +193,22 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             await addWaitlistEntryCallable(waitlistPayload);
             toast.dismiss(toastId);
             showToast('success', `${product.groupName} 대기 신청이 완료되었습니다.`);
+            setReservationStatus('success');
+            // 대기 신청은 예약 완료 버튼 대신 success 토스트 후 바로 idle로 복귀
         } catch (error: any) {
             toast.dismiss(toastId);
             showToast('error', error.message || '대기 신청 중 오류가 발생했습니다.');
+            setReservationStatus('idle');
         } finally {
-            setIsProcessing(false);
+            // 대기 신청은 성공/실패 여부와 관계없이 항상 상태를 초기화합니다.
+            setReservationStatus('idle');
             setQuantity(1);
         }
     };
 
     const showConfirmation = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (isPreLaunch) { showToast('info', `🛍️ 상품 예약은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 2000); return; }
-        if (!cardData?.singleOptionItem) return;
+        if (!cardData?.singleOptionItem || reservationStatus !== 'idle') return;
 
         const { primaryEnd } = getDeadlines(cardData.displayRound);
         const isSecondarySale = primaryEnd ? dayjs().isAfter(primaryEnd) : false;
@@ -268,10 +249,8 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     const showWaitlistConfirmation = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (isPreLaunch) { showToast('info', `🛍️ 대기 신청은 ${dayjs(launchDate).format('M/D')} 정식 런칭 후 가능해요!`, 2000); return; }
-
         const finalVariant = cardData?.singleOptionItem;
-        if (!finalVariant) return;
+        if (!finalVariant || reservationStatus !== 'idle') return;
 
         toast((t) => (
             <div className="confirmation-toast-content">
@@ -295,18 +274,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     const renderStockBadge = () => {
         const { isMultiOption, displayRound } = cardData;
 
-        if (displayRound.eventType === 'RAFFLE') {
-            const deadline = dayjs(safeToDate(displayRound.deadlineDate));
-            const isEnded = dayjs().isAfter(deadline);
-            return (
-                <span className={`stock-badge event-badge-raffle ${isEnded ? 'ended' : ''}`}>
-                    <Ticket size={12} /> {isEnded ? '응모 마감' : '추첨 이벤트'}
-                </span>
-            );
-        }
-
-        // ✅ [삭제] 'CHUSEOK' 이벤트 배지 렌더링 로직을 제거합니다.
-
         if (isMultiOption) {
             const isDisplayableState = ['PURCHASABLE', 'WAITLISTABLE', 'REQUIRE_OPTION'].includes(actionState);
             if (!isDisplayableState) return null;
@@ -329,7 +296,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         if (actionState !== 'PURCHASABLE') return null;
 
         const stockInfo = getStockInfo(displayRound.variantGroups[0] as OriginalVariantGroup & { reservedCount?: number });
-
         if (!stockInfo.isLimited || stockInfo.remainingUnits <= 0) return null;
 
         return (
@@ -340,31 +306,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     };
 
     const renderActionArea = () => {
-        if (isSuspendedUser) {
-            return <button className="simple-card-action-btn disabled" disabled><ShieldX size={16} /> 참여 제한</button>;
-        }
-
-        if (isPreLaunch) {
-            return <button className="simple-card-action-btn disabled" disabled><Calendar size={16} /> {dayjs(launchDate).format('M/D')} 오픈</button>;
-        }
-
-        if (cardData.displayRound.eventType === 'RAFFLE') {
-            const isEntered = userDocument?.enteredRaffleIds?.includes(cardData.displayRound.roundId);
-            const isEnded = dayjs().isAfter(dayjs(safeToDate(cardData.displayRound.deadlineDate)));
-
-            if (isEnded) {
-                return <button className="simple-card-action-btn disabled" disabled><Hourglass size={16} /> 응모 마감</button>;
-            }
-            if (isEntered) {
-                return <button className="simple-card-action-btn disabled" disabled><CheckCircle size={16} /> 응모 완료</button>;
-            }
-            return (
-                <button className="simple-card-action-btn raffle" onClick={handleRaffleEntry} disabled={isProcessing}>
-                    {isProcessing ? '처리중...' : <><Ticket size={16} /> 응모하기</>}
-                </button>
-            );
-        }
-
         if (cardData.isMultiOption || actionState === 'REQUIRE_OPTION') {
             return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
         }
@@ -385,8 +326,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                         />
                         <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity >= maxQty}><Plus size={16} /></button>
                     </div>
-                    <button className="simple-card-action-btn waitlist" onClick={showWaitlistConfirmation} disabled={isProcessing}>
-                        {isProcessing ? '처리중...' : <><Hourglass size={16} /> 대기 신청</>}
+                    <button 
+                        className="simple-card-action-btn waitlist" 
+                        onClick={showWaitlistConfirmation} 
+                        disabled={reservationStatus !== 'idle'}
+                    >
+                        {reservationStatus === 'processing' ? '처리중...' : <><Hourglass size={16} /> 대기 신청</>}
                     </button>
                 </div>
             );
@@ -394,10 +339,23 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
         if (actionState === 'PURCHASABLE') {
             const maxQty = getMaxPurchasableQuantity(cardData.singleOptionVg!, cardData.singleOptionItem!);
+            
+            const getButtonContent = () => {
+                switch (reservationStatus) {
+                    case 'processing': return '처리 중...';
+                    case 'success': return <><CheckCircle size={16} /> 예약 완료</>;
+                    default: return '예약하기';
+                }
+            };
+            
             return (
                 <div className="single-option-controls">
                     <div className="quantity-controls compact">
-                        <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity <= 1}><Minus size={16} /></button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} 
+                            className="quantity-btn" 
+                            disabled={reservationStatus !== 'idle' || (!isNaN(quantity) && quantity <= 1)}
+                        ><Minus size={16} /></button>
                         <input
                             type="number"
                             className="quantity-input"
@@ -405,32 +363,37 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                             onChange={(e) => handleQuantityChange(e, maxQty)}
                             onBlur={handleQuantityBlur}
                             onClick={(e) => { e.stopPropagation(); e.currentTarget.select(); }}
+                            disabled={reservationStatus !== 'idle'}
                         />
-                        <button onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} className="quantity-btn" disabled={!isNaN(quantity) && quantity >= maxQty}><Plus size={16} /></button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} 
+                            className="quantity-btn" 
+                            disabled={reservationStatus !== 'idle' || (!isNaN(quantity) && quantity >= maxQty)}
+                        ><Plus size={16} /></button>
                     </div>
-                    <button className="simple-card-action-btn confirm" onClick={showConfirmation} disabled={isProcessing}>
-                        {isProcessing ? '처리중...' : '예약하기'}
+                    <button 
+                        className={`simple-card-action-btn confirm ${reservationStatus !== 'idle' ? 'processing' : ''}`} 
+                        onClick={showConfirmation} 
+                        disabled={reservationStatus !== 'idle'}
+                    >
+                        {getButtonContent()}
                     </button>
                 </div>
             );
         }
 
+        if (actionState === 'ENDED') {
+            return <button className="simple-card-action-btn sold-out" disabled>품절</button>;
+        }
+        
         return <button className="simple-card-action-btn details" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>상세보기 <ChevronRight size={16} /></button>;
     };
 
-    const isRaffleEvent = cardData.displayRound.eventType === 'RAFFLE';
-    const pickupDateFormatted = isRaffleEvent
-        ? `추첨: ${dayjs(safeToDate(cardData.displayRound.raffleDrawDate)).locale('ko').format('M/D(ddd) HH:mm')}`
-        : dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');
-
-    // ✅ [수정] isEventProduct가 이제 raffle 이벤트만 감지합니다.
-    const isEventProduct = cardData.displayRound.eventType === 'RAFFLE';
-    const cardClassName = `simple-product-card ${isEventProduct ? `event-card-${cardData.displayRound.eventType?.toLowerCase()}` : ''}`;
-
+    const pickupDateFormatted = dayjs(safeToDate(cardData.displayRound.pickupDate)).locale('ko').format('M/D(ddd) 픽업');
 
     return (
         <>
-            <div className={cardClassName} onClick={handleCardClick}>
+            <div className="simple-product-card" onClick={handleCardClick}>
                 <div className="simple-card-main-content">
                     <div className="simple-card-image-wrapper">
                         <OptimizedImage originalUrl={product.imageUrls?.[0]} size='150x150' alt={product.groupName} className="simple-card-image" />
@@ -440,7 +403,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                             <h3 className="simple-card-title">{product.groupName}</h3>
                             {renderStockBadge()}
                         </div>
-                        <p className="simple-card-price">{isRaffleEvent ? '무료 응모' : `${cardData.price.toLocaleString()}원`}</p>
+                        <p className="simple-card-price">{`${cardData.price.toLocaleString()}원`}</p>
                         <p className="simple-card-pickup">{pickupDateFormatted}</p>
                     </div>
                 </div>

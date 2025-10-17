@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom'; 
-import type { UserDocument, LoyaltyTier } from '@/types';
+import type { UserDocument, LoyaltyTier } from '@/shared/types';
 import {
     Crown, Gem, Sparkles, ShieldAlert, ShieldX, User, Mail, Phone, BarChart3
 } from 'lucide-react'; // ✅ [수정] 사용하지 않는 TrendingUp 아이콘 제거

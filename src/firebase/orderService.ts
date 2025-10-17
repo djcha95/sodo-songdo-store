@@ -21,7 +21,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
-import type { Order, OrderStatus, OrderItem } from '@/types';
+import type { Order, OrderStatus, OrderItem } from '@/shared/types';
 
 /**
  * @description 주문 생성 시 클라이언트가 사용자 정보를 직접 수정하지 않도록 변경합니다.

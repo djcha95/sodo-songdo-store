@@ -4,7 +4,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { Timestamp } from "firebase-admin/firestore";
-import type { Order, OrderItem, Product } from "../types.js";
+import type { Order, OrderItem, Product } from "@/shared/types";
 
 /**
  * =================================================================

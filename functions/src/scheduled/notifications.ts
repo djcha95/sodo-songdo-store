@@ -3,7 +3,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { getFirestore } from "firebase-admin/firestore";
 import { sendAlimtalk } from "../utils/nhnApi.js";
-import type { Order, UserDocument } from "../types.js";
+import type { Order, UserDocument } from "@/shared/types";
 
 export async function executePickupReminders(targetUserPhone: string | null = null) {
   const mode = targetUserPhone ? `테스트 실행 (대상: ${targetUserPhone})` : "정기 실행";

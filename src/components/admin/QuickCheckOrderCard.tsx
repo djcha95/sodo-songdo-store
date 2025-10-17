@@ -1,7 +1,7 @@
 // src/components/admin/QuickCheckOrderCard.tsx
 
 import React, { useState, useEffect } from 'react';
-import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/types';
+import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/shared/types';
 import toast from 'react-hot-toast';
 import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';

@@ -1,26 +1,27 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "lib": ["ES2020"],
-    "rootDir": "src",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+
+    "rootDir": "..",                    // ✅ 프로젝트 루트까지 포괄
     "outDir": "lib",
 
-    "strict": true,
+    "types": ["node"],
     "esModuleInterop": true,
     "resolveJsonModule": true,
-
-    "types": ["node"],
-    "typeRoots": ["./node_modules/@types"],
-
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "noImplicitReturns": true,
-    "noUnusedLocals": true,
-    "sourceMap": true
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],                 // functions/src/*
+      "@/shared/*": ["../src/shared/*"] // 루트 src/shared/*
+    },
+
+    "noImplicitAny": false
   },
-  "compileOnSave": true,
-  "include": ["src/**/*.ts"],
-  "exclude": ["**/*.test.ts", "**/*.spec.ts"]
+  "include": ["src/**/*", "../src/shared/**/*"],
+  "exclude": ["node_modules", "lib"]
 }

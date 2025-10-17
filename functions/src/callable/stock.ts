@@ -5,7 +5,7 @@ import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Transaction } from "firebase-admin/firestore";
 import { createNotification } from "../utils/notificationService.js";
 import { submitOrderFromWaitlist } from "../utils/orderService.js";
-import type { Product, WaitlistEntry, UserDocument } from "../types.js";
+import type { Product, WaitlistEntry, UserDocument } from "@/shared/types";
 import * as logger from "firebase-functions/logger";
 
 export const addStockAndProcessWaitlist = onCall({
