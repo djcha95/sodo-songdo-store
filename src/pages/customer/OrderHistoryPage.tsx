@@ -80,7 +80,6 @@ const getCancellationDetails = (order: Order): { cancellable: boolean; isPenalty
   return { cancellable: true, isPenalty: now > penaltyDeadline, reason: null };
 };
 
-// 페이지네이션 훅
 const usePaginatedOrders = (uid?: string) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true); // 처음 로딩 상태는 true
@@ -92,6 +91,8 @@ const usePaginatedOrders = (uid?: string) => {
   const fetchOrders = useCallback(async (isInitial = false) => {
     if (!uid) {
       setLoading(false);
+      // uid가 없으면 더 이상 fetch할 것이 없으므로 hasMore를 false로 설정
+      setHasMore(false); 
       return;
     }
     if ((loadingMore && !isInitial) || (!hasMore && !isInitial)) return;
@@ -104,10 +105,14 @@ const usePaginatedOrders = (uid?: string) => {
     }
     
     try {
+      // ✅ 수정된 부분: lastVisible이 null이 아닌 경우만 전달하도록 조건부 할당
+      const lastDocToPass = isInitial ? null : lastVisible;
+
       const result = await fetchOrdersFn({
         userId: uid,
         pageSize: 10,
-        lastVisible: isInitial ? null : lastVisible,
+        // Firebase Function 인자에 'undefined'가 들어가지 않도록 명확하게 처리
+        lastVisible: lastDocToPass, 
         orderByField: 'pickupDate',
         orderDirection: 'desc',
       });
@@ -121,7 +126,11 @@ const usePaginatedOrders = (uid?: string) => {
       })) as Order[];
       
       setOrders(prev => isInitial ? newOrders : [...prev, ...newOrders]);
-      setLastVisible(lastDoc);
+      
+      // ✅ 수정된 부분: lastDoc이 유효한 값일 경우에만 설정 (null/undefined 방지)
+      setLastVisible(lastDoc || null); 
+      
+      // lastDoc이 없거나, 불러온 주문 수가 pageSize보다 적으면 hasMore = false
       if (!lastDoc || newOrders.length < 10) setHasMore(false);
       
     } catch (error) {
@@ -132,7 +141,7 @@ const usePaginatedOrders = (uid?: string) => {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [uid, loadingMore, hasMore, fetchOrdersFn, lastVisible]);
+  }, [uid, loadingMore, hasMore, fetchOrdersFn, lastVisible]); // 의존성 배열 유지
 
   useEffect(() => {
     fetchOrders(true);

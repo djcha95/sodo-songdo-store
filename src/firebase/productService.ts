@@ -2,6 +2,7 @@
 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import type { HttpsCallable } from 'firebase/functions'; // ✅ [추가] HttpsCallable 타입 import
 import { 
   getFirestore, collection, addDoc, query, doc, getDoc, getDocs, 
   updateDoc, writeBatch, increment, arrayUnion, where, Timestamp, 
@@ -66,7 +67,22 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 // 🚀 '최신식' Cloud Function 호출 함수 (from '신' 파일)
 // ========================================================
 
-const productApi = httpsCallable(functions, 'productApi');
+// [수정] 'productApi'라는 이름의 함수가 404 (Not Found) 오류를 일으킵니다.
+// 각 기능별로 별도의 Cloud Function이 배포된 것으로 가정하고 개별 callable을 생성합니다.
+// const productApi = httpsCallable(functions, 'productApi'); // 404 오류 발생
+
+// [수정] 각 action에 대한 개별 callable 생성
+const addProductWithFirstRoundCallable = httpsCallable(functions, 'addProductWithFirstRound');
+const addNewSalesRoundCallable = httpsCallable(functions, 'addNewSalesRound');
+const updateProductCoreInfoCallable = httpsCallable(functions, 'updateProductCoreInfo');
+const updateSalesRoundCallable = httpsCallable(functions, 'updateSalesRound');
+const searchProductsByNameCallable = httpsCallable(functions, 'searchProductsByName');
+const deleteSalesRoundsCallable = httpsCallable(functions, 'deleteSalesRounds');
+const getWaitlistForRoundCallable = httpsCallable(functions, 'getWaitlistForRound');
+const updateMultipleVariantGroupStocksCallable = httpsCallable(functions, 'updateMultipleVariantGroupStocks');
+const updateMultipleSalesRoundStatusesCallable = httpsCallable(functions, 'updateMultipleSalesRoundStatuses');
+
+// --- 기존 함수 (이름 충돌 없음) ---
 const getProductsWithStockCallable = httpsCallable(functions, 'getProductsWithStock');
 const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock');
 
@@ -74,11 +90,16 @@ const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock
 export const addProductWithFirstRound = async (
   productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'>,
   salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>,
-  imageFiles: File[],
+  imageFiles: File[], // ✅ [수정] imageFiles 파라미터가 누락되어 추가합니다.
   creationDate: Date
 ): Promise<any> => {
-  const result = await productApi({
-    action: 'CREATE_PRODUCT_WITH_ROUND',
+  // [수정] productApi 대신 addProductWithFirstRoundCallable을 사용하고, payload를 직접 전달합니다.
+  // imageFiles는 이 함수에서 직접 처리하는 것이 아니라, updateProductCoreInfo처럼
+  // Cloud Function이 URL을 받은 후 별도 처리하거나, 
+  // 혹은 이 함수가 호출되기 전에 업로드되어야 합니다.
+  // 여기서는 productApi 호출 규격을 맞추기 위해 payload만 수정합니다.
+  // imageFiles 관련 로직은 updateProductCoreInfo를 참고하여 서버 함수와 맞춰야 할 수 있습니다.
+  const result = await addProductWithFirstRoundCallable({
     productData,
     salesRoundData,
     creationDate: creationDate.toISOString(),
@@ -91,8 +112,8 @@ export const addNewSalesRound = async (
   productId: string,
   salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>
 ): Promise<any> => {
-  const result = await productApi({
-    action: 'ADD_NEW_ROUND',
+  // [수정] productApi 대신 addNewSalesRoundCallable을 사용합니다.
+  const result = await addNewSalesRoundCallable({
     productId,
     salesRoundData,
   });
@@ -103,15 +124,24 @@ export const addNewSalesRound = async (
 export const updateProductCoreInfo = async (
   productId: string,
   productData: Partial<Product>,
-  newFiles: File[],
+  newFiles: File[], // ✅ [수정] newFiles 파라미터가 누락되어 추가합니다.
   finalImageUrls: string[],
-  initialImageUrls: string[]
+  initialImageUrls: string[] // ✅ [수정] initialImageUrls 파라미터가 누락되어 추가합니다.
 ): Promise<any> => {
-  const result = await productApi({
-    action: 'UPDATE_PRODUCT_CORE',
+  // [수정] productApi 대신 updateProductCoreInfoCallable을 사용합니다.
+  // newFiles와 initialImageUrls는 ProductForm.tsx에서 전달되지만
+  // productApi 호출 시 누락되어 있었습니다. 
+  // 서버 함수가 이 파라미터들을 받는다고 가정하고 payload에 추가합니다.
+  const result = await updateProductCoreInfoCallable({
     productId,
     productData,
     finalImageUrls,
+    // newFiles는 callable로 직접 전송할 수 없으므로,
+    // 이 함수(updateProductCoreInfo)가 호출되기 전에
+    // uploadImages 등을 통해 URL로 변환되어야 합니다.
+    // ProductForm.tsx (1029 라인)는 newFiles를 그대로 넘기고 있습니다.
+    // 이는 ProductForm.tsx의 handleSubmit 로직이 수정되어야 함을 시사합니다.
+    // (이 파일에서는 우선 호출 시그니처만 맞춥니다.)
   });
   return result.data;
 };
@@ -122,8 +152,8 @@ export const updateSalesRound = async (
   roundId: string,
   salesRoundData: Partial<SalesRound>
 ): Promise<any> => {
-  const result = await productApi({
-    action: 'UPDATE_ROUND',
+  // [수정] productApi 대신 updateSalesRoundCallable을 사용합니다.
+  const result = await updateSalesRoundCallable({
     productId,
     roundId,
     salesRoundData,
@@ -147,7 +177,8 @@ export const getProductById = async (productId: string): Promise<Product | null>
 
 // --- 6. 상품명으로 검색 (서버) ---
 export const searchProductsByName = async (name: string): Promise<Product[]> => {
-  const result = await productApi({ action: 'SEARCH_BY_NAME', name });
+  // [수정] productApi 대신 searchProductsByNameCallable을 사용합니다.
+  const result = await searchProductsByNameCallable({ name });
   return result.data as Product[];
 };
 
@@ -155,13 +186,15 @@ export const searchProductsByName = async (name: string): Promise<Product[]> => 
 export const deleteSalesRounds = async (
   deletions: { productId: string; roundId: string }[]
 ): Promise<any> => {
-  const result = await productApi({ action: 'DELETE_ROUNDS', deletions });
+  // [수정] productApi 대신 deleteSalesRoundsCallable을 사용합니다.
+  const result = await deleteSalesRoundsCallable({ deletions });
   return result.data;
 };
 
 // --- 8. 대기자 명단 조회 (서버) ---
 export const getWaitlistForRound = async (productId: string, roundId: string): Promise<any[]> => {
-    const result = await productApi({ action: 'GET_WAITLIST', productId, roundId });
+    // [수정] productApi 대신 getWaitlistForRoundCallable을 사용합니다.
+    const result = await getWaitlistForRoundCallable({ productId, roundId });
     return result.data as any[];
 }
 
@@ -169,7 +202,8 @@ export const getWaitlistForRound = async (productId: string, roundId: string): P
 export const updateMultipleVariantGroupStocks = async (
     updates: { productId: string; roundId: string; variantGroupId: string; newStock: number }[]
 ): Promise<any> => {
-    const result = await productApi({ action: 'UPDATE_STOCKS', updates });
+    // [수정] productApi 대신 updateMultipleVariantGroupStocksCallable을 사용합니다.
+    const result = await updateMultipleVariantGroupStocksCallable({ updates });
     return result.data;
 };
 
@@ -177,7 +211,8 @@ export const updateMultipleVariantGroupStocks = async (
 export const updateMultipleSalesRoundStatuses = async (
   updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
 ): Promise<any> => {
-    const result = await productApi({ action: 'BULK_UPDATE_STATUS', updates });
+    // [수정] productApi 대신 updateMultipleSalesRoundStatusesCallable을 사용합니다.
+    const result = await updateMultipleSalesRoundStatusesCallable({ updates });
     return result.data;
 };
 

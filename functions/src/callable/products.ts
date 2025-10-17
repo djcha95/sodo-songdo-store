@@ -15,11 +15,175 @@ import type {
   SalesRound,
   VariantGroup,
   UserDocument,
-  CustomerInfo // ✅ CustomerInfo 타입 추가
+  CustomerInfo
 } from "@/shared/types";
 
+
+// =================================================================
+// 1. 신규 상품 + 첫 회차 등록: addProductWithFirstRound
+// =================================================================
+export const addProductWithFirstRound = onCall(
+  {
+    region: "asia-northeast3",
+    cors: allowedOrigins,
+    memory: "512MiB",
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자만 상품을 등록할 수 있습니다.");
+    }
+
+    const { productData, salesRoundData, creationDate } = request.data;
+    if (!productData || !salesRoundData || !creationDate) {
+      throw new HttpsError("invalid-argument", "상품 생성에 필요한 정보가 누락되었습니다.");
+    }
+    if (!productData.groupName || !salesRoundData.roundName) {
+        throw new HttpsError("invalid-argument", "상품명과 회차명은 필수입니다.");
+    }
+
+    try {
+      const newProductRef = db.collection("products").doc();
+      const newProductId = newProductRef.id;
+
+      const firstRound: SalesRound = {
+        ...salesRoundData,
+        roundId: newProductId,
+        createdAt: Timestamp.fromDate(new Date(creationDate)),
+        waitlist: [],
+        waitlistCount: 0,
+      };
+
+      const newProductData: Omit<Product, 'id'> = {
+        ...productData,
+        salesHistory: [firstRound],
+        imageUrls: [],
+        isArchived: false,
+        createdAt: Timestamp.fromDate(new Date(creationDate)),
+        encoreCount: 0,
+        encoreRequesterIds: [],
+      };
+
+      await newProductRef.set(newProductData);
+      
+      logger.info(`New product created by ${request.auth?.uid} with ID: ${newProductId}`);
+      
+      return {
+        success: true,
+        productId: newProductId,
+        message: "상품이 성공적으로 등록되었습니다."
+      };
+
+    } catch (error) {
+      logger.error("Error in addProductWithFirstRound:", error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError("internal", "상품 등록 중 서버 오류가 발생했습니다.");
+    }
+  }
+);
+
+
+// =================================================================
+// 2. 상품명으로 검색: searchProductsByName
+// =================================================================
+export const searchProductsByName = onCall(
+  {
+    region: "asia-northeast3",
+    cors: allowedOrigins,
+  },
+  async (request) => {
+    const name = request.data.name as string;
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      throw new HttpsError('invalid-argument', '검색할 상품명을 입력해주세요.');
+    }
+
+    try {
+      const trimmedName = name.trim();
+      const productsRef = db.collection('products');
+      
+      const snapshot = await productsRef
+        .where('groupName', '>=', trimmedName)
+        .where('groupName', '<=', trimmedName + '\uf8ff')
+        .where('isArchived', '==', false)
+        .limit(5)
+        .get();
+
+      if (snapshot.empty) {
+        return [];
+      }
+      
+      const products = snapshot.docs.map(doc => ({
+        ...(doc.data() as Product),
+        id: doc.id,
+      }));
+
+      return products;
+
+    } catch (error) {
+      logger.error('Error in searchProductsByName:', error);
+      throw new HttpsError('internal', '상품 검색 중 오류가 발생했습니다.');
+    }
+  }
+);
+
+// =================================================================
+// ✅ [신규 추가] 3. 상품 핵심 정보 수정: updateProductCoreInfo
+// =================================================================
+export const updateProductCoreInfo = onCall(
+  {
+    region: "asia-northeast3",
+    // onCall 함수는 CORS를 자동으로 처리하므로 cors: allowedOrigins 옵션이 없어도 괜찮습니다.
+    // 하지만 명시적으로 추가해도 문제는 없습니다.
+  },
+  async (request) => {
+    // 1. 관리자 권한 확인
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    // 2. 파라미터 유효성 검사
+    const { productId, productData, finalImageUrls } = request.data;
+    if (!productId || !productData) {
+      throw new HttpsError("invalid-argument", "상품 ID와 업데이트할 데이터가 필요합니다.");
+    }
+
+    try {
+      const productRef = db.collection("products").doc(productId);
+
+      // 3. 업데이트할 데이터 객체 생성
+      // 클라이언트에서 보낸 productData와 최종 이미지 URL 목록을 합칩니다.
+      const dataToUpdate = {
+        ...productData,
+        imageUrls: finalImageUrls, // finalImageUrls가 undefined가 아니면 이 값으로 덮어씁니다.
+      };
+
+      // 4. Firestore 문서 업데이트
+      await productRef.update(dataToUpdate);
+
+      logger.info(`Product core info updated successfully for product ID: ${productId}`);
+      
+      // 5. 성공 응답 반환
+      return {
+        success: true,
+        message: "상품 정보가 성공적으로 업데이트되었습니다."
+      };
+
+    } catch (error) {
+      logger.error("Error in updateProductCoreInfo:", error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError("internal", "상품 정보 업데이트 중 서버 오류가 발생했습니다.");
+    }
+  }
+);
+
+
 const convertToClientProduct = (product: Product & { id: string }): Product => {
-  // 프론트엔드의 types.ts에 정의된 Product 구조와 정확히 일치시킵니다.
   return {
     id: product.id,
     groupName: product.groupName,
@@ -36,7 +200,7 @@ const convertToClientProduct = (product: Product & { id: string }): Product => {
         items: vg.items,
         totalPhysicalStock: vg.totalPhysicalStock,
         stockUnitType: vg.stockUnitType,
-        reservedCount: vg.reservedCount, // 재고 계산을 위해 이 필드는 유지
+        reservedCount: vg.reservedCount,
         pickedUpCount: vg.pickedUpCount,
       })),
       publishAt: round.publishAt,
@@ -51,13 +215,11 @@ const convertToClientProduct = (product: Product & { id: string }): Product => {
     })),
     isArchived: product.isArchived,
     createdAt: product.createdAt,
-    // ❌ category, encoreCount, tags, hashtags, eventType, allowedTiers 등
-    // 프론트엔드에서 사용하지 않는 모든 필드를 여기서 제거합니다.
   };
 };
 
 /** --------------------------------
- * 2) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock (✅ 페이지네이션 적용으로 수정됨)
+ * 4) 재고/예약 합산 포함 상품 목록 조회: getProductsWithStock
  * --------------------------------- */
 export const getProductsWithStock = onCall(
   {
@@ -69,17 +231,14 @@ export const getProductsWithStock = onCall(
   },
   async (request) => {
     try {
-      // ✅ [추가] 프론트엔드로부터 페이지 크기와 마지막 항목(커서) 정보를 받습니다.
       const { pageSize = 10, lastVisible: lastVisibleDocData } = request.data || {};
 
-      // ✅ [수정] 쿼리를 페이지네이션에 맞게 수정합니다.
       let query = db
         .collection("products")
         .where("isArchived", "==", false)
         .orderBy("createdAt", "desc")
         .limit(pageSize);
 
-      // 만약 마지막 항목 정보가 있다면, 그 지점부터 쿼리를 시작합니다.
       if (lastVisibleDocData?.id) {
         const lastVisibleDoc = await db.collection("products").doc(lastVisibleDocData.id).get();
         if(lastVisibleDoc.exists) {
@@ -93,7 +252,6 @@ export const getProductsWithStock = onCall(
         id: doc.id,
       })) as (Product & { id: string })[];
 
-      // ... (예약/픽업 수량 계산 로직은 기존과 동일)
       const ordersSnap = await db
         .collection("orders")
         .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
@@ -133,13 +291,12 @@ export const getProductsWithStock = onCall(
       
       const clientFriendlyProducts = productsWithClaimedData.map(p => convertToClientProduct(p));
 
-      // ✅ [추가] 다음 페이지 조회를 위한 '마지막 항목' 정보를 생성합니다.
       const lastDoc = productsSnapshot.docs[productsSnapshot.docs.length - 1];
       const nextLastVisible = lastDoc ? { id: lastDoc.id, createdAt: lastDoc.data().createdAt } : null;
 
       return {
-        products: clientFriendlyProducts, // ✅ 이렇게 수정해주세요.
-        lastVisible: nextLastVisible, // 다음 페이지 커서를 반환
+        products: clientFriendlyProducts,
+        lastVisible: nextLastVisible,
       };
     } catch (error) {
       logger.error("getProductsWithStock error:", error);
@@ -151,7 +308,7 @@ export const getProductsWithStock = onCall(
 
 
 /** --------------------------------
- * 3) ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock (✅ 개선됨)
+ * 5) ID로 단일 상품 조회 (재고 포함): getProductByIdWithStock
  * --------------------------------- */
 export const getProductByIdWithStock = onCall(
   {
@@ -182,7 +339,6 @@ export const getProductByIdWithStock = onCall(
         .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
 
-      // ✅ [개선] claimedMap(총 예약/판매량)과 pickedUpMap(픽업 완료량)을 모두 계산
       const claimedMap = new Map<string, number>();
       const pickedUpMap = new Map<string, number>();
       
@@ -212,7 +368,6 @@ export const getProductByIdWithStock = onCall(
             return {
               ...vg,
               reservedCount: claimedMap.get(key) || 0,
-              // ✅ [개선] pickedUpCount 추가
               pickedUpCount: pickedUpMap.get(key) || 0,
             };
           });
@@ -232,8 +387,9 @@ export const getProductByIdWithStock = onCall(
   }
 );
 
+// ... (이하 나머지 함수들은 기존과 동일)
 /** --------------------------------
- * 4) 페이지네이션용 단순 목록: getProductsPage
+ * 6) 페이지네이션용 단순 목록: getProductsPage
  * --------------------------------- */
 export const getProductsPage = onCall(
   {
@@ -280,7 +436,7 @@ export const getProductsPage = onCall(
 );
 
 /** --------------------------------
- * 5) 앵콜 요청: requestEncore
+ * 7) 앵콜 요청: requestEncore
  * --------------------------------- */
 export const requestEncore = onCall(
   {
@@ -347,33 +503,29 @@ export const requestEncore = onCall(
 
 /**
  * ----------------------------------------------------------------
- * 6) 상품 정보 변경 알림: notifyUsersOfProductUpdate (수정됨)
+ * 8) 상품 정보 변경 알림: notifyUsersOfProductUpdate (수정됨)
  * ----------------------------------------------------------------
- * 상품 정보가 수정되었을 때, 해당 상품/회차를 주문했던 모든 사용자에게 알림을 보냅니다.
  */
 export const notifyUsersOfProductUpdate = onCall(
   {
     region: "asia-northeast3",
     cors: allowedOrigins,
     memory: "512MiB",
-    timeoutSeconds: 120, // 사용자 조회 및 알림 생성으로 시간 여유 있게 설정
+    timeoutSeconds: 120,
   },
   async (request) => {
     const userRole = request.auth?.token.role;
 
-    // 1. 관리자 권한 확인
     if (!userRole || !['admin', 'master'].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자만 이 기능을 사용할 수 있습니다.");
     }
     
-    // 2. 파라미터 유효성 검사
     const { productId, roundId, productName, changes } = request.data;
     if (!productId || !roundId || !productName || !Array.isArray(changes) || changes.length === 0) {
       throw new HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다.");
     }
 
     try {
-      // 3. 해당 상품/회차를 주문한 모든 사용자 ID 조회 (✅ 수정된 로직)
       const ordersSnapshot = await db.collection("orders")
         .where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
         .get();
@@ -381,7 +533,6 @@ export const notifyUsersOfProductUpdate = onCall(
       const userIds = new Set<string>();
       ordersSnapshot.forEach(doc => {
         const order = doc.data() as Order;
-        // 각 주문에 포함된 상품(items)들을 순회하며 조건 확인
         const isTargetOrder = (order.items || []).some(item => 
             item.productId === productId && item.roundId === roundId
         );
@@ -399,7 +550,6 @@ export const notifyUsersOfProductUpdate = onCall(
       const uniqueUserIds = Array.from(userIds);
       logger.info(`Found ${uniqueUserIds.length} users to notify for product ${productId} round ${roundId}.`);
 
-      // 4. 각 사용자에게 알림 생성 (Batch 사용으로 원자적 실행)
       const batch = db.batch();
       const changeText = changes.join(", ");
       const message = `[상품 정보 변경] '${productName}' 상품의 정보가 변경되었습니다. (변경: ${changeText})`;
@@ -411,7 +561,7 @@ export const notifyUsersOfProductUpdate = onCall(
           read: false,
           timestamp: FieldValue.serverTimestamp(),
           type: 'PRODUCT_UPDATE',
-          link: `/my-orders`, // 내 주문내역 페이지로 이동 링크
+          link: `/my-orders`,
         });
       });
       
@@ -432,7 +582,7 @@ export const notifyUsersOfProductUpdate = onCall(
 
 /**
  * =================================================================
- * 7) 장바구니 유효성 검사: validateCart (🚨 중요: 로직 수정됨)
+ * 9) 장바구니 유효성 검사: validateCart
  * =================================================================
  */
 export const validateCart = onCall({
@@ -463,7 +613,6 @@ export const validateCart = onCall({
       const productDocs = await Promise.all(productIds.map(id => transaction.get(db.collection("products").doc(id))));
       const productsMap = new Map(productDocs.map(doc => [doc.id, doc.data() as Product]));
       
-      // ✅ [추가] 현재 예약된 수량을 트랜잭션 내에서 실시간으로 계산
       const ordersSnap = await transaction.get(
         db.collection("orders").where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"])
       );
@@ -493,8 +642,6 @@ export const validateCart = onCall({
           continue;
         }
 
-        // ✅ [수정] 하위 호환성 로직 추가
-        // ID로 옵션을 찾되, 실패하면 옵션이 1개뿐인지 확인하고 그걸로 대체
         const vg = round.variantGroups.find(v => v.id === item.variantGroupId) ||
                    (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
         
@@ -503,15 +650,12 @@ export const validateCart = onCall({
             continue;
         }
         
-        // ✅ [수정] 사용자 등급 검증 로직 활성화
         if (userDoc && Array.isArray(round.allowedTiers) && !round.allowedTiers.includes(userDoc.loyaltyTier)) {
            validatedItems.push({ ...item, status: "INELIGIBLE", reason: "사용자 등급 제한" });
            continue;
         }
 
-        // ✅ [수정] 재고 검증 로직 구현
         if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
-            // variantGroupId가 없는 옛날 상품의 경우, 식별을 위해 productId와 roundId만 사용
             const key = `${item.productId}-${item.roundId}-${vg.id || 'default'}`;
             const reservedCount = claimedMap.get(key) || 0;
             const remainingStock = vg.totalPhysicalStock - reservedCount;
@@ -545,333 +689,3 @@ export const validateCart = onCall({
     throw new HttpsError("internal", "장바구니 검증 중 서버 오류가 발생했습니다.");
   }
 });
-
-/**
- * =================================================================
- * 9) 추첨 이벤트 응모: enterRaffleEvent (✅ 수정됨)
- * =================================================================
- */
-/*
-export const enterRaffleEvent = onCall(
-  {
-    region: "asia-northeast3",
-    cors: allowedOrigins,
-    enforceAppCheck: false,
-  },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
-    }
-    const userId = request.auth.uid;
-    const { productId, roundId } = request.data;
-
-    if (!productId || !roundId) {
-      throw new HttpsError("invalid-argument", "상품 정보가 올바르지 않습니다.");
-    }
-
-    try {
-      await db.runTransaction(async (transaction) => {
-        const productRef = db.collection("products").doc(productId);
-        const userRef = db.collection("users").doc(userId);
-        
-        const entryRef = productRef.collection("salesHistory").doc(roundId)
-          .collection("entries").doc(userId);
-
-        const [productDoc, userDoc, entryDoc] = await Promise.all([
-          transaction.get(productRef),
-          transaction.get(userRef),
-          transaction.get(entryRef)
-        ]);
-        
-        if (!productDoc.exists) {
-          throw new HttpsError("not-found", "이벤트 상품을 찾을 수 없습니다.");
-        }
-        if (!userDoc.exists) {
-            throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
-        }
-
-        const product = productDoc.data() as Product;
-        const roundIndex = product.salesHistory?.findIndex(r => r.roundId === roundId);
-
-        if (roundIndex === undefined || roundIndex === -1) {
-            throw new HttpsError("not-found", "판매 회차를 찾을 수 없습니다.");
-        }
-        const round = product.salesHistory[roundIndex];
-
-        if (round?.eventType !== 'RAFFLE') {
-          throw new HttpsError("failed-precondition", "추첨 이벤트 상품이 아닙니다.");
-        }
-
-        if (entryDoc.exists) {
-          throw new HttpsError("already-exists", "이미 응모하셨습니다.");
-        }
-        
-        const now = Timestamp.now();
-        if (round.deadlineDate && now.toMillis() > (round.deadlineDate as Timestamp).toMillis()) {
-            throw new HttpsError("failed-precondition", "응모 기간이 마감되었습니다.");
-        }
-
-        // 응모 내역 저장
-        transaction.set(entryRef, {
-            userId: userId,
-            entryAt: now,
-            status: 'entered'
-        });
-
-        // 사용자 문서에도 응모한 라운드 ID 기록
-        transaction.update(userRef, {
-            enteredRaffleIds: FieldValue.arrayUnion(roundId)
-        });
-
-        // ✅ [추가] Product 문서의 SalesRound에 있는 entryCount를 1 증가시킴
-        const newSalesHistory = [...product.salesHistory];
-        newSalesHistory[roundIndex] = {
-            ...round,
-            entryCount: (round.entryCount || 0) + 1
-        };
-        transaction.update(productRef, { salesHistory: newSalesHistory });
-
-      });
-
-      logger.info(`User ${userId} successfully entered raffle for product ${productId}, round ${roundId}`);
-      return { success: true, message: "이벤트 응모가 완료되었습니다." };
-
-    } catch (error) {
-      logger.error(`Error entering raffle for user ${userId}, product ${productId}:`, error);
-      if (error instanceof HttpsError) {
-        throw error;
-      }
-      throw new HttpsError("internal", "이벤트 응모 중 오류가 발생했습니다.");
-    }
-  }
-);
-*/
-
-/**
- * =================================================================
- * 10) 추첨 이벤트 응모자 목록 조회: getRaffleEntrants (✅ 신규 추가)
- * =================================================================
- */
-/*
-export const getRaffleEntrants = onCall(
-    {
-        region: "asia-northeast3",
-        cors: allowedOrigins,
-        enforceAppCheck: false, // 관리자용이므로 App Check는 false로 설정 가능
-    },
-    async (request) => {
-        const userRole = request.auth?.token.role;
-        if (!userRole || !['admin', 'master'].includes(userRole)) {
-            throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
-        }
-
-        const { productId, roundId } = request.data;
-        if (!productId || !roundId) {
-            throw new HttpsError("invalid-argument", "필수 정보(상품 ID, 회차 ID)가 누락되었습니다.");
-        }
-
-        try {
-            const entriesSnapshot = await db.collection("products").doc(productId)
-                .collection("salesHistory").doc(roundId)
-                .collection("entries")
-                .orderBy("entryAt", "asc")
-                .get();
-
-            if (entriesSnapshot.empty) {
-                return { entrants: [] };
-            }
-
-            const userIds = entriesSnapshot.docs.map(doc => doc.id);
-            const entryDataMap = new Map(entriesSnapshot.docs.map(doc => [doc.id, doc.data()]));
-            
-            // Firestore 'in' 쿼리는 최대 30개의 ID만 지원하므로, userIds 배열을 30개씩 나눕니다.
-            const chunks: string[][] = [];
-            for (let i = 0; i < userIds.length; i += 30) {
-                chunks.push(userIds.slice(i, i + 30));
-            }
-
-            const usersMap = new Map<string, UserDocument>();
-            for (const chunk of chunks) {
-                const usersSnapshot = await db.collection("users").where(admin.firestore.FieldPath.documentId(), "in", chunk).get();
-                usersSnapshot.forEach(doc => {
-                    usersMap.set(doc.id, doc.data() as UserDocument);
-                });
-            }
-
-            const entrants = userIds.map(userId => {
-                const user = usersMap.get(userId);
-                const entry = entryDataMap.get(userId);
-                return {
-                    userId: userId,
-                    name: user?.displayName || '이름 없음',
-                    phone: user?.phone || '정보 없음',
-                    entryAt: entry?.entryAt,
-                };
-            });
-
-            return { entrants };
-
-        } catch (error) {
-            logger.error(`Error fetching raffle entrants for product ${productId}:`, error);
-            if (error instanceof HttpsError) {
-                throw error;
-            }
-            throw new HttpsError("internal", "응모자 목록을 불러오는 중 오류가 발생했습니다.");
-        }
-    }
-);
-*/
-
-/**
- * =================================================================
- * 11) 당첨자 추첨 실행: drawRaffleWinners (✅ 신규 추가)
- * =================================================================
- */
-/*
-export const drawRaffleWinners = onCall(
-  {
-      region: "asia-northeast3",
-      cors: allowedOrigins,
-      memory: "1GiB", // 다수의 사용자 정보 조회 및 주문 생성을 위해 메모리 상향
-      timeoutSeconds: 300,
-  },
-  async (request) => {
-      const userRole = request.auth?.token.role;
-      if (!userRole || !['admin', 'master'].includes(userRole)) {
-          throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
-      }
-
-      const { productId, roundId } = request.data;
-      if (!productId || !roundId) {
-          throw new HttpsError("invalid-argument", "필수 정보(상품 ID, 회차 ID)가 누락되었습니다.");
-      }
-
-      const winners: { userId: string, name: string, phone: string }[] = [];
-
-      try {
-          const productRef = db.collection("products").doc(productId);
-          
-          await db.runTransaction(async (transaction) => {
-              const productDoc = await transaction.get(productRef);
-              if (!productDoc.exists) {
-                  throw new HttpsError("not-found", "이벤트 상품을 찾을 수 없습니다.");
-              }
-
-              const product = productDoc.data() as Product;
-              const roundIndex = product.salesHistory?.findIndex(r => r.roundId === roundId);
-
-              if (roundIndex === undefined || roundIndex === -1) {
-                  throw new HttpsError("not-found", "판매 회차를 찾을 수 없습니다.");
-              }
-              const round = product.salesHistory[roundIndex];
-
-              if (round.status === 'DRAW_COMPLETED') {
-                  throw new HttpsError("failed-precondition", "이미 추첨이 완료된 이벤트입니다.");
-              }
-
-              const winnerCount = round.variantGroups[0]?.totalPhysicalStock;
-              if (!winnerCount || winnerCount <= 0) {
-                  throw new HttpsError("failed-precondition", "당첨 인원이 설정되지 않았습니다.");
-              }
-
-              const entriesRef = productRef.collection("salesHistory").doc(roundId).collection("entries");
-              const entriesSnapshot = await transaction.get(entriesRef);
-              
-              if (entriesSnapshot.empty) {
-                  throw new HttpsError("failed-precondition", "응모자가 없습니다.");
-              }
-
-              const allEntrants = entriesSnapshot.docs.map(doc => doc.id);
-              
-              // Fisher-Yates shuffle algorithm
-              for (let i = allEntrants.length - 1; i > 0; i--) {
-                  const j = Math.floor(Math.random() * (i + 1));
-                  [allEntrants[i], allEntrants[j]] = [allEntrants[j], allEntrants[i]];
-              }
-
-              const winnerIds = allEntrants.slice(0, winnerCount);
-              const loserIds = allEntrants.slice(winnerCount);
-              
-              // 사용자 정보 조회
-              const allUserDocs = await db.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', winnerIds).get();
-              const usersMap = new Map<string, UserDocument>();
-              allUserDocs.forEach(doc => usersMap.set(doc.id, doc.data() as UserDocument));
-
-              const now = Timestamp.now();
-              const pickupDate = round.pickupDate || now; // 픽업일 없으면 현재시간으로
-
-              // 당첨자 처리
-              for (const userId of winnerIds) {
-                  const user = usersMap.get(userId);
-                  if (user) {
-                      winners.push({ userId, name: user.displayName || '이름없음', phone: user.phone || '연락처없음' });
-                      
-                      // 1. 당첨자 주문 생성
-                      const newOrderRef = db.collection("orders").doc();
-                      const customerInfo: CustomerInfo = { name: user.displayName || '', phone: user.phone || '', phoneLast4: user.phone?.slice(-4) || ''};
-                      const orderItem: OrderItem = {
-                          // ... 주문 상품 정보 채우기
-                          id: `${roundId}-${userId}`,
-                          productId,
-                          productName: product.groupName,
-                          imageUrl: product.imageUrls?.[0] || '',
-                          roundId,
-                          roundName: round.roundName,
-                          variantGroupId: round.variantGroups[0].id,
-                          variantGroupName: round.variantGroups[0].groupName,
-                          itemId: round.variantGroups[0].items[0].id,
-                          itemName: round.variantGroups[0].items[0].name,
-                          quantity: 1,
-                          unitPrice: 0,
-                          stock: -1,
-                          stockDeductionAmount: 1,
-                          arrivalDate: null,
-                          pickupDate,
-                          deadlineDate: round.deadlineDate,
-                      };
-                      const newOrder: Omit<Order, 'id'> = {
-                          userId,
-                          customerInfo,
-                          items: [orderItem],
-                          totalPrice: 0,
-                          orderNumber: `EVENT-${now.toMillis()}-${userId.slice(0, 4)}`,
-                          status: 'RESERVED',
-                          createdAt: now,
-                          pickupDate,
-                          pickupDeadlineDate: round.pickupDeadlineDate,
-                          notes: `[이벤트 당첨] ${product.groupName}`,
-                          eventId: roundId,
-                      };
-                      transaction.set(newOrderRef, newOrder);
-                  }
-                  // 2. 응모 상태 'won'으로 변경
-                  transaction.update(entriesRef.doc(userId), { status: 'won' });
-              }
-
-              // 미당첨자 처리
-              for (const userId of loserIds) {
-                  transaction.update(entriesRef.doc(userId), { status: 'lost' });
-              }
-
-              // 이벤트 상태 '추첨완료'로 변경
-              const newSalesHistory = [...product.salesHistory];
-              newSalesHistory[roundIndex] = {
-                  ...round,
-                  status: 'DRAW_COMPLETED'
-              };
-              transaction.update(productRef, { salesHistory: newSalesHistory });
-          });
-
-          logger.info(`Raffle draw completed for product ${productId}, round ${roundId}. Winners: ${winners.length}`);
-          return { success: true, winners };
-
-      } catch (error) {
-          logger.error(`Error drawing raffle winners for product ${productId}:`, error);
-          if (error instanceof HttpsError) {
-              throw error;
-          }
-          throw new HttpsError("internal", "당첨자 추첨 중 오류가 발생했습니다.");
-      }
-  }
-);
-*/

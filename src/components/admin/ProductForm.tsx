@@ -12,7 +12,8 @@ import {
   updateSalesRound,
   updateProductCoreInfo,
   functions,
-  getReservedQuantitiesMap
+  getReservedQuantitiesMap,
+  uploadImages, // ✅ [추가] 이미지 업로드 서비스 import
 } from '@/firebase';
 import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
 // ✅ [수정] 올바른 경로에서 모든 타입을 가져옵니다.
@@ -397,9 +398,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             setDeadlineDate(convertToDate(roundData.deadlineDate));
             setPickupDate(convertToDate(roundData.pickupDate));
             setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate));
-            // setRaffleDrawDate 줄 삭제
           }
-          setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
           setPreOrderTiers(roundData.preOrderTiers || ['공구의 신', '공구왕']);
@@ -545,7 +544,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    // [수정] 콜백 함수의 file 파라미터에 File 타입을 명시하여 타입 추론 오류를 해결합니다.
     const files = Array.from(e.target.files).filter((file: File) => {
       if (file.size > MAX_FILE_SIZE) {
         toast.error(`'${file.name}' 파일 크기가 너무 큽니다 (최대 5MB).`);
@@ -559,7 +557,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
     setImagePreviews(prev => {
       const next = [...prev];
       const nextMap = new Map(previewUrlToFile);
-      // [수정] 콜백 함수의 file 파라미터에 File 타입을 명시합니다.
       files.forEach((file: File) => {
         const url = URL.createObjectURL(file);
         next.push(url);
@@ -713,7 +710,6 @@ const handleAIParse = async () => {
     applyParsed(data);
     toast.success('AI 분석 완료! 자동 입력 내용을 확인해주세요.');
   } catch (err: any) {
-    // [수정] 오류 객체에서 더 상세한 메시지를 추출하여 보여줍니다.
     const errorMessage = err?.details?.message || err.message || 'AI 분석 중 오류가 발생했습니다.';
     const finalMessage = `AI 분석 실패: ${errorMessage}`;
     toast.error(finalMessage);
@@ -731,9 +727,8 @@ const settingsSummary = useMemo(() => {
     const pickupText = pickupDate ? toYmd(pickupDate) : '미설정';
     const pickupDeadlineText = pickupDeadlineDate ? toYmd(pickupDeadlineDate) : '미설정';
    const participationText = isSecretProductEnabled ? `${secretTiers.join(', ')} 등급만` : '모두 참여 가능';
-   // raffleDrawText 변수 삭제
    return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText };
- }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]); // 의존성 배열에서 raffleDrawDate 삭제
+ }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]);
 
   const handleSubmit = async (isDraft: boolean = false) => {
     setIsSubmitting(true);
@@ -758,7 +753,7 @@ const settingsSummary = useMemo(() => {
 
     if (!isDraft) {
       if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error('대표 이미지를 1개 이상 등록해주세요.'); setIsSubmitting(false); return; }
-      if (!isDraft && (!deadlineDate || !pickupDate || !pickupDeadlineDate)) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
+      if (isDraft === false && (!deadlineDate || !pickupDate || !pickupDeadlineDate)) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
       if (isSecretProductEnabled && secretTiers.length === 0) { toast.error('시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요.'); setIsSubmitting(false); return; }
     }
 
@@ -771,7 +766,6 @@ const settingsSummary = useMemo(() => {
         roundName: roundName.trim(),
         status,
         eventType: eventType === 'NONE' ? null : eventType,
-        // raffleDrawDate 줄 삭제
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
@@ -823,11 +817,24 @@ const settingsSummary = useMemo(() => {
           category: categories.find(c => c.id === selectedMainCategory)?.name || '',
           encoreCount: 0, encoreRequesterIds: []
         };
-        await addProductWithFirstRound(productData as any, salesRoundData as any, newImageFiles, creationDate);
+        // ✅ [수정] 이미지 업로드 로직 추가
+        const res = await addProductWithFirstRound(productData as any, salesRoundData as any, newImageFiles, creationDate);
+        if (newImageFiles.length > 0) {
+    const newProductId = res.productId;
+    if (newProductId) {
+        const toastId = toast.loading('이미지 업로드 중...');
+        const uploadedUrls = await uploadImages(newImageFiles, `products/${newProductId}`);
+        // ❗ [수정] 이미지 URL을 올바른 파라미터(finalImageUrls)에 담아 전달합니다.
+        await updateProductCoreInfo(newProductId, {}, [], uploadedUrls, []);
+        toast.dismiss(toastId);
+    }
+}
         toast.success(isDraft ? '상품이 임시저장되었습니다.' : '신규 상품이 성공적으로 등록되었습니다.');
+
       } else if (mode === 'newRound' && productId) {
         await addNewSalesRound(productId, salesRoundData as any);
         toast.success(isDraft ? '새 회차가 임시저장되었습니다.' : '새로운 판매 회차가 추가되었습니다.');
+      
       } else if (mode === 'editRound' && productId && roundId) {
 
         const changes: string[] = [];
@@ -868,13 +875,22 @@ const settingsSummary = useMemo(() => {
           category: categories.find(c => c.id === selectedMainCategory)?.name || ''
         };
 
-        const finalImageUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
-        const newFiles = imagePreviews
+        // ✅ [수정] 이미지 업로드 및 URL 병합 로직
+        const existingUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
+        const filesToUpload = imagePreviews
           .filter(p => p.startsWith('blob:'))
           .map(p => previewUrlToFile.get(p))
           .filter((f): f is File => !!f);
 
-        await updateProductCoreInfo(productId, productDataToUpdate, newFiles, finalImageUrls, initialImageUrls);
+        let finalImageUrls = existingUrls;
+        if (filesToUpload.length > 0) {
+            const toastId = toast.loading('새 이미지 업로드 중...');
+            const uploadedUrls = await uploadImages(filesToUpload, `products/${productId}`);
+            finalImageUrls = [...existingUrls, ...uploadedUrls];
+            toast.dismiss(toastId);
+        }
+
+        await updateProductCoreInfo(productId, productDataToUpdate, filesToUpload, finalImageUrls, initialImageUrls);
         await updateSalesRound(productId, roundId, salesRoundData as any);
 
         toast.success(isDraft ? '수정 내용이 임시저장되었습니다.' : '상품 정보가 성공적으로 수정되었습니다.');
@@ -892,8 +908,6 @@ const settingsSummary = useMemo(() => {
   }, [imagePreviews]);
 
   if (isLoading) return <SodomallLoader message="상품 정보를 불러오는 중입니다..." />;
-
-  // isRaffleEvent 변수 삭제됨
 
   return (
     <>
@@ -1183,7 +1197,6 @@ const settingsSummary = useMemo(() => {
                   <select value={eventType} onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK')}>
                     <option value="NONE">일반 상품</option>
                     <option value="CHUSEOK">🌕 추석 특집</option>
-                    {/* RAFFLE 옵션 삭제 */}
                   </select>
                 </div>
               </div>
@@ -1224,8 +1237,6 @@ const settingsSummary = useMemo(() => {
                   required
                 />
               </div>
-
-              {/* 추첨 예정일 <div> 블록 삭제됨 */}
 
               <div className="form-group">
                 <label>픽업 시작일 *</label>

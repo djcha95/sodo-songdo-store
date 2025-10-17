@@ -309,8 +309,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
             <td><div className="product-name-cell-v2"><img src={item.productImage} alt={item.productName} className="product-thumbnail" /><div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div></div></td>
             <td><StatusDropdown item={item} onStatusChange={onStatusChange} /></td>
             <td style={{textAlign: 'right'}}>{vg.items[0]?.price != null ? `${formatKRW(vg.items[0].price)} 원` : '–'}</td>
-            <td>{formatDate(getEarliestExpirationDateForGroup(vg))}</td>
-            {renderReserveAndWaitlistCell(vg)}
+<td>{formatDate(getEarliestExpirationDateForGroup(vg) === Infinity ? null : getEarliestExpirationDateForGroup(vg))}</td>            {renderReserveAndWaitlistCell(vg)}
             <td className="quantity-cell">{vg.pickedUpCount}</td>
             <td className="stock-cell">
               {editingStockId === vgUniqueId ? (
@@ -346,8 +345,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
           <td><div className="product-name-cell-v2"><img src={item.productImage} alt={item.productName} className="product-thumbnail" /><div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div></div></td>
           <td><StatusDropdown item={item} onStatusChange={onStatusChange} /></td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
-          <td>{formatDate(earliestOverallExpiration)}</td>
-          {renderReserveAndWaitlistCell(null, true)}
+<td>{earliestOverallExpiration === Infinity ? '–' : formatDate(earliestOverallExpiration)}</td>
+{renderReserveAndWaitlistCell(null, true)}
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>

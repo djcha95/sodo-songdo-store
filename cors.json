@@ -3,20 +3,13 @@
     "origin": [
       "http://localhost:5173",
       "http://localhost:5174",
+      "http://127.0.0.1:5173",
       "https://sso-do.web.app",
-      "https://sso-do.firebaseapp.com"
+      "https://sso-do.firebaseapp.com",
+      "https://sodo-songdo.store"
     ],
     "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
-    "responseHeader": [
-      "Content-Type",
-      "Authorization",
-      "x-goog-meta-*",
-      "X-Goog-Upload-Protocol",
-      "X-Goog-Upload-Command",
-      "X-Goog-Upload-Offset",
-      "X-Goog-Upload-Header-Content-Length",
-      "X-Goog-Upload-Header-Content-Type"
-    ],
+    "responseHeader": ["*"],
     "maxAgeSeconds": 3600
   }
 ]
