@@ -26,7 +26,7 @@ const functions = getFunctions(getApp(), 'asia-northeast3');
 const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity: number }, { success: boolean, message: string }>(functions, 'updateOrderQuantity');
 
 // 상수 정의
-const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
+const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZHRoPSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 
 // 타입 정의
 type OrderCancellationItem = { order: Order; isPenalty: boolean; };
@@ -80,42 +80,49 @@ const getCancellationDetails = (order: Order): { cancellable: boolean; isPenalty
   return { cancellable: true, isPenalty: now > penaltyDeadline, reason: null };
 };
 
+// ✅ [수정] 오류가 발생했던 usePaginatedOrders 훅 전체를 다시 수정합니다.
 const usePaginatedOrders = (uid?: string) => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true); // 처음 로딩 상태는 true
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [lastVisible, setLastVisible] = useState<any | null>(null);
+  const lastVisibleRef = useRef(lastVisible);
+  lastVisibleRef.current = lastVisible;
+
   const fetchOrdersFn = useMemo(() => httpsCallable(functions, 'getUserOrders'), []);
 
   const fetchOrders = useCallback(async (isInitial = false) => {
     if (!uid) {
       setLoading(false);
-      // uid가 없으면 더 이상 fetch할 것이 없으므로 hasMore를 false로 설정
-      setHasMore(false); 
+      setHasMore(false);
       return;
     }
     if ((loadingMore && !isInitial) || (!hasMore && !isInitial)) return;
-    
+
     if (isInitial) {
       setLoading(true);
-      setLastVisible(null);
     } else {
       setLoadingMore(true);
     }
-    
-    try {
-      // ✅ 수정된 부분: lastVisible이 null이 아닌 경우만 전달하도록 조건부 할당
-      const lastDocToPass = isInitial ? null : lastVisible;
 
-      const result = await fetchOrdersFn({
-        userId: uid,
-        pageSize: 10,
-        // Firebase Function 인자에 'undefined'가 들어가지 않도록 명확하게 처리
-        lastVisible: lastDocToPass, 
-        orderByField: 'pickupDate',
-        orderDirection: 'desc',
-      });
+    try {
+      const lastDocToPass = isInitial ? null : lastVisibleRef.current;
+
+      // ✅ [수정] payload를 동적으로 구성하여 'undefined'나 'null' 값이 있을 경우 해당 키를 아예 포함하지 않도록 합니다.
+      const payload: Record<string, any> = {
+  targetUserId: uid,
+  pageSize: 10,
+  orderByField: 'pickupDate',
+  orderDirection: 'desc',
+};
+
+
+      if (lastDocToPass) {
+        payload.lastVisible = lastDocToPass;
+      }
+      
+      const result = await fetchOrdersFn(payload);
       
       const { data: rawNewOrders, lastDoc } = result.data as { data: any[], lastDoc: any };
       
@@ -126,11 +133,8 @@ const usePaginatedOrders = (uid?: string) => {
       })) as Order[];
       
       setOrders(prev => isInitial ? newOrders : [...prev, ...newOrders]);
-      
-      // ✅ 수정된 부분: lastDoc이 유효한 값일 경우에만 설정 (null/undefined 방지)
       setLastVisible(lastDoc || null); 
       
-      // lastDoc이 없거나, 불러온 주문 수가 pageSize보다 적으면 hasMore = false
       if (!lastDoc || newOrders.length < 10) setHasMore(false);
       
     } catch (error) {
@@ -141,13 +145,29 @@ const usePaginatedOrders = (uid?: string) => {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [uid, loadingMore, hasMore, fetchOrdersFn, lastVisible]); // 의존성 배열 유지
+  }, [uid, loadingMore, hasMore, fetchOrdersFn]);
 
   useEffect(() => {
-    fetchOrders(true);
-  }, [uid, fetchOrders]);
+    if (uid) {
+      setOrders([]);
+      setLastVisible(null);
+      setHasMore(true);
+      fetchOrders(true);
+    } else {
+      setOrders([]);
+      setLastVisible(null);
+      setHasMore(false);
+      setLoading(false);
+    }
+  }, [uid]);
   
-  return { orders, setOrders, loading, loadingMore, hasMore, loadMore: () => fetchOrders(false) };
+  const loadMore = useCallback(() => {
+    if (!loadingMore && hasMore) {
+        fetchOrders(false);
+    }
+  }, [loadingMore, hasMore, fetchOrders]);
+  
+  return { orders, setOrders, loading, loadingMore, hasMore, loadMore };
 };
 
 // 수량 조절 컴포넌트
@@ -277,19 +297,21 @@ const OrderHistoryPage: React.FC = () => {
   const [cancellationRequest, setCancellationRequest] = useState<CancellationRequest | null>(null);
 
   const handleScroll = useCallback(() => {
-    if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200 && !loading && hasMore) {
+    if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200 && !loading && !loadingMore && hasMore) {
       loadMore();
     }
-  }, [loading, hasMore, loadMore]);
-  useEffect(() => { window.addEventListener('scroll', handleScroll); return () => window.removeEventListener('scroll', handleScroll); }, [handleScroll]);
+  }, [loading, loadingMore, hasMore, loadMore]);
 
-  // ✅ [수정] 그룹화 로직 버그 수정
+  useEffect(() => { 
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
   const groupedOrders = useMemo(() => {
     const groups: { [date: string]: Order[] } = {};
     orders.forEach(order => {
       const date = safeToDate(order.pickupDate);
       if (date) {
-        // dayjs()는 Date 객체를 직접 사용할 수 있습니다.
         const dateStr = dayjs(date).format('YYYY-MM-DD');
         if (!groups[dateStr]) groups[dateStr] = [];
         groups[dateStr].push(order);

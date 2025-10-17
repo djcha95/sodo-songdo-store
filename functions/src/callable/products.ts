@@ -1,5 +1,11 @@
 // functions/src/callable/products.ts
 
+// 🚨 중요: CORS 오류 해결 안내 🚨
+// 'Access-Control-Allow-Origin' 헤더 관련 CORS 오류가 발생할 경우,
+// firebase/admin.js 파일의 'allowedOrigins' 배열에 웹 애플리케이션의 도메인을 추가해야 합니다.
+// 예: const allowedOrigins = ["http://localhost:5173", "https://sodo-songdo.web.app", "https://www.sodo-songdo.store"];
+// 위와 같이 "https://www.sodo-songdo.store"를 배열에 포함시켜주세요.
+
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, admin, allowedOrigins } from "../firebase/admin.js";
@@ -110,8 +116,13 @@ export const updateMultipleVariantGroupStocks = onCall(
     if (!userRole || !['admin', 'master'].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
     }
+
+    // 디버깅을 위해 수신된 데이터 로깅
+    logger.info("updateMultipleVariantGroupStocks called with data:", JSON.stringify(request.data, null, 2));
+
     const updates = request.data as { productId: string; roundId: string; variantGroupId: string; newStock: number }[];
     if (!Array.isArray(updates) || updates.length === 0) {
+      logger.error("Invalid argument: updates is not a non-empty array.", { data: request.data });
       throw new HttpsError("invalid-argument", "업데이트할 재고 정보가 없습니다.");
     }
     try {
@@ -143,6 +154,50 @@ export const updateMultipleVariantGroupStocks = onCall(
     }
   }
 );
+
+// =================================================================
+// 단일 판매 회차 정보 수정 (상태 변경 등)
+// =================================================================
+export const updateSalesRound = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins },
+  async (request) => {
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+    const { productId, roundId, newStatus } = request.data;
+    if (!productId || !roundId || !newStatus) {
+      throw new HttpsError("invalid-argument", "업데이트에 필요한 정보가 누락되었습니다.");
+    }
+
+    try {
+      const productRef = db.collection("products").doc(productId);
+      await db.runTransaction(async (transaction) => {
+        const productDoc = await transaction.get(productRef);
+        if (!productDoc.exists) {
+          throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
+        }
+        const productData = productDoc.data() as Product;
+        const salesHistory = productData.salesHistory || [];
+        const roundIndex = salesHistory.findIndex(r => r.roundId === roundId);
+        if (roundIndex === -1) {
+          throw new HttpsError("not-found", "해당 판매 회차를 찾을 수 없습니다.");
+        }
+        
+        const updatedRound = { ...salesHistory[roundIndex], ...newStatus };
+        salesHistory[roundIndex] = updatedRound;
+        
+        transaction.update(productRef, { salesHistory: salesHistory });
+      });
+      return { success: true, message: "판매 상태가 업데이트되었습니다." };
+    } catch (error) {
+      logger.error(`Error in updateSalesRound for product ${productId}, round ${roundId}:`, error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "판매 상태 업데이트 중 오류가 발생했습니다.");
+    }
+  }
+);
+
 
 // =================================================================
 // 판매 상태 일괄 수정
@@ -182,6 +237,63 @@ export const updateMultipleSalesRoundStatuses = onCall(
     }
   }
 );
+
+// =================================================================
+// 판매 회차 일괄 삭제
+// =================================================================
+export const deleteSalesRounds = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins },
+  async (request) => {
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+    const deletions = request.data as { productId: string; roundId: string }[];
+    if (!Array.isArray(deletions) || deletions.length === 0) {
+      throw new HttpsError("invalid-argument", "삭제할 항목 정보가 없습니다.");
+    }
+
+    try {
+      const batch = db.batch();
+      const deletionsByProduct = deletions.reduce((acc, { productId, roundId }) => {
+        if (!acc[productId]) {
+          acc[productId] = [];
+        }
+        acc[productId].push(roundId);
+        return acc;
+      }, {} as Record<string, string[]>);
+      
+      for (const productId in deletionsByProduct) {
+        const roundIdsToDelete = deletionsByProduct[productId];
+        const productRef = db.collection("products").doc(productId);
+        const productDoc = await productRef.get();
+        
+        if (productDoc.exists) {
+          const productData = productDoc.data() as Product;
+          const originalHistoryLength = productData.salesHistory.length;
+          const newSalesHistory = productData.salesHistory.filter(
+            round => !roundIdsToDelete.includes(round.roundId)
+          );
+          
+          if (newSalesHistory.length < originalHistoryLength) {
+             batch.update(productRef, { salesHistory: newSalesHistory });
+             logger.info(`Scheduled deletion of ${originalHistoryLength - newSalesHistory.length} rounds from product ${productId}`);
+          }
+        } else {
+            logger.warn(`Product not found for deletion, skipping: ${productId}`);
+        }
+      }
+      
+      await batch.commit();
+      return { success: true, message: "선택된 판매 회차가 삭제되었습니다." };
+    } catch (error) {
+      logger.error("Error in deleteSalesRounds:", error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "판매 회차 삭제 중 오류가 발생했습니다.");
+    }
+  }
+);
+
 
 // =================================================================
 // 상품 목록 조회 (재고 포함)

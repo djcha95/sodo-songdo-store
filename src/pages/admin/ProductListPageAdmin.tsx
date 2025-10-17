@@ -455,7 +455,7 @@ const WaitlistModal: React.FC<{ isOpen: boolean; onClose: () => void; data: { pr
                 onClose();
                 return `${result.data.convertedCount}명이 예약으로 전환되었습니다.`;
             },
-            error: (err) => (err as Error).message || '처리 중 오류가 발생했습니다.',
+            error: (err) => (err as any).message || '처리 중 오류가 발생했습니다.',
         });
     };
     if (!isOpen || !data) return null;
@@ -663,14 +663,14 @@ const ProductListPageAdmin: React.FC = () => {
                 }
                 return '재고가 성공적으로 업데이트되었습니다.';
             },
-            error: (err) => (err as Error).message || '재고 처리 중 오류가 발생했습니다.',
+            error: (err) => (err as any).message || '재고 처리 중 오류가 발생했습니다.',
         });
     } else {
         const promise = updateMultipleVariantGroupStocks([{ productId, roundId, variantGroupId, newStock }]);
         await toast.promise(promise, {
             loading: "재고 정보 업데이트 중...",
             success: "재고가 성공적으로 업데이트되었습니다!",
-            error: "업데이트 중 오류가 발생했습니다.",
+            error: (err) => (err as any).message || "업데이트 중 오류가 발생했습니다.",
         });
         await fetchData();
     }
@@ -701,7 +701,11 @@ const ProductListPageAdmin: React.FC = () => {
     }
 
     const promise = updateMultipleSalesRoundStatuses(updates);
-    await toast.promise(promise, { loading: `${updates.length}개 항목의 판매를 종료하는 중...`, success: "선택된 항목이 모두 판매 종료 처리되었습니다.", error: "일괄 작업 중 오류가 발생했습니다." });
+    await toast.promise(promise, { 
+      loading: `${updates.length}개 항목의 판매를 종료하는 중...`, 
+      success: "선택된 항목이 모두 판매 종료 처리되었습니다.", 
+      error: (err) => (err as any).message || "일괄 작업 중 오류가 발생했습니다." 
+    });
     setSelectedItems(new Set()); fetchData();
   };
 
@@ -743,7 +747,7 @@ const ProductListPageAdmin: React.FC = () => {
                     await toast.promise(promise, {
                         loading: `${deletions.length}개 항목을 삭제하는 중...`,
                         success: "선택된 항목이 모두 삭제되었습니다.",
-                        error: "일괄 삭제 중 오류가 발생했습니다."
+                        error: (err) => (err as any).message || "일괄 삭제 중 오류가 발생했습니다."
                     });
                     setSelectedItems(new Set());
                     fetchData();
@@ -765,7 +769,7 @@ const ProductListPageAdmin: React.FC = () => {
     toast.promise(promise, {
       loading: '상태 업데이트 중...',
       success: '상품 상태가 성공적으로 변경되었습니다.',
-      error: '상태 변경 중 오류가 발생했습니다.',
+      error: (err) => (err as any).message || '상태 변경 중 오류가 발생했습니다.',
     });
     
     setPageData(prev => ({
