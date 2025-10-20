@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Timestamp } from 'firebase/firestore';
-import type { UserDocument, Order, AggregatedOrderGroup, LoyaltyTier, OrderStatus } from '@/shared/types';
+import type { UserDocument, Order, OrderItem, LoyaltyTier, OrderStatus } from '@/shared/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
     updateMultipleOrderStatuses,
@@ -20,6 +20,21 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
 
+import type { UniversalTimestamp } from '@/shared/types'; // [추가]
+
+// ✅ [추가] AggregatedOrderGroup 타입을 이 파일에 직접 정의합니다.
+export interface AggregatedOrderGroup {
+    groupKey: string;
+    customerInfo: Order['customerInfo'];
+    item: OrderItem;
+    totalQuantity: number;
+    totalPrice: number;
+    status: OrderStatus;
+    pickupDate: UniversalTimestamp | Date;
+    pickupDeadlineDate?: UniversalTimestamp | Date | null;
+    originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
+}
+
 interface CustomerActionTabsProps {
     user: UserDocument;
     orders: Order[];
@@ -29,10 +44,12 @@ interface CustomerActionTabsProps {
 }
 
 
-const convertToDate = (date: Timestamp | Date | null | undefined): Date | null => {
+const convertToDate = (date: UniversalTimestamp | Date | null | undefined): Date | null => {
     if (!date) return null;
-    if ('toDate' in date && typeof date.toDate === 'function') return date.toDate();
-    return date as Date;
+    if (date instanceof Date) return date; // Date 객체
+    if ('toDate' in date && typeof date.toDate === 'function') return date.toDate(); // ClientTimestamp
+    if ('_seconds' in date && typeof date._seconds === 'number') return date.toDate(); // AdminTimestamp
+    return null; // 알 수 없는 타입
 };
 
 const performAction = async (
@@ -160,14 +177,14 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
                 </p>
                 <div className="role-form">
                     <select value={manualTier} onChange={e => setManualTier(e.target.value as LoyaltyTier | 'auto')}>
-                        <option value="auto">자동 계산</option>
-                        <option value="공구의 신">공구의 신</option>
-                        <option value="공구왕">공구왕</option>
-                        <option value="공구요정">공구요정</option>
-                        <option value="공구새싹">공구새싹</option>
-                        <option value="주의 요망">주의 요망</option>
-                        <option value="참여 제한">참여 제한</option>
-                    </select>
+                    <option value="auto">자동 계산</option>
+                    <option value="공구의 신">공구의 신</option>
+                    <option value="공구왕">공구왕</option>
+                    <option value="공구요정">공구요정</option>
+                    <option value="공구새싹">공구새싹</option>
+                    <option value="공구초보">공구초보</option>
+                    <option value="공구제한">공구제한 (수동)</option>
+                </select>
                     <button onClick={handleTierSave} className="common-button button-primary button-small"><Save size={14}/> 등급 적용</button>
                 </div>
             </div>
@@ -473,9 +490,8 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                                     isSelected={selectedGroupKeys.includes(group.groupKey)}
                                     onSelect={handleSelectGroup}
                                     onQuantityChange={handleQuantityChange}
-                                    isFuture={isFuture}
-                                    onMarkAsNoShow={onMarkAsNoShow}
-                                />
+                                isFuture={isFuture}
+                            />
                             );
                         })}
                         {aggregatedPickupOrders.length === 0 && <p className="no-data-message">처리 대기중인 항목이 없습니다.</p>}

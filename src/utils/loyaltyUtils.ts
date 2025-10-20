@@ -6,8 +6,8 @@ export type LoyaltyTier =
   | '공구왕'
   | '공구요정'
   | '공구새싹'
-  | '주의 요망'
-  | '참여 제한';
+  | '공구초보' // '공구초보' 추가
+  | '공구제한'; // '공구제한'으로 변경
 
 
 /**
@@ -20,16 +20,15 @@ export type LoyaltyTier =
  * @returns 계산된 LoyaltyTier 등급명
  */
 export const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-  const totalTransactions = pickupCount + noShowCount;
-
-  // 거래 내역이 없는 초기 사용자는 '새싹' 등급
-  if (totalTransactions === 0) {
-    return '공구새싹';
+  // 1. 픽업/노쇼 0회 -> 공구초보
+  if (pickupCount === 0 && noShowCount === 0) {
+    return '공구초보';
   }
 
+  const totalTransactions = pickupCount + noShowCount;
   const pickupRate = (pickupCount / totalTransactions) * 100;
 
-  // 픽업률과 누적 픽업 건수를 조합하여 등급 결정 (긍정적 등급만 유지)
+  // 2. 긍정적 등급 (기존 로직 유지)
   if (pickupRate >= 98 && pickupCount >= 250) {
     return '공구의 신';
   }
@@ -39,7 +38,12 @@ export const calculateTier = (pickupCount: number, noShowCount: number): Loyalty
   if (pickupRate >= 90 && pickupCount >= 30) {
     return '공구요정';
   }
-  
-  // 그 외 모든 경우는 '공구새싹'
-  return '공구새싹';
+
+  // 3. 픽업 1회 이상, '요정' 미만 -> 공구새싹
+  if (pickupCount > 0) {
+    return '공구새싹';
+  }
+
+  // 4. 그 외 (예: 픽업 0, 노쇼 1회) -> 공구초보
+  return '공구초보';
 };

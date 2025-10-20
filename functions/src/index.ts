@@ -60,3 +60,6 @@ export * from "./triggers/users.js";
  */
 export * from "./setup.js";
 export * from "./backfillUsers.js";
+
+import { convertObjectDatesToTimestampHTTP } from './scripts/convertToTimestampHTTP';
+export { convertObjectDatesToTimestampHTTP };

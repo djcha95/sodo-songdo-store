@@ -45,14 +45,33 @@ export const manualSendPickupReminders = onRequest(
 
 // 등급 계산 로직
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    if (noShowCount >= 3) return '참여 제한';
-    if (noShowCount >= 1) return '주의 요망';
-    if (pickupCount >= 50) return '공구의 신';
-    if (pickupCount >= 30) return '공구왕';
-    if (pickupCount >= 10) return '공구요정';
-    return '공구새싹';
-};
+  // 1. 픽업/노쇼 0회 -> 공구초보
+  if (pickupCount === 0 && noShowCount === 0) {
+    return '공구초보';
+  }
 
+  const totalTransactions = pickupCount + noShowCount;
+  const pickupRate = (pickupCount / totalTransactions) * 100;
+
+  // 2. 긍정적 등급 (상향된 기준 적용)
+  if (pickupRate >= 98 && pickupCount >= 250) {
+    return '공구의 신';
+  }
+  if (pickupRate >= 95 && pickupCount >= 100) {
+    return '공구왕';
+  }
+  if (pickupRate >= 90 && pickupCount >= 30) {
+    return '공구요정';
+  }
+
+  // 3. 픽업 1회 이상, '요정' 미만 -> 공구새싹
+  if (pickupCount > 0) {
+    return '공구새싹';
+  }
+
+  // 4. 그 외 (예: 픽업 0, 노쇼 1회) -> 공구초보
+  return '공구초보';
+};
 /**
  * @description 모든 사용자의 포인트, 픽업/노쇼 횟수를 주문 내역 기반으로 재계산하는 관리자용 함수
  */

@@ -165,7 +165,7 @@ export const updateSalesRound = async (
 // (참고: '구' 파일의 클라이언트 'getProductById'는 이 함수로 대체됩니다)
 export const getProductById = async (productId: string): Promise<Product | null> => {
   const result = await getProductByIdCallable({ productId });
-  const product = result.data as Product | null;
+  const { product } = result.data as { product: Product | null };
   
   // '구' 파일의 오버레이 로직을 클라이언트에서도 한번 더 적용 (안전장치)
   if (product) {

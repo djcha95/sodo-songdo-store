@@ -2,7 +2,7 @@
 
 import * as admin from 'firebase-admin';
 import { onCall } from 'firebase-functions/v2/https';
-import type { UserDocument } from './functions-types.js';
+import type { UserDocument } from '@/shared/types';
 
 // Firebase Admin SDK 초기화 (이미 되어있지 않은 경우)
 if (admin.apps.length === 0) {

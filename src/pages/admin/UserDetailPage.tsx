@@ -28,8 +28,8 @@ const tierInfo: Record<LoyaltyTier, { icon: React.ReactNode; color: string; }> =
     '공구왕': { icon: <Gem size={20} />, color: 'var(--loyalty-king)' },
     '공구요정': { icon: <Sparkles size={20} />, color: 'var(--loyalty-fairy)' },
     '공구새싹': { icon: <i className="seedling-icon-large">🌱</i>, color: 'var(--loyalty-sprout)' },
-    '주의 요망': { icon: <ShieldAlert size={20} />, color: 'var(--loyalty-warning)' },
-    '참여 제한': { icon: <ShieldX size={20} />, color: 'var(--loyalty-restricted)' },
+    '공구초보': { icon: <User size={20} />, color: 'var(--text-color-light)' }, // ✅ [추가]
+    '공구제한': { icon: <ShieldX size={20} />, color: 'var(--loyalty-restricted)' }, // ✅ [변경]
 };
 
 const orderStatusInfo: Record<OrderStatus, { label: string; className: string }> = {
@@ -279,14 +279,14 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
                 </p>
                 <div className="role-form">
                     <select value={manualTier} onChange={e => setManualTier(e.target.value as LoyaltyTier | 'auto')}>
-                        <option value="auto">자동 계산</option>
-                        <option value="공구의 신">공구의 신</option>
-                        <option value="공구왕">공구왕</option>
-                        <option value="공구요정">공구요정</option>
-                        <option value="공구새싹">공구새싹</option>
-                        <option value="주의 요망">주의 요망</option>
-                        <option value="참여 제한">참여 제한</option>
-                    </select>
+                    <option value="auto">자동 계산</option>
+                    <option value="공구의 신">공구의 신</option>
+                    <option value="공구왕">공구왕</option>
+                    <option value="공구요정">공구요정</option>
+                    <option value="공구새싹">공구새싹</option>
+                    <option value="공구초보">공구초보</option>
+                    <option value="공구제한">공구제한 (수동)</option>
+                </select>
                     <button onClick={handleTierSave} className="common-button button-primary button-small"><ShieldCheck size={14}/> 등급 적용</button>
                 </div>
             </div>

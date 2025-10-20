@@ -18,7 +18,6 @@ import OptimizedImage from '@/components/common/OptimizedImage';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
 
 import { X, Minus, Plus, ShoppingCart, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, AlertTriangle, Clock } from 'lucide-react';
-import useLongPress from '@/hooks/useLongPress';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Pagination, Navigation, Zoom, Thumbs, FreeMode } from 'swiper/modules';
@@ -414,9 +413,6 @@ const QuantityInput: React.FC<{
         return nextVal >= 1 ? nextVal : 1;
     }), [setQuantity, step]);
 
-    const longPressIncrementHandlers = useLongPress(increment, increment, { delay: 200 });
-    const longPressDecrementHandlers = useLongPress(decrement, decrement, { delay: 200 });
-
     const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         const numValue = parseInt(value, 10);
@@ -465,13 +461,13 @@ const QuantityInput: React.FC<{
 
     return (
         <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls">
-            <button 
-                {...longPressDecrementHandlers} 
-                className="quantity-btn" 
-                disabled={isDisabled || isNaN(quantity) || quantity <= 1} // ✅ [수정] isDisabled 적용
-            >
-                <Minus />
-            </button>
+            <button
+        onClick={decrement} // onClick 추가
+        className="quantity-btn"
+        disabled={isDisabled || isNaN(quantity) || quantity <= 1}
+    >
+        <Minus />
+    </button>
             <input
                 type="number"
                 className="quantity-input"
@@ -481,13 +477,13 @@ const QuantityInput: React.FC<{
                 onClick={(e) => e.stopPropagation()}
                 disabled={isDisabled} // ✅ [수정] isDisabled 적용
             />
-            <button 
-                {...longPressIncrementHandlers} 
-                className="quantity-btn" 
-                disabled={isDisabled || (maxQuantity !== null && !isNaN(quantity) && (quantity + step > maxQuantity))} // ✅ [수정] isDisabled 적용
-            >
-                <Plus />
-            </button>
+            <button
+        onClick={increment} // onClick 추가
+        className="quantity-btn"
+        disabled={isDisabled || (maxQuantity !== null && !isNaN(quantity) && (quantity + step > maxQuantity))}
+    >
+        <Plus />
+    </button>
         </div>
     );
 });
@@ -509,7 +505,7 @@ const PurchasePanel: React.FC<{
         setIsMobile(mobileCheck);
     }, []);
 
-    const quantityStep = isMobile ? ((selectedItem as any)?.quantityStep ?? 1) : 1;
+    const quantityStep = 1; // 모바일/데스크탑 구분 없이 항상 1씩 증가/감소
 
     const renderContent = () => {
         switch (actionState) {
@@ -806,10 +802,9 @@ const ProductDetailPage: React.FC = () => {
     // ✅ [수정] handleImmediateOrder 함수 로직 전체 변경
     const handleImmediateOrder = async () => {
         if (!userDocument || !user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
-        // ❌ [제거] isProcessing 대신 reservationStatus로 체크
         if (reservationStatus !== 'idle' || !product || !displayRound || !selectedVariantGroup || !selectedItem) return;
 
-        setReservationStatus('processing'); // ✅ [추가] 상태 변경
+        setReservationStatus('processing'); // '처리 중...'으로 변경
 
         try {
             const prepaymentRequired = displayRound.isPrepaymentRequired;
@@ -837,16 +832,27 @@ const ProductDetailPage: React.FC = () => {
 
             const result = await submitOrderCallable(orderPayload);
             
-            // ✅ [수정] 백엔드 응답에서 'orderIds'를 확인합니다.
-            if (!result.data.orderIds || result.data.orderIds.length === 0) {
-                throw new Error(result.data.message || '예약 생성에 실패했습니다. (재고 부족 또는 유효성 검사 실패)');
-            }
+            // ✅ [수정] 백엔드 응답을 확인하여 분기 처리
+            const data = result.data as { orderIds?: string[], updatedOrderIds?: string[], message?: string };
 
-            setReservationStatus('success'); // ✅ [수정] 성공 상태로 변경
+            if (data.updatedOrderIds && data.updatedOrderIds.length > 0) {
+                // --- (A) 수량 추가 성공 ---
+                showToast('success', '기존 예약에 수량이 추가되었습니다.');
+                setReservationStatus('success'); // '예약 완료' 버튼을 잠시 보여줌 (피드백)
+                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
 
-            if (prepaymentRequired) {
-                setPrepaymentPrice(totalPrice);
-                setPrepaymentModalOpen(true);
+            } else if (data.orderIds && data.orderIds.length > 0) {
+                // --- (B) 신규 예약 성공 ---
+                setReservationStatus('success'); // '예약 완료' 버튼
+                if (prepaymentRequired) {
+                    setPrepaymentPrice(totalPrice);
+                    setPrepaymentModalOpen(true);
+                }
+                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
+
+            } else {
+                // --- (C) 실패 (재고 부족 등) ---
+                throw new Error(data.message || '예약 생성에 실패했습니다. (재고 부족 또는 유효성 검사 실패)');
             }
 
         } catch (error: any) {

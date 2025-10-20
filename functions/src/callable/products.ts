@@ -120,7 +120,7 @@ export const updateMultipleVariantGroupStocks = onCall(
     // 디버깅을 위해 수신된 데이터 로깅
     logger.info("updateMultipleVariantGroupStocks called with data:", JSON.stringify(request.data, null, 2));
 
-    const updates = request.data as { productId: string; roundId: string; variantGroupId: string; newStock: number }[];
+    const { updates } = request.data as { updates: { productId: string; roundId: string; variantGroupId: string; newStock: number }[] };
     if (!Array.isArray(updates) || updates.length === 0) {
       logger.error("Invalid argument: updates is not a non-empty array.", { data: request.data });
       throw new HttpsError("invalid-argument", "업데이트할 재고 정보가 없습니다.");
@@ -165,30 +165,80 @@ export const updateSalesRound = onCall(
     if (!userRole || !['admin', 'master'].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
     }
-    const { productId, roundId, newStatus } = request.data;
-    if (!productId || !roundId || !newStatus) {
-      throw new HttpsError("invalid-argument", "업데이트에 필요한 정보가 누락되었습니다.");
+    // ✅ [수정] 프론트엔드(productService.ts)에서 보내는 키 이름에 맞게 request.data를 수정합니다.
+    const { productId, roundId, salesRoundData } = request.data as {
+      productId: string;
+      roundId: string;
+      salesRoundData: Partial<SalesRound>; // Partial<SalesRound> 타입으로 받습니다.
+    };
+
+    if (!productId || !roundId || !salesRoundData) {
+      // ✅ [수정] 에러 메시지를 salesRoundData 누락으로 변경
+      throw new HttpsError("invalid-argument", "업데이트에 필요한 정보가 누락되었습니다 (ID, 회차 ID, 업데이트 데이터).");
     }
 
     try {
       const productRef = db.collection("products").doc(productId);
+      
+      // 트랜잭션을 사용하여 안전하게 업데이트합니다.
       await db.runTransaction(async (transaction) => {
         const productDoc = await transaction.get(productRef);
         if (!productDoc.exists) {
           throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
         }
         const productData = productDoc.data() as Product;
-        const salesHistory = productData.salesHistory || [];
+        let salesHistory = productData.salesHistory || [];
         const roundIndex = salesHistory.findIndex(r => r.roundId === roundId);
+        
         if (roundIndex === -1) {
           throw new HttpsError("not-found", "해당 판매 회차를 찾을 수 없습니다.");
         }
         
-        const updatedRound = { ...salesHistory[roundIndex], ...newStatus };
-        salesHistory[roundIndex] = updatedRound;
-        
+// --- 시작: 날짜 필드 Timestamp 변환 (수정 2) ---
+        const dateFieldsToConvert: (keyof SalesRound)[] = [
+            'publishAt', 'deadlineDate', 'pickupDate', 'pickupDeadlineDate', 'arrivalDate', 'createdAt'
+        ];
+        const convertedSalesRoundData: Partial<SalesRound> = { ...salesRoundData };
+
+        for (const field of dateFieldsToConvert) {
+            const value = convertedSalesRoundData[field];
+
+            // 값이 존재하고, 이미 Timestamp 객체가 *아닌* 경우에만 변환 시도
+            if (value && !(value instanceof Timestamp)) { // ✅ AdminFirestoreTimestamp -> Timestamp 수정
+                try {
+                    const dateValue = new Date(value as any);
+                    if (!isNaN(dateValue.getTime())) {
+                        // 유효한 Date 객체로부터 Timestamp 생성
+                        const timestampValue = Timestamp.fromDate(dateValue);
+                        // ✅ 타입 추론 오류 우회를 위해 'as any' 사용
+                        (convertedSalesRoundData as any)[field] = timestampValue;
+                        logger.info(`Converted field '${field}' to Timestamp for round ${roundId}`);
+                    } else {
+                         logger.warn(`Field '${field}' for round ${roundId} was not a valid date for conversion:`, value);
+                    }
+                } catch (e) {
+                    logger.error(`Error converting field '${field}' to Timestamp for round ${roundId}:`, e);
+                }
+            }
+            // 이미 Timestamp 객체이거나 null/undefined이면 그대로 둠
+        }
+        // --- 종료: 날짜 필드 Timestamp 변환 (수정 2) ---
+
+        // 해당 회차에 업데이트할 데이터(변환된 날짜 포함)를 병합합니다.
+        const updatedRound: SalesRound = { 
+            ...salesHistory[roundIndex], 
+            ...convertedSalesRoundData // 변환된 데이터 사용
+        } as SalesRound;
+
+        // salesHistory 배열 업데이트
+        salesHistory = salesHistory.map((r, index) => 
+            index === roundIndex ? updatedRound : r
+        );
+
+        // 업데이트된 salesHistory 배열을 통째로 Firestore에 저장
         transaction.update(productRef, { salesHistory: salesHistory });
       });
+      
       return { success: true, message: "판매 상태가 업데이트되었습니다." };
     } catch (error) {
       logger.error(`Error in updateSalesRound for product ${productId}, round ${roundId}:`, error);

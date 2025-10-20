@@ -4,8 +4,7 @@ import { https } from 'firebase-functions/v2';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 
 import { MISSION_REWARDS } from '../utils/pointService.js';
-import type { UserDocument, Order } from '../functions-types.js';
-
+import type { UserDocument, Order } from '@/shared/types';
 // 클라이언트의 getOrderStatusDisplay와 유사한 로직을 서버에도 구현
 const getOrderStatusDisplay = (order: Order) => {
   const now = new Date();

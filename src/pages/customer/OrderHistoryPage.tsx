@@ -47,16 +47,44 @@ const SafeThumb: React.FC<{ src?: string; alt: string; className?: string; }> = 
 // 날짜 관련 유틸 함수
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
+
+  // ✅ [추가] 백엔드에서 숫자로 보낸 epoch milliseconds 처리
+  if (typeof date === 'number') {
+    return new Date(date);
+  }
+
   if (date instanceof Date) return date;
-  if (typeof date.toDate === 'function') return date.toDate();
+
+  // Firestore Timestamp-like (.toDate() method)
+  if (typeof date?.toDate === 'function') return date.toDate();
+
+  // Plain object { _seconds: ... } (from SDK)
   if (date && typeof date._seconds === 'number' && typeof date._nanoseconds === 'number') {
     try {
       return new Timestamp(date._seconds, date._nanoseconds).toDate();
     } catch (e) {
-      console.error("Failed to convert object to Timestamp/Date:", date, e);
+      console.error("Failed to convert _seconds object to Date:", date, e);
       return null;
     }
   }
+
+  // Plain object { seconds: ... } (from raw data / functions response)
+  if (date && typeof date.seconds === 'number' && typeof date.nanoseconds === 'number') {
+    try {
+      return new Date(date.seconds * 1000 + date.nanoseconds / 1000000);
+    } catch (e) {
+      console.error("Failed to convert seconds object to Date:", date, e);
+      return null;
+    }
+  }
+
+  // ISO string 지원
+  if (typeof date === 'string') {
+    const d = new Date(date);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // 빈 객체 {} 또는 기타
   return null;
 };
 const formatPickupDateHeader = (date: Date): string => `${date.getMonth() + 1}/${date.getDate()}(${['일', '월', '화', '수', '목', '금', '토'][date.getDay()]}) 픽업상품`;
@@ -80,13 +108,14 @@ const getCancellationDetails = (order: Order): { cancellable: boolean; isPenalty
   return { cancellable: true, isPenalty: now > penaltyDeadline, reason: null };
 };
 
-// ✅ [수정] 오류가 발생했던 usePaginatedOrders 훅 전체를 다시 수정합니다.
+// ✅ [수정] 서버로 보낼 lastVisible을 ISO로 정규화하고, 받은 데이터를 Date로 즉시 변환
 const usePaginatedOrders = (uid?: string) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [lastVisible, setLastVisible] = useState<any | null>(null);
+  // ✅ [수정] lastVisible 상태는 이제 서버가 기대하는 'pickupDate' ISO 문자열을 담은 객체를 저장합니다.
+  const [lastVisible, setLastVisible] = useState<{ pickupDate: number | null; createdAt: number | null } | null>(null);
   const lastVisibleRef = useRef(lastVisible);
   lastVisibleRef.current = lastVisible;
 
@@ -107,34 +136,51 @@ const usePaginatedOrders = (uid?: string) => {
     }
 
     try {
-      const lastDocToPass = isInitial ? null : lastVisibleRef.current;
+      // ✅ [수정] 직전 커서(epoch number 객체)를 payload에 포함
+      const cursorPayload = isInitial ? null : lastVisibleRef.current;
 
-      // ✅ [수정] payload를 동적으로 구성하여 'undefined'나 'null' 값이 있을 경우 해당 키를 아예 포함하지 않도록 합니다.
       const payload: Record<string, any> = {
-  targetUserId: uid,
-  pageSize: 10,
-  orderByField: 'pickupDate',
-  orderDirection: 'desc',
-};
+        targetUserId: uid,
+        pageSize: 10,
+        orderByField: 'pickupDate',
+        orderDirection: 'desc',
+      };
 
-
-      if (lastDocToPass) {
-        payload.lastVisible = lastDocToPass;
+      if (cursorPayload) {
+        payload.lastVisible = cursorPayload;
       }
-      
+
       const result = await fetchOrdersFn(payload);
+      const { data: rawNewOrders, lastDoc } = result.data as { data: any[]; lastDoc: any };
+
+      // ✅ [디버깅] 여기에 로그를 추가하세요!
+      console.log('--- 백엔드 원본 응답 (rawNewOrders) ---', rawNewOrders);
+
+      // ✅ [수정] 날짜 필드들을 로딩 시점에 즉시 Date 객체로 변환(문자열 방어)
+      const newOrders = rawNewOrders.map((o) => { // ✅ [수정] 소괄호()를 중괄호{}로 변경
       
-      const { data: rawNewOrders, lastDoc } = result.data as { data: any[], lastDoc: any };
-      
-      const newOrders = rawNewOrders.map(order => ({
-        ...order,
-        createdAt: order.createdAt,
-        pickupDate: order.pickupDate,
-      })) as Order[];
-      
+        // ✅ [디버깅] 각 주문의 pickupDate를 확인하세요.
+        console.log('처리 전 pickupDate:', o.pickupDate, '| 타입:', typeof o.pickupDate);
+        
+        return { // ✅ [수정] return 문을 명시적으로 사용
+          ...o,
+          // 위에서 수정한 safeToDate 함수를 사용합니다.
+          createdAt: safeToDate(o.createdAt),
+          pickupDate: safeToDate(o.pickupDate),
+        };
+     
+      }) as Order[]; // ✅ [수정] 닫는 소괄호() 제거
+
       setOrders(prev => isInitial ? newOrders : [...prev, ...newOrders]);
-      setLastVisible(lastDoc || null); 
-      
+
+      // ✅ [수정] 서버가 준 lastDoc (epoch number 객체)을 그대로 다음 커서로 저장
+      // (lastDoc은 백엔드에서 { pickupDate: number, createdAt: number } 형태로 옴)
+      const nextCursor = lastDoc ? {
+          pickupDate: lastDoc.pickupDate || null,
+          createdAt: lastDoc.createdAt || null
+      } : null;
+      setLastVisible(nextCursor);
+
       if (!lastDoc || newOrders.length < 10) setHasMore(false);
       
     } catch (error) {
@@ -159,7 +205,7 @@ const usePaginatedOrders = (uid?: string) => {
       setHasMore(false);
       setLoading(false);
     }
-  }, [uid]);
+  }, [uid]); // fetchOrders 의존성 제거 (useCallback 내부에서 이미 관리)
   
   const loadMore = useCallback(() => {
     if (!loadingMore && hasMore) {

@@ -1,12 +1,24 @@
 // src/components/admin/QuickCheckOrderCard.tsx
 
 import React, { useState, useEffect } from 'react';
-import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/shared/types';
+import type { OrderStatus, OrderItem, UniversalTimestamp, Order } from '@/shared/types';
 import toast from 'react-hot-toast';
 import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 import './QuickCheckOrderCard.css';
 import { formatKRW } from '@/utils/number';
+
+export interface AggregatedOrderGroup {
+    groupKey: string;
+    customerInfo: Order['customerInfo']; // Order 타입에서 가져옴
+    item: OrderItem;
+    totalQuantity: number;
+    totalPrice: number;
+    status: OrderStatus;
+    pickupDate: UniversalTimestamp | Date;
+    pickupDeadlineDate?: UniversalTimestamp | Date | null;
+    originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
+}
 
 interface OrderCardProps {
   group: AggregatedOrderGroup;
@@ -14,7 +26,6 @@ interface OrderCardProps {
   isSelected: boolean;
   onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
   isFuture: boolean;
-  // ✅ [수정] '노쇼 처리' 버튼이 제거되었으므로 더 이상 onMarkAsNoShow prop이 필요하지 않습니다.
   // onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
 }
 

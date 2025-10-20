@@ -67,8 +67,24 @@ const PrepaidCheckPage: React.FC = () => {
       if (!order.items || order.items.length === 0) return acc;
       
       const pickupDate = order.pickupDate;
-      const dateObj = 'toDate' in pickupDate ? pickupDate.toDate() : pickupDate;
-      const key = dayjs(dateObj).format('YYYY년 M월 D일 (ddd)');
+
+  // --- 시작: 강력한 날짜 파서 ---
+  let dateObj: Date | null = null;
+  if (!pickupDate) {
+    dateObj = new Date(); // 혹은 날짜 없음 처리
+  } else if (pickupDate instanceof Date) {
+    dateObj = pickupDate;
+  } else if (typeof pickupDate.toDate === 'function') {
+    dateObj = pickupDate.toDate(); // Firestore Timestamp (from client)
+  } else if (pickupDate && 'seconds' in pickupDate && typeof pickupDate.seconds === 'number') {
+    dateObj = new Date(pickupDate.seconds * 1000); // _seconds -> seconds
+  } else {
+    // @ts-ignore - Date 생성자는 다양한 타입을 받을 수 있으므로, 일단 무시하고 시도합니다.
+    dateObj = new Date(pickupDate); 
+  }
+  // --- 종료: 강력한 날짜 파서 ---
+
+  const key = dayjs(dateObj).format('YYYY년 M월 D일 (ddd)');
 
       if (!acc[key]) acc[key] = [];
       acc[key].push(order);

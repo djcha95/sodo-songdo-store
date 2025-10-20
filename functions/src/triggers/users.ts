@@ -46,9 +46,12 @@ export const handleNewUserSetup = onDocumentCreated({
         };
 
         await snapshot.ref.update({
-            points: FieldValue.increment(pointReward.points),
-            pointHistory: FieldValue.arrayUnion(pointLog),
-        });
+        points: FieldValue.increment(pointReward.points),
+        pointHistory: FieldValue.arrayUnion(pointLog),
+        loyaltyTier: '공구초보', // ✅ [추가]
+        pickupCount: 0,         // ✅ [추가]
+        noShowCount: 0,         // ✅ [추가]
+    });
 
         console.log(`[Points] Successfully awarded points to ${userId}.`);
     }

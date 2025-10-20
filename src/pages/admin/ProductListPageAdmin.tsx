@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Store, MoreVertical } from 'lucide-react';
 // ✅ [수정] 중복된 import를 하나로 합칩니다.
 import SodomallLoader from '@/components/common/SodomallLoader';
-import './ProductListPageAdmin.css';
+import './ProductListPageAdmin.css'; //
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
@@ -309,7 +309,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
             <td><div className="product-name-cell-v2"><img src={item.productImage} alt={item.productName} className="product-thumbnail" /><div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div></div></td>
             <td><StatusDropdown item={item} onStatusChange={onStatusChange} /></td>
             <td style={{textAlign: 'right'}}>{vg.items[0]?.price != null ? `${formatKRW(vg.items[0].price)} 원` : '–'}</td>
-<td>{formatDate(getEarliestExpirationDateForGroup(vg) === Infinity ? null : getEarliestExpirationDateForGroup(vg))}</td>            {renderReserveAndWaitlistCell(vg)}
+            <td>{formatDate(getEarliestExpirationDateForGroup(vg) === Infinity ? null : getEarliestExpirationDateForGroup(vg))}</td>
+            {renderReserveAndWaitlistCell(vg)}
             <td className="quantity-cell">{vg.pickedUpCount}</td>
             <td className="stock-cell">
               {editingStockId === vgUniqueId ? (
@@ -345,8 +346,8 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
           <td><div className="product-name-cell-v2"><img src={item.productImage} alt={item.productName} className="product-thumbnail" /><div className="product-name-text"><span className="product-group-name">{item.productName}</span><span className="round-name-text">{item.round.roundName}</span></div></div></td>
           <td><StatusDropdown item={item} onStatusChange={onStatusChange} /></td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
-<td>{earliestOverallExpiration === Infinity ? '–' : formatDate(earliestOverallExpiration)}</td>
-{renderReserveAndWaitlistCell(null, true)}
+          <td>{earliestOverallExpiration === Infinity ? '–' : formatDate(earliestOverallExpiration)}</td>
+          {renderReserveAndWaitlistCell(null, true)}
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td style={{textAlign: 'center', color: 'var(--text-color-light)'}}>–</td>
           <td>
@@ -371,6 +372,10 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                   <td className="sub-row-name"> └ {subVg.groupName}</td>
                   <td><span className={`status-badge ${subStatus.className}`} title={`Status: ${subStatus.text}`}>{subStatus.text}</span></td>
                   <td style={{textAlign: 'right'}}>{subVg.items[0]?.price != null ? `${formatKRW(subVg.items[0].price)} 원` : '–'}</td>
+                  
+                  {/* ✅ [수정] UI 밀림 현상 해결을 위해 빈 '유통기한' 셀 추가 */}
+                  <td></td>
+                  
                   {renderReserveAndWaitlistCell(subVg, false)}
                   <td className="quantity-cell">{subVg.pickedUpCount}</td>
                   <td className="stock-cell">
@@ -383,7 +388,7 @@ const ProductAdminRow: React.FC<ProductAdminRowProps> = ({ item, index, isExpand
                           onBlur={() => onStockEditSave(subVgUniqueId, item)} 
                           autoFocus 
                           onKeyDown={(e) => { 
-                            if (e.key === 'Enter') onStockEditSave(subVgUniqueId, item); // ✅ [수정] vgUniqueId -> subVgUniqueId
+                            if (e.key === 'Enter') onStockEditSave(subVgUniqueId, item);
                             if (e.key === 'Escape') onStockEditStart('', 0); 
                           }} 
                         />
@@ -766,23 +771,17 @@ const ProductListPageAdmin: React.FC = () => {
   
   const handleStatusChange = useCallback(async (productId: string, roundId: string, newStatus: Partial<SalesRound>) => {
     const promise = updateSalesRound(productId, roundId, newStatus);
-    toast.promise(promise, {
+    
+    // ✅ [수정] 불필요한 낙관적 업데이트 로직을 제거하고,
+    // toast.promise가 완료된 후 fetchData()를 호출하여 최신 상태를 반영하도록 합니다.
+    await toast.promise(promise, {
       loading: '상태 업데이트 중...',
       success: '상품 상태가 성공적으로 변경되었습니다.',
       error: (err) => (err as any).message || '상태 변경 중 오류가 발생했습니다.',
     });
     
-    setPageData(prev => ({
-      ...prev,
-      allProducts: prev.allProducts.map(p => 
-        p.id === productId 
-          ? { ...p, salesHistory: p.salesHistory.map(r => r.roundId === roundId ? { ...r, ...newStatus } : r) }
-          : p
-      )
-    }));
-
-    await promise;
-    fetchData();
+    // ✅ [수정] Promise 성공 후 전체 데이터를 다시 불러와 최신 상태를 반영
+    fetchData(); 
   }, [fetchData]);
 
 

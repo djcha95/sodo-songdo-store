@@ -17,12 +17,32 @@ const POINT_POLICIES = {
  * - 픽업률 기반 강등 조건은 삭제하여 노쇼 횟수에 집중
  */
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    if (noShowCount >= 5) return '참여 제한';
-    if (noShowCount >= 3) return '주의 요망';
-    if (pickupCount >= 50) return '공구의 신';
-    if (pickupCount >= 30) return '공구왕';
-    if (pickupCount >= 10) return '공구요정';
+  // 1. 픽업/노쇼 0회 -> 공구초보
+  if (pickupCount === 0 && noShowCount === 0) {
+    return '공구초보';
+  }
+
+  const totalTransactions = pickupCount + noShowCount;
+  const pickupRate = (pickupCount / totalTransactions) * 100;
+
+  // 2. 긍정적 등급 (상향된 기준 적용: 250/100/30)
+  if (pickupRate >= 98 && pickupCount >= 250) {
+    return '공구의 신';
+  }
+  if (pickupRate >= 95 && pickupCount >= 100) {
+    return '공구왕';
+  }
+  if (pickupRate >= 90 && pickupCount >= 30) {
+    return '공구요정';
+  }
+
+  // 3. 픽업 1회 이상, '요정' 미만 -> 공구새싹
+  if (pickupCount > 0) {
     return '공구새싹';
+  }
+
+  // 4. 그 외 (예: 픽업 0, 노쇼 1회) -> 공구초보
+  return '공구초보';
 };
 
 type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED" | "LATE_PICKUP_CONFIRMED";
@@ -432,9 +452,10 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
             transaction.update(userRef, updateResult.updateData);
 
             if (updateResult.tierChange) {
-                const { from, to } = updateResult.tierChange;
-                const tierOrder = ['참여 제한', '주의 요망', '공구새싹', '공구요정', '공구왕', '공구의 신'];
-                const isPromotion = tierOrder.indexOf(from) < tierOrder.indexOf(to);
+            const { from, to } = updateResult.tierChange;
+            // ✅ [수정] 새로운 등급 순서로 변경
+            const tierOrder = ['공구제한', '공구초보', '공구새싹', '공구요정', '공구왕', '공구의 신'];
+            const isPromotion = tierOrder.indexOf(from) < tierOrder.indexOf(to);
 
                 const message = isPromotion
                     ? `🎉 축하합니다! 회원님의 등급이 [${from}]에서 [${to}](으)로 상승했습니다!`

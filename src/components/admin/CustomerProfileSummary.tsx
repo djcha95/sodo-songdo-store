@@ -15,9 +15,9 @@ const getLoyaltyInfo = (tier: LoyaltyTier) => {
       case '공구왕': return { icon: <Gem size={24} />, className: 'tier-king' };
       case '공구요정': return { icon: <Sparkles size={24} />, className: 'tier-fairy' };
       case '공구새싹': return { icon: <i className="seedling-icon-summary">🌱</i>, className: 'tier-sprout' };
-      case '주의 요망': return { icon: <ShieldAlert size={24} />, className: 'tier-warning' };
-      case '참여 제한': return { icon: <ShieldX size={24} />, className: 'tier-restricted' };
-      default: return { icon: <i className="seedling-icon-summary">🌱</i>, className: 'tier-sprout' };
+      case '공구초보': return { icon: <User size={24} />, className: 'tier-rookie' }; // ✅ [추가]
+      case '공구제한': return { icon: <ShieldX size={24} />, className: 'tier-restricted' }; // ✅ [변경]
+      default: return { icon: <User size={24} />, className: 'tier-rookie' }; // ✅ [기본값 변경]
     }
 };
 
@@ -27,7 +27,7 @@ interface CustomerProfileSummaryProps {
 
 const CustomerProfileSummary: React.FC<CustomerProfileSummaryProps> = ({ user }) => {
     const { 
-        loyaltyTier = '공구새싹', 
+        loyaltyTier = '공구초보',
         pickupCount = 0, 
         noShowCount = 0,
     } = user;

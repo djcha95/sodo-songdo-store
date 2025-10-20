@@ -3,10 +3,10 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
+import { Timestamp as AdminTimestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-// ✅ [수정] AdminTimestamp 타입을 shared/types에서 직접 가져옵니다.
-import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo, LoyaltyTier, AdminTimestamp } from "@/shared/types";
+// AdminTimestamp import 제거됨
+import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo, LoyaltyTier } from "@/shared/types"; // AdminTimestamp 제거
 
 // ✅ [복원] 관리자 기능에 필요한 등급 계산, 포인트 정책 로직을 복원합니다.
 const POINT_POLICIES = {
@@ -15,16 +15,61 @@ const POINT_POLICIES = {
 } as const;
 
 const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier => {
-    const totalTransactions = pickupCount + noShowCount;
-    if (noShowCount >= 3) return '참여 제한';
-    if (totalTransactions === 0) return '공구새싹';
-    const pickupRate = (pickupCount / totalTransactions) * 100;
-    if (pickupRate >= 98 && pickupCount >= 250) return '공구의 신';
-    if (pickupRate >= 95 && pickupCount >= 100) return '공구왕';
-    if (pickupRate >= 90 && pickupCount >= 30) return '공구요정';
-    if (pickupRate < 70) return '주의 요망';
+  // 1. 픽업/노쇼 0회 -> 공구초보
+  if (pickupCount === 0 && noShowCount === 0) {
+    return '공구초보';
+  }
+
+  const totalTransactions = pickupCount + noShowCount;
+  const pickupRate = (pickupCount / totalTransactions) * 100;
+
+  // 2. 긍정적 등급 (기존 로직 유지)
+  if (pickupRate >= 98 && pickupCount >= 250) {
+    return '공구의 신';
+  }
+  if (pickupRate >= 95 && pickupCount >= 100) {
+    return '공구왕';
+  }
+  if (pickupRate >= 90 && pickupCount >= 30) {
+    return '공구요정';
+  }
+
+  // 3. 픽업 1회 이상, '요정' 미만 -> 공구새싹
+  if (pickupCount > 0) {
     return '공구새싹';
+  }
+
+  // 4. 그 외 (예: 픽업 0, 노쇼 1회) -> 공구초보
+  return '공구초보';
 };
+
+/**
+ * 모든 종류의 날짜 타입을 안전하게 Epoch Milliseconds(숫자)로 변환합니다.
+ */
+function toEpochMillis(v: any): number | null {
+  if (!v) return null;
+  // Firestore Timestamp (admin/client 모두 커버)
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v.toDate === 'function') return v.toDate().getTime();
+  // JS Date
+  if (v instanceof Date) return v.getTime();
+  // Dayjs 등 valueOf 있는 객체
+  if (typeof v.valueOf === 'function') {
+    const n = v.valueOf();
+    if (typeof n === 'number') return n;
+  }
+  // 숫자/문자열로 이미 들어온 경우
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return isNaN(t) ? null : t;
+  }
+  // Firestore Timestamp를 plain object로 받은 경우 (seconds/nanoseconds)
+  if (typeof v === 'object' && typeof v.seconds === 'number') {
+      return v.seconds * 1000 + ((v.nanoseconds || 0) / 1000000);
+  }
+  return null;
+}
 
 
 const productConverter = {
@@ -145,7 +190,6 @@ export const submitOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
     if (!request.auth) {
-      // ✅ [수정] HpsError -> HttpsError 오타 수정
       throw new HttpsError("unauthenticated", "A login is required.");
     }
 
@@ -154,7 +198,7 @@ export const submitOrder = onCall(
       items: OrderItem[];
       totalPrice: number;
       customerInfo: CustomerInfo;
-      pickupDate?: FirebaseFirestore.Timestamp | null;
+      pickupDate?: AdminTimestamp | null;
       wasPrepaymentRequired?: boolean;
       notes?: string;
     };
@@ -169,6 +213,12 @@ export const submitOrder = onCall(
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists) {
           throw new HttpsError('not-found', 'User information not found.');
+        }
+
+        const userData = userSnap.data() as UserDocument;
+        const effectiveTier = userData.manualTier || userData.loyaltyTier;
+        if (effectiveTier === '공구제한') {
+            throw new HttpsError("permission-denied", "공구제한 등급은 현재 주문하실 수 없습니다. 관리자에게 문의해주세요.");
         }
 
         const productIds = [...new Set(client.items.map(i => i.productId))];
@@ -195,24 +245,34 @@ export const submitOrder = onCall(
           }
         });
 
+        // ✅ [수정] 1. 사용자의 기존 주문(RESERVED, PREPAID)을 미리 조회합니다.
+        const userOrdersQuery = db.collection("orders")
+            .withConverter(orderConverter)
+            .where("userId", "==", userId)
+            .where("status", "in", ["RESERVED", "PREPAID"]);
+        const userOrdersSnap = await transaction.get(userOrdersQuery);
+
+        // ✅ [수정] 2. 기존 주문을 ItemId 기준으로 맵에 저장합니다. (빠른 탐색용)
+        const existingItemMap = new Map<string, QueryDocumentSnapshot<Order>>();
+        userOrdersSnap.docs.forEach(doc => {
+            const item = doc.data().items[0]; // 주문당 1개 아이템 전제
+            if (item) {
+                // (productId-roundId-variantGroupId-itemId) 조합으로 고유 키 생성
+                const key = `${item.productId}-${item.roundId}-${item.variantGroupId}-${item.itemId}`;
+                existingItemMap.set(key, doc);
+            }
+        });
+
         const txRequestMap = new Map<string, number>();
         for (const item of client.items) {
           const product = productDataMap.get(item.productId);
           if (!product) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
           const round = product.salesHistory.find(r => r.roundId === item.roundId);
           if (!round) throw new HttpsError("not-found", "판매 회차 정보를 찾을 수 없습니다.");
-
-          // ✅ [수정] 하위 호환성 로직 추가
-          // ID로 옵션을 찾되, 실패하면 옵션이 1개뿐인지 확인하고 그걸로 대체
-          const vg = round.variantGroups.find(v => v.id === item.variantGroupId) ||
-                     (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
-          
+          const vg = round.variantGroups.find(v => v.id === item.variantGroupId) || (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
           if (!vg) throw new HttpsError("not-found", "옵션 그룹 정보를 찾을 수 없습니다.");
-          
           const required = item.quantity * (item.stockDeductionAmount || 1);
-          // variantGroupId가 없는 옛날 상품의 경우, 식별을 위해 productId와 roundId만 사용
           const key = `${item.productId}-${item.roundId}-${vg.id || 'default'}`;
-
           txRequestMap.set(key, (txRequestMap.get(key) || 0) + required);
 
           if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
@@ -225,45 +285,67 @@ export const submitOrder = onCall(
           }
         }
 
+        // ✅ [수정] 3. 생성/업데이트된 ID를 분리하여 저장
         const createdOrderIds: string[] = [];
+        const updatedOrderIds: string[] = [];
         const phoneLast4 = (client.customerInfo?.phone || "").slice(-4);
 
-        for (const single of client.items) {
-          // ✅ [수정] product가 undefined일 가능성에 대한 타입스크립트 오류를 해결합니다.
-          const product = productDataMap.get(single.productId);
+        for (const single of client.items) { // 'single'이 프론트에서 보낸 추가할 아이템
           
-          // 이전 반복문에서 이미 검증되었지만, 타입 안전성을 위해 한번 더 확인합니다.
-          if (!product) {
-            // 이 오류는 이론적으로 발생해서는 안 되지만, 안정성을 위해 추가합니다.
-            throw new HttpsError("internal", `주문 처리 중 오류 발생: 상품 정보를 찾을 수 없습니다 (ID: ${single.productId})`);
+          // ✅ [수정] 4. 이 아이템이 기존 주문 맵에 있는지 확인
+          const itemKey = `${single.productId}-${single.roundId}-${single.variantGroupId}-${single.itemId}`;
+          const existingOrderDoc = existingItemMap.get(itemKey);
+
+          if (existingOrderDoc) {
+              // --- (A) 기존 주문이 있으면: UPDATE ---
+              const existingOrder = existingOrderDoc.data();
+              const existingItem = existingOrder.items[0];
+              const newQuantity = existingItem.quantity + single.quantity;
+              const newTotalPrice = existingItem.unitPrice * newQuantity;
+
+              const updatedItem = { ...existingItem, quantity: newQuantity };
+              
+              transaction.update(existingOrderDoc.ref, {
+                  items: [updatedItem],
+                  totalPrice: newTotalPrice,
+                  notes: (existingOrder.notes || "") + `\n[수량 추가] ${single.quantity}개 추가 (총 ${newQuantity}개)`
+              });
+              updatedOrderIds.push(existingOrderDoc.id);
+
+          } else {
+              // --- (B) 기존 주문이 없으면: CREATE (기존 로직) ---
+              const product = productDataMap.get(single.productId);
+              if (!product) {
+                throw new HttpsError("internal", `주문 처리 중 오류 발생: 상품 정보를 찾을 수 없습니다 (ID: ${single.productId})`);
+              }
+              const round = product.salesHistory.find(r => r.roundId === single.roundId)!;
+              if (!round?.pickupDate) {
+                throw new HttpsError("invalid-argument", "상품의 픽업 날짜가 설정되지 않았습니다.");
+              }
+
+              const newOrderRef = db.collection("orders").doc();
+              const newOrder: Omit<Order, "id"> = {
+                userId,
+                customerInfo: { ...client.customerInfo, phoneLast4 },
+                items: [single], // 1개 아이템 배열
+                totalPrice: single.unitPrice * single.quantity,
+                orderNumber: `SODOMALL-${Date.now()}-${createdOrderIds.length}`,
+                status: "RESERVED",
+                createdAt: AdminTimestamp.now(),
+                pickupDate: round.pickupDate,
+                pickupDeadlineDate: round.pickupDeadlineDate ?? null,
+                notes: client.notes ?? "",
+                isBookmarked: false,
+                wasPrepaymentRequired: !!client.wasPrepaymentRequired,
+              };
+
+              transaction.set(newOrderRef, newOrder);
+              createdOrderIds.push(newOrderRef.id);
           }
-
-          const round = product.salesHistory.find(r => r.roundId === single.roundId)!;
-          if (!round?.pickupDate) {
-            throw new HttpsError("invalid-argument", "상품의 픽업 날짜가 설정되지 않았습니다.");
-          }
-
-          const newOrderRef = db.collection("orders").doc();
-          const newOrder: Omit<Order, "id"> = {
-            userId,
-            customerInfo: { ...client.customerInfo, phoneLast4 },
-            items: [single],
-            totalPrice: single.unitPrice * single.quantity,
-            orderNumber: `SODOMALL-${Date.now()}-${createdOrderIds.length}`,
-            status: "RESERVED",
-            createdAt: Timestamp.now(),
-            pickupDate: round.pickupDate,
-            pickupDeadlineDate: round.pickupDeadlineDate ?? null,
-            notes: client.notes ?? "",
-            isBookmarked: false,
-            wasPrepaymentRequired: !!client.wasPrepaymentRequired,
-          };
-
-          transaction.set(newOrderRef, newOrder);
-          createdOrderIds.push(newOrderRef.id);
         }
 
-        return { success: true, orderIds: createdOrderIds };
+        // ✅ [수정] 5. 생성/업데이트된 ID를 구분하여 반환
+        return { success: true, orderIds: createdOrderIds, updatedOrderIds };
       });
 
       return result;
@@ -431,7 +513,7 @@ export const cancelOrder = onCall(
                     const penaltyLog: Omit<PointLog, "id"> = {
                         amount: penalty.points,
                         reason: penalty.reason,
-                        createdAt: Timestamp.now(),
+                        createdAt: AdminTimestamp.now(),
                         orderId: orderId,
                         expiresAt: null,
                     };
@@ -452,7 +534,7 @@ export const cancelOrder = onCall(
 
                 transaction.update(orderRef, { 
                     status: penaltyType === 'late' ? 'LATE_CANCELED' : 'CANCELED', 
-                    canceledAt: Timestamp.now(),
+                    canceledAt: AdminTimestamp.now(),
                     notes: order.notes ? `${order.notes}\n[취소] ${finalMessage}` : `[취소] ${finalMessage}`
                 });
                 
@@ -474,11 +556,11 @@ export const cancelOrder = onCall(
 export const getUserOrders = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
-        const { targetUserId, pageSize, lastVisibleDocData } = request.data as {
-            targetUserId: string;
-            pageSize: number;
-            lastVisibleDocData?: { [key: string]: any };
-        };
+    const { targetUserId, pageSize, lastVisible } = request.data as {
+        targetUserId: string;
+        pageSize: number;
+        lastVisible?: { pickupDate: number | null; createdAt: number | null };
+    };
 
         if (!request.auth) {
             throw new HttpsError("unauthenticated", "A login is required.");
@@ -495,23 +577,26 @@ export const getUserOrders = onCall(
                 .withConverter(orderConverter)
                 .where('userId', '==', targetUserId)
                 .orderBy('pickupDate', 'desc')
+                .orderBy('createdAt', 'desc') // ✅ [수정] 중복 키 방지용 Tie-breaker 추가
                 .limit(pageSize);
 
-            if (lastVisibleDocData) {
-                const cursorFieldData = lastVisibleDocData['pickupDate'];
-                if (cursorFieldData?._seconds) {
-    const cursorValue = new Timestamp(cursorFieldData._seconds, cursorFieldData._nanoseconds); // '-' 오타 수정
-    queryBuilder = queryBuilder.startAfter(cursorValue);
-}
+            // ✅ [수정] 2개 필드로 startAfter를 사용
+            if (lastVisible && typeof lastVisible.pickupDate === 'number' && typeof lastVisible.createdAt === 'number') {
+                const cursorPickupDate = AdminTimestamp.fromDate(new Date(lastVisible.pickupDate));
+                const cursorCreatedAt = AdminTimestamp.fromDate(new Date(lastVisible.createdAt));
+                queryBuilder = queryBuilder.startAfter(cursorPickupDate, cursorCreatedAt);
+            } else if (lastVisible) {
+                 logger.warn("lastVisible was incomplete:", { lastVisible });
             }
 
             const snapshot = await queryBuilder.get();
 
+            // ✅ [수정] 데이터를 map 할 때 Date 객체 대신 toEpochMillis 헬퍼를 사용
             const orders = snapshot.docs.map(doc => {
                 const data = doc.data();
-                // ✅ [오류 해결] 이제 AdminTimestamp 타입을 정상적으로 인식합니다.
-                const createdAt = data.createdAt as AdminTimestamp;
-                const pickupDate = data.pickupDate as AdminTimestamp;
+                
+                // 🚨 converter가 클래스 인스턴스를 반환할 수 있으므로,
+                // 안전하게 필요한 필드만 plain object로 복사하며 변환합니다.
                 return {
                     id: doc.id,
                     userId: data.userId,
@@ -521,15 +606,38 @@ export const getUserOrders = onCall(
                     status: data.status,
                     customerInfo: data.customerInfo,
                     wasPrepaymentRequired: data.wasPrepaymentRequired,
-                    createdAt: { _seconds: createdAt.seconds, _nanoseconds: createdAt.nanoseconds },
-                    pickupDate: { _seconds: pickupDate.seconds, _nanoseconds: pickupDate.nanoseconds },
+                    notes: data.notes,
+                    isBookmarked: data.isBookmarked,
+                    
+                    // ✅ [핵심] 모든 날짜 필드를 숫자로 변환
+                    createdAt: toEpochMillis(data.createdAt),
+                    pickupDate: toEpochMillis(data.pickupDate),
+                    pickupDeadlineDate: toEpochMillis(data.pickupDeadlineDate),
+                    canceledAt: toEpochMillis(data.canceledAt),
+                    pickedUpAt: toEpochMillis(data.pickedUpAt),
+                    prepaidAt: toEpochMillis(data.prepaidAt),
+                    // ... (다른 날짜 필드가 있다면 여기서 모두 변환) ...
                 };
             });
 
             const lastDocSnapshot = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
-            const lastDocPayload = lastDocSnapshot ? { ...lastDocSnapshot.data(), id: lastDocSnapshot.id } : null;
 
-            return { data: orders, lastDoc: lastDocPayload };
+            // ✅ [수정] lastDoc도 createdAt 숫자를 포함
+            let lastDocPayload: { pickupDate: number | null; createdAt: number | null } | null = null;
+            if (lastDocSnapshot) {
+                const lastDocData = lastDocSnapshot.data();
+                lastDocPayload = {
+                    pickupDate: toEpochMillis(lastDocData.pickupDate),
+                    createdAt: toEpochMillis(lastDocData.createdAt) // ✅ [수정] createdAt 추가
+                };
+            }
+
+            return { 
+                data: orders, 
+                lastDoc: lastDocPayload,
+                // ✅ [추가] 배포 확인용 ID
+                buildId: '2025-10-21-EPOCH-FIX' 
+            };
 
         } catch (error: any) {
             logger.error('Error fetching user orders:', error);
@@ -637,8 +745,8 @@ export const searchOrdersByCustomer = onCall(
             
             const orders = Array.from(combinedResults.values())
               .sort((a, b) => {
-                  const timeA = a.createdAt as Timestamp;
-                  const timeB = b.createdAt as Timestamp;
+                  const timeA = a.createdAt as AdminTimestamp;
+                  const timeB = b.createdAt as AdminTimestamp;
                   return timeB.toMillis() - timeA.toMillis();
               });
 
@@ -697,7 +805,7 @@ export const splitBundledOrder = onCall(
             items: [item],
             totalPrice: item.unitPrice * item.quantity,
             orderNumber: `${originalOrder.orderNumber}-S${i + 1}`,
-            createdAt: Timestamp.now(),
+            createdAt: AdminTimestamp.now(),
             splitFrom: orderId,
             notes: `[분할된 주문] 원본: ${originalOrder.orderNumber}`,
           };
@@ -712,7 +820,7 @@ export const splitBundledOrder = onCall(
 
         transaction.update(originalOrderRef, {
           status: 'CANCELED',
-          canceledAt: Timestamp.now(),
+          canceledAt: AdminTimestamp.now(),
           notes: `[주문 분할 완료] ${newOrderIds.length}개의 개별 주문(${newOrderIds.join(', ')})으로 분할되었습니다.`,
         });
       });
@@ -813,7 +921,7 @@ export const createOrderAsAdmin = onCall(
             totalPrice: item.unitPrice * item.quantity,
             orderNumber: `SODOMALL-ADMIN-${Date.now()}`,
             status: 'RESERVED',
-            createdAt: Timestamp.now(),
+            createdAt: AdminTimestamp.now(),
             pickupDate: round.pickupDate,
             pickupDeadlineDate: round.pickupDeadlineDate ?? null,
             notes: `관리자가 생성한 주문입니다.`,
@@ -884,7 +992,7 @@ export const processPartialPickup = onCall(
         const penaltyLog: Omit<PointLog, "id"> = {
           amount: penalty.points,
           reason: penalty.reason,
-          createdAt: Timestamp.now(),
+          createdAt: AdminTimestamp.now(),
           orderId: orderId,
           expiresAt: null,
         };
@@ -901,7 +1009,7 @@ export const processPartialPickup = onCall(
           status: 'PICKED_UP',
           items: [updatedItem],
           totalPrice: newTotalPrice,
-          pickedUpAt: Timestamp.now(),
+          pickedUpAt: AdminTimestamp.now(),
           notes: order.notes ? `${order.notes}\n${note}` : note,
         });
       });

@@ -25,7 +25,7 @@ export type OrderStatus =
   | 'LATE_CANCELED';
 export type SpecialLabel = '수량 한정' | '이벤트 특가' | '신상품';
 export type ProductDisplayStatus = 'ONGOING' | 'ADDITIONAL_RESERVATION' | 'PAST';
-export type LoyaltyTier = '공구의 신' | '공구왕' | '공구요정' | '공구새싹' | '주의 요망' | '참여 제한';
+export type LoyaltyTier = '공구의 신' | '공구왕' | '공구요정' | '공구새싹' | '공구초보' | '공구제한';
 export type UserRole = 'master' | 'admin' | 'customer';
 
 export type NotificationType =

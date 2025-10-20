@@ -44,10 +44,11 @@ const CreateOrderPage: React.FC = () => {
                 const [users, products] = await Promise.all([
                     getAllUsersForQuickCheck(),
                     getAllProducts()
-                ]);
-                setAllUsers(users);
-                setAllProducts(products.filter(p => !p.isArchived));
-            } catch (error) {
+            ]);
+            setAllUsers(users);
+            // ✅ [수정] products.products.filter로 수정
+            setAllProducts(products.products.filter(p => !p.isArchived));
+        } catch (error) {
                 toast.error("필수 데이터를 불러오는 데 실패했습니다.");
             } finally {
                 setIsLoading(false);

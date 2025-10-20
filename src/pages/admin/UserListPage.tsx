@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
 import {
-	Crown, Gem, Sparkles, ShieldAlert, ShieldX,
+	Crown, Gem, Sparkles, ShieldAlert, ShieldX, User, // ✅ [추가]
 	Search, ArrowUpDown, Database, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
@@ -22,8 +22,8 @@ const tierInfo: Record<LoyaltyTier, { icon: React.ReactNode; color: string }> = 
 	'공구왕': { icon: <Gem size={16} />, color: 'var(--loyalty-king)' },
 	'공구요정': { icon: <Sparkles size={16} />, color: 'var(--loyalty-fairy)' },
 	'공구새싹': { icon: <i className="seedling-icon">🌱</i>, color: 'var(--loyalty-sprout)' },
-	'주의 요망': { icon: <ShieldAlert size={16} />, color: 'var(--loyalty-warning)' },
-	'참여 제한': { icon: <ShieldX size={16} />, color: 'var(--loyalty-restricted)' },
+	'공구초보': { icon: <User size={16} />, color: 'var(--text-color-light)' }, // '공구초보' 추가
+	'공구제한': { icon: <ShieldX size={16} />, color: 'var(--loyalty-restricted)' }, // '공구제한'으로 변경
 };
 
 const roleInfo: Record<AppUser['role'], { label: string; className: string }> = {
@@ -110,9 +110,10 @@ const UserListPage = () => {
 			}
 
 			if (key === 'loyaltyTier') {
-				const tierOrder: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹', '주의 요망', '참여 제한'];
-				const aIndex = tierOrder.indexOf(a.loyaltyTier || '공구새싹');
-				const bIndex = tierOrder.indexOf(b.loyaltyTier || '공구새싹');
+                // ✅ [수정] 새로운 등급 순서로 변경
+				const tierOrder: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹', '공구초보', '공구제한'];
+				const aIndex = tierOrder.indexOf(a.loyaltyTier || '공구초보'); // ✅ [수정] 기본값 '공구초보'로 변경
+				const bIndex = tierOrder.indexOf(b.loyaltyTier || '공구초보'); // ✅ [수정] 기본값 '공구초보'로 변경
 				return (aIndex - bIndex) * dir;
 			}
 

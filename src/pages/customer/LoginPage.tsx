@@ -39,7 +39,7 @@ const LoginPage: React.FC = () => {
       return;
     }
 
-    const script = document.createElement("script");
+    const script = document.Element("script");
     script.id = KAKAO_SDK_SCRIPT_ID;
     script.src = "https://developers.kakao.com/sdk/js/kakao.js";
     script.async = true;

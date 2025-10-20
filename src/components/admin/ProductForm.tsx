@@ -136,7 +136,7 @@ const storageTypeOptions: { key: StorageType; name: string; className: string }[
 const bundleUnitKeywords = ['묶음', '박스', '곽', '세트', '팩', '봉지'];
 const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'];
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ALL_LOYALTY_TIERS: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹'];
+const ALL_LOYALTY_TIERS: LoyaltyTier[] = ['공구의 신', '공구왕', '공구요정', '공구새싹', '공구초보'];
 
 // --- 모달 ---
 interface SettingsModalProps {
@@ -299,110 +299,149 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   }, [mode, initialState?.productGroupName]);
 
   useEffect(() => {
+    // ✅ [수정] fetchData가 카테고리를 독립적으로 불러와 처리하도록 변경 (setCategories 호출)
     const fetchData = async () => {
-      if (!productId) return;
+      if (!productId && mode !== 'newProduct') return;
+      
       setIsLoading(true);
       try {
-        const [product, reservedMapData] = await Promise.all([
-            getProductById(productId),
-            mode === 'editRound' ? getReservedQuantitiesMap() : Promise.resolve(new Map<string, number>())
+        const [categoriesData, reservedMapData, productData] = await Promise.all([
+            getCategories(),
+            mode === 'editRound' && productId ? getReservedQuantitiesMap() : Promise.resolve(new Map<string, number>()),
+            productId ? getProductById(productId) : Promise.resolve(null),
         ]);
+
+        // ✅ [추가] 카테고리 상태를 여기서 설정하여 다른 로직에서 안전하게 사용 가능하도록 함
+        setCategories(categoriesData);
 
         if (mode === 'editRound') {
             setInitialReservedMap(reservedMapData);
         }
 
-        if (!product) { toast.error('상품을 찾을 수 없습니다.'); navigate('/admin/products'); return; }
-
-        if (mode === 'editRound') {
-            setInitialProduct({
-                groupName: product.groupName,
-                description: product.description,
-                hashtags: product.hashtags,
-                storageType: product.storageType,
-                category: product.category,
-            });
+        const product = productData;
+        
+        if (productId && !product) { 
+            toast.error('상품을 찾을 수 없습니다.'); 
+            navigate('/admin/products'); 
+            return; 
         }
 
-        setGroupName(product.groupName);
-        setDescription(product.description);
-        setHashtags(product.hashtags || []);
-        setSelectedStorageType(product.storageType);
-        if (product.createdAt) setCreationDate(convertToDate(product.createdAt) || new Date());
-        const mainCat = (await getCategories()).find(c => c.name === product.category);
-        if (mainCat) setSelectedMainCategory(mainCat.id);
-        setInitialImageUrls(product.imageUrls || []);
-        setCurrentImageUrls(product.imageUrls || []);
-        setImagePreviews(product.imageUrls || []);
+        if (product) {
+            if (mode === 'editRound') {
+                setInitialProduct({
+                    groupName: product.groupName,
+                    description: product.description,
+                    hashtags: product.hashtags,
+                    storageType: product.storageType,
+                    category: product.category,
+                });
+            }
 
-        let roundToLoad: SalesRound | undefined;
-        if (mode === 'editRound' && roundId) {
-          roundToLoad = product.salesHistory.find(r => r.roundId === roundId);
-          if (!roundToLoad) { toast.error('판매 회차를 찾을 수 없습니다.'); navigate(`/admin/products/edit/${productId}`); return; }
-          setPageTitle(`'${product.groupName}' 회차 수정`);
-
-          setInitialRound(JSON.parse(JSON.stringify(roundToLoad)));
-
-        } else if (mode === 'newRound') {
-          roundToLoad = initialState?.lastRound || product.salesHistory[0];
-          if (roundToLoad) {
-            const roundNumMatch = roundToLoad.roundName.match(/\d+/);
-            const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : product.salesHistory.length + 1;
-            setRoundName(`${newRoundNumber}차 판매`);
-          } else setRoundName('1차 판매');
+            setGroupName(product.groupName);
+            setDescription(product.description);
+            setHashtags(product.hashtags || []);
+            setSelectedStorageType(product.storageType);
+            if (product.createdAt) setCreationDate(convertToDate(product.createdAt) || new Date());
+            
+            // ✅ [최종 수정] categoriesData가 null/undefined일 경우 빈 배열([])을 사용하도록 합니다.
+            const categoriesArray = categoriesData || [];
+            
+            // 🚨 [강화된 방어 로직]: product가 존재하고, category 필드 값이 존재할 때만 find를 시도합니다.
+            if (product.category) {
+              const mainCat = categoriesArray.find(c => c.name === product.category);
+              if (mainCat) setSelectedMainCategory(mainCat.id);
+            }
+            
+            setInitialImageUrls(product.imageUrls || []);
+            setCurrentImageUrls(product.imageUrls || []);
+            setImagePreviews(product.imageUrls || []);
         }
 
-        if (roundToLoad) {
+        const salesHistory: SalesRound[] = Array.isArray((product as any)?.salesHistory)
+  ? (product as any).salesHistory
+  : [];
+
+let roundToLoad: SalesRound | undefined;
+if (mode === 'editRound' && roundId && product) {
+  roundToLoad = salesHistory.find(r => r.roundId === roundId);
+  if (!roundToLoad) { 
+    toast.error('판매 회차를 찾을 수 없습니다.'); 
+    navigate(`/admin/products/edit/${productId}`); 
+    return; 
+  }
+  setPageTitle(`'${product.groupName}' 회차 수정`);
+  setInitialRound(JSON.parse(JSON.stringify(roundToLoad)));
+} else if (mode === 'newRound' && product) {
+  roundToLoad = initialState?.lastRound || salesHistory[0];
+  if (roundToLoad) {
+    const roundNumMatch = roundToLoad.roundName.match(/\d+/);
+    const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : (salesHistory.length + 1);
+    setRoundName(`${newRoundNumber}차 판매`);
+  } else {
+    setRoundName('1차 판매');
+  }
+}
+
+
+        if (roundToLoad && product) {
           const roundData = roundToLoad as SalesRound & { preOrderTiers?: LoyaltyTier[]; allowedTiers?: LoyaltyTier[] };
           if (mode === 'editRound') setRoundName(roundData.roundName);
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
           setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK');
 
-          const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
+const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
 
             let displayStock: number | '' = vg.totalPhysicalStock ?? '';
             if (mode === 'editRound' && roundId) {
-                const key = `${product.id}-${roundId}-${vg.id}`;
+                const key = `${productId}-${roundId}-${vg.id}`;
                 const reservedCount = reservedMapData.get(key) || 0;
                 const configuredStock = vg.totalPhysicalStock ?? -1;
 
-                if (configuredStock === -1) {
-                    displayStock = '';
-                } else {
-                    displayStock = Math.max(0, configuredStock - reservedCount);
-                }
+                // ⛑️ [수정] Yi Dan의 제안대로 무제한 재고(-1)일 경우 ''(빈칸)으로 표시되도록 수정
+                displayStock = (configuredStock === -1) ? '' : Math.max(0, configuredStock - reservedCount);
+                
+            } else if (mode === 'newRound' && salesHistory[0]?.variantGroups) {
+              displayStock = '';
             }
 
             return {
               id: vg.id,
-              groupName: vg.groupName,
+              // ⛑️ 문자열 필드는 기본값 ''로
+              groupName: vg.groupName ?? '',
               totalPhysicalStock: displayStock,
-              stockUnitType: vg.stockUnitType,
+              // ⛑️ 문자열 필드 기본값
+              stockUnitType: vg.stockUnitType ?? '개',
               expirationDate,
               items: (vg.items || []).map((item: ProductItem) => ({
                 id: item.id,
-                name: item.name,
-                price: item.price,
+                // ⛑️ 문자열 필드 안전값
+                name: item.name ?? '',
+                // ⛑️ (핵심) price가 undefined면 ''로 (formatKRW와 text input 모두 안전)
+                price: (typeof item.price === 'number') ? item.price : '',
+                // 이미 방어 로직이 적용된 부분
                 limitQuantity: item.limitQuantity ?? '',
-                deductionAmount: item.stockDeductionAmount,
-                isBundleOption: bundleUnitKeywords.some(k => item.name.includes(k))
-              }))
+                deductionAmount: item.stockDeductionAmount ?? 1,
+                isBundleOption: bundleUnitKeywords.some(k => String(item.name ?? '').includes(k)),
+              })),
             };
-          });
-          setVariantGroups(mappedVGs);
+          });          setVariantGroups(mappedVGs);
 
           if (mode === 'editRound') {
             setPublishDate(convertToDate(roundData.publishAt) || new Date());
             setDeadlineDate(convertToDate(roundData.deadlineDate));
             setPickupDate(convertToDate(roundData.pickupDate));
             setPickupDeadlineDate(convertToDate(roundData.pickupDeadlineDate));
+          } else if (mode === 'newRound') {
+            // 새 회차의 날짜는 초기화하거나 마지막 회차의 날짜를 복사 (현재 로직 유지)
+            // 여기서는 기존 데이터를 사용하지 않고, 기본값이나 자동 계산된 값을 사용하도록 조정할 수 있으나, 
+            // 현재 코드는 'newRound' 모드일 때 날짜를 복사하지 않고 기본값(아래 useEffect)을 따르는 것으로 보입니다.
           }
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
           setPreOrderTiers(roundData.preOrderTiers || ['공구의 신', '공구왕']);
-          const secretForTiers = roundData.allowedTiers?.filter(t => t !== '주의 요망');
+          const secretForTiers = roundData.allowedTiers;
           setIsSecretProductEnabled(!!secretForTiers && secretForTiers.length < ALL_LOYALTY_TIERS.length);
           setSecretTiers(secretForTiers || []);
         }
@@ -415,7 +454,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   }, [mode, productId, roundId, navigate, initialState]);
 
   useEffect(() => {
-    getCategories().then(setCategories).catch(() => toast.error('카테고리 정보를 불러오는 데 실패했습니다.'));
+    // ✅ [수정] 기존에 분리되어 있던 카테고리 로딩 로직을 fetchData로 옮겼으므로,
+    // 새 상품 등록 시 초기화 로직만 남깁니다.
     if (mode === 'newProduct' && variantGroups.length === 0) {
       setVariantGroups([{
         id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개',
@@ -804,7 +844,7 @@ const settingsSummary = useMemo(() => {
         pickupDate: pickupDate ? Timestamp.fromDate(pickupDate) : null,
         pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
         isPrepaymentRequired: isPrepaymentRequired,
-        allowedTiers: isSecretProductEnabled ? secretTiers : ALL_LOYALTY_TIERS.concat(['주의 요망']),
+        allowedTiers: isSecretProductEnabled ? secretTiers : ALL_LOYALTY_TIERS,
         preOrderTiers: isPreOrderEnabled ? preOrderTiers : []
       };
 
@@ -1150,7 +1190,12 @@ const settingsSummary = useMemo(() => {
                         <div className="form-group-grid item-price">
                           <label>가격 *</label>
                           <div className="price-input-wrapper">
-                            <input type="text" value={formatKRW(item.price)} onChange={e => handlePriceChange(vg.id, item.id, e.target.value)} required/>
+                            <input
+  type="text"
+  value={formatKRW(typeof item.price === 'number' ? item.price : '')}
+  onChange={e => handlePriceChange(vg.id, item.id, e.target.value)}
+  required
+/>
                             <span>원</span>
                           </div>
                         </div>

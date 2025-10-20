@@ -97,6 +97,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     };
     
     // ✅ handleImmediateOrder 함수 로직 수정
+// ✅ handleImmediateOrder 함수 로직 수정
     const handleImmediateOrder = async () => {
         if (!user || !userDocument) {
             showToast('error', '로그인이 필요합니다.');
@@ -112,7 +113,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             return;
         }
 
-        setReservationStatus('processing');
+        setReservationStatus('processing'); // '처리 중...'으로 변경
 
         try {
             const prepaymentRequired = cardData.displayRound.isPrepaymentRequired;
@@ -150,30 +151,37 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             };
 
             const result = await submitOrderCallable(orderPayload);
+            
+            // ✅ [수정] 백엔드 응답을 확인하여 분기 처리
+            const data = result.data as { orderIds?: string[], updatedOrderIds?: string[], message?: string };
+            
+            if (data.updatedOrderIds && data.updatedOrderIds.length > 0) {
+                // --- (A) 수량 추가 성공 ---
+                showToast('success', '기존 예약에 수량이 추가되었습니다.');
+                setReservationStatus('success'); // '예약 완료' 버튼을 잠시 보여줌
+                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
 
-            // 백엔드 응답에서 'orderIds'를 확인합니다.
-            if (!result.data.orderIds || result.data.orderIds.length === 0) {
-                // 이 에러는 클라우드 함수 내부 검증 오류일 가능성이 높음
-                throw new Error(result.data.message || '예약 생성에 실패했습니다. (재고 부족 또는 유효성 검사 실패)');
-            }
-
-            setReservationStatus('success');
-
-            if (prepaymentRequired) {
-                setPrepaymentPrice(totalPrice);
-                setPrepaymentModalOpen(true);
+            } else if (data.orderIds && data.orderIds.length > 0) {
+                // --- (B) 신규 예약 성공 ---
+                setReservationStatus('success'); // '예약 완료' 버튼
+                if (prepaymentRequired) {
+                    setPrepaymentPrice(totalPrice);
+                    setPrepaymentModalOpen(true);
+                }
+                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
+                
             } else {
-                // 예약 완료 메시지는 success 상태 후 2초 뒤에 자연스럽게 사라지므로,
-                // 별도의 success toast는 필요하지 않음.
+                 // --- (C) 실패 (재고 부족 등) ---
+                throw new Error(data.message || '예약 생성에 실패했습니다. (재고 부족 또는 유효성 검사 실패)');
             }
 
         } catch (error: any) {
             showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
-            setReservationStatus('idle');
+            setReservationStatus('idle'); // 에러 발생 시 idle로 복귀
             setQuantity(1);
         }
     };
-
+    
     const handleWaitlistRequest = async () => {
         if (!user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
         if (reservationStatus !== 'idle' || !cardData?.singleOptionItem || !cardData.singleOptionVg) return;

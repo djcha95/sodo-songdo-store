@@ -16,6 +16,7 @@ import { usePageRefs } from '@/layouts/CustomerLayout';
 import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
 import '@/styles/common.css';
+import { Outlet } from 'react-router-dom';
 
 dayjs.extend(isBetween);
 dayjs.locale('ko');
@@ -115,12 +116,24 @@ const SimpleOrderPage: React.FC = () => {
     const tempSecondary: ProductWithUIState[] = [];
     products.forEach(product => {
       const round = getDisplayRound(product);
-      if (!round || round.status === 'draft') return; // ✅ [수정] 너무 엄격했던 필터링 조건 완화
+      // ✅ [수정] getDisplayRound에서 수동 종료/매진된 상품은 이미 필터링되지만, 한번 더 확인합니다.
+      if (!round || round.status === 'draft') return; 
+      
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
-      const finalPhase = (round.isManuallyOnsite) ? 'onsite' : (primaryEndDate && now.isBefore(primaryEndDate)) ? 'primary' : (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '(]')) ? 'secondary' : 'past';
-      if (finalPhase === 'past' || finalPhase === 'onsite') return;
+      
+      // ✅ [수정] determineActionState를 호출하여 'ENDED' 상태인지 확인합니다.
       const actionState = determineActionState(round, userDocument as any);
+      
+      // 'ENDED' 상태(수동 종료, 재고 소진 등)인 상품은 노출하지 않습니다.
+      if (actionState === 'ENDED') return;
+
+      const finalPhase = (round.isManuallyOnsite) ? 'onsite' : (primaryEndDate && now.isBefore(primaryEndDate)) ? 'primary' : (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '(]')) ? 'secondary' : 'past';
+      
+      // 'past'나 'onsite'는 SimpleOrderPage에서 노출하지 않습니다.
+      if (finalPhase === 'past' || finalPhase === 'onsite') return; 
+      
       const productWithState: ProductWithUIState = { ...product, phase: finalPhase, displayRound: round, actionState };
+      
       if (finalPhase === 'primary') tempPrimary.push(productWithState);
       else if (finalPhase === 'secondary') tempSecondary.push(productWithState);
     });
@@ -150,8 +163,9 @@ const SimpleOrderPage: React.FC = () => {
   if (error) return <div className="error-message-container">{error}</div>;
 
   return (
-    <div className="customer-page-container simple-order-page">
-      <div className="tab-content-area">
+    <> {/* ✅ [수정] 전체를 Fragment로 감싸줍니다. */}
+      <div className="customer-page-container simple-order-page">
+        <div className="tab-content-area">
         <div ref={primaryRef} className="content-section">
           {primarySaleProducts.length > 0 && ( <div className="section-header-split"><h2 className="section-title"><span className="tab-icon">🔥</span> 공동구매 진행중</h2>{countdown && (<div className="countdown-timer-inline"><Clock size={16} /><span>{countdown}</span></div>)}</div>)}
           {primarySaleProducts.length > 0 ? (
@@ -168,6 +182,10 @@ const SimpleOrderPage: React.FC = () => {
         {!hasMore && products.length > 0 && <div className="end-of-list">모든 상품을 불러왔습니다.</div>}
       </div>
     </div>
+
+      {/* ✅ [추가] 상세 페이지 모달(ProductDetailPage)이 렌더링될 위치입니다. */}
+      <Outlet />
+    </>
   );
 };
 

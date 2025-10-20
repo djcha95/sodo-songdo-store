@@ -98,11 +98,21 @@ const router = createBrowserRouter([
           {
             element: <CustomerLayout />,
             children: [
-              { index: true, element: <SimpleOrderPage /> },
+              { 
+                path: "/", // ✅ [수정] 'index: true'를 'path: "/"'로 변경
+                element: <SimpleOrderPage />, 
+                children: [ // ✅ [추가] 상세 페이지를 자식으로 중첩
+                  { 
+                    path: "product/:productId", 
+                    element: <ProductDetailPage /> 
+                  }
+                ]
+              },
               { path: "mypage/history", element: <OrderHistoryPage /> },
             ]
           },
-          { path: "product/:productId", element: <ProductDetailPage /> },
+          // ❌ [제거] 별도로 분리되어 있던 상세 페이지 경로를 제거합니다.
+          // { path: "product/:productId", element: <ProductDetailPage /> },
           
           // --- ✅ [복원] 관리자용 전체 경로 ---
           {

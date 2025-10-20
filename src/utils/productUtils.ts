@@ -100,14 +100,19 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
     const now = dayjs();
     const getPhasePriority = (round: OriginalSalesRound): number => {
         const publishAt = safeToDate(round.publishAt);
+        // ✅ [추가] 수동 종료/매진된 상품은 가장 낮은 우선순위로 밀어냅니다.
+        if (round.manualStatus === 'ended' || round.manualStatus === 'sold_out' || round.status === 'ended' || round.status === 'sold_out') return 5;
+        
         if (round.status === 'selling') return 1;
         if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 2;
         if (round.status === 'scheduled' && publishAt && now.isBefore(publishAt)) return 3;
-        if (round.status === 'ended' || round.status === 'sold_out') return 4;
-        return 5;
+        // 기존 4였던 'ended'/'sold_out'을 5로 옮겼으므로, 남은 상태에 대한 필터는 제거하거나 다른 우선순위를 부여합니다.
+        // 현재 로직상 4번이 없으므로, default 처리로 변경합니다.
+        return 4; // Draft 등 기타 상태
     };
     const sortedHistory = [...product.salesHistory]
-        .filter(r => r.status !== 'draft')
+        // ✅ [추가] draft, 수동 종료/매진된 상품은 제외합니다.
+        .filter(r => r.status !== 'draft' && r.manualStatus !== 'ended' && r.manualStatus !== 'sold_out')
         .sort((a, b) => {
             const priorityA = getPhasePriority(a);
             const priorityB = getPhasePriority(b);
@@ -115,7 +120,7 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
             switch (priorityA) {
                 case 1: case 2: return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
                 case 3: return (safeToDate(a.publishAt)?.getTime() ?? 0) - (safeToDate(b.publishAt)?.getTime() ?? 0);
-                case 4: return (safeToDate(b.deadlineDate)?.getTime() ?? 0) - (safeToDate(a.deadlineDate)?.getTime() ?? 0);
+                // case 4: case 5: 는 여기서 처리되지 않고, default로 넘어갑니다.
                 default: return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
             }
         });
@@ -124,6 +129,11 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
 
 // ✅ [수정] determineActionState의 round 파라미터 타입을 OriginalSalesRound로 명시
 export const determineActionState = (round: OriginalSalesRound, userDocument: UserDocument | null): ProductActionState => {
+  // 0. 관리자 수동 상태 및 기본 상태 확인 (가장 먼저 ENDED 처리)
+  if (round.manualStatus === 'ended' || round.manualStatus === 'sold_out' || round.status === 'ended' || round.status === 'sold_out') {
+      return 'ENDED';
+  }
+
   // 1. 판매 기간 확인
   const now = dayjs();
   const publishAt = safeToDate(round.publishAt);
@@ -143,23 +153,35 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
   // 2. 재고 확인
   const isAllOptionsSoldOut = () => {
     if (!round.variantGroups || round.variantGroups.length === 0) return true;
+    // 모든 옵션 그룹의 재고가 0 이하인지 확인
     return round.variantGroups.every(vg => {
       const stockInfo = getStockInfo(vg as VariantGroup);
+      // isLimited가 true이고, 남은 재고가 0 이하일 때
       return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
     });
   };
 
   // 3. 재고 상태와 판매 기간에 따라 상태 결정
   if (isAllOptionsSoldOut()) {
-    // 재고가 없지만, 1차 판매 기간이라면 '대기 가능'
+    // 재고가 없고, 1차 판매 기간이라면 '대기 가능'
     if (primaryEnd && now.isBefore(primaryEnd)) {
       return 'WAITLISTABLE';
     }
-    // 재고가 없고, 1차 판매 기간이 지났다면 '판매 종료'
+    // 재고가 없고, 1차 판매 기간이 지났거나 2차 기간이라면 '판매 종료'
+    // 2차 기간에 재고가 0이면 ENDED 처리하여 노출하지 않습니다.
     return 'ENDED';
   }
   
   // 4. 재고가 있다면, 옵션 선택 필요 여부에 따라 상태 결정
+  const allowedTiers = round.allowedTiers;
+  if (userDocument && Array.isArray(allowedTiers)) {
+      const userTier = userDocument.manualTier || userDocument.loyaltyTier || '공구초보'; // 사용자의 유효 등급 확인 (기본값 '공구초보')
+      if (!allowedTiers.includes(userTier)) {
+          return 'INELIGIBLE'; // 허용 등급이 아니면 'INELIGIBLE' 반환
+      }
+  }
+
+  // 5. 등급 검사 통과 시, 옵션 선택 필요 여부에 따라 상태 결정
   const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
   return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
 };
