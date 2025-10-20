@@ -37,6 +37,34 @@ export default defineConfig({
     },
   },
 
+  // ✅ [추가] build 옵션: 
+  // 거대한 index.js 파일을 라이브러리별로 분리하여 Vercel 배포 오류를 해결합니다.
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // node_modules의 라이브러리들을 분리합니다.
+          if (id.includes('node_modules')) {
+            // 1. firebase 관련 파일들을 'chunk-firebase'로 분리
+            if (id.includes('firebase')) {
+              return 'chunk-firebase';
+            }
+            // 2. react 관련 파일들을 'chunk-react'로 분리
+            if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('react')) {
+              return 'chunk-react';
+            }
+            // 3. framer-motion을 'chunk-motion'으로 분리
+            if (id.includes('framer-motion')) {
+              return 'chunk-motion';
+            }
+            // 4. 기타 라이브러리 (dayjs, toast 등)
+            return 'chunk-vendor'; 
+          }
+        },
+      },
+    },
+  },
+
   test: {
     globals: true,
     environment: 'jsdom',
