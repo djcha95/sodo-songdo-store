@@ -1,84 +1,62 @@
 // vite.config.ts
-
-/// <reference types="vitest" />
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config'; // ⬅️ 여기만 변경!
 import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
-  
   cacheDir: '../../node_modules/.vite/sodomall-app-cache',
-  
+
   server: {
     proxy: {
       '/api': {
         target: 'https://asia-northeast3-sso-do.cloudfunctions.net',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''), 
+        rewrite: (p) => p.replace(/^\/api/, ''),
       },
       '/firebase-storage-proxy': {
         target: 'https://firebasestorage.googleapis.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/firebase-storage-proxy/, '')
-      }
-    },
-  },
-
-  // ✅ [수정] build 옵션: 
-  // manualChunks를 더 세분화하여 500kB가 넘는 chunk-firebase를 분리합니다.
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          // node_modules의 라이브러리들을 분리합니다.
-          if (id.includes('node_modules')) {
-            
-            // --- 1. Firebase를 서비스별로 더 잘게 분리 ---
-            if (id.includes('firebase/auth')) {
-              return 'chunk-firebase-auth';
-            }
-            if (id.includes('firebase/firestore')) {
-              return 'chunk-firebase-firestore';
-            }
-            if (id.includes('firebase/functions')) {
-              return 'chunk-firebase-functions';
-            }
-            // 기타 firebase (예: app, storage 등)
-            if (id.includes('firebase')) {
-              return 'chunk-firebase-core';
-            }
-
-            // --- 2. React 관련 ---
-            if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('react')) {
-              return 'chunk-react';
-            }
-
-            // --- 3. UI 라이브러리 ---
-            if (id.includes('framer-motion')) {
-              return 'chunk-motion';
-            }
-            if (id.includes('swiper')) {
-              return 'chunk-swiper';
-            }
-
-            // --- 4. 유틸리티 라이브러리 ---
-            if (id.includes('dayjs')) {
-              return 'chunk-dayjs';
-            }
-            if (id.includes('react-hot-toast')) {
-              return 'chunk-toast';
-            }
-            
-            // --- 5. 그 외 모든 벤더 ---
-            return 'chunk-vendor'; 
-          }
-        },
+        rewrite: (p) => p.replace(/^\/firebase-storage-proxy/, ''),
       },
     },
   },
 
+  build: {
+    target: 'es2020',
+    sourcemap: false,
+    minify: 'esbuild',
+    rollupOptions: {
+      treeshake: true,
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/.test(id)) {
+              return 'chunk-react';
+            }
+            const svc =
+              id.match(
+                /[\\/]node_modules[\\/](?:firebase|@firebase)[\\/](app-check|analytics|auth|firestore|functions|storage|messaging|performance|remote-config|app)[\\/]/
+              )?.[1] ||
+              (/[\\/]node_modules[\\/](?:firebase|@firebase)[\\/]app[\\/]/.test(id) ? 'app' : null);
+
+            if (svc) return `chunk-firebase-${svc}`;
+            return 'chunk-vendor';
+          }
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
+    chunkSizeWarningLimit: 800,
+  },
+
+  optimizeDeps: {
+    esbuildOptions: { target: 'es2020' },
+  },
+
+  // Vitest 설정 — 이제 타입 에러 없음
   test: {
     globals: true,
     environment: 'jsdom',
