@@ -33,12 +33,14 @@ export default defineConfig({
       treeshake: true, // treeshake 옵션 위치 수정됨 (이전 단계에서)
       output: {
         manualChunks(id) {
-          // -------- React / Router 묶음 --------
           if (id.includes('node_modules')) {
-            if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/.test(id)) {
-              return 'chunk-react';
-            }
-            // -------- Firebase 서비스별 분리 --------
+            // ❌ [제거] React/ReactDOM/React Router를 chunk-react로 분리하는 규칙 제거
+            // if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/.test(id)) {
+            //   return 'chunk-react';
+            // }
+
+            // -------- Firebase 공개 진입점과 내부 패키지 모두 커버 --------
+            // (Firebase 분리 로직은 그대로 유지)
             const svc = (
               id.match(
                 /[\\/]node_modules[\\/](?:firebase|@firebase)[\\/](app-check|analytics|auth|firestore|functions|storage|messaging|performance|remote-config|app)[\\/]/
@@ -48,7 +50,9 @@ export default defineConfig({
             if (svc) {
               return `chunk-firebase-${svc}`;
             }
-            // -------- 기타 외부 라이브러리 --------
+            
+            // -------- 그 외 모든 외부 라이브러리 --------
+            // (React 관련 라이브러리도 여기에 포함되어 처리될 것입니다)
             return 'chunk-vendor';
           }
         },
