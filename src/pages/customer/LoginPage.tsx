@@ -39,7 +39,8 @@ const LoginPage: React.FC = () => {
       return;
     }
 
-    const script = document.Element("script");
+    // ❌ [오류 수정] document.Element("script") 대신 document.createElement("script") 사용
+    const script = document.createElement("script");
     script.id = KAKAO_SDK_SCRIPT_ID;
     script.src = "https://developers.kakao.com/sdk/js/kakao.js";
     script.async = true;
