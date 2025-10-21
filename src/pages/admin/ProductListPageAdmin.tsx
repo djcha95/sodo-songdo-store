@@ -550,12 +550,73 @@ const ProductListPageAdmin: React.FC = () => {
     fetchData(); 
   }, [fetchData, searchParams]);
 
-  const enrichedRounds = useMemo<EnrichedRoundItem[]>(() => {
+const enrichedRounds = useMemo<EnrichedRoundItem[]>(() => {
     let flatRounds: EnrichedRoundItem[] = [];
-    (pageData.allProducts || []).forEach(p => {
-        (p.salesHistory || []).forEach(r => {
-            if (!r.variantGroups || r.variantGroups.length === 0) {
-                reportInfo('ProductListPageAdmin.dataAnomaly', '옵션 그룹 없음', { productId: p.id, roundId: r.roundId });
+    
+    // pageData.allProducts가 배열인지 먼저 확인 (추가적인 안전장치)
+    if (!Array.isArray(pageData.allProducts)) {
+        reportError('ProductListPageAdmin.invalidAllProducts', new Error('pageData.allProducts is not an array'), { pageDataType: typeof pageData.allProducts });
+        return []; // 빈 배열 반환
+    }
+
+    pageData.allProducts.forEach(p => {
+        
+        // ✅ [수정] p.salesHistory가 실제로 배열인지 확인하는 로직 추가
+        if (Array.isArray(p.salesHistory)) {
+            
+            // salesHistory가 빈 배열이면 더 이상 처리할 필요 없음
+            if (p.salesHistory.length === 0) {
+                // 필요하다면 빈 salesHistory를 가진 상품을 로그로 남길 수 있습니다.
+                // reportInfo('ProductListPageAdmin.emptySalesHistory', 'Product has empty salesHistory array', { productId: p.id });
+                // 빈 배열이면 forEach는 실행되지 않으므로 그냥 둡니다.
+            }
+
+            p.salesHistory.forEach(r => { 
+                // --- 시작: 기존 round 처리 로직 (변경 없음) ---
+                if (!r.variantGroups || r.variantGroups.length === 0) {
+                    reportInfo('ProductListPageAdmin.dataAnomaly', '옵션 그룹 없음', { productId: p.id, roundId: r.roundId });
+                    // 데이터 오류 시에도 기본 정보를 포함하여 목록에 표시 (선택적)
+                    flatRounds.push({
+                        productId: p.id,
+                        productName: p.groupName,
+                        productImage: p.imageUrls?.[0] || '/placeholder.svg',
+                        category: p.category || '미지정',
+                        storageType: p.storageType,
+                        round: r, // round 정보는 포함
+                        uniqueId: `${p.id}-${r.roundId}`,
+                        enrichedVariantGroups: [], // 빈 배열
+                        dynamicStatus: { text: "옵션 오류", className: "error" },
+                    });
+                    return; // 다음 round로 넘어감
+                }
+
+                // variantGroups도 배열인지 추가 확인 (더 강력한 방어)
+                const variantGroupsArray = Array.isArray(r.variantGroups) ? r.variantGroups : [];
+                if (r.variantGroups && !Array.isArray(r.variantGroups)) {
+                     reportError('ProductListPageAdmin.invalidVariantGroups', new Error('variantGroups is not an array'), { productId: p.id, roundId: r.roundId, vgType: typeof r.variantGroups });
+                }
+
+                const enrichedVariantGroups: EnrichedVariantGroup[] = variantGroupsArray.map(vg => {
+                    const reservedCount = vg.reservedCount || 0;
+                    const pickedUpCount = vg.pickedUpCount || 0;
+                    const configuredStock = vg.totalPhysicalStock ?? -1;
+                    const remainingStock = configuredStock === -1 ? Infinity : configuredStock - reservedCount;
+                    const dynamicStatus = getDynamicStatus(r, remainingStock);
+                    // waitlist가 배열인지 확인 후 계산
+                    const waitlistCountForGroup = Array.isArray(r.waitlist) 
+                        ? r.waitlist.filter(w => w.variantGroupId === vg.id).reduce((sum, w) => sum + w.quantity, 0) 
+                        : 0;
+                    if (r.waitlist && !Array.isArray(r.waitlist)) {
+                         reportError('ProductListPageAdmin.invalidWaitlist', new Error('waitlist is not an array'), { productId: p.id, roundId: r.roundId, waitlistType: typeof r.waitlist });
+                    }
+
+                    return { ...vg, reservedCount, pickedUpCount, configuredStock, remainingStock, dynamicStatus, waitlistCount: waitlistCountForGroup };
+                });
+
+                const isAllSoldOut = enrichedVariantGroups.every(vg => vg.dynamicStatus.className === 'sold-out');
+                const totalRemainingStock = enrichedVariantGroups.reduce((sum, vg) => sum + (vg.remainingStock === Infinity ? Infinity : vg.remainingStock), 0);
+                const overallDynamicStatus = isAllSoldOut ? { text: '매진', className: 'sold-out' } : getDynamicStatus(r, totalRemainingStock);
+
                 flatRounds.push({
                     productId: p.id,
                     productName: p.groupName,
@@ -564,65 +625,96 @@ const ProductListPageAdmin: React.FC = () => {
                     storageType: p.storageType,
                     round: r,
                     uniqueId: `${p.id}-${r.roundId}`,
+                    enrichedVariantGroups,
+                    dynamicStatus: overallDynamicStatus,
+                });
+                // --- 종료: 기존 round 처리 로직 ---
+            });
+        } else {
+            // 🚨 salesHistory가 존재하지만 배열이 아닌 경우 (데이터 이상 감지)
+            if (p.salesHistory) { // null 이나 undefined가 아닐 때만 로그
+                 reportError('ProductListPageAdmin.invalidSalesHistory', new Error('salesHistory is not an array'), { productId: p.id, salesHistoryType: typeof p.salesHistory });
+                 // 오류 데이터를 목록에 포함 (선택적)
+                 flatRounds.push({
+                    productId: p.id,
+                    productName: p.groupName,
+                    productImage: p.imageUrls?.[0] || '/placeholder.svg',
+                    category: p.category || '미지정',
+                    storageType: p.storageType,
+                    round: {} as SalesRound, // 빈 객체 또는 null로 처리
+                    uniqueId: `${p.id}-INVALID-HISTORY`,
                     enrichedVariantGroups: [],
                     dynamicStatus: { text: "데이터 오류", className: "error" },
-                });
-                return;
+                 });
             }
-
-            const enrichedVariantGroups: EnrichedVariantGroup[] = r.variantGroups.map(vg => {
-                const reservedCount = vg.reservedCount || 0;
-                const pickedUpCount = vg.pickedUpCount || 0;
-                const configuredStock = vg.totalPhysicalStock ?? -1;
-                const remainingStock = configuredStock === -1 ? Infinity : configuredStock - reservedCount;
-                const dynamicStatus = getDynamicStatus(r, remainingStock);
-                const waitlistCountForGroup = r.waitlist?.filter(w => w.variantGroupId === vg.id).reduce((sum, w) => sum + w.quantity, 0) || 0;
-
-                return { ...vg, reservedCount, pickedUpCount, configuredStock, remainingStock, dynamicStatus, waitlistCount: waitlistCountForGroup };
-            });
-
-            const isAllSoldOut = enrichedVariantGroups.every(vg => vg.dynamicStatus.className === 'sold-out');
-            const totalRemainingStock = enrichedVariantGroups.reduce((sum, vg) => sum + (vg.remainingStock === Infinity ? Infinity : vg.remainingStock), 0);
-            const overallDynamicStatus = isAllSoldOut ? { text: '매진', className: 'sold-out' } : getDynamicStatus(r, totalRemainingStock);
-
-            flatRounds.push({
-                productId: p.id,
-                productName: p.groupName,
-                productImage: p.imageUrls?.[0] || '/placeholder.svg',
-                category: p.category || '미지정',
-                storageType: p.storageType,
-                round: r,
-                uniqueId: `${p.id}-${r.roundId}`,
-                enrichedVariantGroups,
-                dynamicStatus: overallDynamicStatus,
-            });
-        });
+            // salesHistory가 null 또는 undefined면 여기서 아무것도 하지 않음 (정상)
+        }
     });
-
-    if (searchQuery) flatRounds = flatRounds.filter(item => item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || item.round.roundName.toLowerCase().includes(searchQuery.toLowerCase()));
-    if (filterCategory !== 'all') flatRounds = flatRounds.filter(item => item.category === filterCategory);
     
-    // ✅ [수정] 필터 로직 수정 (RAFFLE 관련 필터 제거)
+    // --- 시작: 기존 필터링 및 정렬 로직 (변경 없음) ---
+    if (searchQuery) {
+        flatRounds = flatRounds.filter(item => 
+            item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            item.round?.roundName?.toLowerCase().includes(searchQuery.toLowerCase()) // roundName도 null 체크
+        );
+    }
+    if (filterCategory !== 'all') {
+        flatRounds = flatRounds.filter(item => item.category === filterCategory);
+    }
     if (filterStatus !== 'all') {
         flatRounds = flatRounds.filter(item => item.dynamicStatus.text === filterStatus);
     }
 
     return flatRounds.sort((a, b) => {
         const key = sortConfig.key;
-        let aVal: any; let bVal: any;
-        if (key === 'roundCreatedAt') { aVal = safeToDate(a.round.createdAt)?.getTime() || 0; bVal = safeToDate(b.round.createdAt)?.getTime() || 0; }
-        else if (key === 'pickupDate') { aVal = safeToDate(a.round.pickupDate)?.getTime() || 0; bVal = safeToDate(b.round.pickupDate)?.getTime() || 0; }
-        else if (key === 'expirationDate') {
-            const aEarliestExp = a.enrichedVariantGroups.length > 0 ? Math.min(...a.enrichedVariantGroups.map(vg => getEarliestExpirationDateForGroup(vg))) : Infinity;
-            const bEarliestExp = b.enrichedVariantGroups.length > 0 ? Math.min(...b.enrichedVariantGroups.map(vg => getEarliestExpirationDateForGroup(vg))) : Infinity;
-            aVal = aEarliestExp; bVal = bEarliestExp;
-            if (aVal === Infinity && bVal !== Infinity) return 1; if (bVal === Infinity && aVal !== Infinity) return -1; if (aVal === Infinity && bVal === Infinity) return 0;
-        } else { aVal = a[key as keyof EnrichedRoundItem] ?? 0; bVal = b[key as keyof EnrichedRoundItem] ?? 0; }
-        if (sortConfig.direction === 'asc') return aVal < bVal ? -1 : 1;
-        return aVal > bVal ? -1 : 1;
-    });
-  }, [pageData, searchQuery, filterCategory, filterStatus, sortConfig]);
+        let aVal: any; 
+        let bVal: any;
+        
+        // round 객체가 유효한지 확인 후 값 접근
+        const aRound = a.round || {};
+        const bRound = b.round || {};
 
+        if (key === 'roundCreatedAt') { 
+            aVal = safeToDate(aRound.createdAt)?.getTime() || 0; 
+            bVal = safeToDate(bRound.createdAt)?.getTime() || 0; 
+        } else if (key === 'pickupDate') { 
+            aVal = safeToDate(aRound.pickupDate)?.getTime() || 0; 
+            bVal = safeToDate(bRound.pickupDate)?.getTime() || 0; 
+        } else if (key === 'expirationDate') {
+            const getEarliest = (groups: EnrichedVariantGroup[]) => {
+                 if (!Array.isArray(groups) || groups.length === 0) return Infinity;
+                 const allDates = groups.flatMap(vg => 
+                     Array.isArray(vg.items) ? vg.items.map(i => i.expirationDate ? safeToDate(i.expirationDate)?.getTime() : undefined) : []
+                 ).filter((d): d is number => d !== undefined && d !== null);
+                 return allDates.length > 0 ? Math.min(...allDates) : Infinity;
+            };
+            aVal = getEarliest(a.enrichedVariantGroups);
+            bVal = getEarliest(b.enrichedVariantGroups);
+            if (aVal === Infinity && bVal !== Infinity) return 1; 
+            if (bVal === Infinity && aVal !== Infinity) return -1; 
+            if (aVal === Infinity && bVal === Infinity) return 0;
+        } else if (key === 'productName' || key === 'category') {
+             aVal = a[key] ?? ''; // 기본값 ''
+             bVal = b[key] ?? ''; // 기본값 ''
+             // 문자열 비교는 localeCompare 사용 권장 (한글 등)
+             return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        } else { 
+            // 다른 키에 대한 처리 (만약 있다면)
+             aVal = (a as any)[key] ?? 0; 
+             bVal = (b as any)[key] ?? 0; 
+        }
+        
+        // 숫자 비교
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+             return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+
+        // 기본 비교 (타입이 다르거나 비교 불가 시)
+        return 0;
+    });
+    // --- 종료: 기존 필터링 및 정렬 로직 ---
+
+  }, [pageData, searchQuery, filterCategory, filterStatus, sortConfig]); // 의존성 배열 확인
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterCategory, filterStatus, itemsPerPage]);
   const paginatedRounds = useMemo(() => { const startIndex = (currentPage - 1) * itemsPerPage; return enrichedRounds.slice(startIndex, startIndex + itemsPerPage); }, [enrichedRounds, currentPage, itemsPerPage]);
   useEffect(() => { const allExpandableIds = new Set(enrichedRounds.filter(item => item.enrichedVariantGroups.length > 1).map(item => item.uniqueId)); setExpandedRoundIds(allExpandableIds); }, [enrichedRounds]);

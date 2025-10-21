@@ -379,21 +379,50 @@ export const getProductsWithStock = onCall(
         });
       });
       const productsWithClaimedData = products.map((product) => {
-        if (!Array.isArray(product.salesHistory)) {
-          return product;
+        
+        // ✅ [수정] product.salesHistory가 배열인지 확인하고, 아니면 빈 배열로 대체
+        const salesHistoryArray = Array.isArray(product.salesHistory) ? product.salesHistory : [];
+        
+        // salesHistoryArray가 비어있으면 더 이상 처리할 필요 없음
+        if (salesHistoryArray.length === 0) {
+             if (product.salesHistory && !Array.isArray(product.salesHistory)) { // 원래 salesHistory가 있었는데 배열이 아니었던 경우 로그
+                logger.warn(`Product ${product.id} has invalid salesHistory (type: ${typeof product.salesHistory}), returning empty salesHistory.`);
+             }
+             // salesHistory가 null, undefined 또는 빈 배열이면 정상 처리
+             return { ...product, salesHistory: [] }; // salesHistory를 항상 배열로 반환
         }
-        const newSalesHistory: SalesRound[] = product.salesHistory.map((round) => {
-          if (!Array.isArray(round.variantGroups)) {
-            return round;
+
+        // ✅ [수정] 원본 product.salesHistory 대신 salesHistoryArray를 사용
+        const newSalesHistory: SalesRound[] = salesHistoryArray.map((round) => {
+          
+          // ✅ [추가] round.variantGroups도 배열인지 확인 (방어 코드 강화)
+          const variantGroupsArray = Array.isArray(round.variantGroups) ? round.variantGroups : [];
+
+          if (variantGroupsArray.length === 0) {
+              if (round.variantGroups && !Array.isArray(round.variantGroups)) {
+                  logger.warn(`Round ${round.roundId} in product ${product.id} has invalid variantGroups (type: ${typeof round.variantGroups}), returning empty variantGroups.`);
+              }
+               // variantGroups가 null, undefined 또는 빈 배열이면 정상 처리
+              return { ...round, variantGroups: [] }; // variantGroups를 항상 배열로 반환
           }
-          const newVariantGroups: VariantGroup[] = round.variantGroups.map((vg) => {
+
+          // ✅ [수정] round.variantGroups 대신 variantGroupsArray 사용 (재고 계산 로직은 그대로)
+          const newVariantGroups = variantGroupsArray.map((vg) => {
             const key = `${product.id}-${round.roundId}-${vg.id}`;
-            return { ...vg, reservedCount: claimedMap.get(key) || 0, pickedUpCount: pickedUpMap.get(key) || 0 };
+            // 타입스크립트 추론을 돕기 위해 타입을 명시적으로 지정할 수 있습니다. (기존 로직 유지)
+            const enrichedVg = { 
+                ...vg, 
+                reservedCount: claimedMap.get(key) || 0, 
+                pickedUpCount: pickedUpMap.get(key) || 0 
+            };
+            return enrichedVg as VariantGroup & { reservedCount: number; pickedUpCount: number }; // 타입 단언 사용 유지
           });
           return { ...round, variantGroups: newVariantGroups };
         });
         return { ...product, salesHistory: newSalesHistory };
       });
+      
+      return { products: productsWithClaimedData, lastVisible: null }; // 최종 반환
       return { products: productsWithClaimedData, lastVisible: null };
     } catch (error) {
       logger.error("getProductsWithStock error:", error);
