@@ -7,6 +7,7 @@ import {
   getFirestore, collection, addDoc, query, doc, getDoc, getDocs, 
   updateDoc, writeBatch, increment, arrayUnion, where, Timestamp, 
   runTransaction, 
+  orderBy, limit, startAfter, // ✅ [수정] DB 직접 조회를 위한 Firestore 함수 추가
   type DocumentData, type DocumentReference, type WriteBatch 
 } from 'firebase/firestore';
 import { getStorage, ref, deleteObject } from 'firebase/storage';
@@ -51,7 +52,12 @@ function overlayKey(productId: string, roundId: string, vgId: string) {
 }
 
 function applyReservedOverlay(product: Product, reservedMap: Map<string, number>): Product {
-  if (!product?.salesHistory) return product;
+  // 💡 [수정] 
+  // 기존: if (!product?.salesHistory) return product;
+  // product.salesHistory가 undefined, null 뿐만 아니라, 아예 배열이 아닌 경우(.map 오류 발생)를
+  // 방지하기 위해 명시적인 배열(Array) 확인 로직으로 변경합니다.
+  if (!Array.isArray(product?.salesHistory)) return product;
+
   product.salesHistory = product.salesHistory.map((round) => {
     const vgs = (round.variantGroups || []).map((vg) => {
       const key = overlayKey(product.id, round.roundId, vg.id);
@@ -67,10 +73,6 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 // 🚀 '최신식' Cloud Function 호출 함수 (from '신' 파일)
 // ========================================================
 
-// [수정] 'productApi'라는 이름의 함수가 404 (Not Found) 오류를 일으킵니다.
-// 각 기능별로 별도의 Cloud Function이 배포된 것으로 가정하고 개별 callable을 생성합니다.
-// const productApi = httpsCallable(functions, 'productApi'); // 404 오류 발생
-
 // [수정] 각 action에 대한 개별 callable 생성
 const addProductWithFirstRoundCallable = httpsCallable(functions, 'addProductWithFirstRound');
 const addNewSalesRoundCallable = httpsCallable(functions, 'addNewSalesRound');
@@ -83,7 +85,8 @@ const updateMultipleVariantGroupStocksCallable = httpsCallable(functions, 'updat
 const updateMultipleSalesRoundStatusesCallable = httpsCallable(functions, 'updateMultipleSalesRoundStatuses');
 
 // --- 기존 함수 (이름 충돌 없음) ---
-const getProductsWithStockCallable = httpsCallable(functions, 'getProductsWithStock');
+// ❌ [제거] 5초 '콜드 스타트'의 원인이므로 이 함수는 더 이상 사용하지 않습니다.
+// const getProductsWithStockCallable = httpsCallable(functions, 'getProductsWithStock'); 
 const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock');
 
 // --- 1. 신규 상품 + 첫 회차 등록 ---
@@ -93,12 +96,6 @@ export const addProductWithFirstRound = async (
   imageFiles: File[], // ✅ [수정] imageFiles 파라미터가 누락되어 추가합니다.
   creationDate: Date
 ): Promise<any> => {
-  // [수정] productApi 대신 addProductWithFirstRoundCallable을 사용하고, payload를 직접 전달합니다.
-  // imageFiles는 이 함수에서 직접 처리하는 것이 아니라, updateProductCoreInfo처럼
-  // Cloud Function이 URL을 받은 후 별도 처리하거나, 
-  // 혹은 이 함수가 호출되기 전에 업로드되어야 합니다.
-  // 여기서는 productApi 호출 규격을 맞추기 위해 payload만 수정합니다.
-  // imageFiles 관련 로직은 updateProductCoreInfo를 참고하여 서버 함수와 맞춰야 할 수 있습니다.
   const result = await addProductWithFirstRoundCallable({
     productData,
     salesRoundData,
@@ -112,7 +109,6 @@ export const addNewSalesRound = async (
   productId: string,
   salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>
 ): Promise<any> => {
-  // [수정] productApi 대신 addNewSalesRoundCallable을 사용합니다.
   const result = await addNewSalesRoundCallable({
     productId,
     salesRoundData,
@@ -128,20 +124,10 @@ export const updateProductCoreInfo = async (
   finalImageUrls: string[],
   initialImageUrls: string[] // ✅ [수정] initialImageUrls 파라미터가 누락되어 추가합니다.
 ): Promise<any> => {
-  // [수정] productApi 대신 updateProductCoreInfoCallable을 사용합니다.
-  // newFiles와 initialImageUrls는 ProductForm.tsx에서 전달되지만
-  // productApi 호출 시 누락되어 있었습니다. 
-  // 서버 함수가 이 파라미터들을 받는다고 가정하고 payload에 추가합니다.
   const result = await updateProductCoreInfoCallable({
     productId,
     productData,
     finalImageUrls,
-    // newFiles는 callable로 직접 전송할 수 없으므로,
-    // 이 함수(updateProductCoreInfo)가 호출되기 전에
-    // uploadImages 등을 통해 URL로 변환되어야 합니다.
-    // ProductForm.tsx (1029 라인)는 newFiles를 그대로 넘기고 있습니다.
-    // 이는 ProductForm.tsx의 handleSubmit 로직이 수정되어야 함을 시사합니다.
-    // (이 파일에서는 우선 호출 시그니처만 맞춥니다.)
   });
   return result.data;
 };
@@ -152,7 +138,6 @@ export const updateSalesRound = async (
   roundId: string,
   salesRoundData: Partial<SalesRound>
 ): Promise<any> => {
-  // [수정] productApi 대신 updateSalesRoundCallable을 사용합니다.
   const result = await updateSalesRoundCallable({
     productId,
     roundId,
@@ -162,12 +147,10 @@ export const updateSalesRound = async (
 };
 
 // --- 5. 단일 상품 조회 (서버) ---
-// (참고: '구' 파일의 클라이언트 'getProductById'는 이 함수로 대체됩니다)
 export const getProductById = async (productId: string): Promise<Product | null> => {
   const result = await getProductByIdCallable({ productId });
   const { product } = result.data as { product: Product | null };
   
-  // '구' 파일의 오버레이 로직을 클라이언트에서도 한번 더 적용 (안전장치)
   if (product) {
     const reservedMap = await getReservedQuantitiesMap();
     return applyReservedOverlay(product, reservedMap);
@@ -177,7 +160,6 @@ export const getProductById = async (productId: string): Promise<Product | null>
 
 // --- 6. 상품명으로 검색 (서버) ---
 export const searchProductsByName = async (name: string): Promise<Product[]> => {
-  // [수정] productApi 대신 searchProductsByNameCallable을 사용합니다.
   const result = await searchProductsByNameCallable({ name });
   return result.data as Product[];
 };
@@ -186,14 +168,12 @@ export const searchProductsByName = async (name: string): Promise<Product[]> => 
 export const deleteSalesRounds = async (
   deletions: { productId: string; roundId: string }[]
 ): Promise<any> => {
-  // [수정] productApi 대신 deleteSalesRoundsCallable을 사용합니다.
   const result = await deleteSalesRoundsCallable({ deletions });
   return result.data;
 };
 
 // --- 8. 대기자 명단 조회 (서버) ---
 export const getWaitlistForRound = async (productId: string, roundId: string): Promise<any[]> => {
-    // [수정] productApi 대신 getWaitlistForRoundCallable을 사용합니다.
     const result = await getWaitlistForRoundCallable({ productId, roundId });
     return result.data as any[];
 }
@@ -202,7 +182,6 @@ export const getWaitlistForRound = async (productId: string, roundId: string): P
 export const updateMultipleVariantGroupStocks = async (
     updates: { productId: string; roundId: string; variantGroupId: string; newStock: number }[]
 ): Promise<any> => {
-    // [수정] productApi 대신 updateMultipleVariantGroupStocksCallable을 사용합니다.
     const result = await updateMultipleVariantGroupStocksCallable({ updates });
     return result.data;
 };
@@ -211,7 +190,6 @@ export const updateMultipleVariantGroupStocks = async (
 export const updateMultipleSalesRoundStatuses = async (
   updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
 ): Promise<any> => {
-    // [수정] productApi 대신 updateMultipleSalesRoundStatusesCallable을 사용합니다.
     const result = await updateMultipleSalesRoundStatusesCallable({ updates });
     return result.data;
 };
@@ -242,6 +220,10 @@ export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> =
 
   allProductsSnapshot.docs.forEach(doc => {
     const product = { id: doc.id, ...doc.data() } as Product;
+
+    // 💡 [수정] 여기서도 applyReservedOverlay와 동일한 방어 코드를 추가합니다.
+    if (!Array.isArray(product.salesHistory)) return; // salesHistory가 배열이 아니면 이 product는 건너뜁니다.
+    
     (product.salesHistory || []).forEach(round => {
       if (round.waitlist && round.waitlist.length > 0) {
         const sortedWaitlist = [...round.waitlist].sort((a, b) => {
@@ -382,6 +364,12 @@ export const cancelWaitlistEntry = async (
     const productDoc = await transaction.get(productRef);
     if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
     const productData = productDoc.data() as Product;
+
+    // 💡 [수정] 여기서도 applyReservedOverlay와 동일한 방어 코드를 추가합니다.
+    if (!Array.isArray(productData.salesHistory)) {
+      throw new Error("상품 데이터에 salesHistory 배열이 없습니다.");
+    }
+    
     const newSalesHistory = [...productData.salesHistory];
     const roundIndex = newSalesHistory.findIndex(r => r.roundId === roundId);
     if (roundIndex === -1) throw new Error("판매 회차를 찾을 수 없습니다.");
@@ -408,6 +396,12 @@ export const updateItemStock = async (
     const productSnap = await transaction.get(productRef);
     if (!productSnap.exists()) throw new Error("상품을 찾을 수 없습니다.");
     const product = productSnap.data() as Product;
+
+    // 💡 [수정] 여기서도 applyReservedOverlay와 동일한 방어 코드를 추가합니다.
+    if (!Array.isArray(product.salesHistory)) {
+      throw new Error("상품 데이터에 salesHistory 배열이 없습니다.");
+    }
+
     const newSalesHistory = product.salesHistory.map((round: SalesRound) => {
       if (round.roundId === roundId) {
         const newVariantGroups = round.variantGroups.map((vg: VariantGroup) => {
@@ -433,29 +427,91 @@ export const updateItemStock = async (
 
 export interface GetProductsWithStockResponse {
   products: Product[];
-  lastVisible: number | null; // '구' 파일에서는 lastVisible이 number (timestamp) 였습니다.
+  lastVisible: number | null; // timestamp (millis)
 }
 
 type GetProductsWithStockPayload = {
   pageSize?: number;
-  lastVisible?: number | null;
+  lastVisible?: number | null; // timestamp (millis)
   category?: string | null;
 };
 
 /**
  * ✅ [업그레이드] 이제 이 함수가 상품 목록을 가져오는 유일한 공식 함수입니다.
- * (from '구' 파일, '신' 파일의 getProductsWithStockCallable을 사용)
+ * * 💡 [수정] 5초 '콜드 스타트' 문제를 해결하기 위해,
+ * Cloud Function(getProductsWithStockCallable) 호출 대신
+ * Firestore DB에서 직접 데이터를 조회하도록 로직을 변경합니다.
  */
 export const getProductsWithStock = async (
   payload: GetProductsWithStockPayload
 ): Promise<GetProductsWithStockResponse> => {
   try {
-    // '신' 파일의 'getProductsWithStockCallable'를 사용합니다.
-    const result = await getProductsWithStockCallable(payload);
-    return result.data as GetProductsWithStockResponse;
-  } catch (error) {
-    console.error("Error calling getProductsWithStock:", error);
-    throw new Error("상품 재고 정보를 불러오는 데 실패했습니다.");
+    // 1. 페이로드 해체 및 기본값 설정
+    const { pageSize = 10, lastVisible = null, category = null } = payload;
+    
+    // 2. 쿼리 제약 조건 배열 생성
+    const queryConstraints: any[] = []; // (any[] 타입 사용은 query 제약조건 동적 추가시 일반적)
+    
+    // 3. 기본 필터: 보관처리(isArchived)되지 않은 상품만 조회
+    queryConstraints.push(where('isArchived', '==', false));
+
+    // 4. 카테고리 필터 (선택 사항)
+    if (category) {
+      queryConstraints.push(where('category', '==', category));
+    }
+
+    // 5. 정렬: 생성일(createdAt) 기준 내림차순 정렬
+    // (참고: createdAt 필드가 Timestamp 형식이며, Firestore 인덱스가 생성되어 있어야 합니다)
+    queryConstraints.push(orderBy('createdAt', 'desc'));
+
+    // 6. 페이지네이션 (Cursor)
+    if (lastVisible) {
+      // lastVisible은 timestamp (millis) 숫자입니다. Firestore Timestamp 객체로 변환합니다.
+      const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
+      queryConstraints.push(startAfter(lastVisibleTimestamp));
+    }
+
+    // 7. 페이지 크기 제한
+    queryConstraints.push(limit(pageSize));
+
+    // 8. 쿼리 생성
+    const productsRef = collection(db, 'products');
+    const q = query(productsRef, ...queryConstraints);
+
+    // 9. 예약 수량 맵 가져오기 (오버레이 적용을 위해)
+    const reservedMap = await getReservedQuantitiesMap();
+
+    // 10. 쿼리 실행
+    const snapshot = await getDocs(q);
+
+    // 11. 결과 처리
+    const products: Product[] = [];
+    snapshot.docs.forEach(doc => {
+      const productData = doc.data() as Product;
+      // 예약 수량 오버레이 적용
+      const productWithOverlay = applyReservedOverlay(
+        { ...productData, id: doc.id }, 
+        reservedMap
+      );
+      products.push(productWithOverlay);
+    });
+
+    // 12. 다음 페이지를 위한 마지막 항목(lastVisible) timestamp 추출
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    const newLastVisible = lastDoc 
+      ? (lastDoc.data().createdAt as Timestamp).toMillis() // createdAt 기준 정렬
+      : null;
+
+    return { products, lastVisible: newLastVisible };
+
+  } catch (error: any) {
+    console.error("Error fetching products directly from Firestore:", error);
+    // 쿼리 실패 시 (예: 인덱스 누락) 오류가 발생할 수 있습니다.
+    // Firestore 콘솔에 표시될 수 있는 오류 메시지를 확인하세요.
+    if (error.code === 'failed-precondition') {
+       throw new Error("상품 목록을 불러오는 데 필요한 데이터베이스 인덱스가 없습니다. Firestore 콘솔에서 인덱스를 생성해주세요.");
+    }
+    throw new Error("상품 재고 정보를 불러오는 데 실패했습니다. (Firestore 직접 조회 오류)");
   }
 };
 
@@ -496,7 +552,7 @@ export const getProductsByCategory = (payload: { category: string | null }) =>
   });
 
 /**
- * @deprecated `getProductsWithStock` 사용을 권장합니다.
+ * @deprecated `getProductsWithStock` 사용을 G권장합니다.
  */
 export const getPaginatedProductsWithStock = (
   // ✅ [수정] payload 객체를 받도록 수정 (타입스크립트 호환성을 위해 유지)

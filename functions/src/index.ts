@@ -28,6 +28,7 @@ export * from "./http/migration.js";
 export * from "./http/manualTrigger.js";
 export * from "./http/manualTriggerRecent.js";
 export * from "./http/banner.js";
+export * from "./http/maintenance.js";
 
 
 /**

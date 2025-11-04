@@ -96,7 +96,7 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Day
 };
 
 export const getDisplayRound = (product: Product): OriginalSalesRound | null => {
-    if (!product.salesHistory || product.salesHistory.length === 0) return null;
+    if (!Array.isArray(product.salesHistory) || product.salesHistory.length === 0) return null;
     const now = dayjs();
     const getPhasePriority = (round: OriginalSalesRound): number => {
         const publishAt = safeToDate(round.publishAt);

@@ -9,7 +9,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, admin, allowedOrigins } from "../firebase/admin.js";
-import { Timestamp, DocumentData, DocumentSnapshot, FieldValue } from "firebase-admin/firestore";
+import { Timestamp, DocumentData, DocumentSnapshot, FieldValue, Transaction } from "firebase-admin/firestore";
 import { auth as adminAuth } from "firebase-admin";
 
 import type {
@@ -126,31 +126,90 @@ export const updateMultipleVariantGroupStocks = onCall(
       throw new HttpsError("invalid-argument", "업데이트할 재고 정보가 없습니다.");
     }
     try {
-      await db.runTransaction(async (transaction) => {
-        for (const update of updates) {
+      await db.runTransaction(async (transaction: Transaction) => {
+        // [수정 시작] await db.runTransaction 내부
+        // 모든 업데이트를 병렬로 처리하기 위해 Promise 배열 생성
+        const readAndUpdatePromises = updates.map(async (update) => {
           const { productId, roundId, variantGroupId, newStock } = update;
-          if (typeof newStock !== 'number') continue;
+
+          if (typeof newStock !== 'number' || (newStock < 0 && newStock !== -1)) {
+            logger.error(`Invalid stock value for ${productId}: ${newStock}`);
+            return; // 이 업데이트 건너뛰기
+          }
+
           const productRef = db.collection("products").doc(productId);
           const productDoc = await transaction.get(productRef);
+
           if (!productDoc.exists) {
-            logger.warn(`Product not found for stock update: ${productId}`);
-            continue;
+            logger.error(`Product ${productId} not found.`);
+            return; // 이 업데이트 건너뛰기
           }
+
           const productData = productDoc.data() as Product;
-          const salesHistory = productData.salesHistory || [];
-          const roundIndex = salesHistory.findIndex(r => r.roundId === roundId);
-          if (roundIndex === -1) continue;
-          const round = salesHistory[roundIndex];
-          const vgIndex = (round.variantGroups || []).findIndex(vg => vg.id === variantGroupId);
-          if (vgIndex === -1) continue;
-          const fieldPath = `salesHistory.${roundIndex}.variantGroups.${vgIndex}.totalPhysicalStock`;
-          transaction.update(productRef, { [fieldPath]: newStock });
-        }
+          
+          if (!Array.isArray(productData.salesHistory)) {
+             logger.error(`Product ${productId} salesHistory is not an array. Data might be corrupt.`);
+             return; 
+          }
+
+          // 1. 수정할 Round의 인덱스 찾기
+          const roundIndex = productData.salesHistory.findIndex(r => r.roundId === roundId);
+          if (roundIndex === -1) {
+            logger.error(`Round ${roundId} not found in product ${productId}.`);
+            return;
+          }
+
+          const round = productData.salesHistory[roundIndex];
+
+          // 2. 수정할 VariantGroup의 인덱스 찾기
+          if (!Array.isArray(round.variantGroups)) {
+             logger.error(`Product ${productId} round ${roundId} variantGroups is not an array.`);
+             return;
+          }
+            
+          const vgIndex = round.variantGroups.findIndex(vg => vg.id === variantGroupId);
+          if (vgIndex === -1) {
+            logger.error(`VariantGroup ${variantGroupId} not found in round ${roundId}.`);
+            return;
+          }
+
+          // 3. 업데이트할 경로(path)와 데이터 생성
+          const stockUpdatePath = `salesHistory.${roundIndex}.variantGroups.${vgIndex}.totalPhysicalStock`;
+          
+          // FieldValue.update()는 dot notation을 지원하지 않으므로 객체 사용
+          const updatePayload: { [key: string]: any } = {
+            [stockUpdatePath]: newStock,
+          };
+
+          // 4. 재고가 다시 채워졌으므로(0개 초과 또는 무제한), 수동 상태를 리셋
+          if (newStock > 0 || newStock === -1) {
+            const statusUpdatePath = `salesHistory.${roundIndex}.manualStatus`;
+            updatePayload[statusUpdatePath] = null; // '매진 (수동)' -> '자동'
+            
+            const onsiteUpdatePath = `salesHistory.${roundIndex}.isManuallyOnsite`;
+            updatePayload[onsiteUpdatePath] = false; // '현장판매 (수동)' -> '자동'
+          }
+
+          // 5. 트랜잭션에 업데이트 추가
+          transaction.update(productRef, updatePayload);
+        });
+
+        // 트랜잭션 내에서 모든 읽기/업데이트 로직이 완료될 때까지 대기
+        await Promise.all(readAndUpdatePromises);
+        // [수정 종료] ...
       });
-      return { success: true, message: "재고 정보가 업데이트되었습니다." };
+      
+      logger.info(`Successfully updated ${updates.length} stock items.`);
+      return { success: true, message: "재고가 성공적으로 업데이트되었습니다." };
+      
     } catch (error) {
-      logger.error("Error in updateMultipleVariantGroupStocks:", error);
-      throw new HttpsError("internal", "재고 업데이트 중 오류가 발생했습니다.");
+      // [수정] 에러 로깅 개선
+      logger.error("Error in updateMultipleVariantGroupStocks transaction:", error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      // [수정] 원본 에러 정보를 클라이언트에 전달
+      throw new HttpsError("internal", "재고 업데이트 중 오류가 발생했습니다.", (error as Error).message);
     }
   }
 );
@@ -178,23 +237,29 @@ export const updateSalesRound = onCall(
     }
 
     try {
-      const productRef = db.collection("products").doc(productId);
       
       // 트랜잭션을 사용하여 안전하게 업데이트합니다.
       await db.runTransaction(async (transaction) => {
+        const productRef = db.collection("products").doc(productId);
         const productDoc = await transaction.get(productRef);
+        
         if (!productDoc.exists) {
           throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
         }
         const productData = productDoc.data() as Product;
-        let salesHistory = productData.salesHistory || [];
-        const roundIndex = salesHistory.findIndex(r => r.roundId === roundId);
+        
+        if (!Array.isArray(productData.salesHistory)) {
+            logger.error(`Product ${productId} salesHistory is not an array. Data might be corrupt.`);
+            throw new HttpsError("internal", "상품 데이터가 손상되었습니다 (salesHistory is not an array).");
+        }
+        
+        const roundIndex = productData.salesHistory.findIndex(r => r.roundId === roundId);
         
         if (roundIndex === -1) {
           throw new HttpsError("not-found", "해당 판매 회차를 찾을 수 없습니다.");
         }
         
-// --- 시작: 날짜 필드 Timestamp 변환 (수정 2) ---
+        // --- 1. 날짜 필드 Timestamp 변환 (기존 로직 유지) ---
         const dateFieldsToConvert: (keyof SalesRound)[] = [
             'publishAt', 'deadlineDate', 'pickupDate', 'pickupDeadlineDate', 'arrivalDate', 'createdAt'
         ];
@@ -202,48 +267,41 @@ export const updateSalesRound = onCall(
 
         for (const field of dateFieldsToConvert) {
             const value = convertedSalesRoundData[field];
-
-            // 값이 존재하고, 이미 Timestamp 객체가 *아닌* 경우에만 변환 시도
-            if (value && !(value instanceof Timestamp)) { // ✅ AdminFirestoreTimestamp -> Timestamp 수정
+            if (value && !(value instanceof Timestamp)) {
                 try {
                     const dateValue = new Date(value as any);
                     if (!isNaN(dateValue.getTime())) {
-                        // 유효한 Date 객체로부터 Timestamp 생성
-                        const timestampValue = Timestamp.fromDate(dateValue);
-                        // ✅ 타입 추론 오류 우회를 위해 'as any' 사용
-                        (convertedSalesRoundData as any)[field] = timestampValue;
-                        logger.info(`Converted field '${field}' to Timestamp for round ${roundId}`);
-                    } else {
-                         logger.warn(`Field '${field}' for round ${roundId} was not a valid date for conversion:`, value);
+                        (convertedSalesRoundData as any)[field] = Timestamp.fromDate(dateValue);
+                    } else if (value) {
+                         logger.warn(`Field '${field}' for round ${roundId} was not a valid date:`, value);
                     }
                 } catch (e) {
-                    logger.error(`Error converting field '${field}' to Timestamp for round ${roundId}:`, e);
+                    logger.error(`Error converting field '${field}' to Timestamp:`, e);
                 }
             }
-            // 이미 Timestamp 객체이거나 null/undefined이면 그대로 둠
         }
-        // --- 종료: 날짜 필드 Timestamp 변환 (수정 2) ---
+        // --- 날짜 변환 종료 ---
 
-        // 해당 회차에 업데이트할 데이터(변환된 날짜 포함)를 병합합니다.
-        const updatedRound: SalesRound = { 
-            ...salesHistory[roundIndex], 
-            ...convertedSalesRoundData // 변환된 데이터 사용
-        } as SalesRound;
+        // --- 2. Dot Notation을 사용한 업데이트 페이로드 생성 ---
+        const updatePayload: { [key: string]: any } = {
+            'updatedAt': FieldValue.serverTimestamp() // 상품 전체의 updatedAt 갱신
+        };
+        
+        for (const [key, value] of Object.entries(convertedSalesRoundData)) {
+            // e.g., "salesHistory.0.roundName": "새로운 라운드 이름"
+            // e.g., "salesHistory.0.publishAt": Timestamp(...)
+            updatePayload[`salesHistory.${roundIndex}.${key}`] = value;
+        }
 
-        // salesHistory 배열 업데이트
-        salesHistory = salesHistory.map((r, index) => 
-            index === roundIndex ? updatedRound : r
-        );
-
-        // 업데이트된 salesHistory 배열을 통째로 Firestore에 저장
-        transaction.update(productRef, { salesHistory: salesHistory });
+        // 3. 배열 덮어쓰기(X) -> Dot Notation으로 특정 필드만 업데이트(O)
+        transaction.update(productRef, updatePayload);
       });
       
-      return { success: true, message: "판매 상태가 업데이트되었습니다." };
+      return { success: true, message: "판매 회차 정보가 업데이트되었습니다." };
     } catch (error) {
       logger.error(`Error in updateSalesRound for product ${productId}, round ${roundId}:`, error);
       if (error instanceof HttpsError) throw error;
-      throw new HttpsError("internal", "판매 상태 업데이트 중 오류가 발생했습니다.");
+      throw new HttpsError("internal", "판매 회차 정보 업데이트 중 오류가 발생했습니다.", (error as Error).message);
     }
   }
 );
@@ -264,26 +322,62 @@ export const updateMultipleSalesRoundStatuses = onCall(
       throw new HttpsError("invalid-argument", "업데이트할 상태 정보가 없습니다.");
     }
     try {
-      const batch = db.batch();
-      for (const update of updates) {
-        const productRef = db.collection("products").doc(update.productId);
-        const productDoc = await productRef.get();
-        if (productDoc.exists) {
-          const productData = productDoc.data() as Product;
-          const newSalesHistory = productData.salesHistory.map(round => {
-            if (round.roundId === update.roundId) {
-              return { ...round, status: update.newStatus };
-            }
-            return round;
-          });
-          batch.update(productRef, { salesHistory: newSalesHistory });
+      // 트랜잭션을 사용하여 모든 업데이트를 안전하게 처리
+      await db.runTransaction(async (transaction: Transaction) => {
+        const productRefs = new Map<string, FirebaseFirestore.DocumentReference>();
+        const productDatas = new Map<string, Product>();
+
+        // 1. 모든 관련 상품 문서를 미리 읽습니다 (중복 방지)
+        for (const update of updates) {
+          if (!productRefs.has(update.productId)) {
+            const ref = db.collection("products").doc(update.productId);
+            productRefs.set(update.productId, ref);
+          }
         }
-      }
-      await batch.commit();
+        
+        const docs = await Promise.all(
+          Array.from(productRefs.values()).map(ref => transaction.get(ref))
+        );
+        
+        docs.forEach(doc => {
+          if (doc.exists) {
+            productDatas.set(doc.id, doc.data() as Product);
+          } else {
+            logger.warn(`Product not found during status update: ${doc.id}`);
+          }
+        });
+
+        // 2. 읽어온 데이터를 기반으로 Dot Notation 업데이트 페이로드 생성
+        for (const update of updates) {
+          const { productId, roundId, newStatus } = update;
+          const productData = productDatas.get(productId);
+          const productRef = productRefs.get(productId);
+
+          if (!productData || !productRef) continue; // 상품이 없으면 건너뛰기
+          if (!Array.isArray(productData.salesHistory)) {
+            logger.error(`Skipping status update for corrupt product ${productId} (salesHistory not array)`);
+            continue;
+          }
+
+          const roundIndex = productData.salesHistory.findIndex(r => r.roundId === roundId);
+          if (roundIndex === -1) {
+            logger.warn(`Skipping status update for missing round ${roundId} in ${productId}`);
+            continue;
+          }
+
+          // 3. Dot Notation으로 정확한 상태 필드만 업데이트
+          transaction.update(productRef, {
+            [`salesHistory.${roundIndex}.status`]: newStatus,
+            'updatedAt': FieldValue.serverTimestamp() // 상품 전체의 updatedAt 갱신
+          });
+        }
+      });
+      
       return { success: true, message: "판매 상태가 업데이트되었습니다." };
     } catch (error) {
       logger.error("Error in updateMultipleSalesRoundStatuses:", error);
-      throw new HttpsError("internal", "판매 상태 업데이트 중 오류가 발생했습니다.");
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "판매 상태 업데이트 중 오류가 발생했습니다.", (error as Error).message);
     }
   }
 );
@@ -304,42 +398,70 @@ export const deleteSalesRounds = onCall(
     }
 
     try {
-      const batch = db.batch();
-      const deletionsByProduct = deletions.reduce((acc, { productId, roundId }) => {
-        if (!acc[productId]) {
-          acc[productId] = [];
-        }
-        acc[productId].push(roundId);
-        return acc;
-      }, {} as Record<string, string[]>);
-      
-      for (const productId in deletionsByProduct) {
-        const roundIdsToDelete = deletionsByProduct[productId];
-        const productRef = db.collection("products").doc(productId);
-        const productDoc = await productRef.get();
-        
-        if (productDoc.exists) {
-          const productData = productDoc.data() as Product;
-          const originalHistoryLength = productData.salesHistory.length;
-          const newSalesHistory = productData.salesHistory.filter(
-            round => !roundIdsToDelete.includes(round.roundId)
-          );
+      // 트랜잭션을 사용하여 모든 삭제를 안전하게 처리
+      await db.runTransaction(async (transaction: Transaction) => {
+        const productRefs = new Map<string, FirebaseFirestore.DocumentReference>();
+        const productDatas = new Map<string, Product>();
+        const deletionsByProduct = new Map<string, string[]>();
+
+        // 1. 삭제할 라운드 ID를 상품별로 그룹화하고, 관련 상품 문서를 미리 읽습니다.
+        for (const { productId, roundId } of deletions) {
+          // 상품별 라운드 ID 그룹화
+          const roundIds = deletionsByProduct.get(productId) || [];
+          roundIds.push(roundId);
+          deletionsByProduct.set(productId, roundIds);
           
-          if (newSalesHistory.length < originalHistoryLength) {
-             batch.update(productRef, { salesHistory: newSalesHistory });
-             logger.info(`Scheduled deletion of ${originalHistoryLength - newSalesHistory.length} rounds from product ${productId}`);
+          // 상품 Ref 맵핑 (중복 방지)
+          if (!productRefs.has(productId)) {
+            const ref = db.collection("products").doc(productId);
+            productRefs.set(productId, ref);
           }
-        } else {
-            logger.warn(`Product not found for deletion, skipping: ${productId}`);
         }
-      }
+        
+        const docs = await Promise.all(
+          Array.from(productRefs.values()).map(ref => transaction.get(ref))
+        );
+        
+        docs.forEach(doc => {
+          if (doc.exists) {
+            productDatas.set(doc.id, doc.data() as Product);
+          } else {
+            logger.warn(`Product not found during deletion: ${doc.id}`);
+          }
+        });
+
+        // 2. 읽어온 데이터를 기반으로 FieldValue.arrayRemove 업데이트 수행
+        for (const [productId, roundIdsToDelete] of deletionsByProduct.entries()) {
+          const productData = productDatas.get(productId);
+          const productRef = productRefs.get(productId);
+
+          if (!productData || !productRef) continue; // 상품 없으면 건너뛰기
+          if (!Array.isArray(productData.salesHistory)) {
+             logger.error(`Skipping deletion for corrupt product ${productId} (salesHistory not array)`);
+             continue;
+          }
+
+          // 3. 원본 salesHistory 배열에서 삭제할 *객체 전체*를 찾습니다.
+          const roundsToRemove = productData.salesHistory.filter(
+            round => roundIdsToDelete.includes(round.roundId)
+          );
+
+          if (roundsToRemove.length > 0) {
+            // 4. FieldValue.arrayRemove를 사용하여 배열에서 해당 객체들을 제거
+            transaction.update(productRef, {
+              salesHistory: FieldValue.arrayRemove(...roundsToRemove),
+              'updatedAt': FieldValue.serverTimestamp()
+            });
+            logger.info(`Scheduled deletion of ${roundsToRemove.length} rounds from product ${productId}`);
+          }
+        }
+      });
       
-      await batch.commit();
       return { success: true, message: "선택된 판매 회차가 삭제되었습니다." };
     } catch (error) {
       logger.error("Error in deleteSalesRounds:", error);
       if (error instanceof HttpsError) throw error;
-      throw new HttpsError("internal", "판매 회차 삭제 중 오류가 발생했습니다.");
+      throw new HttpsError("internal", "판매 회차 삭제 중 오류가 발생했습니다.", (error as Error).message);
     }
   }
 );
@@ -358,9 +480,30 @@ export const getProductsWithStock = onCall(
   },
   async (request) => {
     try {
+      // ✅ [디버깅 코드 1] "하리보 스타믹스" 상품의 isArchived 상태를 강제로 확인합니다.
+      const DEBUG_PRODUCT_ID = "VuVa6vMBIKktUsYbc5uS"; // 하리보 상품 ID
+      try {
+        const debugProductSnap = await db.collection("products").doc(DEBUG_PRODUCT_ID).get();
+        if (debugProductSnap.exists) {
+          const debugData = debugProductSnap.data();
+          logger.info(`[디버깅 1] 상품(${DEBUG_PRODUCT_ID}) 조회 성공. isArchived: ${debugData?.isArchived}`);
+        } else {
+          logger.info(`[디버깅 1] 상품(${DEBUG_PRODUCT_ID})을 찾을 수 없음 (Not Found).`);
+        }
+      } catch (e: any) {
+        logger.error(`[디버깅 1] 상품(${DEBUG_PRODUCT_ID}) 조회 중 오류 발생:`, e.message);
+      }
+      // --- 디버깅 코드 1 종료 ---
+
       const query = db.collection("products").where("isArchived", "==", false).orderBy("createdAt", "desc");
       const productsSnapshot = await query.get();
       const products = productsSnapshot.docs.map((doc) => ({ ...(doc.data() as Product), id: doc.id })) as (Product & { id: string })[];
+
+      // ✅ [디버깅 코드 2] 쿼리 결과에 "하리보"가 포함되었는지 확인
+      const isHariboInResult = products.some(p => p.id === DEBUG_PRODUCT_ID);
+      logger.info(`[디버깅 2] "isArchived == false" 쿼리 결과(${products.length}개)에 상품(${DEBUG_PRODUCT_ID}) 포함 여부: ${isHariboInResult}`);
+      // --- 디버깅 코드 2 종료 ---
+
       const ordersSnap = await db.collection("orders").where("status", "in", ["RESERVED", "PREPAID", "PICKED_UP"]).get();
       const claimedMap = new Map<string, number>();
       const pickedUpMap = new Map<string, number>();
@@ -423,7 +566,6 @@ export const getProductsWithStock = onCall(
       });
       
       return { products: productsWithClaimedData, lastVisible: null }; // 최종 반환
-      return { products: productsWithClaimedData, lastVisible: null };
     } catch (error) {
       logger.error("getProductsWithStock error:", error);
       if (error instanceof HttpsError) throw error;
@@ -431,7 +573,6 @@ export const getProductsWithStock = onCall(
     }
   }
 );
-
 // =================================================================
 // 단일 상품 조회 (재고 포함)
 // =================================================================
