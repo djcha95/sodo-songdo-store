@@ -66,9 +66,12 @@
     "firebase-admin": "^13.4.0",
     "firebase-tools": "^14.17.0",
     "jsdom": "^26.1.0",
+    "madge": "^8.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2",
     "vite": "^7.0.5",
+    "vite-plugin-inspect": "^11.3.3",
+    "vite-plugin-pwa": "^1.1.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   },

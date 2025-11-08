@@ -5,7 +5,13 @@
     overflow: hidden;
     border: 1px solid #e9ecef;
     border-radius: 12px;
-    margin: 0.5rem 0.25rem;
+    
+    /* ✅ [수정]
+       기존: margin: 0.5rem 0.25rem;
+       수정: 수직 마진(0.5rem)을 0으로 변경하여 부모(List)의 gap과 충돌하지 않게 합니다.
+    */
+    margin: 0 0.25rem;
+    
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 

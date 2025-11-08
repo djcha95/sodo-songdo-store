@@ -1,5 +1,5 @@
 // src/main.tsx
-
+import '@/utils/dayjsSetup'; // ⬅️ 이 줄을 최상단에 추가합니다.
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';

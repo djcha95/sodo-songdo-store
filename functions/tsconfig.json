@@ -5,22 +5,22 @@
     "moduleResolution": "Node",
     "target": "ES2022",
     "lib": ["ES2022"],
-
-    "rootDir": "..",                    // ✅ 프로젝트 루트까지 포괄
+    "rootDir": "..",
     "outDir": "lib",
-
     "types": ["node"],
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],                 // functions/src/*
-      "@/shared/*": ["../src/shared/*"] // 루트 src/shared/*
+      "@/*": ["src/*"],
+      "@/shared/*": ["../src/shared/*"]
     },
+    "noImplicitAny": false,
 
-    "noImplicitAny": false
+    // ⬇️ 선택: 품질/디버깅 보조
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true
   },
   "include": ["src/**/*", "../src/shared/**/*"],
   "exclude": ["node_modules", "lib"]

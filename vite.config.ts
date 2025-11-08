@@ -1,78 +1,89 @@
 // vite.config.ts
 
-/// <reference types="vitest" /> // ✅ [확인] 이 지시문이 파일 맨 위에 있어야 합니다.
-import { defineConfig } from 'vite'; // ✅ [수정] 'vitest/config'가 아닌 'vite'에서 가져옵니다.
+/// <reference types="vitest" /> 
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import tsconfigPaths from 'vite-tsconfig-paths';
+import path from 'path'; 
+// ✅ [추가] 방금 설치한 inspect 플러그인을 import합니다.
+import Inspect from 'vite-plugin-inspect';
+// ✅ [추가] PWA 플러그인 import (이전에 추가했던 코드)
+import { VitePWA } from 'vite-plugin-pwa'; 
 
 export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
-  
-  cacheDir: '../../node_modules/.vite/sodomall-app-cache',
-  
-  server: {
-    proxy: {
-      '/api': {
-        target: 'https://asia-northeast3-sso-do.cloudfunctions.net',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''), 
+  plugins: [
+    // ✅ [추가] Inspect()를 plugins 배열의 맨 처음에 추가합니다.
+    Inspect(), 
+    react(),
+    // ✅ [추가] PWA 플러그인 및 dev 옵션 (이전에 추가했던 코드)
+    VitePWA({
+      devOptions: {
+        enabled: false 
       },
-      '/firebase-storage-proxy': {
-        target: 'https://firebasestorage.googleapis.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/firebase-storage-proxy/, '')
-      }
-    },
-  },
+    })
+  ], 
+  
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      // ✅ [추가] /src 경로도 @와 동일하게 처리하도록 강제 (모듈 중복 방지)
+      '/src': path.resolve(__dirname, 'src'),
+    },
+  },
+  
+  cacheDir: '../../node_modules/.vite/sodomall-app-cache',
+  
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://asia-northeast3-sso-do.cloudfunctions.net',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''), 
+      },
+      '/firebase-storage-proxy': {
+        target: 'https://firebasestorage.googleapis.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/firebase-storage-proxy/, '')
+      }
+    },
+  },
 
-  build: {
-    target: 'es2020',
-    sourcemap: false,
-    minify: 'esbuild',
-    rollupOptions: {
-      treeshake: true, // treeshake 옵션 위치 수정됨 (이전 단계에서)
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            // ❌ [제거] React/ReactDOM/React Router를 chunk-react로 분리하는 규칙 제거
-            // if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/.test(id)) {
-            //   return 'chunk-react';
-            // }
-
-            // -------- Firebase 공개 진입점과 내부 패키지 모두 커버 --------
-            // (Firebase 분리 로직은 그대로 유지)
-            const svc = (
-              id.match(
-                /[\\/]node_modules[\\/](?:firebase|@firebase)[\\/](app-check|analytics|auth|firestore|functions|storage|messaging|performance|remote-config|app)[\\/]/
-              )?.[1] ||
-              (/[\\/]node_modules[\\/](?:firebase|@firebase)[\\/]app[\\/]/.test(id) ? 'app' : null)
-            );
-            if (svc) {
-              return `chunk-firebase-${svc}`;
-            }
-            
-            // -------- 그 외 모든 외부 라이브러리 --------
-            // (React 관련 라이브러리도 여기에 포함되어 처리될 것입니다)
-            return 'chunk-vendor';
-          }
-        },
-        chunkFileNames: 'assets/[name]-[hash].js',
-        entryFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]'
-      }
-    },
-    chunkSizeWarningLimit: 800 
-  },
-  
-  optimizeDeps: {
-    esbuildOptions: { target: 'es2020' }
-  },
-
-  // Vitest 설정 (이제 타입 오류 없이 작동해야 함)
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/setupTests.ts',
-    css: true,
-  },
+  // ... (build, optimizeDeps, test 설정은 기존과 동일합니다) ...
+  build: {
+    target: 'es2020',
+    sourcemap: false,
+    minify: 'esbuild',
+    rollupOptions: {
+      treeshake: true, 
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            const svc = (
+              id.match(
+                /[\\/]node_modules[\\/](?:firebase|@firebase)[\\/](app-check|analytics|auth|firestore|functions|storage|messaging|performance|remote-config|app)[\\/]/
+              )?.[1] ||
+              (/[\\/]node_modules[\\/](?:firebase|@firebase)[\\/]app[\\/]/.test(id) ? 'app' : null)
+            );
+            if (svc) {
+              return `chunk-firebase-${svc}`;
+            }
+            return 'chunk-vendor';
+          }
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]'
+      }
+    },
+    chunkSizeWarningLimit: 800 
+  },
+  
+  optimizeDeps: {
+    esbuildOptions: { target: 'es2020' }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.ts',
+    css: true,
+  },
 });

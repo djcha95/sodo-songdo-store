@@ -1,6 +1,8 @@
 // src/firebase/generalService.ts
 
-import { db, storage } from './index';
+// ✅ [수정] 순환 의존성 해결:
+// './index' 대신 './firebaseConfig'에서 직접 db와 storage를 가져옵니다.
+import { db, storage } from './firebaseConfig'; 
 import {
   collection,
   query,
@@ -23,9 +25,12 @@ import {
 } from 'firebase/storage';
 import type { StorageReference } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
+
+// ✅ [수정] 타입 오류 해결:
+// '@/shared/types'에 존재하지 않는 4개의 타입을 import 목록에서 제거합니다.
 import type { 
-    Banner, StoreInfo, Category, Product, Order, OrderItem,
-    TodayStockItem, TodayOrderItem, TodayPickupItem 
+    Banner, Category, Product, Order, OrderItem
+    // StoreInfo, TodayStockItem, TodayOrderItem, TodayPickupItem 
 } from '@/shared/types'; 
 
 // --- Helper Functions ---
@@ -113,20 +118,23 @@ export const getActiveBanners = async (): Promise<Banner[]> => {
 };
 
 // --- Store Info Functions ---
+// ✅ [참고] 'StoreInfo' 타입이 없으므로, 'any'로 임시 처리합니다.
+// 나중에 @/shared/types에 StoreInfo를 정의하고 타입을 'StoreInfo | null'로 변경하세요.
 const STORE_INFO_DOC_ID = 'main'; // 매장 정보는 하나의 문서로 관리
 
-export const getStoreInfo = async (): Promise<StoreInfo | null> => {
+export const getStoreInfo = async (): Promise<any | null> => {
     const docRef = doc(db, 'storeInfo', STORE_INFO_DOC_ID);
     const docSnap = await getDocFromServer(docRef);
-    return docSnap.exists() ? docSnap.data() as StoreInfo : null;
+    return docSnap.exists() ? docSnap.data() as any : null;
 };
 
-export const updateStoreInfo = async (storeData: StoreInfo): Promise<void> => {
+export const updateStoreInfo = async (storeData: any): Promise<void> => {
     const docRef = doc(db, 'storeInfo', STORE_INFO_DOC_ID);
     await setDoc(docRef, storeData, { merge: true });
 };
 
 // DailyDashboardModal 컴포넌트에서 사용할 데이터 조회 함수
+// ✅ [참고] 관련 타입이 없으므로 'any'로 임시 처리합니다.
 export const getDailyDashboardData = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -138,8 +146,8 @@ export const getDailyDashboardData = async () => {
     const productsQuery = query(productsRef, where('isArchived', '==', false));
     const productsSnapshot = await getDocs(productsQuery);
 
-    const todayStock: TodayStockItem[] = [];
-    const todayPickupDeadlineProducts: TodayPickupItem[] = [];
+    const todayStock: any[] = []; // TodayStockItem[]
+    const todayPickupDeadlineProducts: any[] = []; // TodayPickupItem[]
 
     productsSnapshot.forEach(docSnap => {
         const product = { id: docSnap.id, ...docSnap.data() } as Product;
@@ -177,7 +185,7 @@ export const getDailyDashboardData = async () => {
     const ordersRef = collection(db, 'orders');
     const ordersQuery = query(ordersRef, where('status', '==', 'PREPAID'));
     const ordersSnapshot = await getDocs(ordersQuery);
-    const todayPrepaidOrders: TodayOrderItem[] = [];
+    const todayPrepaidOrders: any[] = []; // TodayOrderItem[]
     ordersSnapshot.forEach(docSnap => {
         const order = docSnap.data() as Order;
         order.items.forEach((item: OrderItem) => {

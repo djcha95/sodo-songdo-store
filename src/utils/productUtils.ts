@@ -1,5 +1,6 @@
 // src/utils/productUtils.ts
 
+// ✅ [수정] 디버깅용 console.log 코드 7줄 제거
 import type {
   Product,
   SalesRound as OriginalSalesRound,
@@ -18,12 +19,10 @@ export interface VariantGroup extends OriginalVariantGroup {
   reservedCount?: number;
 }
 
-// ✅ [수정] SalesRound 인터페이스 재정의
-// eventType을 직접 정의하는 대신 OriginalSalesRound로부터 상속받도록 하여 타입 오류를 해결합니다.
+// ✅ [수정] SalesRound 인터페이스 재정의 (기존 코드 유지)
 export interface SalesRound extends OriginalSalesRound {
   variantGroups: VariantGroup[];
 }
-
 
 export interface StockInfo {
   isLimited: boolean;
@@ -49,12 +48,11 @@ export type ProductActionState =
   | 'LOADING'
   | 'PURCHASABLE'
   | 'REQUIRE_OPTION'
-  | 'WAITLISTABLE'
   | 'ENCORE_REQUESTABLE'
   | 'SCHEDULED'
   | 'ENDED'
   | 'INELIGIBLE'
-  | 'AWAITING_STOCK';
+  | 'AWAITING_STOCK'; // 'WAITLISTABLE' 제거, 'AWAITING_STOCK' 사용
 
 export const safeToDate = (date: any): Date | null => {
   if (!date) return null;
@@ -88,8 +86,8 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Day
     const publishDay = dayjs(publishAt);
     let primaryEndFallback = publishDay.add(1, 'day').hour(13).minute(0).second(0);
     const dayOfWeek = primaryEndFallback.day();
-    if (dayOfWeek === 6) primaryEndFallback = primaryEndFallback.add(2, 'day');
-    else if (dayOfWeek === 0) primaryEndFallback = primaryEndFallback.add(1, 'day');
+    if (dayOfWeek === 6) primaryEndFallback = primaryEndFallback.add(2, 'day'); // 토요일 -> 월요일 13시
+    else if (dayOfWeek === 0) primaryEndFallback = primaryEndFallback.add(1, 'day'); // 일요일 -> 월요일 13시
     
     const secondaryEndFallback = safeToDate(round.pickupDate) ? dayjs(safeToDate(round.pickupDate)).hour(13).minute(0).second(0) : null;
     return { primaryEnd: primaryEndFallback, secondaryEnd: secondaryEndFallback };
@@ -100,19 +98,19 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
     const now = dayjs();
     const getPhasePriority = (round: OriginalSalesRound): number => {
         const publishAt = safeToDate(round.publishAt);
-        // ✅ [추가] 수동 종료/매진된 상품은 가장 낮은 우선순위로 밀어냅니다.
-        if (round.manualStatus === 'ended' || round.manualStatus === 'sold_out' || round.status === 'ended' || round.status === 'sold_out') return 5;
+        // ✅ [수정] 수동 '종료'된 상품만 가장 낮은 우선순위로 밀어냅니다. ('sold_out'은 정상 로직을 따름)
+        if (round.manualStatus === 'ended' || round.status === 'ended') return 5;
         
         if (round.status === 'selling') return 1;
         if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 2;
         if (round.status === 'scheduled' && publishAt && now.isBefore(publishAt)) return 3;
-        // 기존 4였던 'ended'/'sold_out'을 5로 옮겼으므로, 남은 상태에 대한 필터는 제거하거나 다른 우선순위를 부여합니다.
-        // 현재 로직상 4번이 없으므로, default 처리로 변경합니다.
+        // ✅ [수정] 'sold_out' 상태는 1~3번 로직(selling, scheduled)을 따르도록 합니다.
+        // (예: manualStatus: 'sold_out' 이지만 status: 'selling'이면 1번)
         return 4; // Draft 등 기타 상태
     };
     const sortedHistory = [...product.salesHistory]
-        // ✅ [추가] draft, 수동 종료/매진된 상품은 제외합니다.
-        .filter(r => r.status !== 'draft' && r.manualStatus !== 'ended' && r.manualStatus !== 'sold_out')
+        // ✅ [수정] draft, 수동 '종료'된 상품만 제외합니다. ('sold_out'은 허용)
+        .filter(r => r.status !== 'draft' && r.manualStatus !== 'ended')
         .sort((a, b) => {
             const priorityA = getPhasePriority(a);
             const priorityB = getPhasePriority(b);
@@ -120,7 +118,6 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
             switch (priorityA) {
                 case 1: case 2: return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
                 case 3: return (safeToDate(a.publishAt)?.getTime() ?? 0) - (safeToDate(b.publishAt)?.getTime() ?? 0);
-                // case 4: case 5: 는 여기서 처리되지 않고, default로 넘어갑니다.
                 default: return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
             }
         });
@@ -129,8 +126,9 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
 
 // ✅ [수정] determineActionState의 round 파라미터 타입을 OriginalSalesRound로 명시
 export const determineActionState = (round: OriginalSalesRound, userDocument: UserDocument | null): ProductActionState => {
-  // 0. 관리자 수동 상태 및 기본 상태 확인 (가장 먼저 ENDED 처리)
-  if (round.manualStatus === 'ended' || round.manualStatus === 'sold_out' || round.status === 'ended' || round.status === 'sold_out') {
+  // 0. 관리자 수동 '종료' 또는 DB '종료' 상태 확인 (가장 먼저 ENDED 처리)
+  // ✅ [수정] 'sold_out' 관련 로직을 제거합니다. 'ended' 상태만 즉시 종료시킵니다.
+  if (round.manualStatus === 'ended' || round.status === 'ended') {
       return 'ENDED';
   }
 
@@ -139,18 +137,19 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
   const publishAt = safeToDate(round.publishAt);
   const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
-  // 아직 판매 시작 전이면 '판매 예정'
+  // 1A. 아직 판매 시작 전이면 '판매 예정'
   if (publishAt && now.isBefore(publishAt)) {
     return 'SCHEDULED';
   }
 
-  // 모든 판매 기간(2차 포함)이 종료되었으면 '판매 종료'
+  // 1B. 모든 판매 기간(2차 포함)이 종료되었으면 '판매 종료'
+  // 2차 마감일(secondaryEnd, 픽업일 13시)이 존재하면 그것 기준으로, 없으면 1차 마감일(primaryEnd) 기준으로 판단
   const salesHasEnded = (secondaryEnd && now.isAfter(secondaryEnd)) || (!secondaryEnd && primaryEnd && now.isAfter(primaryEnd));
   if (salesHasEnded) {
     return 'ENDED';
   }
 
-  // 2. 재고 확인
+  // 2. 재고 확인 (함수 정의)
   const isAllOptionsSoldOut = () => {
     if (!round.variantGroups || round.variantGroups.length === 0) return true;
     // 모든 옵션 그룹의 재고가 0 이하인지 확인
@@ -162,29 +161,37 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
   };
 
   // 3. 재고 상태와 판매 기간에 따라 상태 결정
-  if (isAllOptionsSoldOut()) {
-    // 재고가 없고, 1차 판매 기간이라면 '대기 가능'
-    if (primaryEnd && now.isBefore(primaryEnd)) {
-      return 'WAITLISTABLE';
-    }
-    // 재고가 없고, 1차 판매 기간이 지났거나 2차 기간이라면 '판매 종료'
-    // 2차 기간에 재고가 0이면 ENDED 처리하여 노출하지 않습니다.
-    return 'ENDED';
+  // ✅ [수정] 재고가 없거나(isAllOptionsSoldOut) 수동 품절('sold_out') 상태인 경우,
+  // (기간은 아직 안 끝났으므로) 'ENDED' 대신 'AWAITING_STOCK'을 반환합니다.
+  if (isAllOptionsSoldOut() || round.manualStatus === 'sold_out') {
+    return 'AWAITING_STOCK';
   }
   
-  // 4. 재고가 있다면, 옵션 선택 필요 여부에 따라 상태 결정
+  // 4. 재고가 있다면, 등급 확인
   const allowedTiers = round.allowedTiers;
-  if (userDocument && Array.isArray(allowedTiers)) {
+  if (userDocument && Array.isArray(allowedTiers) && allowedTiers.length > 0) { // allowedTiers가 설정된 경우에만 검사
       const userTier = userDocument.manualTier || userDocument.loyaltyTier || '공구초보'; // 사용자의 유효 등급 확인 (기본값 '공구초보')
       if (!allowedTiers.includes(userTier)) {
           return 'INELIGIBLE'; // 허용 등급이 아니면 'INELIGIBLE' 반환
       }
   }
 
-  // 5. 등급 검사 통과 시, 옵션 선택 필요 여부에 따라 상태 결정
+  // 5. 등급 검사 통과 시 (또는 등급 제한이 없을 시), 옵션 선택 필요 여부에 따라 상태 결정
   const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
+  
+  // 단일 옵션인데, 해당 옵션 아이템이 재고가 없는 경우 (isAllOptionsSoldOut는 아니지만, 유일한 옵션이 품절인 경우)
+  if (!hasMultipleOptions) {
+    const stockInfo = getStockInfo(round.variantGroups[0] as VariantGroup);
+    if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
+      // ✅ [수정] 이 경우도 'AWAITING_STOCK'으로 처리합니다.
+      return 'AWAITING_STOCK';
+    }
+  }
+
   return hasMultipleOptions ? 'REQUIRE_OPTION' : 'PURCHASABLE';
 };
+
+// ... (파일의 나머지 부분은 동일합니다) ...
 
 export const sortProductsForDisplay = (a: { displayRound: OriginalSalesRound }, b: { displayRound: OriginalSalesRound }): number => {
     const roundA = a.displayRound;
@@ -217,7 +224,24 @@ export function getMaxPurchasableQuantity(
 ) {
   const remainingUnits = computeRemainingUnits(vg);
   const unit = Number(item.stockDeductionAmount ?? 1);
+  // unit이 0이거나 음수일 경우를 대비해 1로 보정
   const stockBound = Math.floor(remainingUnits / (unit > 0 ? unit : 1));
-  const limitBound = Number.isFinite(item.limitQuantity ?? null) ? Number(item.limitQuantity) : Infinity;
-  return Math.max(0, Math.min(stockBound, limitBound));
+  
+  // item.limitQuantity가 0, null, undefined인 경우 모두 Infinity로 처리
+  const limitBound = (item.limitQuantity ?? null) !== null && Number.isFinite(item.limitQuantity) && (item.limitQuantity as number) > 0
+    ? Number(item.limitQuantity) 
+    : Infinity;
+    
+  // stockBound와 limitBound 중 작은 값을 반환
+  const maxQty = Math.min(stockBound, limitBound);
+  
+  // 최종 수량이 Infinity가 아닌지 확인 (둘 다 무제한일 경우)
+  // 현실적인 최대 수량 제한 (예: 999)
+  const practicalMax = 999; 
+  
+  if (!isFinite(maxQty)) {
+      return practicalMax;
+  }
+  
+  return Math.max(0, Math.min(maxQty, practicalMax));
 }

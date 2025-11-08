@@ -7,7 +7,11 @@ import { cancelOrder } from '@/firebase/orderService';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import type { Order, OrderItem, OrderStatus } from '@/shared/types';
-import { Timestamp } from 'firebase/firestore';
+// 💡 [수정] Firestore DB 직접 조회를 위한 import 추가
+import { 
+  Timestamp, getFirestore, collection, query, where, 
+  orderBy, limit, startAfter, getDocs, type QueryConstraint
+} from 'firebase/firestore'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
@@ -23,6 +27,8 @@ import './OrderHistoryPage.css';
 
 // Firebase Functions 설정
 const functions = getFunctions(getApp(), 'asia-northeast3');
+// 💡 [추가] Firestore DB 인스턴스
+const db = getFirestore(getApp());
 const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity: number }, { success: boolean, message: string }>(functions, 'updateOrderQuantity');
 
 // 상수 정의
@@ -114,12 +120,13 @@ const usePaginatedOrders = (uid?: string) => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  // ✅ [수정] lastVisible 상태는 이제 서버가 기대하는 'pickupDate' ISO 문자열을 담은 객체를 저장합니다.
-  const [lastVisible, setLastVisible] = useState<{ pickupDate: number | null; createdAt: number | null } | null>(null);
+  // 💡 [수정] lastVisible 상태는 Firestore의 startAfter를 위해 'Timestamp' 객체를 저장합니다.
+  const [lastVisible, setLastVisible] = useState<{ pickupDate: Timestamp | null; createdAt: Timestamp | null } | null>(null);
   const lastVisibleRef = useRef(lastVisible);
   lastVisibleRef.current = lastVisible;
 
-  const fetchOrdersFn = useMemo(() => httpsCallable(functions, 'getUserOrders'), []);
+  // ❌ [제거] 5초 '콜드 스타트'의 원인인 Cloud Function 제거
+  // const fetchOrdersFn = useMemo(() => httpsCallable(functions, 'getUserOrders'), []);
 
   const fetchOrders = useCallback(async (isInitial = false) => {
     if (!uid) {
@@ -136,62 +143,68 @@ const usePaginatedOrders = (uid?: string) => {
     }
 
     try {
-      // ✅ [수정] 직전 커서(epoch number 객체)를 payload에 포함
+      // 💡 [수정] 5초 콜드 스타트 해결을 위해 DB에서 직접 쿼리합니다.
+      const ordersRef = collection(db, 'orders');
+      const queryConstraints: QueryConstraint[] = [
+        where('userId', '==', uid),
+        orderBy('pickupDate', 'desc'),
+        orderBy('createdAt', 'desc'), // 페이지네이션의 정확도를 위한 2차 정렬
+        limit(10)
+      ];
+
+      // 💡 [수정] 페이지네이션 커서(lastVisible) 적용
       const cursorPayload = isInitial ? null : lastVisibleRef.current;
-
-      const payload: Record<string, any> = {
-        targetUserId: uid,
-        pageSize: 10,
-        orderByField: 'pickupDate',
-        orderDirection: 'desc',
-      };
-
-      if (cursorPayload) {
-        payload.lastVisible = cursorPayload;
+      if (cursorPayload && cursorPayload.pickupDate && cursorPayload.createdAt) {
+        queryConstraints.push(
+          startAfter(cursorPayload.pickupDate, cursorPayload.createdAt)
+        );
       }
 
-      const result = await fetchOrdersFn(payload);
-      const { data: rawNewOrders, lastDoc } = result.data as { data: any[]; lastDoc: any };
+      const q = query(ordersRef, ...queryConstraints);
+      const snapshot = await getDocs(q);
 
-      // ✅ [디버깅] 여기에 로그를 추가하세요!
-      console.log('--- 백엔드 원본 응답 (rawNewOrders) ---', rawNewOrders);
-
-      // ✅ [수정] 날짜 필드들을 로딩 시점에 즉시 Date 객체로 변환(문자열 방어)
-      const newOrders = rawNewOrders.map((o) => { // ✅ [수정] 소괄호()를 중괄호{}로 변경
+      // 💡 [수정] Firestore 문서에서 데이터를 변환합니다.
+      const newOrders = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id, // 문서 ID 추가
+          createdAt: safeToDate(data.createdAt),
+          pickupDate: safeToDate(data.pickupDate),
+        } as unknown as Order;
+      });
       
-        // ✅ [디버깅] 각 주문의 pickupDate를 확인하세요.
-        console.log('처리 전 pickupDate:', o.pickupDate, '| 타입:', typeof o.pickupDate);
-        
-        return { // ✅ [수정] return 문을 명시적으로 사용
-          ...o,
-          // 위에서 수정한 safeToDate 함수를 사용합니다.
-          createdAt: safeToDate(o.createdAt),
-          pickupDate: safeToDate(o.pickupDate),
-        };
-     
-      }) as Order[]; // ✅ [수정] 닫는 소괄호() 제거
-
       setOrders(prev => isInitial ? newOrders : [...prev, ...newOrders]);
 
-      // ✅ [수정] 서버가 준 lastDoc (epoch number 객체)을 그대로 다음 커서로 저장
-      // (lastDoc은 백엔드에서 { pickupDate: number, createdAt: number } 형태로 옴)
-      const nextCursor = lastDoc ? {
-          pickupDate: lastDoc.pickupDate || null,
-          createdAt: lastDoc.createdAt || null
-      } : null;
-      setLastVisible(nextCursor);
-
-      if (!lastDoc || newOrders.length < 10) setHasMore(false);
+      // 💡 [수정] 다음 페이지를 위한 lastVisible(커서)을 설정합니다.
+      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+      if (lastDoc) {
+        const lastDocData = lastDoc.data();
+        setLastVisible({
+          pickupDate: lastDocData.pickupDate as Timestamp,
+          createdAt: lastDocData.createdAt as Timestamp
+        });
+      } else {
+        setLastVisible(null);
+        setHasMore(false);
+      }
       
-    } catch (error) {
-      console.error("Order fetching error:", error);
-      showToast('error', '예약 내역을 불러오는데 실패했습니다.');
+      if (newOrders.length < 10) setHasMore(false);
+      
+    } catch (error: any) {
+      console.error("Order fetching error (DB Direct):", error);
+      // 💡 [수정] 인덱스 누락 오류에 대한 친절한 안내
+      if (error.code === 'failed-precondition') {
+        showToast('error', '예약 내역을 불러오는데 필요한 DB 인덱스가 없습니다. (Firestore 콘솔 확인 필요)');
+      } else {
+        showToast('error', '예약 내역을 불러오는데 실패했습니다.');
+      }
       setHasMore(false);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [uid, loadingMore, hasMore, fetchOrdersFn]);
+  }, [uid, loadingMore, hasMore]); // 💡 [수정] 의존성 배열에서 fetchOrdersFn 제거
 
   useEffect(() => {
     if (uid) {
@@ -205,13 +218,13 @@ const usePaginatedOrders = (uid?: string) => {
       setHasMore(false);
       setLoading(false);
     }
-  }, [uid]); // fetchOrders 의존성 제거 (useCallback 내부에서 이미 관리)
+  }, [uid, fetchOrders]); // 💡 [수정] fetchOrders를 의존성에 다시 추가 (useCallback으로 최적화 됨)
   
   const loadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
         fetchOrders(false);
     }
-  }, [loadingMore, hasMore, fetchOrders]);
+  }, [loadingMore, hasMore, fetchOrders]); // 💡 [수정] fetchOrders 의존성 추가
   
   return { orders, setOrders, loading, loadingMore, hasMore, loadMore };
 };

@@ -312,12 +312,16 @@ const ProductListPageAdmin: React.FC = () => {
     
     // 1. 데이터 평탄화 (Enrichment)
     pageData.forEach(p => {
-        (p.salesHistory || []).forEach(r => {
+        (Array.isArray(p.salesHistory) ? p.salesHistory : []).forEach(r => {
             
             // 1a. 하위 옵션 그룹(VG) 상세 데이터 생성
-            const enrichedVariantGroups: EnrichedVariantGroup[] = (r.variantGroups || []).map(vg => {
+            // ✅ [수정] (r.variantGroups || []) -> Array.isArray 방어 코드 추가 (502줄 ~ 512줄 수정 반영)
+            const enrichedVariantGroups: EnrichedVariantGroup[] = (Array.isArray(r.variantGroups) ? r.variantGroups : []).map(vg => {
                 const stockInfo = getStockInfo(vg);
-                const firstItem = vg.items?.[0];
+
+                // ✅ [수정] vg.items가 undefined일 수 있으므로 방어 코드 추가
+                const safeItems: ProductItem[] = Array.isArray(vg.items) ? vg.items : [];
+                const firstItem = safeItems[0]; // ✅ [수정]
                 
                 const configuredStock = vg.totalPhysicalStock ?? -1;
                 const remainingStock = stockInfo.remainingUnits === Infinity ? '무제한' : stockInfo.remainingUnits;
@@ -326,8 +330,9 @@ const ProductListPageAdmin: React.FC = () => {
                 const status = getSimplifiedStatus(r, remainingStock); 
                 
                 // VG의 가장 빠른 유통기한
-                const earliestExpiration = vg.items.length > 0
-                    ? Math.min(...vg.items.map(i => safeToDate(i.expirationDate)?.getTime() || Infinity).filter(t => t !== Infinity))
+                // ✅ [수정] vg.items.length -> safeItems.length
+                const earliestExpiration = safeItems.length > 0
+                    ? Math.min(...safeItems.map(i => safeToDate(i.expirationDate)?.getTime() || Infinity).filter(t => t !== Infinity))
                     : null;
 
                 return {
@@ -437,27 +442,41 @@ const ProductListPageAdmin: React.FC = () => {
             const newDate = Timestamp.fromDate(new Date(newValue as number));
             backendPromise = updateSalesRound(productId, roundId, { publishAt: newDate });
         }
+        // ✅ [수정] '유통기한' 수정 로직 (596~606줄 수정 반영)
         else if (field === 'expirationDate' && vgId && itemId) {
             const product = pageData.find(p => p.id === productId);
             const round = product?.salesHistory.find(r => r.roundId === roundId);
             const vg = round?.variantGroups?.find(v => v.id === vgId);
-            const item = vg?.items?.find(i => i.id === itemId);
+
+            // ✅ [수정] 이 방어 코드를 추가하세요
+            const safeItems: ProductItem[] = Array.isArray(vg?.items) ? vg.items : [];
+            const item = safeItems.find(i => i.id === itemId); // ✅ [수정]
+            
             if (!product || !round || !vg || !item) throw new Error("유통기한 업데이트를 위한 상품/회차/옵션 정보를 찾을 수 없습니다.");
             const newDate = Timestamp.fromDate(new Date(newValue as number));
             const updatedItem = { ...item, expirationDate: newDate };
-            const updatedVg = { ...vg, items: vg.items.map(i => i.id === itemId ? updatedItem : i) };
-            const updatedRound = { ...round, variantGroups: round.variantGroups.map(v => v.id === vgId ? updatedVg : v) };
+            
+            const updatedVg = { ...vg, items: safeItems.map(i => i.id === itemId ? updatedItem : i) }; // ✅ [수정]
+            const updatedRound = { ...round, variantGroups: (Array.isArray(round.variantGroups) ? round.variantGroups : []).map(v => v.id === vgId ? updatedVg : v) }; // ✅ [수정]
+            
             backendPromise = updateSalesRound(productId, roundId, updatedRound);
         }
+        // ✅ [수정] '가격' 수정 로직 (607~618줄 수정 반영)
         else if (field === 'price' && vgId && itemId) {
             const product = pageData.find(p => p.id === productId);
             const round = product?.salesHistory.find(r => r.roundId === roundId);
             const vg = round?.variantGroups?.find(v => v.id === vgId);
-            const item = vg?.items?.find(i => i.id === itemId);
+
+            // ✅ [수정] 이 방어 코드를 추가하세요
+            const safeItems: ProductItem[] = Array.isArray(vg?.items) ? vg.items : [];
+            const item = safeItems.find(i => i.id === itemId); // ✅ [수정]
+            
             if (!product || !round || !vg || !item) throw new Error("가격 업데이트를 위한 상품/회차/옵션 정보를 찾을 수 없습니다.");
             const updatedItem = { ...item, price: newValue as number };
-            const updatedVg = { ...vg, items: vg.items.map(i => i.id === itemId ? updatedItem : i) };
-            const updatedRound = { ...round, variantGroups: round.variantGroups.map(v => v.id === vgId ? updatedVg : v) };
+
+            const updatedVg = { ...vg, items: safeItems.map(i => i.id === itemId ? updatedItem : i) }; // ✅ [수정]
+            const updatedRound = { ...round, variantGroups: (Array.isArray(round.variantGroups) ? round.variantGroups : []).map(v => v.id === vgId ? updatedVg : v) }; // ✅ [수정]
+            
             backendPromise = updateSalesRound(productId, roundId, updatedRound); 
         } 
         else if (field === 'stock' && vgId) {
@@ -469,7 +488,10 @@ const ProductListPageAdmin: React.FC = () => {
         }
 
         await backendPromise; 
-        toast.success("수정되었습니다.");
+        if (field === 'stock') {
+            // 재고 수정 시 상태가 바뀔 수 있으므로 필터 초기화 제안
+            // setFilterStatus('all'); // 주석 처리: 이 기능은 재고 수정 시 너무 불편할 수 있어 일단 유지합니다.
+        }
         
         await fetchData();
 

@@ -87,7 +87,19 @@
 .simple-product-list {
     display: flex;
     flex-direction: column;
-    gap: 0;
+    
+    /* ✅ [수정]
+       기존: gap: 0;
+       변경: 카드 사이의 수직 간격을 0.5rem으로 설정합니다.
+    */
+    gap: 0.5rem;
+    
+    /* ✅ [추가]
+       기존에 카드의 margin-top/bottom이 하던 역할을
+       리스트의 padding으로 대체합니다.
+       (리스트의 첫 번째 카드 위, 마지막 카드 아래에 여백 생성)
+    */
+    padding: 0.5rem 0;
 }
 
 /* ✅ [추가] 섹션 제목과 카운트다운을 양쪽으로 나누는 헤더 스타일 */
