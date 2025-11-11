@@ -216,9 +216,9 @@ const SimpleOrderPage: React.FC = () => {
     // 이 파일에서는 별도의 플러그인 설정 없이 dayjs를 바로 사용합니다.
 
     const now = dayjs();
-    // ✅ 정렬을 위한 임시 배열의 타입에 sortPrice를 추가합니다.
-    const tempPrimary: (ProductWithUIState & { sortPrice: number })[] = [];
-    const tempSecondary: (ProductWithUIState & { sortPrice: number })[] = [];
+    // ✅ [수정] 정렬을 위한 임시 배열의 타입에 sortPrice와 isSoldOut을 추가합니다.
+    const tempPrimary: (ProductWithUIState & { sortPrice: number; isSoldOut: boolean })[] = [];
+    const tempSecondary: (ProductWithUIState & { sortPrice: number; isSoldOut: boolean })[] = [];
     let earliestPrimaryEnd: dayjs.Dayjs | null = null;
 
     products.forEach(product => {
@@ -227,6 +227,8 @@ const SimpleOrderPage: React.FC = () => {
 
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
       const actionState = determineActionState(round, userDocument as any);
+      
+      // 1. 'ENDED' (판매 기간 종료) 상태는 항상 숨김
       if (actionState === 'ENDED') return;
 
       const finalPhase = (round.isManuallyOnsite)
@@ -236,17 +238,27 @@ const SimpleOrderPage: React.FC = () => {
           : (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '(]'))
             ? 'secondary'
             : 'past';
-
+      
+      // 2. 'past' (기간 지남) 또는 'onsite' (현장 판매)는 이 페이지에서 숨김
       if (finalPhase === 'past' || finalPhase === 'onsite') return;
+      
+      // ✅ [추가 1] 2차 공구(secondary)이고 품절(AWAITING_STOCK)이면 리스트에서 제외 (숨김 처리)
+      if (finalPhase === 'secondary' && actionState === 'AWAITING_STOCK') {
+        return;
+      }
+
+      // ✅ [추가 2] 1차 공구 품절 여부 확인 (정렬용)
+      const isSoldOut = (actionState === 'AWAITING_STOCK'); // 2차 공구는 위에서 걸러졌으므로, 1차 공구 품절만 true가 됨
 
       const productWithState: ProductWithUIState = { ...product, phase: finalPhase, displayRound: round, actionState };
 
       // ⚠️ 상품의 가격을 결정합니다. (SimpleProductCard 로직과 동일하게 첫 번째 옵션 가격 사용)
       const priceForSort = productWithState.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
       
-      const productWithSortPrice: ProductWithUIState & { sortPrice: number } = {
+      const productWithSortPrice: ProductWithUIState & { sortPrice: number; isSoldOut: boolean } = {
           ...productWithState,
-          sortPrice: priceForSort
+          sortPrice: priceForSort,
+          isSoldOut: isSoldOut // ✅ 품절 상태 추가
       };
 
       if (finalPhase === 'primary') {
@@ -255,19 +267,27 @@ const SimpleOrderPage: React.FC = () => {
           earliestPrimaryEnd = primaryEndDate;
         }
       } else if (finalPhase === 'secondary') {
+        // (품절된 2차 공구 상품은 위에서 이미 return되어 여기까지 오지 않음)
         tempSecondary.push(productWithSortPrice);
       }
     });
 
-    // ✅ [추가된 정렬 로직] 가격(sortPrice)이 높은 순(내림차순)으로 정렬
-    // Array.prototype.sort()는 원본을 변경하므로, map/filter 이후에는 새로운 배열을 받아 정렬해야 합니다.
-    // 여기서 tempPrimary와 tempSecondary는 이미 새로운 배열이므로 .sort()를 사용해도 안전합니다.
-    const sortedPrimary = tempPrimary.sort((a, b) => b.sortPrice - a.sortPrice);
+    // ✅ [수정된 정렬 로직]
+    // 1. 품절되지 않은 상품(isSoldOut=false)이 위로 오도록 정렬
+    // 2. 동일 상태 내에서는 가격(sortPrice)이 높은 순(내림차순)으로 정렬
+    const sortedPrimary = tempPrimary.sort((a, b) => {
+        if (a.isSoldOut !== b.isSoldOut) {
+            return a.isSoldOut ? 1 : -1; // isSoldOut: true (품절) 상품을 뒤로 보냄
+        }
+        return b.sortPrice - a.sortPrice; // 동일 상태면 가격 내림차순
+    });
+    
+    // 2차 공구는 이미 품절 상품이 필터링되었으므로 가격순 정렬만 수행
     const sortedSecondary = tempSecondary.sort((a, b) => b.sortPrice - a.sortPrice);
 
     return {
       // ✅ 정렬된 배열을 반환
-      // 반환 시에는 임시로 추가했던 sortPrice 속성을 제거하고 ProductWithUIState 타입으로 캐스팅합니다.
+      // 반환 시에는 임시로 추가했던 sortPrice, isSoldOut 속성을 제거하고 ProductWithUIState 타입으로 캐스팅합니다.
       primarySaleProducts: sortedPrimary as ProductWithUIState[],
       secondarySaleProducts: sortedSecondary as ProductWithUIState[],
       generalPrimarySaleEndDate: earliestPrimaryEnd,

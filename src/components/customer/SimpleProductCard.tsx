@@ -240,8 +240,17 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
         if (isMultiOption) {
             // ✅ [수정] 'WAITLISTABLE' 제거
-            const isDisplayableState = ['PURCHASABLE', 'REQUIRE_OPTION'].includes(actionState);
+            const isDisplayableState = ['PURCHASABLE', 'REQUIRE_OPTION', 'AWAITING_STOCK'].includes(actionState); // ✅ AWAITING_STOCK 추가
             if (!isDisplayableState) return null;
+
+            // ✅ [추가] 1차 공구 품절 상태 배지
+            if (actionState === 'AWAITING_STOCK') {
+                return (
+                    <span className="stock-badge sold-out">
+                        <Hourglass size={12} /> 1차 품절
+                    </span>
+                );
+            }
 
             const hasAnyLimitedStock = displayRound.variantGroups.some(vg => {
                 const stockInfo = getStockInfo(vg as OriginalVariantGroup & { reservedCount?: number });
@@ -258,6 +267,15 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             return null;
         }
 
+        // ✅ [추가] 1차 공구 품절 상태 배지
+        if (actionState === 'AWAITING_STOCK') {
+            return (
+                <span className="stock-badge sold-out">
+                    <Hourglass size={12} /> 1차 품절
+                </span>
+            );
+        }
+        
         if (actionState !== 'PURCHASABLE') return null;
 
         const stockInfo = getStockInfo(displayRound.variantGroups[0] as OriginalVariantGroup & { reservedCount?: number });
@@ -334,6 +352,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                     </button>
                 </div>
             );
+        }
+
+        // ✅ [추가] 1차 공구 품절 (AWAITING_STOCK) 시 '품절 (상세보기)' 버튼
+        // (2차 공구 품절은 SimpleOrderPage에서 이미 필터링됨)
+        if (actionState === 'AWAITING_STOCK') {
+             return <button className="simple-card-action-btn details sold-out" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>품절 (상세보기) <ChevronRight size={16} /></button>;
         }
 
         if (actionState === 'ENDED') {
