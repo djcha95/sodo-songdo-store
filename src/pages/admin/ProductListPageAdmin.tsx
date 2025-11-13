@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, deleteSalesRounds, updateSalesRound, getProductsWithStock, updateProductCoreInfo } from '@/firebase';
-import type { Product, SalesRound, Category, SalesRoundStatus, VariantGroup, StorageType, ProductItem } from '@/shared/types';
+import { updateMultipleVariantGroupStocks, updateMultipleSalesRoundStatuses, deleteSalesRounds, updateSalesRound, getProductsWithStock, updateProductCoreInfo } from '@/firebase';
+import type { Product, SalesRound, SalesRoundStatus, VariantGroup, StorageType, ProductItem } from '@/shared/types';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, BarChart2, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Store, MoreVertical, Loader2, Sun, Snowflake, Tag } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
@@ -168,7 +168,7 @@ const InlineEditor: React.FC<{
   return (<span className="editable-field" onClick={() => setIsEditing(true)}> {displayValue} </span>);
 };
 
-// --- [수정] 4. 인라인 '보관' 편집 컴포넌트 - 표시 부분 클릭 가능 ---
+// --- [수정] 4. 인라인 '보관' 편집 컴포넌트 - 표시 부분 클릭 가능 + 색상 적용 (Request 3) ---
 const InlineStorageEditor: React.FC<{
   initialValue: StorageType;
   onSave: (newValue: StorageType) => Promise<void>;
@@ -215,8 +215,15 @@ const InlineStorageEditor: React.FC<{
       </div>
     );
   }
-  // [수정] span에 직접 onClick
-  return (<span className="editable-field" onClick={() => setIsEditing(true)}>{displayValue}</span>);
+  // [수정] Request 3 반영: 뱃지 클래스 추가
+  return (
+    <span 
+      className={`editable-field storage-badge storage-${initialValue.toLowerCase()}`} 
+      onClick={() => setIsEditing(true)}
+    > 
+      {displayValue} 
+    </span>
+  );
 };
 
 // --- [수정] 5. 인라인 '유통기한' / '입고일' 편집 컴포넌트 - 아이콘 제거 ---
@@ -291,7 +298,8 @@ const ProductListPageAdmin: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const productsData = await getProductsWithStock({ pageSize: 1000, lastVisible: null, category: null });
+      // [수정] Request 1 반영: category: null 속성 제거
+      const productsData = await getProductsWithStock({ pageSize: 1000, lastVisible: null });
       setPageData(productsData.products);
     } catch (error: any) {
       reportError('ProductListPageAdmin.fetchData', error);
@@ -553,11 +561,14 @@ const ProductListPageAdmin: React.FC = () => {
     <div className="admin-page-container product-list-admin-container simplified inline-edit">
         <header className="admin-page-header">
             <h1 className="admin-page-title"><PackageOpen size={28} /> 상품 관리 (간편 편집)</h1>
-            <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="완전히 새로운 대표 상품을 시스템에 등록합니다."><Plus size={18}/> 신규 대표 상품 추가</button>
+            {/* ❌ [삭제] 중복 버튼 삭제 (Request 1) */}
         </header>
 
         {/* 필터/검색 영역 */}
         <div className="product-list-controls-v2">
+            {/* ✅ [유지] 옮겨진 버튼 */}
+            <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="완전히 새로운 대표 상품을 시스템에 등록합니다."><Plus size={18}/> 신규 대표 상품 추가</button>
+
             <div className="search-bar-wrapper">
                 <Search size={18} className="search-icon"/>
                 <input type="text" placeholder="상품명 또는 회차명으로 검색..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="search-input"/>
@@ -597,8 +608,9 @@ const ProductListPageAdmin: React.FC = () => {
                             <th className="th-align-center sortable-header" onClick={() => handleSortChange('expirationDate')} style={{ width: '90px' }}>
                                 유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                             </th>
+                            {/* ✅ [수정] '입고일' -> '판매 시작일'로 텍스트 변경 (Request 2) */}
                             <th className="th-align-center sortable-header" onClick={() => handleSortChange('publishAt')} style={{ width: '80px' }}>
-                                입고일 {sortConfig.key === 'publishAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                                판매 시작일 {sortConfig.key === 'publishAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                             </th>
                             <th className="th-align-center sortable-header" onClick={() => handleSortChange('status')} style={{ width: '100px' }}>
                                 상태 {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
@@ -712,6 +724,20 @@ const ProductListPageAdmin: React.FC = () => {
                                             </td>
                                             <td className="td-align-center td-nowrap">
                                                 <div className="action-buttons-wrapper inline-actions">
+                                                    {/* ✅ [추가] '새 회차 추가' 버튼 (Request 2) */}
+                                                    <button
+                                                        onClick={() => navigate('/admin/products/add', {
+                                                            state: {
+                                                                productId: item.productId,
+                                                                productGroupName: item.productName,
+                                                                lastRound: item.round // 현재 행의 라운드 정보를 전달
+                                                            }
+                                                        })}
+                                                        className="admin-action-button add-round" // CSS 클래스 추가
+                                                        title="이 상품에 새 판매 회차 추가"
+                                                    >
+                                                        <Plus size={16}/>
+                                                    </button>
                                                     <button
                                                         onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)}
                                                         className="admin-action-button"

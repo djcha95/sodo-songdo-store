@@ -324,3 +324,157 @@
 .admin-product-table td:nth-child(4) .product-name-cell-simple {
    max-width: 100%; /* 부모 셀 너비에 맞춤 */
 }
+
+
+/* ============================ */
+/* 4. [NEW] UI/UX Improvements  */
+/* ============================ */
+
+/* --- '새 회차 추가' 버튼 (Request 2) --- */
+.admin-action-button.add-round {
+  color: var(--success-color-dark);
+}
+.admin-action-button.add-round:hover {
+   background-color: var(--success-color-light);
+}
+
+/* --- 보관 타입 뱃지 (Request 3) --- */
+.storage-badge {
+  display: inline-block;
+  padding: 6px 8px; /* input-like padding */
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 0.9em;
+  color: #fff;
+  background-color: #888; /* Default */
+  border-bottom: 1px dashed transparent; 
+  cursor: pointer;
+  transition: background-color 0.2s, border-bottom 0.2s, color 0.2s;
+}
+.storage-badge:hover {
+  background-color: var(--hover-background-color);
+  border-bottom: 1px dashed var(--primary-color);
+  color: var(--text-color-primary); /* Text color on hover */
+}
+.storage-badge.storage-room {
+  background-color: #a88d77; /* 실온 = Brown */
+  color: #fff;
+}
+.storage-badge.storage-frozen {
+  background-color: #3b82f6; /* 냉동 = Blue */
+  color: #fff;
+}
+.storage-badge.storage-cold {
+  background-color: #ef4444; /* 냉장 = Red */
+  color: #fff;
+}
+.storage-badge.storage-fresh {
+  background-color: #22c55e; /* 신선 = Green */
+  color: #fff;
+}
+/* Colored badges on hover */
+.storage-badge.storage-room:hover,
+.storage-badge.storage-frozen:hover,
+.storage-badge.storage-cold:hover,
+.storage-badge.storage-fresh:hover {
+    background-color: var(--hover-background-color);
+    border-bottom: 1px dashed var(--primary-color);
+    color: var(--text-color-primary);
+}
+
+
+/* ============================ */
+/* 5. [NEW] UI Layout Fixes     */
+/* ============================ */
+/* --- 페이지 헤더 (제목 + 신규 상품 추가 버튼) --- */
+.admin-page-header {
+  display: flex; /* Flexbox 사용 */
+  justify-content: flex-start; /* ⬅️ 수정: 제목이 왼쪽 정렬 */
+  align-items: center; /* 세로 중앙 정렬 */
+  width: 100%; /* 너비 100% */
+  margin-bottom: 1.5rem; /* 기존 여백 유지 */
+}
+
+/* --- 컨트롤 영역 (버튼, 검색, 필터) --- */
+.product-list-controls-v2 {
+  display: flex;
+  justify-content: space-between; /* 양쪽으로 펼치기 유지 */
+  align-items: center;
+  width: 100%;
+  gap: 16px; /* 컨트롤간 간격 */
+  margin-bottom: 1.5rem;
+}
+
+/* --- 1. '신규 대표 상품 추가' 버튼 (Primary CTA) --- */
+.admin-add-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px; /* 버튼 크기 키움 */
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #fff;
+  background-color: var(--primary-color); /* ⬅️ 메인 색상 적용 */
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+  flex-shrink: 0; /* 줄어들지 않음 */
+}
+.admin-add-button:hover {
+  background-color: var(--primary-color-dark);
+  box-shadow: 0 2px 8px rgba(0, 89, 178, 0.3);
+}
+.admin-add-button svg {
+  margin-top: -2px;
+}
+
+/* --- 2. 검색창 (남는 공간 차지) --- */
+.product-list-controls-v2 .search-bar-wrapper {
+  flex-grow: 1; /* ⬅️ 남는 공간 모두 차지 */
+  /* max-width: 600px; */ /* 최대 너비 제한 제거 또는 800px로 늘리기 */
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+/* 검색창 아이콘 (기존 것 재사용) */
+.search-bar-wrapper .search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-color-light);
+  z-index: 1;
+}
+/* ⬅️ 검색창 <input> 자체를 키움 */
+.search-bar-wrapper .search-input {
+  width: 100%;
+  padding: 12px 12px 12px 40px; /* ⬅️ input 크기 키움 (패딩 증가) */
+  font-size: 1.0em; /* ⬅️ 폰트 크기 키움 */
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-bar-wrapper .search-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color-light);
+  outline: none;
+}
+
+/* --- 3. 필터 (크기 유지) --- */
+.product-list-controls-v2 .filter-sort-wrapper {
+  flex-shrink: 0; /* 줄어들지 않음 */
+  display: flex;
+  gap: 12px;
+}
+.filter-sort-wrapper .control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-color-secondary);
+}
+.filter-sort-wrapper .control-select {
+  padding: 10px 12px; /* ⬅️ 다른 컨트롤과 높이 맞춤 */
+  font-size: 0.95em;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+}

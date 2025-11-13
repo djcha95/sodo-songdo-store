@@ -2,12 +2,12 @@
 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { HttpsCallable } from 'firebase/functions'; // ✅ [추가] HttpsCallable 타입 import
+import type { HttpsCallable } from 'firebase/functions'; // ✅ [유지] HttpsCallable 타입 import
 import { 
   getFirestore, collection, addDoc, query, doc, getDoc, getDocs, 
   updateDoc, writeBatch, increment, arrayUnion, where, Timestamp, 
   runTransaction, 
-  orderBy, limit, startAfter, // ✅ [수정] DB 직접 조회를 위한 Firestore 함수 추가
+  orderBy, limit, startAfter, // ✅ [유지] DB 직접 조회를 위한 Firestore 함수
   type DocumentData, type DocumentReference, type WriteBatch 
 } from 'firebase/firestore';
 import { getStorage, ref, deleteObject } from 'firebase/storage';
@@ -15,13 +15,13 @@ import { uploadImages } from './generalService';
 import { getReservedQuantitiesMap } from './orderService';
 import { getUserDocById } from './userService';
 
-// ✅ [수정] '구' 파일과 '신' 파일의 모든 타입을 통합합니다.
+// ✅ [유지] '구' 파일과 '신' 파일의 모든 타입을 통합합니다.
 import type { 
   Product, SalesRound, SalesRoundStatus, VariantGroup, 
   ProductItem, CartItem, LoyaltyTier 
 } from '@/shared/types';
 
-// ✅ [추가] WaitlistInfo 타입을 여기에 직접 정의합니다.
+// ✅ [유지] WaitlistInfo 타입을 여기에 직접 정의합니다.
 // (공용 타입이 아니라, 이 파일에서만 데이터를 조합해 쓰는 커스텀 타입입니다)
 export interface WaitlistInfo {
   productId: string;
@@ -45,17 +45,14 @@ const db = getFirestore(getApp());
 const storage = getStorage(getApp());
 
 // ========================================================
-// 헬퍼: reservedCount 오버레이 적용 (from '구' 파일)
+// 헬퍼: reservedCount 오버레이 적용
 // ========================================================
 function overlayKey(productId: string, roundId: string, vgId: string) {
   return `${productId}-${roundId}-${vgId}`;
 }
 
 function applyReservedOverlay(product: Product, reservedMap: Map<string, number>): Product {
-  // 💡 [수정] 
-  // 기존: if (!product?.salesHistory) return product;
-  // product.salesHistory가 undefined, null 뿐만 아니라, 아예 배열이 아닌 경우(.map 오류 발생)를
-  // 방지하기 위해 명시적인 배열(Array) 확인 로직으로 변경합니다.
+  // 💡 [유지] salesHistory 배열 방어 로직
   if (!Array.isArray(product?.salesHistory)) return product;
 
   product.salesHistory = product.salesHistory.map((round) => {
@@ -70,10 +67,10 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 }
 
 // ========================================================
-// 🚀 '최신식' Cloud Function 호출 함수 (from '신' 파일)
+// 🚀 '최신식' Cloud Function 호출 함수
 // ========================================================
 
-// [수정] 각 action에 대한 개별 callable 생성
+// [유지] 각 action에 대한 개별 callable 생성
 const addProductWithFirstRoundCallable = httpsCallable(functions, 'addProductWithFirstRound');
 const addNewSalesRoundCallable = httpsCallable(functions, 'addNewSalesRound');
 const updateProductCoreInfoCallable = httpsCallable(functions, 'updateProductCoreInfo');
@@ -85,15 +82,13 @@ const updateMultipleVariantGroupStocksCallable = httpsCallable(functions, 'updat
 const updateMultipleSalesRoundStatusesCallable = httpsCallable(functions, 'updateMultipleSalesRoundStatuses');
 
 // --- 기존 함수 (이름 충돌 없음) ---
-// ❌ [제거] 5초 '콜드 스타트'의 원인이므로 이 함수는 더 이상 사용하지 않습니다.
-// const getProductsWithStockCallable = httpsCallable(functions, 'getProductsWithStock'); 
 const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock');
 
 // --- 1. 신규 상품 + 첫 회차 등록 ---
 export const addProductWithFirstRound = async (
   productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'>,
   salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>,
-  imageFiles: File[], // ✅ [수정] imageFiles 파라미터가 누락되어 추가합니다.
+  imageFiles: File[],
   creationDate: Date
 ): Promise<any> => {
   const result = await addProductWithFirstRoundCallable({
@@ -120,9 +115,9 @@ export const addNewSalesRound = async (
 export const updateProductCoreInfo = async (
   productId: string,
   productData: Partial<Product>,
-  newFiles: File[], // ✅ [수정] newFiles 파라미터가 누락되어 추가합니다.
+  newFiles: File[],
   finalImageUrls: string[],
-  initialImageUrls: string[] // ✅ [수정] initialImageUrls 파라미터가 누락되어 추가합니다.
+  initialImageUrls: string[]
 ): Promise<any> => {
   const result = await updateProductCoreInfoCallable({
     productId,
@@ -195,24 +190,12 @@ export const updateMultipleSalesRoundStatuses = async (
 };
 
 // ========================================================
-// 📦 '구' 파일에서 가져온 클라이언트 함수 (빌드 오류 해결용)
+// 📦 '구' 파일에서 가져온 클라이언트 함수
 // ========================================================
 
-// --- 11. 카테고리 일괄 이동 (✅ 빌드 오류 해결) ---
-export const moveProductsToCategory = async (productIds: string[], newCategoryName: string): Promise<void> => {
-  if (!productIds || productIds.length === 0) {
-    return;
-  }
-  const batch = writeBatch(db);
-  productIds.forEach(id => {
-    const productRef = doc(db, 'products', id);
-    batch.update(productRef, { category: newCategoryName || '' });
-  });
+// --- ❌ [삭제] 11. 카테고리 일괄 이동 (moveProductsToCategory) 함수 전체 삭제 (요청 2) ---
 
-  await batch.commit();
-};
-
-// --- 12. 사용자 대기열 조회 (✅ 빌드 오류 해결) ---
+// --- 12. 사용자 대기열 조회 ---
 export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
   if (!userId) return [];
   const allProductsSnapshot = await getDocs(query(collection(db, 'products'), where('isArchived', '==', false)));
@@ -221,8 +204,8 @@ export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> =
   allProductsSnapshot.docs.forEach(doc => {
     const product = { id: doc.id, ...doc.data() } as Product;
 
-    // 💡 [수정] 여기서도 applyReservedOverlay와 동일한 방어 코드를 추가합니다.
-    if (!Array.isArray(product.salesHistory)) return; // salesHistory가 배열이 아니면 이 product는 건너뜁니다.
+    // 💡 [유지] salesHistory 배열 방어 코드
+    if (!Array.isArray(product.salesHistory)) return; 
     
     (product.salesHistory || []).forEach(round => {
       if (round.waitlist && round.waitlist.length > 0) {
@@ -316,7 +299,7 @@ export const updateEncoreRequest = async (productId: string, userId: string): Pr
     encoreRequesterIds: arrayUnion(userId),
   });
   batch.update(userRef, {
-    encoreRequestedProductIds: arrayUnion(userId), // 오타 수정: arrayUnion(userId)
+    encoreRequestedProductIds: arrayUnion(userId),
   });
   await batch.commit();
 };
@@ -365,7 +348,7 @@ export const cancelWaitlistEntry = async (
     if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
     const productData = productDoc.data() as Product;
 
-    // 💡 [수정] 여기서도 applyReservedOverlay와 동일한 방어 코드를 추가합니다.
+    // 💡 [유지] salesHistory 배열 방어 코드
     if (!Array.isArray(productData.salesHistory)) {
       throw new Error("상품 데이터에 salesHistory 배열이 없습니다.");
     }
@@ -397,7 +380,7 @@ export const updateItemStock = async (
     if (!productSnap.exists()) throw new Error("상품을 찾을 수 없습니다.");
     const product = productSnap.data() as Product;
 
-    // 💡 [수정] 여기서도 applyReservedOverlay와 동일한 방어 코드를 추가합니다.
+    // 💡 [유지] salesHistory 배열 방어 코드
     if (!Array.isArray(product.salesHistory)) {
       throw new Error("상품 데이터에 salesHistory 배열이 없습니다.");
     }
@@ -422,7 +405,7 @@ export const updateItemStock = async (
 };
 
 // ========================================================
-// 🚀 '최신식' 상품 목록 조회 (페이지네이션) (from '구' 파일)
+// 🚀 '최신식' 상품 목록 조회 (페이지네이션)
 // ========================================================
 
 export interface GetProductsWithStockResponse {
@@ -433,40 +416,37 @@ export interface GetProductsWithStockResponse {
 type GetProductsWithStockPayload = {
   pageSize?: number;
   lastVisible?: number | null; // timestamp (millis)
-  category?: string | null;
+  // ❌ [삭제] category?: string | null; (요청 2)
 };
 
 /**
  * ✅ [업그레이드] 이제 이 함수가 상품 목록을 가져오는 유일한 공식 함수입니다.
- * * 💡 [수정] 5초 '콜드 스타트' 문제를 해결하기 위해,
- * Cloud Function(getProductsWithStockCallable) 호출 대신
- * Firestore DB에서 직접 데이터를 조회하도록 로직을 변경합니다.
+ * * 💡 Cloud Function 호출 대신 Firestore DB에서 직접 데이터를 조회합니다.
  */
 export const getProductsWithStock = async (
   payload: GetProductsWithStockPayload
 ): Promise<GetProductsWithStockResponse> => {
   try {
     // 1. 페이로드 해체 및 기본값 설정
-    const { pageSize = 10, lastVisible = null, category = null } = payload;
+    // ❌ [수정] category = null 제거 (요청 2)
+    const { pageSize = 10, lastVisible = null } = payload;
     
     // 2. 쿼리 제약 조건 배열 생성
-    const queryConstraints: any[] = []; // (any[] 타입 사용은 query 제약조건 동적 추가시 일반적)
+    const queryConstraints: any[] = [];
     
     // 3. 기본 필터: 보관처리(isArchived)되지 않은 상품만 조회
     queryConstraints.push(where('isArchived', '==', false));
 
-    // 4. 카테고리 필터 (선택 사항)
-    if (category) {
-      queryConstraints.push(where('category', '==', category));
-    }
+    // ❌ [제거] 4. 카테고리 필터 if 블록 전체 삭제 (요청 2)
+    // if (category) {
+    //   queryConstraints.push(where('category', '==', category));
+    // }
 
     // 5. 정렬: 생성일(createdAt) 기준 내림차순 정렬
-    // (참고: createdAt 필드가 Timestamp 형식이며, Firestore 인덱스가 생성되어 있어야 합니다)
     queryConstraints.push(orderBy('createdAt', 'desc'));
 
     // 6. 페이지네이션 (Cursor)
     if (lastVisible) {
-      // lastVisible은 timestamp (millis) 숫자입니다. Firestore Timestamp 객체로 변환합니다.
       const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
       queryConstraints.push(startAfter(lastVisibleTimestamp));
     }
@@ -506,8 +486,6 @@ export const getProductsWithStock = async (
 
   } catch (error: any) {
     console.error("Error fetching products directly from Firestore:", error);
-    // 쿼리 실패 시 (예: 인덱스 누락) 오류가 발생할 수 있습니다.
-    // Firestore 콘솔에 표시될 수 있는 오류 메시지를 확인하세요.
     if (error.code === 'failed-precondition') {
        throw new Error("상품 목록을 불러오는 데 필요한 데이터베이스 인덱스가 없습니다. Firestore 콘솔에서 인덱스를 생성해주세요.");
     }
@@ -517,16 +495,15 @@ export const getProductsWithStock = async (
 
 // =================================================================
 // ✅ [신규 추가] 리팩토링으로 인해 이름이 변경된 함수 별칭 (Alias)
-// (모든 빌드 오류 해결)
 // =================================================================
 
 /**
  * @deprecated `getProductsWithStock` 사용을 권장합니다.
  */
-export const getProducts = (category?: string) => 
+// ❌ [수정] category 파라미터 제거 및 category: null 설정 (요청 2)
+export const getProducts = () => 
   getProductsWithStock({ 
-    category: category || null, 
-    pageSize: 1000, // 기존 getProducts는 페이지네이션이 없었으므로 큰 값 설정
+    pageSize: 1000, 
     lastVisible: null 
   });
 
@@ -535,33 +512,25 @@ export const getProducts = (category?: string) =>
  */
 export const getAllProducts = () => 
   getProductsWithStock({ 
-    pageSize: 1000, // 기존 getAllProducts는 페이지네이션이 없었으므로 큰 값 설정
+    pageSize: 1000, 
     lastVisible: null,
-    category: null
+    // category 필터가 없으므로 null로 설정
+    // category: null // (이미 GetProductsWithStockPayload에서 category가 제거됨)
   });
 
-/**
- * @deprecated `getProductsWithStock` 사용을 권장합니다.
- * ✅ [수정] payload 객체를 받도록 수정
- */
-export const getProductsByCategory = (payload: { category: string | null }) => 
-  getProductsWithStock({ 
-    category: payload.category, // payload에서 category 추출
-    pageSize: 1000, // 기존 getProductsByCategory는 페이지네이션이 없었으므로 큰 값 설정
-    lastVisible: null 
-  });
+// ❌ [삭제] getProductsByCategory 별칭 함수 전체 삭제 (요청 2)
 
 /**
  * @deprecated `getProductsWithStock` 사용을 G권장합니다.
  */
 export const getPaginatedProductsWithStock = (
-  // ✅ [수정] payload 객체를 받도록 수정 (타입스크립트 호환성을 위해 유지)
+  // ✅ [유지] 기존 함수 시그니처 유지 (호환성을 위해)
   pageSize: number, 
   lastVisible: number | null, 
-  category: string | null
+  category: string | null // 💡 [주석] category 파라미터는 더 이상 사용되지 않습니다.
 ) => 
   getProductsWithStock({ 
     pageSize, 
     lastVisible, 
-    category 
+    // category // ❌ [제거] category 인자 전달 제거 (요청 2)
   });

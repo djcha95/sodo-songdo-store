@@ -96,34 +96,46 @@ export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Day
 export const getDisplayRound = (product: Product): OriginalSalesRound | null => {
     if (!Array.isArray(product.salesHistory) || product.salesHistory.length === 0) return null;
     const now = dayjs();
+    
+    // ✅ [수정] 이 함수 전체를 교체합니다.
     const getPhasePriority = (round: OriginalSalesRound): number => {
         const publishAt = safeToDate(round.publishAt);
-        // ✅ [수정] 수동 '종료'된 상품만 가장 낮은 우선순위로 밀어냅니다. ('sold_out'은 정상 로직을 따름)
+        // 1. 수동 '종료' 또는 DB '종료'는 항상 최하순위
         if (round.manualStatus === 'ended' || round.status === 'ended') return 5;
+
+        // 2. [1순위] 'scheduled' 상태이지만 발행일(publishAt)이 '지금'이거나 '과거'인 경우
+        // (즉, 지금 당장 'selling'이 되어야 하는 라운드)
+        if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 1;
         
-        if (round.status === 'selling') return 1;
-        if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 2;
+        // 3. [2순위] 이미 'selling' 중인 경우
+        if (round.status === 'selling') return 2;
+
+        // 4. [3순위] 'scheduled' 상태이고 발행일이 '미래'인 경우 (판매 예정)
         if (round.status === 'scheduled' && publishAt && now.isBefore(publishAt)) return 3;
-        // ✅ [수정] 'sold_out' 상태는 1~3번 로직(selling, scheduled)을 따르도록 합니다.
-        // (예: manualStatus: 'sold_out' 이지만 status: 'selling'이면 1번)
+
         return 4; // Draft 등 기타 상태
     };
+
     const sortedHistory = [...product.salesHistory]
-        // ✅ [수정] draft, 수동 '종료'된 상품만 제외합니다. ('sold_out'은 허용)
         .filter(r => r.status !== 'draft' && r.manualStatus !== 'ended')
         .sort((a, b) => {
             const priorityA = getPhasePriority(a);
             const priorityB = getPhasePriority(b);
             if (priorityA !== priorityB) return priorityA - priorityB;
+            
+            // ✅ [수정] 1순위, 2순위, 3순위 모두 createdAt(생성일) 내림차순으로 정렬
+            // (즉, 동일 순위 내에서는 가장 최근에 만든 라운드가 이김)
             switch (priorityA) {
-                case 1: case 2: return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
-                case 3: return (safeToDate(a.publishAt)?.getTime() ?? 0) - (safeToDate(b.publishAt)?.getTime() ?? 0);
-                default: return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
+                case 1: // 'scheduled' (now)
+                case 2: // 'selling'
+                case 3: // 'scheduled' (future)
+                    return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
+                default:
+                    return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
             }
         });
     return sortedHistory[0] || null;
 };
-
 // ✅ [수정] determineActionState의 round 파라미터 타입을 OriginalSalesRound로 명시
 export const determineActionState = (round: OriginalSalesRound, userDocument: UserDocument | null): ProductActionState => {
   // 0. 관리자 수동 '종료' 또는 DB '종료' 상태 확인 (가장 먼저 ENDED 처리)
@@ -167,15 +179,6 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
     return 'AWAITING_STOCK';
   }
   
-  // 4. 재고가 있다면, 등급 확인
-  const allowedTiers = round.allowedTiers;
-  if (userDocument && Array.isArray(allowedTiers) && allowedTiers.length > 0) { // allowedTiers가 설정된 경우에만 검사
-      const userTier = userDocument.manualTier || userDocument.loyaltyTier || '공구초보'; // 사용자의 유효 등급 확인 (기본값 '공구초보')
-      if (!allowedTiers.includes(userTier)) {
-          return 'INELIGIBLE'; // 허용 등급이 아니면 'INELIGIBLE' 반환
-      }
-  }
-
   // 5. 등급 검사 통과 시 (또는 등급 제한이 없을 시), 옵션 선택 필요 여부에 따라 상태 결정
   const hasMultipleOptions = round.variantGroups.length > 1 || (round.variantGroups[0]?.items?.length ?? 0) > 1;
   

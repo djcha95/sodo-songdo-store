@@ -120,92 +120,101 @@ const usePaginatedOrders = (uid?: string) => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  // 💡 [수정] lastVisible 상태는 Firestore의 startAfter를 위해 'Timestamp' 객체를 저장합니다.
-  const [lastVisible, setLastVisible] = useState<{ pickupDate: Timestamp | null; createdAt: Timestamp | null } | null>(null);
+
+  // Firestore startAfter용 커서
+  const [lastVisible, setLastVisible] = useState<{
+    pickupDate: Timestamp | null;
+    createdAt: Timestamp | null;
+  } | null>(null);
   const lastVisibleRef = useRef(lastVisible);
   lastVisibleRef.current = lastVisible;
 
-  // ❌ [제거] 5초 '콜드 스타트'의 원인인 Cloud Function 제거
-  // const fetchOrdersFn = useMemo(() => httpsCallable(functions, 'getUserOrders'), []);
-
-  const fetchOrders = useCallback(async (isInitial = false) => {
-    if (!uid) {
-      setLoading(false);
-      setHasMore(false);
-      return;
-    }
-    if ((loadingMore && !isInitial) || (!hasMore && !isInitial)) return;
-
-    if (isInitial) {
-      setLoading(true);
-    } else {
-      setLoadingMore(true);
-    }
-
-    try {
-      // 💡 [수정] 5초 콜드 스타트 해결을 위해 DB에서 직접 쿼리합니다.
-      const ordersRef = collection(db, 'orders');
-      const queryConstraints: QueryConstraint[] = [
-        where('userId', '==', uid),
-        orderBy('pickupDate', 'desc'),
-        orderBy('createdAt', 'desc'), // 페이지네이션의 정확도를 위한 2차 정렬
-        limit(10)
-      ];
-
-      // 💡 [수정] 페이지네이션 커서(lastVisible) 적용
-      const cursorPayload = isInitial ? null : lastVisibleRef.current;
-      if (cursorPayload && cursorPayload.pickupDate && cursorPayload.createdAt) {
-        queryConstraints.push(
-          startAfter(cursorPayload.pickupDate, cursorPayload.createdAt)
-        );
-      }
-
-      const q = query(ordersRef, ...queryConstraints);
-      const snapshot = await getDocs(q);
-
-      // 💡 [수정] Firestore 문서에서 데이터를 변환합니다.
-      const newOrders = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          ...data,
-          id: doc.id, // 문서 ID 추가
-          createdAt: safeToDate(data.createdAt),
-          pickupDate: safeToDate(data.pickupDate),
-        } as unknown as Order;
-      });
-      
-      setOrders(prev => isInitial ? newOrders : [...prev, ...newOrders]);
-
-      // 💡 [수정] 다음 페이지를 위한 lastVisible(커서)을 설정합니다.
-      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-      if (lastDoc) {
-        const lastDocData = lastDoc.data();
-        setLastVisible({
-          pickupDate: lastDocData.pickupDate as Timestamp,
-          createdAt: lastDocData.createdAt as Timestamp
-        });
-      } else {
-        setLastVisible(null);
+  // ✅ fetchOrders는 uid만 의존하게
+  const fetchOrders = useCallback(
+    async (isInitial = false) => {
+      if (!uid) {
+        setLoading(false);
         setHasMore(false);
+        return;
       }
-      
-      if (newOrders.length < 10) setHasMore(false);
-      
-    } catch (error: any) {
-      console.error("Order fetching error (DB Direct):", error);
-      // 💡 [수정] 인덱스 누락 오류에 대한 친절한 안내
-      if (error.code === 'failed-precondition') {
-        showToast('error', '예약 내역을 불러오는데 필요한 DB 인덱스가 없습니다. (Firestore 콘솔 확인 필요)');
-      } else {
-        showToast('error', '예약 내역을 불러오는데 실패했습니다.');
-      }
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [uid, loadingMore, hasMore]); // 💡 [수정] 의존성 배열에서 fetchOrdersFn 제거
 
+      if (isInitial) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      try {
+        const ordersRef = collection(db, "orders");
+        const queryConstraints: QueryConstraint[] = [
+          where("userId", "==", uid),
+          orderBy("pickupDate", "desc"),
+          orderBy("createdAt", "desc"),
+          limit(10),
+        ];
+
+        // ✅ 커서 적용
+        const cursorPayload = isInitial ? null : lastVisibleRef.current;
+        if (
+          cursorPayload &&
+          cursorPayload.pickupDate &&
+          cursorPayload.createdAt
+        ) {
+          queryConstraints.push(
+            startAfter(cursorPayload.pickupDate, cursorPayload.createdAt)
+          );
+        }
+
+        const q = query(ordersRef, ...queryConstraints);
+        const snapshot = await getDocs(q);
+
+        const newOrders = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            ...data,
+            id: doc.id,
+            createdAt: safeToDate(data.createdAt),
+            pickupDate: safeToDate(data.pickupDate),
+          } as unknown as Order;
+        });
+
+        setOrders((prev) => (isInitial ? newOrders : [...prev, ...newOrders]));
+
+        const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        if (lastDoc) {
+          const lastDocData = lastDoc.data();
+          setLastVisible({
+            pickupDate: lastDocData.pickupDate as Timestamp,
+            createdAt: lastDocData.createdAt as Timestamp,
+          });
+        } else {
+          setLastVisible(null);
+          setHasMore(false);
+        }
+
+        if (newOrders.length < 10) {
+          setHasMore(false);
+        }
+      } catch (error: any) {
+        console.error("Order fetching error (DB Direct):", error);
+        if (error.code === "failed-precondition") {
+          showToast(
+            "error",
+            "예약 내역을 불러오는데 필요한 DB 인덱스가 없습니다. (Firestore 콘솔 확인 필요)"
+          );
+        } else {
+          showToast("error", "예약 내역을 불러오는데 실패했습니다.");
+        }
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [uid] // ✅ 여기서 uid만!
+  );
+
+  // ✅ uid 바뀔 때만 초기화 + 첫 페이지 로드
   useEffect(() => {
     if (uid) {
       setOrders([]);
@@ -218,14 +227,16 @@ const usePaginatedOrders = (uid?: string) => {
       setHasMore(false);
       setLoading(false);
     }
-  }, [uid, fetchOrders]); // 💡 [수정] fetchOrders를 의존성에 다시 추가 (useCallback으로 최적화 됨)
-  
+  }, [uid, fetchOrders]);
+
+  // 추가 로드(무한스크롤용)
   const loadMore = useCallback(() => {
+    // ✅ 여기서만 loadingMore, hasMore를 검사
     if (!loadingMore && hasMore) {
-        fetchOrders(false);
+      fetchOrders(false);
     }
-  }, [loadingMore, hasMore, fetchOrders]); // 💡 [수정] fetchOrders 의존성 추가
-  
+  }, [loadingMore, hasMore, fetchOrders]);
+
   return { orders, setOrders, loading, loadingMore, hasMore, loadMore };
 };
 

@@ -6,19 +6,19 @@ import { Timestamp } from 'firebase/firestore';
 import {
   addProductWithFirstRound,
   addNewSalesRound,
-  getCategories,
+  // getCategories, // ❌ [삭제] 카테고리 기능 제거 (Request 1)
   searchProductsByName,
   getProductById,
   updateSalesRound,
   updateProductCoreInfo,
   functions,
   getReservedQuantitiesMap,
-  uploadImages, // ✅ [추가] 이미지 업로드 서비스 import
+  uploadImages,
 } from '@/firebase';
 import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
 // ✅ [수정] 올바른 경로에서 모든 타입을 가져옵니다.
 import type {
-  Category,
+  // Category, // ❌ [삭제] 카테고리 기능 제거 (Request 1)
   StorageType,
   Product,
   SalesRound,
@@ -30,7 +30,7 @@ import type {
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, Lock, AlertTriangle, Loader2, CalendarPlus, Bot, Tag, Gift
+  FileText, Clock, AlertTriangle, Loader2, CalendarPlus, Bot, Gift
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
@@ -68,21 +68,22 @@ interface VariantGroupUI {
   items: ProductItemUI[];
 }
 
-interface AIParsedData {
-  productType: 'single' | 'group';
-  storageType: StorageType;
-  categoryName: string | null;
-  groupName: string | null;
-  cleanedDescription: string | null;
-  hashtags?: string[];
-  variantGroups: {
-    groupName: string | null;
-    totalPhysicalStock: number | null;
-    expirationDate: string | null; // YYYY-MM-DD
-    pickupDate: string | null;     // YYYY-MM-DD
-    items: { name: string; price: number; stockDeductionAmount: number; }[];
-  }[];
-}
+// ❌ [삭제] interface AIParsedData { ... } 인터페이스 정의 전체 (Request 3 - 수정 2)
+// interface AIParsedData {
+//   productType: 'single' | 'group';
+//   storageType: StorageType;
+//   categoryName: string | null;
+//   groupName: string | null;
+//   cleanedDescription: string | null;
+//   hashtags?: string[];
+//   variantGroups: {
+//     groupName: string | null;
+//     totalPhysicalStock: number | null;
+//     expirationDate: string | null; // YYYY-MM-DD
+//     pickupDate: string | null;     // YYYY-MM-DD
+//     items: { name: string; price: number; stockDeductionAmount: number; }[];
+//   }[];
+// }
 
 // --- 헬퍼 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
@@ -143,21 +144,18 @@ interface SettingsModalProps {
   isOpen: boolean; onClose: () => void;
   isPreOrderEnabled: boolean; setIsPreOrderEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   preOrderTiers: LoyaltyTier[]; setPreOrderTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
-  isSecretProductEnabled: boolean; setIsSecretProductEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  secretTiers: LoyaltyTier[]; setSecretTiers: React.Dispatch<React.SetStateAction<LoyaltyTier[]>>;
+  // ❌ [삭제] isSecretProductEnabled, setIsSecretProductEnabled, secretTiers, setSecretTiers (Request 6)
 }
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen, onClose, isPreOrderEnabled, setIsPreOrderEnabled,
-  preOrderTiers, setPreOrderTiers, isSecretProductEnabled, setIsSecretProductEnabled,
-  secretTiers, setSecretTiers
+  preOrderTiers, setPreOrderTiers,
+  // ❌ [삭제] isSecretProductEnabled, setIsSecretProductEnabled, secretTiers, setSecretTiers (Request 6)
 }) => {
   if (!isOpen) return null;
   const handlePreOrderTierChange = (tier: LoyaltyTier) => {
     setPreOrderTiers(prev => prev.includes(tier) ? prev.filter(t => t !== tier) : [...prev, tier]);
   };
-  const handleSecretTierChange = (tier: LoyaltyTier) => {
-    setSecretTiers(prev => prev.includes(tier) ? prev.filter(t => t !== tier) : [...prev, tier]);
-  };
+  // ❌ [삭제] handleSecretTierChange 함수 (Request 6)
   return (
     <div className="admin-modal-overlay" onClick={onClose}>
       <div className="admin-modal-content" onClick={e => e.stopPropagation()}>
@@ -190,29 +188,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
           </div>
 
-          <div className="form-group">
-            <label className="preorder-toggle-label">
-              <span><Lock size={16} /> 시크릿 상품 (등급 제한)</span>
-              <div className={`toggle-switch ${isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSecretProductEnabled(!isSecretProductEnabled)}>
-                <div className="toggle-handle"></div>
-              </div>
-            </label>
-            {isSecretProductEnabled && (
-              <div className="preorder-options active">
-                <p className="preorder-info"><Info size={14} />선택된 등급의 고객에게만 이 상품이 노출됩니다.</p>
-                <div className="tier-checkbox-group">
-                  {ALL_LOYALTY_TIERS.map(tier => (
-                    <label key={`secret-${tier}`} htmlFor={`secret-tier-${tier}`}>
-                      <input type="checkbox" id={`secret-tier-${tier}`} value={tier}
-                        checked={secretTiers.includes(tier)}
-                        onChange={() => handleSecretTierChange(tier)} />
-                      {tier}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          {/* ❌ [삭제] 시크릿 상품 (등급 제한) 전체 블록 (Request 6) */}
         </div>
         <div className="admin-modal-footer">
           <button onClick={onClose} className="modal-button primary">확인</button>
@@ -229,6 +205,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
 
   const [isLoading, setIsLoading] = useState(mode === 'editRound' || mode === 'newRound');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // ❌ [삭제] isParsingWithAI state 변수 선언을 삭제합니다. (Request 3 - 수정 1)
   const [pageTitle, setPageTitle] = useState('새 상품 등록');
   const [submitButtonText, setSubmitButtonText] = useState('신규 상품 등록하기');
 
@@ -236,12 +213,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [initialRound, setInitialRound] = useState<Partial<SalesRound> | null>(null);
 
   const [productType, setProductType] = useState<'single' | 'group'>('single');
-  const [categories, setCategories] = useState<Category[]>([]);
+  // ❌ [삭제] const [categories, setCategories] = useState<Category[]>([]); (Request 1)
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
-  const [hashtags, setHashtags] = useState<string[]>([]);
-  const [hashtagInput, setHashtagInput] = useState('');
-  const [selectedMainCategory, setSelectedMainCategory] = useState('');
+  // ❌ [삭제] const [hashtags, setHashtags] = useState<string[]>([]); (Request 2)
+  // ❌ [삭제] const [hashtagInput, setHashtagInput] = useState(''); (Request 2)
+  // ❌ [삭제] const [selectedMainCategory, setSelectedMainCategory] = useState(''); (Request 1)
   const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
   const [creationDate, setCreationDate] = useState<Date>(new Date());
 
@@ -261,15 +238,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [pickupDeadlineDate, setPickupDeadlineDate] = useState<Date | null>(null);
 
   const [isPrepaymentRequired, setIsPrepaymentRequired] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalFrom] = useState(false);
   const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
   const [preOrderTiers, setPreOrderTiers] = useState<LoyaltyTier[]>(['공구의 신', '공구왕']);
-  const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false);
-  const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]);
+  // ❌ [삭제] const [isSecretProductEnabled, setIsSecretProductEnabled] = useState(false); (Request 6)
+  // ❌ [삭제] const [secretTiers, setSecretTiers] = useState<LoyaltyTier[]>([]); (Request 6)
 
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
-  const [isParsingWithAI, setIsParsingWithAI] = useState(false);
+  // ❌ [삭제] const [isParsingWithAI, setIsParsingWithAI] = useState(false); (Request 3 - 수정 1)
   const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK'>('NONE');
 
 
@@ -305,14 +282,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
       
       setIsLoading(true);
       try {
-        const [categoriesData, reservedMapData, productData] = await Promise.all([
-            getCategories(),
+        const [reservedMapData, productData] = await Promise.all([
+            // ❌ [삭제] getCategories() 호출 (Request 1)
             mode === 'editRound' && productId ? getReservedQuantitiesMap() : Promise.resolve(new Map<string, number>()),
             productId ? getProductById(productId) : Promise.resolve(null),
         ]);
 
-        // ✅ [추가] 카테고리 상태를 여기서 설정하여 다른 로직에서 안전하게 사용 가능하도록 함
-        setCategories(categoriesData);
+        // ❌ [삭제] setCategories(categoriesData); (Request 1)
 
         if (mode === 'editRound') {
             setInitialReservedMap(reservedMapData);
@@ -331,26 +307,24 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
                 setInitialProduct({
                     groupName: product.groupName,
                     description: product.description,
-                    hashtags: product.hashtags,
+                    // ❌ [삭제] hashtags: product.hashtags, (Request 2)
                     storageType: product.storageType,
-                    category: product.category,
+                    // ❌ [삭제] category: product.category, (Request 1)
                 });
             }
 
             setGroupName(product.groupName);
             setDescription(product.description);
-            setHashtags(product.hashtags || []);
+            // ❌ [삭제] setHashtags(product.hashtags || []); (Request 2)
             setSelectedStorageType(product.storageType);
             if (product.createdAt) setCreationDate(convertToDate(product.createdAt) || new Date());
             
-            // ✅ [최종 수정] categoriesData가 null/undefined일 경우 빈 배열([])을 사용하도록 합니다.
-            const categoriesArray = categoriesData || [];
-            
-            // 🚨 [강화된 방어 로직]: product가 존재하고, category 필드 값이 존재할 때만 find를 시도합니다.
-            if (product.category) {
-              const mainCat = categoriesArray.find(c => c.name === product.category);
-              if (mainCat) setSelectedMainCategory(mainCat.id);
-            }
+            // ❌ [삭제] 카테고리 로딩 및 선택 로직 전체 (Request 1)
+            // const categoriesArray = categoriesData || [];
+            // if (product.category) {
+            //   const mainCat = categoriesArray.find(c => c.name === product.category);
+            //   if (mainCat) setSelectedMainCategory(mainCat.id);
+            // }
             
             setInitialImageUrls(product.imageUrls || []);
             setCurrentImageUrls(product.imageUrls || []);
@@ -426,7 +400,28 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
                 isBundleOption: bundleUnitKeywords.some(k => String(item.name ?? '').includes(k)),
               })),
             };
-          });          setVariantGroups(mappedVGs);
+          });          
+          
+          // ✅ [추가] '새 회차' 모드인데 불러온 옵션이 0개일 경우, 기본 빈 옵션 1개를 추가합니다. (Request 2 - 수정 2)
+          if (mode === 'newRound' && mappedVGs.length === 0) {
+            mappedVGs.push({
+              id: generateUniqueId(),
+              groupName: product ? product.groupName : '', // 대표 상품명으로 기본 설정
+              totalPhysicalStock: '', // 재고는 비워둠
+              stockUnitType: '개',
+              expirationDate: null,
+              items: [{ 
+                id: generateUniqueId(), 
+                name: '', 
+                price: '', 
+                limitQuantity: '', 
+                deductionAmount: 1, 
+                isBundleOption: false 
+              }]
+            });
+          }
+          
+          setVariantGroups(mappedVGs);
 
           if (mode === 'editRound') {
             setPublishDate(convertToDate(roundData.publishAt) || new Date());
@@ -441,9 +436,10 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
           setPreOrderTiers(roundData.preOrderTiers || ['공구의 신', '공구왕']);
-          const secretForTiers = roundData.allowedTiers;
-          setIsSecretProductEnabled(!!secretForTiers && secretForTiers.length < ALL_LOYALTY_TIERS.length);
-          setSecretTiers(secretForTiers || []);
+          // ❌ [삭제] 시크릿 상품 관련 로직 3줄 (Request 6)
+          // const secretForTiers = roundData.allowedTiers;
+          // setIsSecretProductEnabled(!!secretForTiers && secretForTiers.length < ALL_LOYALTY_TIERS.length);
+          // setSecretTiers(secretForTiers || []);
         }
       } catch (err) {
         reportError('ProductForm.fetchData', err);
@@ -466,16 +462,19 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
   }, [mode, variantGroups.length]);
 
   useEffect(() => {
-    if (mode === 'editRound' || eventType === 'CHUSEOK') return;
+    // ✅ [수정] mode === 'editRound' 조건을 삭제합니다. (Request 2 - 수정 1)
+    if (eventType === 'CHUSEOK') return;
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
 
     const dayOfWeek = deadline.day();
 
-    if (dayOfWeek === 6) {
-      deadline = deadline.add(2, 'day');
-    } else if (dayOfWeek === 0) {
+    // ❌ [삭제] 토요일 발행 -> 월요일 마감 로직 (Request 3)
+    // if (dayOfWeek === 6) {
+    //   deadline = deadline.add(2, 'day');
+    // } else 
+    if (dayOfWeek === 0) { // ✅ [수정] 일요일 마감 -> 월요일 마감 (Request 3)
       deadline = deadline.add(1, 'day');
     }
 
@@ -646,118 +645,124 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
     }
   };
 
-const handleHashtagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      const newTag = hashtagInput.trim().replace(/#/g, '');
-      if (newTag && hashtags.length < 4 && !hashtags.includes(`#${newTag}`)) {
-        setHashtags([...hashtags, `#${newTag}`]);
-      }
-      setHashtagInput('');
-    }
-};
+// ❌ [삭제] handleHashtagKeyDown 함수 (Request 2)
+// const handleHashtagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+//     if (e.key === 'Enter' || e.key === ',') {
+//       e.preventDefault();
+//       const newTag = hashtagInput.trim().replace(/#/g, '');
+//       if (newTag && hashtags.length < 4 && !hashtags.includes(`#${newTag}`)) {
+//         setHashtags([...hashtags, `#${newTag}`]);
+//       }
+//       setHashtagInput('');
+//     }
+// };
 
-const removeHashtag = (tagToRemove: string) => {
-    setHashtags(hashtags.filter(tag => tag !== tagToRemove));
-};
+// ❌ [삭제] removeHashtag 함수 (Request 2)
+// const removeHashtag = (tagToRemove: string) => {
+//     setHashtags(hashtags.filter(tag => tag !== tagToRemove));
+// };
 
-const applyParsed = (data: any) => {
-  if (!data || typeof data !== 'object') {
-    throw new Error('AI 응답 포맷이 올바르지 않습니다.');
-  }
+// ❌ [삭제] applyParsed 함수 전체를 삭제합니다. (Request 3 - 수정 3)
+// const applyParsed = (data: any) => {
+//   if (!data || typeof data !== 'object') {
+//     throw new Error('AI 응답 포맷이 올바르지 않습니다.');
+//   }
 
-  if (data.groupName) setGroupName(String(data.groupName));
-  if (data.cleanedDescription) setDescription(String(data.cleanedDescription));
-  if (Array.isArray(data.hashtags)) {
-    setHashtags(data.hashtags.slice(0, 4).map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`));
-  }
-  if (data.storageType) setSelectedStorageType(data.storageType as StorageType);
-  if (data.productType === 'single' || data.productType === 'group') {
-    setProductType(data.productType);
-  }
+//   if (data.groupName) setGroupName(String(data.groupName));
+//   if (data.cleanedDescription) setDescription(String(data.cleanedDescription));
+//   // ❌ [삭제] 해시태그 설정 로직 (Request 2)
+//   // if (Array.isArray(data.hashtags)) {
+//   //   setHashtags(data.hashtags.slice(0, 4).map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`));
+//   // }
+//   if (data.storageType) setSelectedStorageType(data.storageType as StorageType);
+//   if (data.productType === 'single' || data.productType === 'group') {
+//     setProductType(data.productType);
+//   }
 
-  if (data.categoryName && Array.isArray(categories) && categories.length > 0) {
-    const found = categories.find(c => c.name === data.categoryName);
-    if (found) {
-      setSelectedMainCategory(found.id);
-      toast.success(`'${found.name}' 카테고리 자동 선택`);
-    } else {
-      toast.error(`추천 카테고리 '${data.categoryName}'를 목록에서 찾을 수 없습니다.`);
-    }
-  }
+//   // ❌ [삭제] 카테고리 설정 로직 (Request 1)
+//   // if (data.categoryName && Array.isArray(categories) && categories.length > 0) {
+//   //   const found = categories.find(c => c.name === data.categoryName);
+//   //   if (found) {
+//   //     setSelectedMainCategory(found.id);
+//   //     toast.success(`'${found.name}' 카테고리 자동 선택`);
+//   //   } else {
+//   //     toast.error(`추천 카테고리 '${data.categoryName}'를 목록에서 찾을 수 없습니다.`);
+//   //   }
+//   // }
 
-  const firstVg = data.variantGroups?.[0];
-  if (firstVg?.pickupDate) {
-    const d = parseDateStringToDate(firstVg.pickupDate);
-    if (d) setPickupDate(d);
-  }
+//   const firstVg = data.variantGroups?.[0];
+//   if (firstVg?.pickupDate) {
+//     const d = parseDateStringToDate(firstVg.pickupDate);
+//     if (d) setPickupDate(d);
+//   }
 
-  if (Array.isArray(data.variantGroups) && data.variantGroups.length > 0) {
-    const newVgs: VariantGroupUI[] = data.variantGroups.map((vg: any) => {
-      const exp = parseDateStringToDate(vg.expirationDate);
-      const items: ProductItemUI[] = Array.isArray(vg.items) && vg.items.length > 0
-        ? vg.items.map((it: any) => ({
-            id: generateUniqueId(),
-            name: String(it.name ?? ''),
-            price: typeof it.price === 'number' ? it.price : '',
-            limitQuantity: '',
-            deductionAmount: it.stockDeductionAmount ?? 1,
-            isBundleOption: bundleUnitKeywords.some(k => String(it.name ?? '').includes(k)),
-          }))
-        : [{
-            id: generateUniqueId(), name: '', price: '',
-            limitQuantity: '', deductionAmount: 1, isBundleOption: false,
-          }];
-      return {
-        id: generateUniqueId(),
-        groupName: String(vg.groupName ?? data.groupName ?? ''),
-        totalPhysicalStock: vg.totalPhysicalStock ?? '',
-        stockUnitType: '개',
-        expirationDate: exp,
-        items,
-      };
-    });
-    setVariantGroups(newVgs);
-  } else {
-    setVariantGroups([{
-      id: generateUniqueId(),
-      groupName: String(data.groupName ?? ''),
-      totalPhysicalStock: '', stockUnitType: '개',
-      expirationDate: null,
-      items: [{
-        id: generateUniqueId(), name: '', price: '',
-        limitQuantity: '', deductionAmount: 1, isBundleOption: false,
-      }],
-    }]);
-  }
-};
+//   if (Array.isArray(data.variantGroups) && data.variantGroups.length > 0) {
+//     const newVgs: VariantGroupUI[] = data.variantGroups.map((vg: any) => {
+//       const exp = parseDateStringToDate(vg.expirationDate);
+//       const items: ProductItemUI[] = Array.isArray(vg.items) && vg.items.length > 0
+//         ? vg.items.map((it: any) => ({
+//             id: generateUniqueId(),
+//             name: String(it.name ?? ''),
+//             price: typeof it.price === 'number' ? it.price : '',
+//             limitQuantity: '',
+//             deductionAmount: it.stockDeductionAmount ?? 1,
+//             isBundleOption: bundleUnitKeywords.some(k => String(it.name ?? '').includes(k)),
+//           }))
+//         : [{
+//             id: generateUniqueId(), name: '', price: '',
+//             limitQuantity: '', deductionAmount: 1, isBundleOption: false,
+//           }];
+//       return {
+//         id: generateUniqueId(),
+//         groupName: String(vg.groupName ?? data.groupName ?? ''),
+//         totalPhysicalStock: vg.totalPhysicalStock ?? '',
+//         stockUnitType: '개',
+//         expirationDate: exp,
+//         items,
+//       };
+//     });
+//     setVariantGroups(newVgs);
+//   } else {
+//     setVariantGroups([{
+//       id: generateUniqueId(),
+//       groupName: String(data.groupName ?? ''),
+//       totalPhysicalStock: '', stockUnitType: '개',
+//       expirationDate: null,
+//       items: [{
+//         id: generateUniqueId(), name: '', price: '',
+//         limitQuantity: '', deductionAmount: 1, isBundleOption: false,
+//       }],
+//     }]);
+//   }
+// };
 
-const handleAIParse = async () => {
-  if (!description?.trim()) {
-    toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.');
-    return;
-  }
-  const payload = {
-    text: description,
-    categories: (categories ?? []).map(c => c.name),
-  };
+// ❌ [삭제] handleAIParse 함수 전체를 삭제합니다. (Request 3 - 수정 3)
+// const handleAIParse = async () => {
+//   if (!description?.trim()) {
+//     toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.');
+//     return;
+//   }
+//   const payload = {
+//     text: description,
+//     // ❌ [삭제] categories: (categories ?? []).map(c => c.name), (Request 1)
+//   };
 
-  setIsParsingWithAI(true);
-  try {
-    const callable = httpsCallable(functions, 'parseProductText');
-    const res = await callable(payload) as HttpsCallableResult<any>;
-    const data = res.data;
-    applyParsed(data);
-    toast.success('AI 분석 완료! 자동 입력 내용을 확인해주세요.');
-  } catch (err: any) {
-    const errorMessage = err?.details?.message || err.message || 'AI 분석 중 오류가 발생했습니다.';
-    const finalMessage = `AI 분석 실패: ${errorMessage}`;
-    toast.error(finalMessage);
-    reportError('ProductForm.handleAIParse', err);
-  } finally {
-    setIsParsingWithAI(false);
-  }
-};
+//   setIsParsingWithAI(true);
+//   try {
+//     const callable = httpsCallable(functions, 'parseProductText');
+//     const res = await callable(payload) as HttpsCallableResult<any>;
+//     const data = res.data;
+//     applyParsed(data);
+//     toast.success('AI 분석 완료! 자동 입력 내용을 확인해주세요.');
+//   } catch (err: any) {
+//     const errorMessage = err?.details?.message || err.message || 'AI 분석 중 오류가 발생했습니다.';
+//     const finalMessage = `AI 분석 실패: ${errorMessage}`;
+//     toast.error(finalMessage);
+//     reportError('ProductForm.handleAIParse', err);
+//   } finally {
+//     setIsParsingWithAI(false);
+//   }
+// };
 
 const settingsSummary = useMemo(() => {
    const publishDateTime = new Date(publishDate);
@@ -766,9 +771,12 @@ const settingsSummary = useMemo(() => {
     const deadlineText = deadlineDate ? toDateTimeLocal(deadlineDate).replace('T', ' ') : '미설정';
     const pickupText = pickupDate ? toYmd(pickupDate) : '미설정';
     const pickupDeadlineText = pickupDeadlineDate ? toYmd(pickupDeadlineDate) : '미설정';
-   const participationText = isSecretProductEnabled ? `${secretTiers.join(', ')} 등급만` : '모두 참여 가능';
+   // ✅ [수정] 등급 제한 기능 제거로 인해 '모두 참여 가능'으로 하드코딩 (Request 6)
+   const participationText = '모두 참여 가능';
    return { publishText, deadlineText, pickupText, pickupDeadlineText, participationText };
- }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate, isSecretProductEnabled, secretTiers]);
+ }, [publishDate, deadlineDate, pickupDate, pickupDeadlineDate,
+  // ❌ [삭제] isSecretProductEnabled, secretTiers (Request 6)
+]);
 
   const handleSubmit = async (isDraft: boolean = false) => {
     setIsSubmitting(true);
@@ -794,12 +802,14 @@ const settingsSummary = useMemo(() => {
     if (!isDraft) {
       if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error('대표 이미지를 1개 이상 등록해주세요.'); setIsSubmitting(false); return; }
       if (isDraft === false && (!deadlineDate || !pickupDate || !pickupDeadlineDate)) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
-      if (isSecretProductEnabled && secretTiers.length === 0) { toast.error('시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요.'); setIsSubmitting(false); return; }
+      // ❌ [삭제] 시크릿 상품 유효성 검사 if 블록 (Request 6)
+      // if (isSecretProductEnabled && secretTiers.length === 0) { toast.error('시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요.'); setIsSubmitting(false); return; }
     }
 
     try {
       const status: SalesRoundStatus = isDraft ? 'draft' : 'scheduled';
       const finalPublishDate = new Date(publishDate);
+      // ✅ [유지] 발행일 오후 2시 설정 (Request 5)
       finalPublishDate.setHours(14, 0, 0, 0);
 
       const salesRoundData = {
@@ -844,17 +854,18 @@ const settingsSummary = useMemo(() => {
         pickupDate: pickupDate ? Timestamp.fromDate(pickupDate) : null,
         pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,
         isPrepaymentRequired: isPrepaymentRequired,
-        allowedTiers: isSecretProductEnabled ? secretTiers : ALL_LOYALTY_TIERS,
+        // ✅ [수정] allowedTiers: ALL_LOYALTY_TIERS로 하드코딩 (Request 6)
+        allowedTiers: ALL_LOYALTY_TIERS,
         preOrderTiers: isPreOrderEnabled ? preOrderTiers : []
       };
 
       if (mode === 'newProduct') {
-        const productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'> & { hashtags?: string[] } = {
+        const productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'> & { /* hashtags?: string[] */ } = {
           groupName: groupName.trim(),
           description: description.trim(),
-          hashtags: hashtags,
+          // ❌ [삭제] hashtags: hashtags, (Request 2)
           storageType: selectedStorageType,
-          category: categories.find(c => c.id === selectedMainCategory)?.name || '',
+          // ❌ [삭제] category: categories.find(c => c.id === selectedMainCategory)?.name || '', (Request 1)
           encoreCount: 0, encoreRequesterIds: []
         };
         // ✅ [수정] 이미지 업로드 로직 추가
@@ -872,19 +883,48 @@ const settingsSummary = useMemo(() => {
         toast.success(isDraft ? '상품이 임시저장되었습니다.' : '신규 상품이 성공적으로 등록되었습니다.');
 
       } else if (mode === 'newRound' && productId) {
+        // --- [추가 시작] --- (Request 4)
+        // 'editRound' 모드와 동일하게 대표 정보 및 이미지 업데이트 로직
+        const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> & { /* hashtags?: string[] */ } = {
+          groupName: groupName.trim(),
+          description: description.trim(),
+          storageType: selectedStorageType,
+          // category: categories.find(c => c.id === selectedMainCategory)?.name || '' // Request 1에서 제거됨
+        };
+
+        // 이미지 업로드 및 URL 병합 로직
+        const existingUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
+        const filesToUpload = imagePreviews
+          .filter(p => p.startsWith('blob:'))
+          .map(p => previewUrlToFile.get(p))
+          .filter((f): f is File => !!f);
+
+        let finalImageUrls = existingUrls;
+        if (filesToUpload.length > 0) {
+            const toastId = toast.loading('새 이미지 업로드 중...');
+            const uploadedUrls = await uploadImages(filesToUpload, `products/${productId}`);
+            finalImageUrls = [...existingUrls, ...uploadedUrls];
+            toast.dismiss(toastId);
+        }
+
+        await updateProductCoreInfo(productId, productDataToUpdate, filesToUpload, finalImageUrls, initialImageUrls);
+        // --- [추가 끝] ---
+        
         await addNewSalesRound(productId, salesRoundData as any);
         toast.success(isDraft ? '새 회차가 임시저장되었습니다.' : '새로운 판매 회차가 추가되었습니다.');
       
       } else if (mode === 'editRound' && productId && roundId) {
 
         const changes: string[] = [];
-        const currentCategoryName = categories.find(c => c.id === selectedMainCategory)?.name || '';
+        // ❌ [삭제] 카테고리 로직 (Request 1)
+        // const currentCategoryName = categories.find(c => c.id === selectedMainCategory)?.name || '';
         const storageTypeMap = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
 
         if (initialProduct?.groupName !== groupName.trim()) changes.push(`상품명 변경`);
         if (initialProduct?.description !== description.trim()) changes.push(`상세 설명 변경`);
         if (initialProduct?.storageType !== selectedStorageType) changes.push(`보관 방법: ${storageTypeMap[initialProduct?.storageType!]} -> ${storageTypeMap[selectedStorageType]}`);
-        if (initialProduct?.category !== currentCategoryName) changes.push(`카테고리: ${initialProduct?.category} -> ${currentCategoryName}`);
+        // ❌ [삭제] 카테고리 변경 감지 로직 (Request 1)
+        // if (initialProduct?.category !== currentCategoryName) changes.push(`카테고리: ${initialProduct?.category} -> ${currentCategoryName}`);
 
         if (initialRound?.roundName !== salesRoundData.roundName) changes.push(`회차명: ${initialRound?.roundName} -> ${salesRoundData.roundName}`);
         if (toYmd(convertToDate(initialRound?.pickupDate)) !== toYmd(convertToDate(salesRoundData.pickupDate))) changes.push(`픽업 시작일 변경`);
@@ -907,12 +947,12 @@ const settingsSummary = useMemo(() => {
             }
         }
 
-        const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> & { hashtags?: string[] } = {
+        const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> & { /* hashtags?: string[] */ } = {
           groupName: groupName.trim(),
           description: description.trim(),
-          hashtags: hashtags,
+          // ❌ [삭제] hashtags: hashtags, (Request 2)
           storageType: selectedStorageType,
-          category: categories.find(c => c.id === selectedMainCategory)?.name || ''
+          // ❌ [삭제] category: categories.find(c => c.id === selectedMainCategory)?.name || '' (Request 1)
         };
 
         // ✅ [수정] 이미지 업로드 및 URL 병합 로직
@@ -953,15 +993,12 @@ const settingsSummary = useMemo(() => {
     <>
       <SettingsModal
         isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
+        onClose={() => setIsSettingsModalFrom(false)}
         isPreOrderEnabled={isPreOrderEnabled}
         setIsPreOrderEnabled={setIsPreOrderEnabled}
         preOrderTiers={preOrderTiers}
         setPreOrderTiers={setPreOrderTiers}
-        isSecretProductEnabled={isSecretProductEnabled}
-        setIsSecretProductEnabled={setIsSecretProductEnabled}
-        secretTiers={secretTiers}
-        setSecretTiers={setSecretTiers}
+        // ❌ [삭제] isSecretProductEnabled, setIsSecretProductEnabled, secretTiers, setSecretTiers (Request 6)
       />
       <div className="product-add-page-wrapper smart-form">
         <form onSubmit={(e) => { e.preventDefault(); handleSubmit(false); }}>
@@ -1036,48 +1073,22 @@ const settingsSummary = useMemo(() => {
               <div className="form-group">
                 <label>상세 설명</label>
                 <div className="description-wrapper">
-                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={8} placeholder="이곳에 상품 안내문을 붙여넣고 [AI로 채우기] 버튼을 눌러보세요." />
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={8} placeholder="이곳에 상품 안내문을 붙여넣으세요." />
+                  {/* ❌ [삭제] AI로 채우기 버튼 (Request 3 - 수정 4)
                   <button type="button" className="ai-parse-button" onClick={handleAIParse} disabled={isParsingWithAI}>
                     {isParsingWithAI ? <Loader2 className="spinner-icon" /> : <Bot size={16} />}
                     {isParsingWithAI ? '분석 중...' : 'AI로 채우기'}
                   </button>
+                  */}
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>해시태그 (최대 4개)</label>
-                <div className="hashtag-input-container">
-                  <div className="hashtag-display-area">
-                    {hashtags.map((tag) => (
-                      <div key={tag} className="hashtag-pill">
-                        {tag}
-                        <button type="button" onClick={() => removeHashtag(tag)}><X size={12} /></button>
-                      </div>
-                    ))}
-                  </div>
-                  {hashtags.length < 4 && (
-                    <input
-                      type="text"
-                      className="hashtag-input"
-                      value={hashtagInput}
-                      onChange={(e) => setHashtagInput(e.target.value)}
-                      onKeyDown={handleHashtagKeyDown}
-                      placeholder="태그 입력 후 Enter..."
-                      disabled={mode !== 'editRound' && mode !== 'newProduct'}
-                    />
-                  )}
-                </div>
-                <p className="input-description">상품을 잘 나타내는 검색용 태그를 추가해보세요.</p>
-              </div>
+              {/* ❌ [삭제] 해시태그 UI 전체 블록 (Request 2) */}
 
               <div className="form-group">
-                <label>카테고리/보관타입</label>
-                <div className="category-select-wrapper">
-                  <select value={selectedMainCategory} onChange={e => setSelectedMainCategory(e.target.value)} disabled={mode !== 'editRound' && mode !== 'newProduct'}>
-                    <option value="">대분류 선택</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
+                {/* ✅ [수정] 라벨을 '보관타입'으로 변경 (Request 1) */}
+                <label>보관타입</label>
+                {/* ❌ [삭제] 카테고리 선택 select UI (Request 1) */}
                 <div className="settings-option-group">
                   {storageTypeOptions.map(opt =>
                     <button key={opt.key} type="button"
@@ -1254,8 +1265,9 @@ const settingsSummary = useMemo(() => {
                       <Save size={16} /> 선입금
                     </button>
                   </Tippy>
-                  <Tippy content="선주문, 등급별 노출 등 판매 조건을 설정합니다.">
-                    <button type="button" className={`settings-option-btn ${(isPreOrderEnabled && preOrderTiers.length > 0) || isSecretProductEnabled ? 'active' : ''}`} onClick={() => setIsSettingsModalOpen(true)}>
+                  <Tippy content="선주문 등 판매 조건을 설정합니다.">
+                    {/* ✅ [수정] tooltip 텍스트 변경 */}
+                    <button type="button" className={`settings-option-btn ${(isPreOrderEnabled && preOrderTiers.length > 0) ? 'active' : ''}`} onClick={() => setIsSettingsModalFrom(true)}>
                       <SlidersHorizontal size={16} /> 등급 설정
                     </button>
                   </Tippy>

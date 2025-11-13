@@ -102,6 +102,90 @@ export const updateProductCoreInfo = onCall(
   }
 );
 
+// =================================================================
+// 🚀 [수정] 2-1. 기존 상품에 새 회차 추가 (500 오류 수정)
+// =================================================================
+export const addNewSalesRound = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
+  async (request) => {
+    // 1. 관리자 권한 확인
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    // 2. 데이터 유효성 검사
+    const { productId, salesRoundData } = request.data;
+    if (!productId || !salesRoundData) {
+      throw new HttpsError("invalid-argument", "상품 ID와 새 회차 정보가 필요합니다.");
+    }
+
+    try {
+      // --- [추가된 수정사항 1: 날짜 변환] ---
+      // updateSalesRound 함수와 동일하게 클라이언트에서 온 날짜 객체를
+      // Admin SDK용 Timestamp로 변환합니다.
+      const dateFieldsToConvert: (keyof SalesRound)[] = [
+        "publishAt", "deadlineDate", "pickupDate", "pickupDeadlineDate", "arrivalDate"
+      ];
+      
+      const convertedSalesRoundData: Partial<SalesRound> = { ...salesRoundData };
+      
+      for (const field of dateFieldsToConvert) {
+        const value = convertedSalesRoundData[field];
+        // 값이 존재하고, Admin Timestamp가 아닌 경우 (즉, 클라이언트에서 넘어온 경우)
+        if (value && !(value instanceof Timestamp)) {
+          const d = new Date(value as any); // 클라이언트는 {seconds, nanoseconds} 객체나 ISO 문자열로 보냄
+          if (!isNaN(d.getTime())) {
+            (convertedSalesRoundData as any)[field] = Timestamp.fromDate(d); // Admin Timestamp로 변환
+          } else {
+            logger.warn(`addNewSalesRound: Field '${String(field)}' was not a valid date:`, value);
+            (convertedSalesRoundData as any)[field] = null; // 잘못된 날짜면 null 처리
+          }
+        }
+      }
+      // --- [수정사항 1 끝] ---
+
+      const productRef = db.collection("products").doc(productId);
+
+      // 3. 새 회차 데이터 구성
+      const newRound: SalesRound = {
+        ...(convertedSalesRoundData as SalesRound), // 변환된 데이터를 사용
+        roundId: productRef.collection("temp").doc().id, // 고유 ID 생성
+        
+        // --- [추가된 수정사항 2: Timestamp.now() 사용] ---
+        // FieldValue.serverTimestamp() (명령어) 대신
+        // Timestamp.now() (현재 시간 값)를 사용해야 arrayUnion이 인식합니다.
+        createdAt: Timestamp.now(),
+        // --- [수정사항 2 끝] ---
+        
+        waitlist: [], // 빈 대기열
+        waitlistCount: 0,
+      };
+
+      // 4. Firestore 트랜잭션: arrayUnion으로 안전하게 추가
+      await db.runTransaction(async (transaction) => {
+        const productSnap = await transaction.get(productRef);
+        if (!productSnap.exists) {
+          throw new HttpsError("not-found", "새 회차를 추가할 상품을 찾을 수 없습니다.");
+        }
+        
+        // salesHistory 필드에 새 회차 객체를 원자적으로 추가
+        transaction.update(productRef, {
+          salesHistory: FieldValue.arrayUnion(newRound),
+          updatedAt: FieldValue.serverTimestamp(), // (참고) 여기서는 FieldValue 사용 가능
+        });
+      });
+
+      logger.info(`New sales round added to product ${productId} by ${request.auth?.uid}`);
+      return { success: true, message: "새 판매 회차가 성공적으로 추가되었습니다." };
+
+    } catch (error) {
+      logger.error(`Error in addNewSalesRound for product ${productId}:`, error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "새 회차 추가 중 서버 오류가 발생했습니다.");
+    }
+  }
+);
 
 // =================================================================
 // ✅ [수정됨 V2] 4. 재고 수량 일괄 수정 (중복 병합 + 배열 통교체)
