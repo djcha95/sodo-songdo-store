@@ -178,7 +178,22 @@ const usePaginatedOrders = (uid?: string) => {
           } as unknown as Order;
         });
 
-        setOrders((prev) => (isInitial ? newOrders : [...prev, ...newOrders]));
+        // 💡 [수정]: ID를 기준으로 중복 제거
+        setOrders(prev => {
+          // 1) 이번에 쓸 전체 리스트를 만들고
+          const combined = isInitial ? newOrders : [...prev, ...newOrders];
+
+          // 2) id 기준으로 Map에 저장하여 중복 제거 (마지막으로 들어온 항목이 유지됨)
+          const map = new Map<string, Order>();
+          combined.forEach((order) => {
+            if (order && order.id) {
+              map.set(order.id, order);
+            }
+          });
+
+          // 3) 중복 제거된 배열 반환
+          return Array.from(map.values());
+        });
 
         const lastDoc = snapshot.docs[snapshot.docs.length - 1];
         if (lastDoc) {
