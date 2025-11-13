@@ -35,7 +35,6 @@ const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
 const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage'));
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
-const ProductCategoryBatchPage = React.lazy(() => import('@/pages/admin/ProductCategoryBatchPage'));
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage'));
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
@@ -127,7 +126,6 @@ const router = createBrowserRouter([
                 { path: 'products/add', element: <ProductAddAdminPage /> },
                 { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
                 { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> },
-                { path: 'products/batch-category', element: <ProductCategoryBatchPage /> },
                 { path: 'orders', element: <OrderManagementPage /> },
                 { path: 'create-order', element: <CreateOrderPage /> },
                 { path: 'users', element: <UserListPage /> },
