@@ -228,8 +228,8 @@ const SimpleOrderPage: React.FC = () => {
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
       const actionState = determineActionState(round, userDocument as any);
       
-      // 1. 'ENDED' (판매 기간 종료) 상태는 항상 숨김
-      if (actionState === 'ENDED') return;
+      // ✅ [수정] 1. 'ENDED'(판매 종료) 또는 'SCHEDULED'(판매 예정) 상태는 항상 숨김
+      if (actionState === 'ENDED' || actionState === 'SCHEDULED') return;
 
       const finalPhase = (round.isManuallyOnsite)
         ? 'onsite'
