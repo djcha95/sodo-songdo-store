@@ -69,21 +69,6 @@ interface VariantGroupUI {
 }
 
 // ❌ [삭제] interface AIParsedData { ... } 인터페이스 정의 전체 (Request 3 - 수정 2)
-// interface AIParsedData {
-//   productType: 'single' | 'group';
-//   storageType: StorageType;
-//   categoryName: string | null;
-//   groupName: string | null;
-//   cleanedDescription: string | null;
-//   hashtags?: string[];
-//   variantGroups: {
-//     groupName: string | null;
-//     totalPhysicalStock: number | null;
-//     expirationDate: string | null; // YYYY-MM-DD
-//     pickupDate: string | null;     // YYYY-MM-DD
-//     items: { name: string; price: number; stockDeductionAmount: number; }[];
-//   }[];
-// }
 
 // --- 헬퍼 ---
 const generateUniqueId = () => Math.random().toString(36).substring(2, 11);
@@ -247,7 +232,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   // ❌ [삭제] const [isParsingWithAI, setIsParsingWithAI] = useState(false); (Request 3 - 수정 1)
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK'>('NONE');
+  // ✅ [수정] eventType에 'ANNIVERSARY' 추가
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY'>('NONE');
 
 
   useEffect(() => {
@@ -303,7 +289,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
         }
 
         if (product) {
-            if (mode === 'editRound') {
+            // newRound 모드에서도 초기값 저장은 유지 (변경 감지 로직을 위해)
+            if (mode === 'editRound' || mode === 'newRound') {
                 setInitialProduct({
                     groupName: product.groupName,
                     description: product.description,
@@ -320,11 +307,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
             if (product.createdAt) setCreationDate(convertToDate(product.createdAt) || new Date());
             
             // ❌ [삭제] 카테고리 로딩 및 선택 로직 전체 (Request 1)
-            // const categoriesArray = categoriesData || [];
-            // if (product.category) {
-            //   const mainCat = categoriesArray.find(c => c.name === product.category);
-            //   if (mainCat) setSelectedMainCategory(mainCat.id);
-            // }
             
             setInitialImageUrls(product.imageUrls || []);
             setCurrentImageUrls(product.imageUrls || []);
@@ -362,7 +344,8 @@ if (mode === 'editRound' && roundId && product) {
           if (mode === 'editRound') setRoundName(roundData.roundName);
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
-          setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK');
+          // ✅ [수정] eventType 타입 변경 반영
+          setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY');
 
 const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
@@ -437,9 +420,6 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
           setIsPreOrderEnabled(roundData.preOrderTiers ? roundData.preOrderTiers.length > 0 : true);
           setPreOrderTiers(roundData.preOrderTiers || ['공구의 신', '공구왕']);
           // ❌ [삭제] 시크릿 상품 관련 로직 3줄 (Request 6)
-          // const secretForTiers = roundData.allowedTiers;
-          // setIsSecretProductEnabled(!!secretForTiers && secretForTiers.length < ALL_LOYALTY_TIERS.length);
-          // setSecretTiers(secretForTiers || []);
         }
       } catch (err) {
         reportError('ProductForm.fetchData', err);
@@ -463,7 +443,7 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
 
   useEffect(() => {
     // ✅ [수정] mode === 'editRound' 조건을 삭제합니다. (Request 2 - 수정 1)
-    if (eventType === 'CHUSEOK') return;
+    if (eventType === 'CHUSEOK' || eventType === 'ANNIVERSARY') return; // ✅ [수정] 1주년 이벤트 추가
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
@@ -635,7 +615,8 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
     reorderedPreviews.splice(destination.index, 0, movedPreview);
     setImagePreviews(reorderedPreviews);
 
-    if (mode === 'editRound') {
+    // newRound 모드에서도 이미지 순서 변경 가능
+    if (mode === 'editRound' || mode === 'newRound') {
       const reorderedUrls = Array.from(currentImageUrls);
       const [movedUrl] = reorderedUrls.splice(source.index, 1);
       if (typeof movedUrl !== 'undefined') {
@@ -646,123 +627,12 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
   };
 
 // ❌ [삭제] handleHashtagKeyDown 함수 (Request 2)
-// const handleHashtagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-//     if (e.key === 'Enter' || e.key === ',') {
-//       e.preventDefault();
-//       const newTag = hashtagInput.trim().replace(/#/g, '');
-//       if (newTag && hashtags.length < 4 && !hashtags.includes(`#${newTag}`)) {
-//         setHashtags([...hashtags, `#${newTag}`]);
-//       }
-//       setHashtagInput('');
-//     }
-// };
 
 // ❌ [삭제] removeHashtag 함수 (Request 2)
-// const removeHashtag = (tagToRemove: string) => {
-//     setHashtags(hashtags.filter(tag => tag !== tagToRemove));
-// };
 
 // ❌ [삭제] applyParsed 함수 전체를 삭제합니다. (Request 3 - 수정 3)
-// const applyParsed = (data: any) => {
-//   if (!data || typeof data !== 'object') {
-//     throw new Error('AI 응답 포맷이 올바르지 않습니다.');
-//   }
-
-//   if (data.groupName) setGroupName(String(data.groupName));
-//   if (data.cleanedDescription) setDescription(String(data.cleanedDescription));
-//   // ❌ [삭제] 해시태그 설정 로직 (Request 2)
-//   // if (Array.isArray(data.hashtags)) {
-//   //   setHashtags(data.hashtags.slice(0, 4).map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`));
-//   // }
-//   if (data.storageType) setSelectedStorageType(data.storageType as StorageType);
-//   if (data.productType === 'single' || data.productType === 'group') {
-//     setProductType(data.productType);
-//   }
-
-//   // ❌ [삭제] 카테고리 설정 로직 (Request 1)
-//   // if (data.categoryName && Array.isArray(categories) && categories.length > 0) {
-//   //   const found = categories.find(c => c.name === data.categoryName);
-//   //   if (found) {
-//   //     setSelectedMainCategory(found.id);
-//   //     toast.success(`'${found.name}' 카테고리 자동 선택`);
-//   //   } else {
-//   //     toast.error(`추천 카테고리 '${data.categoryName}'를 목록에서 찾을 수 없습니다.`);
-//   //   }
-//   // }
-
-//   const firstVg = data.variantGroups?.[0];
-//   if (firstVg?.pickupDate) {
-//     const d = parseDateStringToDate(firstVg.pickupDate);
-//     if (d) setPickupDate(d);
-//   }
-
-//   if (Array.isArray(data.variantGroups) && data.variantGroups.length > 0) {
-//     const newVgs: VariantGroupUI[] = data.variantGroups.map((vg: any) => {
-//       const exp = parseDateStringToDate(vg.expirationDate);
-//       const items: ProductItemUI[] = Array.isArray(vg.items) && vg.items.length > 0
-//         ? vg.items.map((it: any) => ({
-//             id: generateUniqueId(),
-//             name: String(it.name ?? ''),
-//             price: typeof it.price === 'number' ? it.price : '',
-//             limitQuantity: '',
-//             deductionAmount: it.stockDeductionAmount ?? 1,
-//             isBundleOption: bundleUnitKeywords.some(k => String(it.name ?? '').includes(k)),
-//           }))
-//         : [{
-//             id: generateUniqueId(), name: '', price: '',
-//             limitQuantity: '', deductionAmount: 1, isBundleOption: false,
-//           }];
-//       return {
-//         id: generateUniqueId(),
-//         groupName: String(vg.groupName ?? data.groupName ?? ''),
-//         totalPhysicalStock: vg.totalPhysicalStock ?? '',
-//         stockUnitType: '개',
-//         expirationDate: exp,
-//         items,
-//       };
-//     });
-//     setVariantGroups(newVgs);
-//   } else {
-//     setVariantGroups([{
-//       id: generateUniqueId(),
-//       groupName: String(data.groupName ?? ''),
-//       totalPhysicalStock: '', stockUnitType: '개',
-//       expirationDate: null,
-//       items: [{
-//         id: generateUniqueId(), name: '', price: '',
-//         limitQuantity: '', deductionAmount: 1, isBundleOption: false,
-//       }],
-//     }]);
-//   }
-// };
 
 // ❌ [삭제] handleAIParse 함수 전체를 삭제합니다. (Request 3 - 수정 3)
-// const handleAIParse = async () => {
-//   if (!description?.trim()) {
-//     toast.error('먼저 상세 설명란에 분석할 내용을 붙여넣어 주세요.');
-//     return;
-//   }
-//   const payload = {
-//     text: description,
-//     // ❌ [삭제] categories: (categories ?? []).map(c => c.name), (Request 1)
-//   };
-
-//   setIsParsingWithAI(true);
-//   try {
-//     const callable = httpsCallable(functions, 'parseProductText');
-//     const res = await callable(payload) as HttpsCallableResult<any>;
-//     const data = res.data;
-//     applyParsed(data);
-//     toast.success('AI 분석 완료! 자동 입력 내용을 확인해주세요.');
-//   } catch (err: any) {
-//     const errorMessage = err?.details?.message || err.message || 'AI 분석 중 오류가 발생했습니다.';
-//     const finalMessage = `AI 분석 실패: ${errorMessage}`;
-//     toast.error(finalMessage);
-//     reportError('ProductForm.handleAIParse', err);
-//   } finally {
-//     setIsParsingWithAI(false);
-//   }
-// };
 
 const settingsSummary = useMemo(() => {
    const publishDateTime = new Date(publishDate);
@@ -800,10 +670,10 @@ const settingsSummary = useMemo(() => {
     }
 
     if (!isDraft) {
-      if (mode !== 'newRound' && imagePreviews.length === 0) { toast.error('대표 이미지를 1개 이상 등록해주세요.'); setIsSubmitting(false); return; }
+      // ✅ [수정] newRound 모드에서도 이미지 유효성 검사 적용
+      if (imagePreviews.length === 0) { toast.error('대표 이미지를 1개 이상 등록해주세요.'); setIsSubmitting(false); return; }
       if (isDraft === false && (!deadlineDate || !pickupDate || !pickupDeadlineDate)) { toast.error('공구 마감일, 픽업 시작일, 픽업 마감일을 모두 설정해주세요.'); setIsSubmitting(false); return; }
       // ❌ [삭제] 시크릿 상품 유효성 검사 if 블록 (Request 6)
-      // if (isSecretProductEnabled && secretTiers.length === 0) { toast.error('시크릿 상품을 활성화했습니다. 참여 가능한 등급을 1개 이상 선택해주세요.'); setIsSubmitting(false); return; }
     }
 
     try {
@@ -815,6 +685,7 @@ const settingsSummary = useMemo(() => {
       const salesRoundData = {
         roundName: roundName.trim(),
         status,
+        // ✅ [수정] eventType에 'ANNIVERSARY' 추가
         eventType: eventType === 'NONE' ? null : eventType,
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
@@ -906,7 +777,8 @@ const settingsSummary = useMemo(() => {
             finalImageUrls = [...existingUrls, ...uploadedUrls];
             toast.dismiss(toastId);
         }
-
+        
+        // newRound 모드에서 대표 상품 정보와 이미지 업데이트
         await updateProductCoreInfo(productId, productDataToUpdate, filesToUpload, finalImageUrls, initialImageUrls);
         // --- [추가 끝] ---
         
@@ -924,7 +796,6 @@ const settingsSummary = useMemo(() => {
         if (initialProduct?.description !== description.trim()) changes.push(`상세 설명 변경`);
         if (initialProduct?.storageType !== selectedStorageType) changes.push(`보관 방법: ${storageTypeMap[initialProduct?.storageType!]} -> ${storageTypeMap[selectedStorageType]}`);
         // ❌ [삭제] 카테고리 변경 감지 로직 (Request 1)
-        // if (initialProduct?.category !== currentCategoryName) changes.push(`카테고리: ${initialProduct?.category} -> ${currentCategoryName}`);
 
         if (initialRound?.roundName !== salesRoundData.roundName) changes.push(`회차명: ${initialRound?.roundName} -> ${salesRoundData.roundName}`);
         if (toYmd(convertToDate(initialRound?.pickupDate)) !== toYmd(convertToDate(salesRoundData.pickupDate))) changes.push(`픽업 시작일 변경`);
@@ -1033,7 +904,8 @@ const settingsSummary = useMemo(() => {
               <div className="form-group with-validation">
                 <label>대표 상품명 *</label>
                 <div className="input-wrapper">
-                  <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} required disabled={mode !== 'newProduct' && mode !== 'editRound'} />
+                  {/* ✅ [수정] disabled 조건 제거 (모든 모드에서 수정 가능) */}
+                  <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} required />
                   {isCheckingDuplicates && <div className="input-spinner-wrapper"><Loader2 className="spinner-icon" /></div>}
                 </div>
                 {mode === 'newProduct' && similarProducts.length > 0 && (
@@ -1074,12 +946,7 @@ const settingsSummary = useMemo(() => {
                 <label>상세 설명</label>
                 <div className="description-wrapper">
                   <textarea value={description} onChange={e => setDescription(e.target.value)} rows={8} placeholder="이곳에 상품 안내문을 붙여넣으세요." />
-                  {/* ❌ [삭제] AI로 채우기 버튼 (Request 3 - 수정 4)
-                  <button type="button" className="ai-parse-button" onClick={handleAIParse} disabled={isParsingWithAI}>
-                    {isParsingWithAI ? <Loader2 className="spinner-icon" /> : <Bot size={16} />}
-                    {isParsingWithAI ? '분석 중...' : 'AI로 채우기'}
-                  </button>
-                  */}
+                  {/* ❌ [삭제] AI로 채우기 버튼 (Request 3 - 수정 4) */}
                 </div>
               </div>
 
@@ -1094,7 +961,7 @@ const settingsSummary = useMemo(() => {
                     <button key={opt.key} type="button"
                       className={`settings-option-btn ${opt.className} ${selectedStorageType === opt.key ? 'active' : ''}`}
                       onClick={() => setSelectedStorageType(opt.key)}
-                      disabled={mode !== 'editRound' && mode !== 'newProduct'}>
+                      disabled={mode !== 'editRound' && mode !== 'newProduct' && mode !== 'newRound'}>
                       {opt.name}
                     </button>
                   )}
@@ -1114,10 +981,12 @@ const settingsSummary = useMemo(() => {
                           multiple
                           accept="image/png, image/jpeg"
                           style={{ display: 'none' }}
-                          disabled={mode !== 'editRound' && mode !== 'newProduct'}
+                          disabled={mode !== 'editRound' && mode !== 'newProduct' && mode !== 'newRound'}
                         />
                         {imagePreviews.map((p, i) => (
-                          <Draggable key={p + i} draggableId={p + i.toString()} index={i} isDragDisabled={mode !== 'editRound' && mode !== 'newProduct'}>
+                          <Draggable key={p + i} draggableId={p + i.toString()} index={i} 
+                            isDragDisabled={mode !== 'editRound' && mode !== 'newProduct'}
+                          >
                             {(provided, snapshot) => (
                               <div
                                 ref={provided.innerRef}
@@ -1127,17 +996,17 @@ const settingsSummary = useMemo(() => {
                                 style={{ ...provided.draggableProps.style }}
                               >
                                 <img src={p} alt={`미리보기 ${i + 1}`} />
-                                {mode !== 'newRound' && (
+                                {/* ✅ [수정] mode !== 'newRound' 조건 제거 (모든 모드에서 삭제 버튼 보이게) */}
                                   <button type="button" onClick={() => removeImage(i)} className="remove-thumbnail-btn">
                                     <X size={10} />
                                   </button>
-                                )}
                               </div>
                             )}
                           </Draggable>
                         ))}
                         {provided.placeholder}
-                        {imagePreviews.length < 10 && (mode === 'editRound' || mode === 'newProduct') && (
+                        {/* ✅ [수정] mode === 'newRound' 조건 추가 */}
+                        {imagePreviews.length < 10 && (mode === 'editRound' || mode === 'newProduct' || mode === 'newRound') && (
                           <button type="button" onClick={() => fileInputRef.current?.click()} className="add-thumbnail-btn">
                             <PlusCircle size={20} />
                           </button>
@@ -1250,9 +1119,14 @@ const settingsSummary = useMemo(() => {
                 <label>이벤트 타입</label>
                 <div className="input-with-icon">
                   <Gift size={16} className="input-icon" />
-                  <select value={eventType} onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK')}>
+                  <select 
+                    value={eventType} 
+                    onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY')}
+                  >
                     <option value="NONE">일반 상품</option>
                     <option value="CHUSEOK">🌕 추석 특집</option>
+                    {/* ✅ [추가] 1주년 이벤트 옵션 추가 */}
+                    <option value="ANNIVERSARY">🎉 1주년 기념 🎉</option>
                   </select>
                 </div>
               </div>

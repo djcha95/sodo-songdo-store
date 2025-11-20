@@ -168,7 +168,7 @@ const UserListPage = () => {
 	return (
 		<>
 			<PointManagementModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} user={selectedUser} />
-			<div className="admin-page-container full-width-container">
+			<div className="admin-page-container full-width-container user-list-page-wrapper">
 				<header className="admin-page-header">
 					<h1 className="admin-page-title">전체 고객 관리</h1>
 				</header>

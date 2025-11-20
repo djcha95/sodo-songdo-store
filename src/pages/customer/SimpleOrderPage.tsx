@@ -276,11 +276,23 @@ const SimpleOrderPage: React.FC = () => {
     // 1. 품절되지 않은 상품(isSoldOut=false)이 위로 오도록 정렬
     // 2. 동일 상태 내에서는 가격(sortPrice)이 높은 순(내림차순)으로 정렬
     const sortedPrimary = tempPrimary.sort((a, b) => {
-        if (a.isSoldOut !== b.isSoldOut) {
-            return a.isSoldOut ? 1 : -1; // isSoldOut: true (품절) 상품을 뒤로 보냄
-        }
-        return b.sortPrice - a.sortPrice; // 동일 상태면 가격 내림차순
-    });
+    // [추가된 로직] 1. 1주년 이벤트 상품인지 확인 ('ANNIVERSARY'는 사장님이 2단계에서 정한 value값)
+    const isAnniversaryA = a.displayRound.eventType === 'ANNIVERSARY';
+    const isAnniversaryB = b.displayRound.eventType === 'ANNIVERSARY';
+
+    // A만 1주년이면 A를 앞으로 (-1)
+    if (isAnniversaryA && !isAnniversaryB) return -1;
+    // B만 1주년이면 B를 앞으로 (1)
+    if (!isAnniversaryA && isAnniversaryB) return 1;
+
+    // [기존 로직] 2. 품절 여부 (품절된 건 뒤로)
+    if (a.isSoldOut !== b.isSoldOut) {
+        return a.isSoldOut ? 1 : -1;
+    }
+
+    // [기존 로직] 3. 가격순
+    return b.sortPrice - a.sortPrice;
+});
     
     // 2차 공구는 이미 품절 상품이 필터링되었으므로 가격순 정렬만 수행
     const sortedSecondary = tempSecondary.sort((a, b) => b.sortPrice - a.sortPrice);

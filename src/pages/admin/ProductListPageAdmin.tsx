@@ -42,7 +42,8 @@ interface EnrichedRoundItem {
   productImage: string;
   round: SalesRound; // 전체 회차 정보
   createdAt: number; // For sorting
-  publishAt: number; // For sorting
+  // ❌ [수정] publishAt: number; 를 pickupDate로 변경 (Request 1)
+  pickupDate: number; // ✅ 픽업일로 변경
   storageType: StorageType; // Product level
   status: SimplifiedStatus; // Overall status
   
@@ -51,7 +52,8 @@ interface EnrichedRoundItem {
 }
 
 type SimplifiedStatus = '판매예정' | '1차 공구중' | '2차 공구중' | '매진' | '판매종료' | '데이터 오류' | '옵션 오류';
-type SortableKeys = 'createdAt' | 'productName' | 'status' | 'publishAt' | 'expirationDate';
+// ❌ [수정] 'publishAt'을 'pickupDate'로 변경 (Request 1)
+type SortableKeys = 'createdAt' | 'productName' | 'status' | 'pickupDate' | 'expirationDate';
 
 const storageTypeOptions: { key: StorageType; name: string; icon: React.ReactNode }[] = [
     { key: 'ROOM', name: '상온', icon: <Sun size={16} /> },
@@ -288,6 +290,7 @@ const ProductListPageAdmin: React.FC = () => {
   const [updatingItems, setUpdatingItems] = useState<Record<string, boolean>>({}); 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  // ❌ [수정] 정렬 기준 'publishAt' -> 'pickupDate'로 변경 (Request 1)
   const [sortConfig, setSortConfig] = useState<{key: SortableKeys, direction: 'asc' | 'desc'}>({ key: 'createdAt', direction: 'desc' });
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -374,7 +377,8 @@ const ProductListPageAdmin: React.FC = () => {
                 productImage: p.imageUrls?.[0] || '/placeholder.svg',
                 round: r, 
                 createdAt: safeToDate(r.createdAt)?.getTime() || 0,
-                publishAt: safeToDate(r.publishAt)?.getTime() || 0, 
+                // ❌ [수정] publishAt -> pickupDate로 변경 (Request 1)
+                pickupDate: safeToDate(r.pickupDate)?.getTime() || 0, // ✅ 픽업일 데이터 연결
                 storageType: p.storageType, 
                 status: overallStatus,
                 enrichedVariantGroups: enrichedVariantGroups,
@@ -404,7 +408,8 @@ const ProductListPageAdmin: React.FC = () => {
         let aVal: any; let bVal: any;
 
         if (key === 'createdAt') { aVal = a.createdAt; bVal = b.createdAt; }
-        else if (key === 'publishAt') { aVal = a.publishAt; bVal = b.publishAt; } 
+        // ❌ [수정] 'publishAt' -> 'pickupDate'로 변경 (Request 1)
+        else if (key === 'pickupDate') { aVal = a.pickupDate; bVal = b.pickupDate; } 
         else if (key === 'expirationDate') { aVal = a.expirationDate ?? 0; bVal = b.expirationDate ?? 0; }
         else if (key === 'productName') { aVal = a.productName; bVal = b.productName; }
         else if (key === 'status') { aVal = a.status; bVal = b.status; }
@@ -430,7 +435,8 @@ const ProductListPageAdmin: React.FC = () => {
   // --- 인라인 업데이트 핸들러 ---
   const handleUpdate = useCallback(async (
     uniqueId: string, // productId-roundId
-    field: 'price' | 'stock' | 'storageType' | 'expirationDate' | 'publishAt',
+    // ❌ [수정] 'publishAt' -> 'pickupDate'로 변경 (Request 1)
+    field: 'price' | 'stock' | 'storageType' | 'expirationDate' | 'pickupDate',
     newValue: string | number | StorageType,
     extraData: { productId: string; roundId: string; vgId?: string; itemId?: string } 
   ) => {
@@ -446,9 +452,10 @@ const ProductListPageAdmin: React.FC = () => {
         if (field === 'storageType') {
             backendPromise = updateProductCoreInfo(productId, { storageType: newValue as StorageType }, [], [], []);
         }
-        else if (field === 'publishAt') {
+        // ❌ [수정] 'publishAt' -> 'pickupDate'로 변경하고 로직 수정 (Request 1)
+        else if (field === 'pickupDate') {
             const newDate = Timestamp.fromDate(new Date(newValue as number));
-            backendPromise = updateSalesRound(productId, roundId, { publishAt: newDate });
+            backendPromise = updateSalesRound(productId, roundId, { pickupDate: newDate }); // ✅ 픽업일 업데이트 요청
         }
         // ✅ [수정] '유통기한' 수정 로직 (596~606줄 수정 반영)
         else if (field === 'expirationDate' && vgId && itemId) {
@@ -514,6 +521,7 @@ const ProductListPageAdmin: React.FC = () => {
 
 
   // --- 정렬 핸들러 ---
+  // ❌ [수정] 'publishAt' -> 'pickupDate'로 변경 (Request 1)
   const handleSortChange = (key: SortableKeys) => { setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' })); };
 
   // --- 펼치기 핸들러 ---
@@ -594,33 +602,52 @@ const ProductListPageAdmin: React.FC = () => {
             <div className="admin-product-table-container">
                 <table className="admin-product-table simple inline-edit-table">
                     {/* [수정] <thead>: 상품명/회차명 통합, 예약/재고 헤더 */}
-                    <thead>
-                        <tr>
-                            <th className="th-align-center" style={{ width: '50px' }}>No.</th>
-                            <th className="th-align-center" style={{ width: '100px' }}>상품 ID</th>
-                            <th className="th-align-center sortable-header" onClick={() => handleSortChange('createdAt')} style={{ width: '80px' }}>
-                                등록일 {sortConfig.key === 'createdAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
-                            </th>
-                            <th className="th-align-left sortable-header" onClick={() => handleSortChange('productName')} style={{ minWidth: '150px' }}> {/* 너비 살짝 조정 */}
-                                상품/회차 {sortConfig.key === 'productName' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
-                            </th>
-                            <th className="th-align-center" style={{ width: '90px' }}>보관</th>
-                            <th className="th-align-center sortable-header" onClick={() => handleSortChange('expirationDate')} style={{ width: '90px' }}>
-                                유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
-                            </th>
-                            {/* ✅ [수정] '입고일' -> '판매 시작일'로 텍스트 변경 (Request 2) */}
-                            <th className="th-align-center sortable-header" onClick={() => handleSortChange('publishAt')} style={{ width: '80px' }}>
-                                판매 시작일 {sortConfig.key === 'publishAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
-                            </th>
-                            <th className="th-align-center sortable-header" onClick={() => handleSortChange('status')} style={{ width: '100px' }}>
-                                상태 {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
-                            </th>
-                            <th className="th-align-right" style={{ width: '110px' }}>가격</th>
-                            {/* [수정] 예약/재고 헤더 */}
-                            <th className="th-align-right" style={{ width: '130px' }}>예약/재고</th>
-                            <th className="th-align-center" style={{ width: '100px' }}>관리</th>
-                        </tr>
-                    </thead>
+<thead>
+    <tr>
+        {/* 1. 번호 */}
+        <th className="th-align-center" style={{ width: '50px' }}>No.</th>
+        
+        {/* 2. 아이디 */}
+        <th className="th-align-center" style={{ width: '100px' }}>상품 ID</th>
+        
+        {/* 3. 등록일 (따로 있어야 함!) */}
+        <th className="th-align-center sortable-header" onClick={() => handleSortChange('createdAt')} style={{ width: '80px' }}>
+            등록일 {sortConfig.key === 'createdAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+        </th>
+        
+        {/* 4. 상품/회차 (따로 있어야 함!) - 여기가 묶여있으면 안 됨 */}
+        <th className="th-align-left sortable-header" onClick={() => handleSortChange('productName')} style={{ minWidth: '150px' }}>
+            상품/회차 {sortConfig.key === 'productName' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+        </th>
+        
+        {/* 5. 보관 */}
+        <th className="th-align-center" style={{ width: '90px' }}>보관</th>
+        
+        {/* 6. 유통기한 (따로!) */}
+        <th className="th-align-center sortable-header" onClick={() => handleSortChange('expirationDate')} style={{ width: '90px' }}>
+            유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+        </th>
+        
+        {/* 7. 픽업일 (따로!) */}
+        <th className="th-align-center sortable-header" onClick={() => handleSortChange('pickupDate')} style={{ width: '80px' }}>
+            픽업일 {sortConfig.key === 'pickupDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+        </th>
+        
+        {/* 8. 상태 (따로!) */}
+        <th className="th-align-center sortable-header" onClick={() => handleSortChange('status')} style={{ width: '100px' }}>
+            상태 {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+        </th>
+        
+        {/* 9. 가격 */}
+        <th className="th-align-right" style={{ width: '110px' }}>가격</th>
+        
+        {/* 10. 예약/재고 */}
+        <th className="th-align-right" style={{ width: '130px' }}>예약/재고</th>
+        
+        {/* 11. 관리 */}
+        <th className="th-align-center" style={{ width: '100px' }}>관리</th>
+    </tr>
+</thead>
                     <tbody>
                         {paginatedRounds.length > 0 ? (
                             paginatedRounds.map((item, index) => {
@@ -679,11 +706,12 @@ const ProductListPageAdmin: React.FC = () => {
                                                     <span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>
                                                 )}
                                             </td>
+                                            {/* ❌ [수정] item.publishAt -> item.pickupDate로 변경 (Request 1) */}
                                             <td className="td-align-center td-nowrap">
                                                 <InlineDateEditor
-                                                    initialValue={item.publishAt}
-                                                    onSave={(newValue) => handleUpdate(item.uniqueId, 'publishAt', newValue, { productId: item.productId, roundId: item.round.roundId })}
-                                                    isLoading={updatingItems[`${item.uniqueId}-publishAt-product`]}
+                                                    initialValue={item.pickupDate}
+                                                    onSave={(newValue) => handleUpdate(item.uniqueId, 'pickupDate', newValue, { productId: item.productId, roundId: item.round.roundId })}
+                                                    isLoading={updatingItems[`${item.uniqueId}-pickupDate-product`]}
                                                 />
                                             </td>
                                             <td className="td-align-center td-nowrap status-cell">
@@ -782,10 +810,13 @@ const ProductListPageAdmin: React.FC = () => {
                                                         isLoading={updatingItems[`${item.uniqueId}-expirationDate-${vg.id}`]}
                                                     />
                                                 </td>
+                                                {/* ❌ [수정] item.publishAt 대신 item.pickupDate로 에디터 연결 (줄 맞춤) (Request 1) */}
                                                 <td className="td-align-center td-nowrap">
-                                                    <span className="disabled-field">
-                                                        {formatDateShortMMDD(item.publishAt)}
-                                                    </span>
+                                                    <InlineDateEditor
+                                                        initialValue={item.pickupDate}
+                                                        onSave={(newValue) => handleUpdate(item.uniqueId, 'pickupDate', newValue, { productId: item.productId, roundId: item.round.roundId })}
+                                                        isLoading={updatingItems[`${item.uniqueId}-pickupDate-product`]}
+                                                    />
                                                 </td>
                                                 <td className="td-align-center td-nowrap status-cell">
                                                     <span className={`status-badge status-${vg.status.replace(/\s+/g, '-')}`}>
