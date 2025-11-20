@@ -21,8 +21,8 @@ import PrepaymentModal from '@/components/common/PrepaymentModal';
 
 import { X, Minus, Plus, ShoppingCart, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, AlertTriangle, Clock } from 'lucide-react';
 
-// 💡 [추가] 예약 수량을 가져오기 위한 import
-import { getReservedQuantitiesMap } from '@/firebase/orderService';
+// 💡 [추가/수정] 예약 수량을 가져오기 위한 import
+import { getReservedQuantitiesMap, getUserOrders } from '@/firebase/orderService'; 
 
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Pagination, Navigation, Zoom, Thumbs, FreeMode } from 'swiper/modules';
@@ -501,12 +501,12 @@ const QuantityInput: React.FC<{
     return (
         <div className="quantity-controls-fixed" data-tutorial-id="detail-quantity-controls">
             <button
-        onClick={decrement} // onClick 추가
-        className="quantity-btn"
-        disabled={isDisabled || isNaN(quantity) || quantity <= 1}
-    >
-        <Minus />
-    </button>
+                onClick={decrement} // onClick 추가
+                className="quantity-btn"
+                disabled={isDisabled || isNaN(quantity) || quantity <= 1}
+            >
+                <Minus />
+            </button>
             <input
                 type="number"
                 className="quantity-input"
@@ -517,12 +517,12 @@ const QuantityInput: React.FC<{
                 disabled={isDisabled} // ✅ [수정] isDisabled 적용
             />
             <button
-        onClick={increment} // onClick 추가
-        className="quantity-btn"
-        disabled={isDisabled || (maxQuantity !== null && !isNaN(quantity) && (quantity + step > maxQuantity))}
-    >
-        <Plus />
-    </button>
+                onClick={increment} // onClick 추가
+                className="quantity-btn"
+                disabled={isDisabled || (maxQuantity !== null && !isNaN(quantity) && (quantity + step > maxQuantity))}
+            >
+                <Plus />
+            </button>
         </div>
     );
 });
@@ -536,16 +536,14 @@ const PurchasePanel: React.FC<{
     setQuantity: React.Dispatch<React.SetStateAction<number>>;
     onPurchaseAction: (status: 'RESERVATION') => void; // ✅ [수정] 'WAITLIST' 제거
     reservationStatus: 'idle' | 'processing' | 'success'; // ✅ [추가] props 받기
-}> = React.memo(({ actionState, round, selectedVariantGroup, selectedItem, quantity, setQuantity, onPurchaseAction, reservationStatus }) => { // ✅ [수정] isProcessing 제거
+    myPurchasedCount: number; // 👈 [추가] 이 줄을 꼭 추가해주세요!
+}> = React.memo(({ 
+    actionState, round, selectedVariantGroup, selectedItem, 
+    quantity, setQuantity, onPurchaseAction, reservationStatus,
+    myPurchasedCount // 👈 [추가] 여기서도 받아옵니다.
+}) => {
     
-    // ❌ [제거] isMobile state 제거 (사용되지 않음)
-    // const [isMobile, setIsMobile] = useState(false);
-    // useEffect(() => {
-    //     const mobileCheck = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    //     setIsMobile(mobileCheck);
-    // }, []);
-
-    const quantityStep = 1; // 모바일/데스크탑 구분 없이 항상 1씩 증가/감소
+    const quantityStep = 1; 
 
     const renderContent = () => {
         switch (actionState) {
@@ -553,7 +551,26 @@ const PurchasePanel: React.FC<{
                 return <div className="action-notice"><Box size={20} /><div><p><strong>현장 판매 진행 중</strong></p><span>매장에서 직접 구매 가능합니다.</span></div></div>;
             case 'PURCHASABLE':
                 if (!selectedItem || !selectedVariantGroup) return <button className="add-to-cart-btn-fixed" disabled><span>구매 가능한 옵션이 없습니다</span></button>;
-                const maxQuantity = selectedVariantGroup && selectedItem ? getMaxPurchasableQuantity(selectedVariantGroup, selectedItem) : null;
+                
+                // 1. 재고 기준 최대 수량
+                const stockMax = getMaxPurchasableQuantity(selectedVariantGroup, selectedItem);
+
+                // 👇 [추가] 1인당 제한 로직 적용
+                const limitSetting = selectedItem.limitQuantity ?? Infinity;
+                const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
+                
+                // 👇 [추가] 이미 한도만큼 샀으면 '구매 완료' 버튼 표시
+                if (limitSetting !== Infinity && myRemainingLimit <= 0) {
+                    return (
+                        <button className="add-to-cart-btn-fixed disabled" disabled>
+                            <CheckCircle size={20} />
+                            <span>구매 완료 ({limitSetting}개 구매함)</span>
+                        </button>
+                    );
+                }
+
+                // 👇 [추가] 최종 구매 가능 수량 (재고 vs 내 남은 한도 중 작은 값)
+                const finalMaxQty = Math.min(stockMax, myRemainingLimit);
                 
                 const getButtonContent = () => {
                     switch (reservationStatus) {
@@ -568,22 +585,21 @@ const PurchasePanel: React.FC<{
                         <QuantityInput 
                             quantity={quantity} 
                             setQuantity={setQuantity} 
-                            maxQuantity={maxQuantity} 
+                            maxQuantity={finalMaxQty} // 👈 [수정] finalMaxQty 전달
                             step={quantityStep} 
-                            reservationStatus={reservationStatus} // ✅ [추가] reservationStatus 전달
+                            reservationStatus={reservationStatus}
                         />
                         <button 
                             onClick={() => onPurchaseAction('RESERVATION')} 
                             className={`add-to-cart-btn-fixed ${reservationStatus !== 'idle' ? 'processing' : ''}`}
                             data-tutorial-id="detail-action-button" 
-                            disabled={reservationStatus !== 'idle' || maxQuantity === 0} // ✅ [수정] reservationStatus 및 maxQuantity 0일때 비활성화
+                            // 👈 [수정] finalMaxQty가 0이면 비활성화
+                            disabled={reservationStatus !== 'idle' || finalMaxQty === 0} 
                         >
-                            {maxQuantity === 0 ? '재고 없음' : getButtonContent()}
+                            {stockMax === 0 ? '재고 없음' : getButtonContent()}
                         </button>
                     </div>
                 );
-            // ❌ [제거] 'WAITLISTABLE' case 제거
-            // case 'WAITLISTABLE': ...
             case 'REQUIRE_OPTION': return <button className="add-to-cart-btn-fixed" onClick={() => showToast('info', '페이지 하단에서 옵션을 먼저 선택해주세요!')}><Box size={20} /><span>옵션을 선택해주세요</span></button>;
             case 'AWAITING_STOCK': return <button className="add-to-cart-btn-fixed" disabled><Hourglass size={20} /><span>재고 준비중</span></button>;
             // ✅ [수정] 'ENDED' 상태일 때 '전량 마감' 표시
@@ -612,7 +628,6 @@ const ProductDetailPage: React.FC = () => {
     const [quantity, setQuantity] = useState(1);
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
-    // ❌ [제거] isProcessing 제거
     const [countdown, setCountdown] = useState<string | null>(null);
 
     const [isPrepaymentModalOpen, setPrepaymentModalOpen] = useState(false);
@@ -620,6 +635,10 @@ const ProductDetailPage: React.FC = () => {
 
     // ✅ [추가] 예약 상태를 관리하기 위한 새 state
     const [reservationStatus, setReservationStatus] = useState<'idle' | 'processing' | 'success'>('idle');
+    
+    // 👇 [추가] 내가 이미 구매한 수량을 저장할 변수
+    const [myPurchasedCount, setMyPurchasedCount] = useState(0);
+
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
@@ -628,11 +647,7 @@ const ProductDetailPage: React.FC = () => {
     const db = useMemo(() => getFirestore(getApp()), []);
 
     const functionsInstance = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-    // ❌ [제거] 5초 '콜드 스타트'의 원인인 Cloud Function을 제거합니다.
-    // const getProductByIdWithStock = useMemo(() => httpsCallable(functionsInstance, 'getProductByIdWithStock'), [functionsInstance]);
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'submitOrder'), [functionsInstance]);
-    // ❌ [제거] addWaitlistEntryCallable 제거
-    // const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functionsInstance, 'addWaitlistEntry'), [functionsInstance]);
 
     const handleClose = useCallback(() => {
         if (location.key === 'default' || window.history.length <= 1) {
@@ -658,6 +673,36 @@ const ProductDetailPage: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [reservationStatus]);
+
+    // 👇 [추가] 옵션(selectedItem)이 바뀔 때마다 내 주문 내역 확인
+    useEffect(() => {
+        const checkMyHistory = async () => {
+            if (!user || !selectedItem || !displayRound) {
+                setMyPurchasedCount(0);
+                return;
+            }
+
+            try {
+                const myOrders = await getUserOrders(user.uid);
+                const currentRoundId = displayRound.roundId;
+                const currentItemId = selectedItem.id;
+
+                // '취소되지 않은' 주문 중에서, '지금 보고 있는 상품'의 수량을 다 더함
+                const totalBought = myOrders
+                    .filter(o => o.status !== 'CANCELED' && o.status !== 'LATE_CANCELED') // 취소된 건 제외
+                    .flatMap(o => o.items)
+                    .filter(i => i.roundId === currentRoundId && i.itemId === currentItemId)
+                    .reduce((sum, i) => sum + i.quantity, 0);
+
+                setMyPurchasedCount(totalBought);
+            } catch (error) {
+                console.error("내 주문 내역 확인 중 오류:", error);
+            }
+        };
+
+        checkMyHistory();
+    }, [user, selectedItem, displayRound]); // 아이템을 바꿀 때마다 다시 체크
+
 
     useEffect(() => {
         if (!displayRound) {
@@ -807,15 +852,12 @@ const ProductDetailPage: React.FC = () => {
         // ✅ [수정] productUtils의 determineActionState를 직접 사용 (타입 오류 해결)
         const baseState = determineActionState(displayRound, userDocument as any);
 
-        // ✅ [수정] productUtils에서 WAITLISTABLE이 제거되었으므로, 관련 로직 수정
-        
         // 옵션이 필요한데 아이템이 선택된 경우 (PURCHASABLE로 보정)
         if (baseState === 'REQUIRE_OPTION' && selectedItem) return 'PURCHASABLE';
 
         // 구매 가능한데 아이템이 선택되지 않은 경우 (REQUIRE_OPTION으로 보정)
         if (baseState === 'PURCHASABLE' && !selectedItem) {
             // (productUtils에서 이 로직을 이미 처리함, 'REQUIRE_OPTION'으로 반환됨)
-            // 하지만 방어적으로 코드를 유지하거나, productUtils를 신뢰하고 baseState를 그대로 반환
             return 'REQUIRE_OPTION'; 
         }
         
@@ -854,10 +896,19 @@ const ProductDetailPage: React.FC = () => {
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
-    // ✅ [수정] handleImmediateOrder 함수 로직 전체 변경
+    // ✅ [수정] handleImmediateOrder 함수 로직 전체 변경 (보안관 역할 추가)
     const handleImmediateOrder = async () => {
         if (!userDocument || !user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
         if (reservationStatus !== 'idle' || !product || !displayRound || !selectedVariantGroup || !selectedItem) return;
+
+        // 👇 [추가] 보안관 등장! (버튼 누르는 순간 마지막 체크)
+        const limitSetting = selectedItem.limitQuantity ?? Infinity;
+        const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
+
+        if (quantity > myRemainingLimit) {
+             showToast('error', `구매 한도 초과! 최대 ${myRemainingLimit}개만 더 구매 가능합니다.`);
+             return;
+        }
 
         setReservationStatus('processing'); // '처리 중...'으로 변경
 
@@ -893,22 +944,22 @@ const ProductDetailPage: React.FC = () => {
             if (data.updatedOrderIds && data.updatedOrderIds.length > 0) {
                 // --- (A) 수량 추가 성공 ---
                 showToast('success', '기존 예약에 수량이 추가되었습니다.');
-                setReservationStatus('success'); // '예약 완료' 버튼을 잠시 보여줌 (피드백)
-                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
-                // ✅ [추가] 재고가 변경되었으므로 상품 정보 새로고침
-                fetchProduct();
+                setReservationStatus('success'); 
+                fetchProduct(); // 재고 변경 반영
+                // myPurchasedCount를 즉시 업데이트
+                setMyPurchasedCount(prev => prev + quantity); 
 
             } else if (data.orderIds && data.orderIds.length > 0) {
                 // --- (B) 신규 예약 성공 ---
-                showToast('success', '예약이 완료되었습니다!'); // ✅ [수정] 성공 토스트 추가
-                setReservationStatus('success'); // '예약 완료' 버튼
+                showToast('success', '예약이 완료되었습니다!'); 
+                setReservationStatus('success'); 
                 if (prepaymentRequired) {
                     setPrepaymentPrice(totalPrice);
                     setPrepaymentModalOpen(true);
                 }
-                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
-                // ✅ [추가] 재고가 변경되었으므로 상품 정보 새로고침
-                fetchProduct();
+                fetchProduct(); // 재고 변경 반영
+                // myPurchasedCount를 즉시 업데이트
+                setMyPurchasedCount(prev => prev + quantity); 
 
             } else {
                 // --- (C) 실패 (재고 부족 등) ---
@@ -919,13 +970,9 @@ const ProductDetailPage: React.FC = () => {
             showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
             setReservationStatus('idle'); // 에러 발생 시 idle로 복귀
             setQuantity(1);
-            // ✅ [추가] 실패 시에도 최신 재고 반영을 위해 새로고침
-            fetchProduct();
+            fetchProduct(); // 실패 시에도 최신 재고 반영을 위해 새로고침
         }
     };
-
-    // ❌ [제거] handleWaitlistRequest 함수 제거
-    // const handleWaitlistRequest = async () => { ... };
 
     // ✅ [수정] handlePurchaseAction에서 'WAITLIST' 관련 로직 제거
     const handlePurchaseAction = useCallback((status: 'RESERVATION') => {
@@ -933,9 +980,6 @@ const ProductDetailPage: React.FC = () => {
             showToast('error', '옵션을 선택해주세요.');
             return;
         }
-
-        // ❌ [제거] status === 'WAITLIST' 분기 제거
-        // if (status === 'WAITLIST') { ... }
 
         // status가 'RESERVATION'일 때의 로직만 남김
         const { primaryEnd } = getDeadlines(displayRound);
@@ -957,13 +1001,12 @@ const ProductDetailPage: React.FC = () => {
                 onConfirm: handleImmediateOrder
             }), { duration: Infinity });
         } else {
-            // 1차 예약은 컨펌 없이 즉시 진행
+            // 1차 예약은 컨펌 없이 즉시 진행 (요청 사항에 따라)
             handleImmediateOrder();
         }
     }, [
         product, displayRound, selectedVariantGroup,
         selectedItem, quantity, handleImmediateOrder, 
-        // ❌ [제거] handleWaitlistRequest 의존성 제거
     ]);
 
     
@@ -999,7 +1042,7 @@ const ProductDetailPage: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    {/* ✅ [수정] actionState가 'ENDED'나 'LOADING' 등이 아닐 때만 하단 패널 렌더링 */}
+                    {/* 1번째 PurchasePanel (일반적인 경우) */}
                     {(actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'ON_SITE_SALE' || actionState === 'AWAITING_STOCK') && (
                         <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
                             <>
@@ -1039,10 +1082,11 @@ const ProductDetailPage: React.FC = () => {
                                 setQuantity={setQuantity}
                                 onPurchaseAction={handlePurchaseAction}
                                 reservationStatus={reservationStatus} // ✅ [추가] reservationStatus 전달
+                                myPurchasedCount={myPurchasedCount} // 👈 [추가] 값 전달
                             />
                         </div>
                     )}
-                    {/* ✅ [추가] 'ENDED' 상태일 때 '전량 마감' 푸터 표시 */}
+                    {/* 2번째 PurchasePanel (전량 마감/ENDED 상태일 때) */}
                     {actionState === 'ENDED' && (
                         <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
                             <PurchasePanel
@@ -1054,6 +1098,7 @@ const ProductDetailPage: React.FC = () => {
                                 setQuantity={setQuantity}
                                 onPurchaseAction={handlePurchaseAction}
                                 reservationStatus={reservationStatus}
+                                myPurchasedCount={myPurchasedCount} // 👈 [추가] 값 전달
                             />
                         </div>
                     )}
