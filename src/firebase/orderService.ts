@@ -279,10 +279,15 @@ export const revertFinalizedOrder = async (orderId: string, originalStatus: Orde
 // 읽기(Read) 및 기타 함수
 // =================================================================
 
+/**
+ * @description 사용자 ID로 모든 주문 내역을 가져옵니다. (1인당 구매 한도 체크 로직에 사용됨)
+ */
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   if (!userId) return [];
-  const q = query(collection(db, 'orders'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  // ✅ Firestore Timestamp 필드를 'desc' 내림차순으로 정렬
+  const q = query(collection(db, 'orders'), where('userId', '==', userId), orderBy('createdAt', 'desc')); 
   const querySnapshot = await getDocs(q);
+  // ✅ Order 타입으로 변환하여 반환
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };
 

@@ -118,18 +118,27 @@
   word-break: keep-all;
 }
 
+/* ✅ [최종 재수정] 마크다운 콘텐츠 스타일 (단일 엔터 줄바꿈 활성화 + 간격 최적화) */
 .markdown-content {
   font-size: 0.95rem;
-  line-height: 1.7;
-  white-space: pre-wrap;
+  line-height: 1.6;
+  white-space: pre-wrap; /* 💡 [재추가] 단일 엔터(줄바꿈)를 그대로 반영합니다. */
   word-break: keep-all;
   text-align: center;
   color: #444;
 }
 
+/* 마크다운 내부의 문단(p) 태그 여백 조정 (white-space: pre-wrap; 때문에 마진을 작게 조정) */
 .markdown-content p {
-  margin: 0 0 0.8rem 0;
+  margin: 0 0 0.5rem 0; /* 문단 간격은 0.5rem로 간결하게 */
+  word-break: keep-all; 
 }
+
+/* 마크다운 내부의 마지막 문단은 여백 제거 */
+.markdown-content p:last-child {
+    margin-bottom: 0;
+}
+
 .markdown-content ul,
 .markdown-content ol {
   list-style: none; margin: 0.5rem 0; padding: 0;
@@ -138,6 +147,14 @@
 .markdown-content strong { font-weight: 700; color: #000; }
 .markdown-content em { font-style: italic; }
 .markdown-content a { color: var(--color-primary, #2563eb); text-decoration: underline; }
+
+/* 강제 줄바꿈(<br>)이 있을 경우 */
+.markdown-content br {
+    display: block; 
+    content: ""; 
+    margin-top: 0; 
+}
+/* ✅ [최종 재수정] 마크다운 콘텐츠 스타일 끝 */
 
 .product-key-info {
   margin-top: 1.5rem;
@@ -293,7 +310,7 @@
 .add-to-cart-btn-fixed,
 .waitlist-btn-fixed,
 .encore-request-btn-fixed,
-.raffle-entry-btn-fixed { /* ✅ raffle-entry-btn-fixed 추가 */
+.raffle-entry-btn-fixed { /* ✅ raffle-entry-btn-fixed 포함 */
   flex-grow: 1;
   border: none;
   border-radius: 12px;
@@ -309,11 +326,11 @@
   transition: all 0.2s ease-in-out;
 }
 
-.add-to-cart-btn-fixed:hover, .waitlist-btn-fixed:hover, .encore-request-btn-fixed:hover, .raffle-entry-btn-fixed:hover { /* ✅ raffle-entry-btn-fixed 추가 */
+.add-to-cart-btn-fixed:hover, .waitlist-btn-fixed:hover, .encore-request-btn-fixed:hover, .raffle-entry-btn-fixed:hover { /* ✅ raffle-entry-btn-fixed 포함 */
     transform: scale(1.02);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
-.add-to-cart-btn-fixed:active, .waitlist-btn-fixed:active, .encore-request-btn-fixed:active, .raffle-entry-btn-fixed:active { /* ✅ raffle-entry-btn-fixed 추가 */
+.add-to-cart-btn-fixed:active, .waitlist-btn-fixed:active, .encore-request-btn-fixed:active, .raffle-entry-btn-fixed:active { /* ✅ raffle-entry-btn-fixed 포함 */
     transform: scale(0.98);
 }
 

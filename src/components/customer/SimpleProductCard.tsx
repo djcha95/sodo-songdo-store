@@ -16,16 +16,7 @@ import OptimizedImage from '@/components/common/OptimizedImage';
 import { showToast } from '@/utils/toastUtils';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
 import './SimpleProductCard.css';
-
-// ❌ 기존 safeToDate 제거 - productUtils에서 가져와 사용합니다.
-/*
-const safeToDate = (date: any): Date | null => {
-  if (!date) return null;
-  if (date instanceof Date) return date; // 이미 Date 객체이면 그대로 반환
-  if (typeof date.toDate === 'function') return date.toDate(); // Timestamp 객체이면 변환
-  return null;
-};
-*/
+import { getUserOrders } from '@/firebase/orderService'; // 👈 [1. 추가] 주문 내역 가져오기 함수 import
 
 type Product = OriginalProduct & {
     displayRound: OriginalSalesRound;
@@ -46,12 +37,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     // ✅ 예약 상태를 관리하기 위한 새 state
     const [reservationStatus, setReservationStatus] = useState<'idle' | 'processing' | 'success'>('idle');
+    
+    // 👇 [2. 추가] 사용자가 이미 구매한 수량을 저장할 State
+    const [myPurchasedCount, setMyPurchasedCount] = useState(0);
 
     const functions = useMemo(() => getFunctions(getApp(), 'asia-northeast3'), []);
-    // ❌ validateCartCallable 제거
     const submitOrderCallable = useMemo(() => httpsCallable<any, any>(functions, 'submitOrder'), [functions]);
-    // ❌ [제거] addWaitlistEntryCallable 제거
-    // const addWaitlistEntryCallable = useMemo(() => httpsCallable<any, any>(functions, 'addWaitlistEntry'), [functions]);
 
     const cardData = useMemo(() => {
         const { displayRound } = product;
@@ -68,13 +59,47 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         };
     }, [product]);
 
+    // ✅ [추가] 1주년 기념 이벤트 상품인지 확인
+    const isAnniversary = product.displayRound.eventType === 'ANNIVERSARY';
+
+    // 👇 [3. 추가] 컴포넌트가 로딩될 때 내 주문 내역을 확인하는 로직 (CCTV 같은 역할)
+    useEffect(() => {
+        const checkMyHistory = async () => {
+            // cardData가 준비되어 있고, 사용자 로그인이 되어 있을 때만 실행
+            if (!user || !cardData?.singleOptionItem || !cardData?.displayRound) return;
+
+            try {
+                // 내 모든 주문 내역을 가져옴
+                const myOrders = await getUserOrders(user.uid);
+                
+                const currentRoundId = cardData.displayRound.roundId;
+                const currentItemId = cardData.singleOptionItem.id;
+
+                // '취소되지 않은' 주문 중에서, '지금 보고 있는 상품'의 수량을 다 더함
+                const totalBought = myOrders
+                    .filter(o => o.status !== 'CANCELED' && o.status !== 'LATE_CANCELED') // 취소된 건 제외
+                    .flatMap(o => o.items)
+                    .filter(i => i.roundId === currentRoundId && i.itemId === currentItemId)
+                    .reduce((sum, i) => sum + i.quantity, 0);
+
+                setMyPurchasedCount(totalBought);
+            } catch (error) {
+                console.error("내 주문 내역 확인 중 오류:", error);
+            }
+        };
+
+        checkMyHistory();
+    }, [user, cardData]); // 유저나 상품 데이터가 바뀌면 다시 체크
+
     // ✅ 예약 성공 후 버튼 상태를 되돌리기 위한 useEffect
     useEffect(() => {
         if (reservationStatus === 'success') {
+            // 예약 성공 후, myPurchasedCount를 업데이트 해야 정확한 한도 계산이 가능합니다.
+            // 하지만 카드 컴포넌트가 재마운트 되는 경우를 대비하여 단순 리셋만 수행합니다.
             const timer = setTimeout(() => {
                 setReservationStatus('idle');
                 setQuantity(1); // 수량을 1로 리셋
-            }, 2000); // 2초 후 '예약하기'로 복귀
+            }, 2000); 
             return () => clearTimeout(timer);
         }
     }, [reservationStatus]);
@@ -100,7 +125,7 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         if (isNaN(quantity) || quantity < 1) { setQuantity(1); }
     };
     
-    // ✅ handleImmediateOrder 함수 로직 수정
+    // ✅ handleImmediateOrder 함수 로직 수정 (보안 강화)
     const handleImmediateOrder = async () => {
         if (!user || !userDocument) {
             showToast('error', '로그인이 필요합니다.');
@@ -113,6 +138,24 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         const vg = cardData.singleOptionVg;
         if (!finalVariant || !vg) {
             showToast('error', '상품 정보를 찾을 수 없습니다.');
+            return;
+        }
+
+        // 👇 [추가] 마지막으로 한 번 더 검사 (보안 철저히!)
+        const limitSetting = finalVariant?.limitQuantity ?? Infinity;
+        const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
+
+        if (quantity > myRemainingLimit) {
+             showToast('error', `구매 한도 초과! 회원님은 최대 ${myRemainingLimit}개만 더 구매 가능합니다.`);
+             return; // 여기서 강제로 멈춤
+        }
+        
+        // 🚨 [주의] 재고 체크는 서버에서 한 번 더 하지만, 클라이언트 측에서도 최종 가능 수량을 계산해서 체크합니다.
+        const stockMax = getMaxPurchasableQuantity(vg, finalVariant);
+        const finalMaxQty = Math.min(stockMax, myRemainingLimit);
+
+        if (quantity > finalMaxQty) {
+            showToast('error', `재고 또는 구매 한도 제한으로 인해 최대 ${finalMaxQty}개까지만 구매 가능합니다.`);
             return;
         }
 
@@ -162,7 +205,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 // --- (A) 수량 추가 성공 ---
                 showToast('success', '기존 예약에 수량이 추가되었습니다.');
                 setReservationStatus('success'); // '예약 완료' 버튼을 잠시 보여줌
-                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
 
             } else if (data.orderIds && data.orderIds.length > 0) {
                 // --- (B) 신규 예약 성공 ---
@@ -172,7 +214,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                     setPrepaymentPrice(totalPrice);
                     setPrepaymentModalOpen(true);
                 }
-                // (useEffect가 2초 후 idle로 돌리고 수량 1로 리셋할 것임)
                 
             } else {
                  // --- (C) 실패 (재고 부족 등) ---
@@ -187,7 +228,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     };
     
     // ❌ [제거] handleWaitlistRequest 함수 제거
-    // const handleWaitlistRequest = async () => { ... };
 
     const showConfirmation = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -231,7 +271,6 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
     };
 
     // ❌ [제거] showWaitlistConfirmation 함수 제거
-    // const showWaitlistConfirmation = (e: React.MouseEvent) => { ... };
 
     if (!cardData) return null;
 
@@ -276,12 +315,12 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
             );
         }
         
+        // ✨ 구매 가능 상태일 때만 재고/한정수량 배지를 보여줍니다.
         if (actionState !== 'PURCHASABLE') return null;
 
         const stockInfo = getStockInfo(displayRound.variantGroups[0] as OriginalVariantGroup & { reservedCount?: number });
         if (!stockInfo.isLimited || stockInfo.remainingUnits <= 0) return null;
         
-        // ✅ [수정 제안] 10개 이하일 때와 11개 이상일 때를 분리
         if (stockInfo.remainingUnits <= 10) {
             // 10개 이하: 남은 수량 표시 (로우 스톡 강조)
             return (
@@ -290,15 +329,13 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 </span>
             );
         } else {
-            // 11개 이상: '한정수량' 텍스트 표시 (기존에는 이 부분이 null이었음)
+            // 11개 이상: '한정수량' 텍스트 표시
             return (
                 <span className="stock-badge">
                     <Flame size={12} /> 한정수량
                 </span>
             );
         }
-        
-        // return null; // <- else 블록으로 대체되었으므로 이 줄은 제거되거나 영향 없음
     };
 
     const renderActionArea = () => {
@@ -307,11 +344,30 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
         }
 
         // ❌ [제거] 'WAITLISTABLE' 상태 블록 제거
-        // if (actionState === 'WAITLISTABLE') { ... }
 
         if (actionState === 'PURCHASABLE') {
-            const maxQty = getMaxPurchasableQuantity(cardData.singleOptionVg!, cardData.singleOptionItem!);
+            // 1. 재고 기준 최대 수량
+            const stockMax = getMaxPurchasableQuantity(cardData.singleOptionVg!, cardData.singleOptionItem!);
             
+            // 👇 [수정] 관리자가 설정한 1인당 제한 수량 (설정 안 했으면 무제한)
+            const limitSetting = cardData.singleOptionItem?.limitQuantity ?? Infinity;
+            
+            // 👇 [수정] 내가 앞으로 더 살 수 있는 수량 = (제한 - 이미 산 거)
+            const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
+
+            // 👇 [수정] 최종적으로 입력 가능한 최대값 (재고랑 내 남은 한도 중 더 작은 거)
+            const finalMaxQty = Math.min(stockMax, myRemainingLimit);
+
+            // ✨ [핵심] 한도가 있고(무제한 아니고), 남은 게 0개 이하면 -> '구매 완료' 버튼 보여주기
+            if (limitSetting !== Infinity && myRemainingLimit <= 0) {
+                return (
+                    <button className="simple-card-action-btn disabled" disabled>
+                        <CheckCircle size={16} /> 예약 완료! ({limitSetting}개 구매함)
+                    </button>
+                );
+            }
+            
+            // 구매 가능할 때 버튼 내용
             const getButtonContent = () => {
                 switch (reservationStatus) {
                     case 'processing': return '처리 중...';
@@ -324,38 +380,44 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
                 <div className="single-option-controls">
                     <div className="quantity-controls compact">
                         <button 
+                            // 👇 [수정] quantity가 1보다 작거나 finalMaxQty보다 크면 1로 리셋
                             onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.max(1, (isNaN(q) ? 2 : q) - 1))}} 
                             className="quantity-btn" 
                             disabled={reservationStatus !== 'idle' || (!isNaN(quantity) && quantity <= 1)}
                         ><Minus size={16} /></button>
+                        
                         <input
                             type="number"
                             className="quantity-input"
                             value={isNaN(quantity) ? '' : quantity}
-                            onChange={(e) => handleQuantityChange(e, maxQty)}
+                            // 👇 [수정] 직접 입력할 때도 finalMaxQty 못 넘기게 막음
+                            onChange={(e) => handleQuantityChange(e, finalMaxQty)} 
                             onBlur={handleQuantityBlur}
                             onClick={(e) => { e.stopPropagation(); e.currentTarget.select(); }}
                             disabled={reservationStatus !== 'idle'}
                         />
+
                         <button 
-                            onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(maxQty, (isNaN(q) ? 0 : q) + 1))}} 
+                            // 👇 [수정] finalMaxQty를 넘지 않도록 제한
+                            onClick={(e) => { e.stopPropagation(); setQuantity(q => Math.min(finalMaxQty, (isNaN(q) ? 0 : q) + 1))}} 
                             className="quantity-btn" 
-                            disabled={reservationStatus !== 'idle' || (!isNaN(quantity) && quantity >= maxQty)}
+                            disabled={reservationStatus !== 'idle' || (!isNaN(quantity) && quantity >= finalMaxQty)}
                         ><Plus size={16} /></button>
                     </div>
+                    
                     <button 
                         className={`simple-card-action-btn confirm ${reservationStatus !== 'idle' ? 'processing' : ''}`} 
                         onClick={showConfirmation} 
-                        disabled={reservationStatus !== 'idle' || maxQty === 0} // ✅ [수정] maxQty가 0일 때 비활성화
+                        // 👇 [수정] 더 살 수 있는 게 없으면 버튼 비활성화
+                        disabled={reservationStatus !== 'idle' || finalMaxQty === 0} 
                     >
-                        {maxQty === 0 ? '재고 없음' : getButtonContent()}
+                        {finalMaxQty === 0 ? '재고 없음' : getButtonContent()}
                     </button>
                 </div>
             );
         }
 
         // ✅ [추가] 1차 공구 품절 (AWAITING_STOCK) 시 '품절 (상세보기)' 버튼
-        // (2차 공구 품절은 SimpleOrderPage에서 이미 필터링됨)
         if (actionState === 'AWAITING_STOCK') {
              return <button className="simple-card-action-btn details sold-out" onClick={(e) => { e.stopPropagation(); handleCardClick(); }}>품절 (상세보기) <ChevronRight size={16} /></button>;
         }
@@ -372,7 +434,10 @@ const SimpleProductCard: React.FC<SimpleProductCardProps> = ({ product, actionSt
 
     return (
         <>
-            <div className="simple-product-card" onClick={handleCardClick}>
+            <div 
+                className={`simple-product-card ${isAnniversary ? 'anniversary-glow' : ''}`} // ✅ [수정] 1주년 효과 클래스 추가
+                onClick={handleCardClick}
+            >
                 <div className="simple-card-main-content">
                     <div className="simple-card-image-wrapper">
                         <OptimizedImage originalUrl={product.imageUrls?.[0]} size='150x150' alt={product.groupName} className="simple-card-image" />
