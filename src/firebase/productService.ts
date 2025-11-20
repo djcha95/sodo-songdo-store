@@ -108,8 +108,18 @@ export const addNewSalesRound = async (
     productId,
     salesRoundData,
   });
+
+  // ✅ 회차 추가 후, 상품을 "새로 등록된 공구"처럼 맨 앞에 노출되게
+  const productRef = doc(db, 'products', productId);
+  await updateDoc(productRef, {
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+
   return result.data;
 };
+
+
 
 // --- 3. 상품 핵심 정보 수정 ---
 export const updateProductCoreInfo = async (
@@ -408,6 +418,7 @@ export const updateItemStock = async (
 // 🚀 '최신식' 상품 목록 조회 (페이지네이션)
 // ========================================================
 
+// 📦 상품 목록 + 재고 조회 (Firestore 직접 조회 버전)
 export interface GetProductsWithStockResponse {
   products: Product[];
   lastVisible: number | null; // timestamp (millis)
@@ -416,70 +427,52 @@ export interface GetProductsWithStockResponse {
 type GetProductsWithStockPayload = {
   pageSize?: number;
   lastVisible?: number | null; // timestamp (millis)
-  // ❌ [삭제] category?: string | null; (요청 2)
 };
 
-/**
- * ✅ [업그레이드] 이제 이 함수가 상품 목록을 가져오는 유일한 공식 함수입니다.
- * * 💡 Cloud Function 호출 대신 Firestore DB에서 직접 데이터를 조회합니다.
- */
 export const getProductsWithStock = async (
   payload: GetProductsWithStockPayload
 ): Promise<GetProductsWithStockResponse> => {
   try {
-    // 1. 페이로드 해체 및 기본값 설정
-    // ❌ [수정] category = null 제거 (요청 2)
     const { pageSize = 10, lastVisible = null } = payload;
     
-    // 2. 쿼리 제약 조건 배열 생성
     const queryConstraints: any[] = [];
     
-    // 3. 기본 필터: 보관처리(isArchived)되지 않은 상품만 조회
+    // 1. 보관 처리 안 된 것만
     queryConstraints.push(where('isArchived', '==', false));
 
-    // ❌ [제거] 4. 카테고리 필터 if 블록 전체 삭제 (요청 2)
-    // if (category) {
-    //   queryConstraints.push(where('category', '==', category));
-    // }
-
-    // 5. 정렬: 생성일(createdAt) 기준 내림차순 정렬
+    // 2. createdAt 기준 내림차순
     queryConstraints.push(orderBy('createdAt', 'desc'));
 
-    // 6. 페이지네이션 (Cursor)
+    // 3. 페이지네이션 커서
     if (lastVisible) {
       const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
       queryConstraints.push(startAfter(lastVisibleTimestamp));
     }
 
-    // 7. 페이지 크기 제한
+    // 4. 페이지 사이즈
     queryConstraints.push(limit(pageSize));
 
-    // 8. 쿼리 생성
     const productsRef = collection(db, 'products');
     const q = query(productsRef, ...queryConstraints);
 
-    // 9. 예약 수량 맵 가져오기 (오버레이 적용을 위해)
+    // 예약 수량 맵
     const reservedMap = await getReservedQuantitiesMap();
 
-    // 10. 쿼리 실행
     const snapshot = await getDocs(q);
 
-    // 11. 결과 처리
     const products: Product[] = [];
-    snapshot.docs.forEach(doc => {
-      const productData = doc.data() as Product;
-      // 예약 수량 오버레이 적용
+    snapshot.docs.forEach(docSnap => {
+      const productData = docSnap.data() as Product;
       const productWithOverlay = applyReservedOverlay(
-        { ...productData, id: doc.id }, 
+        { ...productData, id: docSnap.id },
         reservedMap
       );
       products.push(productWithOverlay);
     });
 
-    // 12. 다음 페이지를 위한 마지막 항목(lastVisible) timestamp 추출
     const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-    const newLastVisible = lastDoc 
-      ? (lastDoc.data().createdAt as Timestamp).toMillis() // createdAt 기준 정렬
+    const newLastVisible = lastDoc
+      ? (lastDoc.data().createdAt as Timestamp).toMillis()
       : null;
 
     return { products, lastVisible: newLastVisible };
@@ -497,40 +490,39 @@ export const getProductsWithStock = async (
 // ✅ [신규 추가] 리팩토링으로 인해 이름이 변경된 함수 별칭 (Alias)
 // =================================================================
 
-/**
- * @deprecated `getProductsWithStock` 사용을 권장합니다.
- */
-// ❌ [수정] category 파라미터 제거 및 category: null 설정 (요청 2)
-export const getProducts = () => 
-  getProductsWithStock({ 
-    pageSize: 1000, 
-    lastVisible: null 
-  });
+// =================================================================
+// ✅ 기존 함수들에 대한 별칭 (호환용)
+// =================================================================
 
 /**
- * @deprecated `getProductsWithStock` 사용을 권장합니다.
+ * @deprecated `getProductsWithStock` 사용 권장
  */
-export const getAllProducts = () => 
-  getProductsWithStock({ 
-    pageSize: 1000, 
+export const getProducts = () =>
+  getProductsWithStock({
+    pageSize: 1000,
     lastVisible: null,
-    // category 필터가 없으므로 null로 설정
-    // category: null // (이미 GetProductsWithStockPayload에서 category가 제거됨)
   });
 
-// ❌ [삭제] getProductsByCategory 별칭 함수 전체 삭제 (요청 2)
+/**
+ * @deprecated `getProductsWithStock` 사용 권장
+ */
+export const getAllProducts = () =>
+  getProductsWithStock({
+    pageSize: 1000,
+    lastVisible: null,
+  });
 
 /**
- * @deprecated `getProductsWithStock` 사용을 G권장합니다.
+ * @deprecated `getProductsWithStock` 사용 권장
+ * 기존 시그니처 유지: (pageSize, lastVisible, category)
+ * category는 무시
  */
 export const getPaginatedProductsWithStock = (
-  // ✅ [유지] 기존 함수 시그니처 유지 (호환성을 위해)
-  pageSize: number, 
-  lastVisible: number | null, 
-  category: string | null // 💡 [주석] category 파라미터는 더 이상 사용되지 않습니다.
-) => 
-  getProductsWithStock({ 
-    pageSize, 
-    lastVisible, 
-    // category // ❌ [제거] category 인자 전달 제거 (요청 2)
+  pageSize: number,
+  lastVisible: number | null,
+  category: string | null,
+) =>
+  getProductsWithStock({
+    pageSize,
+    lastVisible,
   });

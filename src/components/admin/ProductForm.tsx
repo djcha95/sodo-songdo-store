@@ -329,10 +329,30 @@ if (mode === 'editRound' && roundId && product) {
   setInitialRound(JSON.parse(JSON.stringify(roundToLoad)));
 } else if (mode === 'newRound' && product) {
   roundToLoad = initialState?.lastRound || salesHistory[0];
+  
   if (roundToLoad) {
     const roundNumMatch = roundToLoad.roundName.match(/\d+/);
     const newRoundNumber = roundNumMatch ? parseInt(roundNumMatch[0], 10) + 1 : (salesHistory.length + 1);
     setRoundName(`${newRoundNumber}차 판매`);
+
+    // ✨ [추가] 이전 회차 정보(날짜, 설정 등) 복사 로직
+    const prevRoundData = roundToLoad as SalesRound;
+    
+// 1. 날짜 복사
+    // ✅ [수정] 새 회차 추가 시, 이전 회차의 발행일을 복사하지 않고 '오늘(기본값)'로 유지하도록 해당 줄을 주석 처리 또는 삭제합니다.
+    // if (prevRoundData.publishAt) setPublishDate(convertToDate(prevRoundData.publishAt) || new Date());
+    
+    // ⚠️ 참고: publishDate가 오늘로 유지되면, 하단 useEffect에 의해 마감일(deadlineDate)도 오늘 기준으로 자동 재계산됩니다.
+    if (prevRoundData.deadlineDate) setDeadlineDate(convertToDate(prevRoundData.deadlineDate));
+    if (prevRoundData.pickupDate) setPickupDate(convertToDate(prevRoundData.pickupDate));
+    if (prevRoundData.pickupDeadlineDate) setPickupDeadlineDate(convertToDate(prevRoundData.pickupDeadlineDate));
+
+    // 2. 설정 복사
+    setIsPrepaymentRequired(prevRoundData.isPrepaymentRequired ?? false);
+    // 2. 설정 복사
+    setIsPrepaymentRequired(prevRoundData.isPrepaymentRequired ?? false);
+    setIsPreOrderEnabled(!!(prevRoundData.preOrderTiers && prevRoundData.preOrderTiers.length > 0));
+    setPreOrderTiers(prevRoundData.preOrderTiers || ['공구의 신', '공구왕']);
   } else {
     setRoundName('1차 판매');
   }
@@ -720,7 +740,7 @@ const settingsSummary = useMemo(() => {
             }))
           };
         }),
-        publishAt: Timestamp.fromDate(finalPublishDate),
+        publishAt: finalPublishDate as any,
         deadlineDate: deadlineDate ? Timestamp.fromDate(deadlineDate) : null,
         pickupDate: pickupDate ? Timestamp.fromDate(pickupDate) : null,
         pickupDeadlineDate: pickupDeadlineDate ? Timestamp.fromDate(pickupDeadlineDate) : null,

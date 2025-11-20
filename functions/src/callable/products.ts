@@ -132,14 +132,24 @@ export const addNewSalesRound = onCall(
       
       for (const field of dateFieldsToConvert) {
         const value = convertedSalesRoundData[field];
-        // 값이 존재하고, Admin Timestamp가 아닌 경우 (즉, 클라이언트에서 넘어온 경우)
+        
+        // Admin SDK의 Timestamp가 아닌 경우 (변환 필요)
         if (value && !(value instanceof Timestamp)) {
-          const d = new Date(value as any); // 클라이언트는 {seconds, nanoseconds} 객체나 ISO 문자열로 보냄
-          if (!isNaN(d.getTime())) {
-            (convertedSalesRoundData as any)[field] = Timestamp.fromDate(d); // Admin Timestamp로 변환
+          let d: Date | undefined;
+
+          // [핵심 수정] 입력값이 { seconds: ... } 형태의 객체인지 먼저 확인
+          if (typeof value === 'object' && value !== null && 'seconds' in value && typeof (value as any).seconds === 'number') {
+             d = new Date((value as any).seconds * 1000);
+          } else {
+             // 문자열(ISO)이나 숫자(ms)인 경우
+             d = new Date(value as any);
+          }
+
+          if (d && !isNaN(d.getTime())) {
+            (convertedSalesRoundData as any)[field] = Timestamp.fromDate(d); 
           } else {
             logger.warn(`addNewSalesRound: Field '${String(field)}' was not a valid date:`, value);
-            (convertedSalesRoundData as any)[field] = null; // 잘못된 날짜면 null 처리
+            (convertedSalesRoundData as any)[field] = null; 
           }
         }
       }
@@ -328,11 +338,20 @@ export const updateSalesRound = onCall(
         "publishAt", "deadlineDate", "pickupDate", "pickupDeadlineDate", "arrivalDate", "createdAt"
       ];
       const converted: Partial<SalesRound> = { ...salesRoundData };
+      
       for (const field of dateFieldsToConvert) {
         const value = converted[field];
         if (value && !(value instanceof Timestamp)) {
-          const d = new Date(value as any);
-          if (!isNaN(d.getTime())) {
+          // [핵심 수정] { seconds: ... } 처리 로직 추가
+          let d: Date | undefined;
+
+          if (typeof value === 'object' && value !== null && 'seconds' in value && typeof (value as any).seconds === 'number') {
+             d = new Date((value as any).seconds * 1000);
+          } else {
+             d = new Date(value as any);
+          }
+
+          if (d && !isNaN(d.getTime())) {
             (converted as any)[field] = Timestamp.fromDate(d);
           } else {
             logger.warn(`Field '${String(field)}' was not a valid date:`, value);

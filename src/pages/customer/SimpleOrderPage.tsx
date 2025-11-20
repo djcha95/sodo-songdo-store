@@ -7,9 +7,6 @@ import type { Product, SalesRound } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import SimpleProductCard from '@/components/customer/SimpleProductCard';
 import dayjs from 'dayjs';
-// ❌ import 'dayjs/locale/ko'; // 2단계에서 주석처리된 부분은 그대로 유지 (필요하다면) -> 삭제
-// ❌ import isBetween from 'dayjs/plugin/isBetween'; // ✅ [수정 1] 플러그인 import 해제 -> 삭제
-
 import { PackageSearch, Clock } from 'lucide-react';
 import { getDisplayRound, getDeadlines, determineActionState } from '@/utils/productUtils';
 import type { ProductActionState } from '@/utils/productUtils';
@@ -18,10 +15,6 @@ import { showToast } from '@/utils/toastUtils';
 import './SimpleOrderPage.css';
 import '@/styles/common.css';
 import { Outlet } from 'react-router-dom';
-
-// ❌ [수정 2] 플러그인을 컴포넌트 외부에서 한 번만 확장 -> 삭제
-// dayjs.extend(isBetween);
-// dayjs.locale('ko');
 
 interface ProductWithUIState extends Product {
   phase: 'primary' | 'secondary' | 'onsite' | 'past';
@@ -48,17 +41,17 @@ const SimpleOrderPage: React.FC = () => {
   const hasMoreRef = useRef(true);
   const lastVisibleRef = useRef<any | null>(null);
 
-  // ✅ [수정 1] 디바운싱(Debouncing)을 위한 ref 추가
+  // 디바운싱(Debouncing)을 위한 ref
   const lastLoadAtRef = useRef(0);
-  const MIN_INTERVAL = 300; // ms (ChatGPT 제안)
+  const MIN_INTERVAL = 300;
 
   const { primaryRef, secondaryRef } = usePageRefs();
 
-  // 상태 → ref 동기화 (렌더와 분리)
+  // 상태 → ref 동기화
   useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
   useEffect(() => { lastVisibleRef.current = lastVisible; }, [lastVisible]);
 
-  // 최초 데이터 로딩 (첫 페이지)
+  // 최초 데이터 로딩
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
@@ -80,7 +73,7 @@ const SimpleOrderPage: React.FC = () => {
     fetchInitialData();
   }, []);
 
-  // 다음 페이지 로드 (상태 의존 제거, ref 기반)
+  // 다음 페이지 로드
   const fetchNextPage = useCallback(async () => {
     const cursor = lastVisibleRef.current;
     const { products: newProducts, lastVisible: newLastVisible } =
@@ -91,12 +84,12 @@ const SimpleOrderPage: React.FC = () => {
     setHasMore(!!newLastVisible && newProducts.length === 10);
   }, []);
 
-  // ✅ [수정 2] 옵저버 콜백 (디바운싱 및 관찰 지연 적용)
+  // 옵저버 콜백
   const onIntersect = useCallback((entries: IntersectionObserverEntry[]) => {
     const entry = entries[0];
     if (!entry?.isIntersecting) return;
 
-    // ★ 디바운스: 최소 간격(300ms) 이내의 중복 호출 방지
+    // 디바운스
     const nowTs = Date.now();
     if (nowTs - lastLoadAtRef.current < MIN_INTERVAL) return;
     lastLoadAtRef.current = nowTs;
@@ -107,7 +100,7 @@ const SimpleOrderPage: React.FC = () => {
     loadingRef.current = true;
     setIsLoadingMore(true);
 
-    // 로딩 중에는 센티넬 관찰 해제 → 연쇄 호출 차단
+    // 로딩 중에는 센티넬 관찰 해제
     if (ioRef.current) ioRef.current.unobserve(entry.target);
 
     (async () => {
@@ -119,7 +112,7 @@ const SimpleOrderPage: React.FC = () => {
         setIsLoadingMore(false);
         loadingRef.current = false;
 
-        // ★ 레이아웃 안정화 후 관찰 재개 (Double requestAnimationFrame)
+        // 레이아웃 안정화 후 관찰 재개
         if (hasMoreRef.current && observerRef.current && ioRef.current) {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -133,102 +126,47 @@ const SimpleOrderPage: React.FC = () => {
     })();
   }, [fetchNextPage]);
 
-  // ✅ [수정 3] 옵저버는 한 번만 생성/유지 (rootMargin 확장)
+  // 옵저버 생성
   useEffect(() => {
-    // 기존 옵저버 정리
     ioRef.current?.disconnect();
-
-    // 옵저버 객체 생성
     ioRef.current = new IntersectionObserver(onIntersect, {
       root: null,
-      rootMargin: '600px 0px', // ★ 더 일찍 로드 (300 -> 600)
+      rootMargin: '600px 0px',
       threshold: 0,
     });
 
-    // 이 useEffect에서는 관찰 시작하지 않음 (return에서 정리만 담당)
     return () => {
       ioRef.current?.disconnect();
       ioRef.current = null;
     };
   }, [onIntersect]);
-  
-  // 🚀 [추가된 코드] 옵저버 관찰 지연: 초기 로딩이 완료된 후에만 관찰 시작
+
+  // 옵저버 관찰 시작 제어
   useEffect(() => {
     const node = observerRef.current;
-    
-    // 로딩 중이거나, 더 볼 상품이 없거나, 옵저버가 준비되지 않았다면 관찰하지 않습니다.
     if (loading || !hasMore || !node || !ioRef.current) return;
-    
-    // ★ 최초 관찰 시작
     ioRef.current.observe(node);
-
-    // cleanup: 이펙트가 다시 실행되거나 언마운트될 때 관찰 해제
     return () => {
-        ioRef.current?.unobserve(node);
+      ioRef.current?.unobserve(node);
     }
-  }, [loading, hasMore]); // loading 상태와 hasMore 상태에 의존
-
-  // ✅ 1단계: 진단용 로그 (p.name -> p.id 로 최종 수정)
-  useEffect(() => {
-    if (!products || products.length === 0) return;
-
-    console.log(`===== [F5/HMR 진단 시작] 총 상품: ${products.length}개 =====`);
-
-    products.forEach((p: Product) => {
-      try {
-        // 1. productUtils.ts의 실제 함수 시그니처에 맞게 호출
-        const round = getDisplayRound(p);
-        
-        // 2. round가 없으면(표시할 회차가 없으면) 스킵
-        if (!round) {
-          console.log(`[상품] ${p.id}`, { action: 'NO_DISPLAY_ROUND' }); // 🚨 최종 수정: p.id
-          return;
-        }
-
-        // 3. 실제 시그니처에 맞게 호출
-        const deadlines = getDeadlines(round);
-        const action = determineActionState(round, userDocument as any); // useAuth의 userDocument 사용
-
-        console.log(`[상품] ${p.id}`, { // 🚨 최종 수정: p.id
-          roundId: round.roundId,
-          status: round.status,
-          manualStatus: round.manualStatus,
-          // (참고) deadlines 객체는 dayjs 객체이므로 .format()으로 봐야 편합니다.
-          deadlines: { 
-            primaryEnd: deadlines.primaryEnd?.format('YYYY-MM-DD HH:mm:ss'), 
-            secondaryEnd: deadlines.secondaryEnd?.format('YYYY-MM-DD HH:mm:ss') 
-          },
-          action, // (중요) 이 값이 F5와 HMR에서 다른지 확인
-        });
-      } catch (e: any) {
-        console.warn(`[진단오류] ${p.id}`, e.message); // 🚨 최종 수정: p.id
-      }
-    });
-
-    console.log('===== [F5/HMR 진단 끝] =====');
-  }, [products, userDocument]); // ✅ [수정] userDocument 의존성 추가
+  }, [loading, hasMore]);
 
   // 파생 리스트 메모
   const { primarySaleProducts, secondarySaleProducts, generalPrimarySaleEndDate } = useMemo(() => {
-    // dayjs import는 상단에서 처리되었으므로 isBetween 플러그인을 여기서 추가합니다.
-    // 이전 require 오류 코드는 제거되었음을 확인합니다.
-    // ⚠️ dayjs.extend(isBetween)과 dayjs.locale('ko')가 중앙 초기화되었으므로
-    // 이 파일에서는 별도의 플러그인 설정 없이 dayjs를 바로 사용합니다.
-
     const now = dayjs();
-    // ✅ [수정] 정렬을 위한 임시 배열의 타입에 sortPrice와 isSoldOut을 추가합니다.
     const tempPrimary: (ProductWithUIState & { sortPrice: number; isSoldOut: boolean })[] = [];
     const tempSecondary: (ProductWithUIState & { sortPrice: number; isSoldOut: boolean })[] = [];
     let earliestPrimaryEnd: dayjs.Dayjs | null = null;
 
     products.forEach(product => {
       const round = getDisplayRound(product);
+      // productUtils 수정으로 인해 여기서 round가 null이면 '표시할 수 있는 유효한 회차가 없음'을 의미함
       if (!round || round.status === 'draft') return;
 
       const { primaryEnd: primaryEndDate, secondaryEnd: secondaryEndDate } = getDeadlines(round);
       const actionState = determineActionState(round, userDocument as any);
-      
-      // ✅ [수정] 1. 'ENDED'(판매 종료) 또는 'SCHEDULED'(판매 예정) 상태는 항상 숨김
+
+      // 1. 'ENDED'(판매 종료) 또는 'SCHEDULED'(판매 예정) 상태는 숨김
       if (actionState === 'ENDED' || actionState === 'SCHEDULED') return;
 
       const finalPhase = (round.isManuallyOnsite)
@@ -238,27 +176,25 @@ const SimpleOrderPage: React.FC = () => {
           : (secondaryEndDate && primaryEndDate && now.isBetween(primaryEndDate, secondaryEndDate, null, '(]'))
             ? 'secondary'
             : 'past';
-      
-      // 2. 'past' (기간 지남) 또는 'onsite' (현장 판매)는 이 페이지에서 숨김
+
+      // 2. 'past' 또는 'onsite'는 이 페이지에서 숨김
       if (finalPhase === 'past' || finalPhase === 'onsite') return;
-      
-      // ✅ [추가 1] 2차 공구(secondary)이고 품절(AWAITING_STOCK)이면 리스트에서 제외 (숨김 처리)
+
+      // 2차 공구(secondary)이고 품절(AWAITING_STOCK)이면 리스트에서 제외
       if (finalPhase === 'secondary' && actionState === 'AWAITING_STOCK') {
         return;
       }
 
-      // ✅ [추가 2] 1차 공구 품절 여부 확인 (정렬용)
-      const isSoldOut = (actionState === 'AWAITING_STOCK'); // 2차 공구는 위에서 걸러졌으므로, 1차 공구 품절만 true가 됨
+      // 1차 공구 품절 여부 확인
+      const isSoldOut = (actionState === 'AWAITING_STOCK');
 
       const productWithState: ProductWithUIState = { ...product, phase: finalPhase, displayRound: round, actionState };
-
-      // ⚠️ 상품의 가격을 결정합니다. (SimpleProductCard 로직과 동일하게 첫 번째 옵션 가격 사용)
       const priceForSort = productWithState.displayRound.variantGroups?.[0]?.items?.[0]?.price ?? 0;
-      
+
       const productWithSortPrice: ProductWithUIState & { sortPrice: number; isSoldOut: boolean } = {
-          ...productWithState,
-          sortPrice: priceForSort,
-          isSoldOut: isSoldOut // ✅ 품절 상태 추가
+        ...productWithState,
+        sortPrice: priceForSort,
+        isSoldOut: isSoldOut
       };
 
       if (finalPhase === 'primary') {
@@ -267,39 +203,28 @@ const SimpleOrderPage: React.FC = () => {
           earliestPrimaryEnd = primaryEndDate;
         }
       } else if (finalPhase === 'secondary') {
-        // (품절된 2차 공구 상품은 위에서 이미 return되어 여기까지 오지 않음)
         tempSecondary.push(productWithSortPrice);
       }
     });
 
-    // ✅ [수정된 정렬 로직]
-    // 1. 품절되지 않은 상품(isSoldOut=false)이 위로 오도록 정렬
-    // 2. 동일 상태 내에서는 가격(sortPrice)이 높은 순(내림차순)으로 정렬
+    // 정렬 로직
     const sortedPrimary = tempPrimary.sort((a, b) => {
-    // [추가된 로직] 1. 1주년 이벤트 상품인지 확인 ('ANNIVERSARY'는 사장님이 2단계에서 정한 value값)
-    const isAnniversaryA = a.displayRound.eventType === 'ANNIVERSARY';
-    const isAnniversaryB = b.displayRound.eventType === 'ANNIVERSARY';
+      const isAnniversaryA = a.displayRound.eventType === 'ANNIVERSARY';
+      const isAnniversaryB = b.displayRound.eventType === 'ANNIVERSARY';
 
-    // A만 1주년이면 A를 앞으로 (-1)
-    if (isAnniversaryA && !isAnniversaryB) return -1;
-    // B만 1주년이면 B를 앞으로 (1)
-    if (!isAnniversaryA && isAnniversaryB) return 1;
+      if (isAnniversaryA && !isAnniversaryB) return -1;
+      if (!isAnniversaryA && isAnniversaryB) return 1;
 
-    // [기존 로직] 2. 품절 여부 (품절된 건 뒤로)
-    if (a.isSoldOut !== b.isSoldOut) {
+      if (a.isSoldOut !== b.isSoldOut) {
         return a.isSoldOut ? 1 : -1;
-    }
+      }
 
-    // [기존 로직] 3. 가격순
-    return b.sortPrice - a.sortPrice;
-});
-    
-    // 2차 공구는 이미 품절 상품이 필터링되었으므로 가격순 정렬만 수행
+      return b.sortPrice - a.sortPrice;
+    });
+
     const sortedSecondary = tempSecondary.sort((a, b) => b.sortPrice - a.sortPrice);
 
     return {
-      // ✅ 정렬된 배열을 반환
-      // 반환 시에는 임시로 추가했던 sortPrice, isSoldOut 속성을 제거하고 ProductWithUIState 타입으로 캐스팅합니다.
       primarySaleProducts: sortedPrimary as ProductWithUIState[],
       secondarySaleProducts: sortedSecondary as ProductWithUIState[],
       generalPrimarySaleEndDate: earliestPrimaryEnd,
@@ -383,30 +308,28 @@ const SimpleOrderPage: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ [수정 4] 센티넬 + 로더 (레이아웃 점프 방지를 위해 구조 변경) */}
         <div
           ref={observerRef}
           className="infinite-scroll-trigger"
           style={{
-            minHeight: '120px', // (↑) 여유 공간 확보 (80 -> 120)
+            minHeight: '120px',
             display: 'flex',
-            flexDirection: 'column', // 로더와 end-of-list를 수직 정렬
+            flexDirection: 'column',
             justifyContent: 'center',
             alignItems: 'center'
           }}
         >
-          {/* ★ 항상 존재하는 고정 높이 컨테이너 → 레이아웃 점프 방지 */}
           <div
             className="loader-stable"
             style={{
-              height: 48, // 로더 실제 높이에 맞춰 고정
+              height: 48,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: isLoadingMore ? 1 : 0, // ★ 토글은 opacity로
+              opacity: isLoadingMore ? 1 : 0,
               transition: 'opacity 120ms linear',
-              willChange: 'opacity', // 페인트 최적화
-              transform: 'translateZ(0)' // GPU 합성
+              willChange: 'opacity',
+              transform: 'translateZ(0)'
             }}
             aria-hidden={!isLoadingMore}
           >

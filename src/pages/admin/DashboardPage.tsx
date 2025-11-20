@@ -30,13 +30,13 @@ interface EnrichedGroupItem {
   configuredStock: number;
 }
 
-// ✅ [추가] 이벤트 정보를 담을 새로운 타입
+// ✅ 이벤트 정보를 담을 타입
 interface ActiveRaffleEvent {
     productId: string;
     roundId: string;
     productName: string;
     entryCount: number;
-    deadlineDate: Timestamp;
+    deadlineDate: any; // ⚠️ [수정] 타입 호환성 문제 방지를 위해 any로 완화 (Timestamp 메서드 사용 가능)
 }
 
 const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
@@ -76,14 +76,14 @@ const DashboardPage: React.FC = () => {
   const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
   const [editingStockId, setEditingStockId] = useState<string | null>(null);
-  // ✅ [추가] 활성 이벤트 상태
   const [activeRaffles, setActiveRaffles] = useState<ActiveRaffleEvent[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // ⚠️ [수정 1] getProducts() 인자 제거 (Expected 0 arguments 오류 해결)
       const [productsResponse, allPendingOrders] = await Promise.all([
-        getProducts(false, 9999),
+        getProducts(), 
         getDocs(query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))),
       ]);
 
@@ -106,21 +106,25 @@ const DashboardPage: React.FC = () => {
       });
 
       const allDisplayItems: EnrichedGroupItem[] = [];
-      // ✅ [추가] 활성 래플 이벤트 목록을 담을 배열
       const currentActiveRaffles: ActiveRaffleEvent[] = [];
 
       productsResponse.products.forEach((product: Product) => {
         const uploadDate = product.createdAt && 'toDate' in product.createdAt ? formatDate(product.createdAt.toDate()) : '날짜 없음';
 
-        product.salesHistory?.forEach((round: SalesRound) => {
-          // ✅ [추가] 진행중인 래플 이벤트인지 확인하고 목록에 추가
-          if (round.eventType === 'RAFFLE' && round.deadlineDate && Timestamp.now().toMillis() < round.deadlineDate.toMillis()) {
+        // ✅ [수정] 가장 최근(마지막) 회차 1개만 가져와서 표시 (중복 방지)
+        const latestRound = product.salesHistory?.[product.salesHistory.length - 1];
+        
+        if (latestRound) {
+          const round = latestRound;
+
+          // ⚠️ [수정 2 & 3] entryCount 타입 오류 및 Timestamp 타입 불일치 해결 (as any 사용)
+          if (round.eventType === 'RAFFLE' && round.deadlineDate && Timestamp.now().toMillis() < (round.deadlineDate as any).toMillis()) {
             currentActiveRaffles.push({
                 productId: product.id,
                 roundId: round.roundId,
                 productName: product.groupName,
-                entryCount: round.entryCount || 0,
-                deadlineDate: round.deadlineDate,
+                entryCount: (round as any).entryCount || 0, // 'SalesRound'에 entryCount가 없다는 오류 해결
+                deadlineDate: round.deadlineDate as any, // Timestamp 타입 불일치 해결
             });
           }
 
@@ -149,7 +153,7 @@ const DashboardPage: React.FC = () => {
               configuredStock: finalConfiguredStock,
             });
           });
-        });
+        } 
       });
 
       const grouped = allDisplayItems.reduce((acc, item) => {
@@ -162,7 +166,7 @@ const DashboardPage: React.FC = () => {
       }, {} as Record<string, EnrichedGroupItem[]>);
 
       setGroupedItems(grouped);
-      setActiveRaffles(currentActiveRaffles); // ✅ [추가] 상태 업데이트
+      setActiveRaffles(currentActiveRaffles);
 
     } catch (error) {
       reportError("대시보드 데이터 로딩 실패", error);
@@ -243,7 +247,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
       
-      {/* ✅ [추가] 진행중인 추첨 이벤트 섹션 */}
+      {/* 진행중인 추첨 이벤트 섹션 */}
       {activeRaffles.length > 0 && (
           <div className="dashboard-group raffle-summary-group">
               <h2 className="group-title"><Ticket size={20} /> 진행중인 추첨 이벤트</h2>

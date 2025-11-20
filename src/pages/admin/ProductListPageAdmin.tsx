@@ -322,7 +322,7 @@ const ProductListPageAdmin: React.FC = () => {
           round: r,
           createdAt: safeToDate(r.createdAt)?.getTime() || 0,
           // ✅ [수정 2] 데이터 매핑 부분에서 pickupDate 연결
-          pickupDate: safeToDate(r.pickupDate)?.getTime() || 0,
+          pickupDate: (r.pickupDate ? safeToDate(r.pickupDate) : null)?.getTime() || 0,
           storageType: p.storageType,
           status: overallStatus,
           enrichedVariantGroups: enrichedVariantGroups,
