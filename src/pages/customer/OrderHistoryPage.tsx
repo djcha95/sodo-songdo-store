@@ -255,7 +255,7 @@ const usePaginatedOrders = (uid?: string) => {
   return { orders, setOrders, loading, loadingMore, hasMore, loadMore };
 };
 
-// 수량 조절 컴포넌트
+// 수량 조절 컴포넌트 (수정본)
 const QuantityControls: React.FC<{
   order: Order;
   onUpdate: (orderId: string, newQuantity: number) => void;
@@ -263,14 +263,32 @@ const QuantityControls: React.FC<{
   const [currentQuantity, setCurrentQuantity] = useState(order.items[0].quantity);
   const [isUpdating, setIsUpdating] = useState(false);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // ✨ [수정] 구매 제한 수량을 아주 안전하게 가져오는 로직
+  // DB에 값이 없거나(undefined), 문자열("5")로 저장되어 있어도 숫자로 정확히 변환합니다.
+  const item = order.items[0];
+  const rawLimit = (item as any).limitQuantity;
+  
+  // 값이 있으면 숫자로 변환, 없으면 무제한(Infinity)
+  const limitQuantity = (rawLimit !== undefined && rawLimit !== null) 
+    ? Number(rawLimit) 
+    : Infinity;
   
   useEffect(() => {
     setCurrentQuantity(order.items[0].quantity);
   }, [order.items]);
 
-
   const handleQuantityChange = (newQuantity: number) => {
     if (newQuantity < 1 || isUpdating) return;
+
+    // ✨ [수정] 문지기 역할 강화: 제한 수량이 있고, 그것을 넘으려 하면 차단
+    if (limitQuantity !== Infinity && newQuantity > limitQuantity) {
+        showToast('error', `구매 한도 초과! 최대 ${limitQuantity}개까지만 가능합니다.`);
+        // 강제로 현재 수량을 제한 수량(또는 기존 수량)으로 맞춤 (UI 튕김 방지)
+        setCurrentQuantity(Math.min(currentQuantity, limitQuantity));
+        return;
+    }
+
     setCurrentQuantity(newQuantity);
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
 
@@ -279,7 +297,11 @@ const QuantityControls: React.FC<{
       const promise = updateOrderQuantityCallable({ orderId: order.id, newQuantity });
       showPromiseToast(promise, {
         loading: '수량 변경 중...',
-        success: () => { onUpdate(order.id, newQuantity); setIsUpdating(false); return '수량이 변경되었습니다.'; },
+        success: () => { 
+            onUpdate(order.id, newQuantity); 
+            setIsUpdating(false); 
+            return '수량이 변경되었습니다.'; 
+        },
         error: (err) => { 
           setCurrentQuantity(order.items[0].quantity); 
           setIsUpdating(false); 
@@ -293,22 +315,26 @@ const QuantityControls: React.FC<{
     <div className="quantity-controls">
       <button 
         onClick={(e) => { e.stopPropagation(); handleQuantityChange(currentQuantity - 1); }} 
+        // 1개 이하일 때는 - 버튼 비활성화
         disabled={isUpdating || currentQuantity <= 1}
+        className="qty-btn minus"
       >
         <Minus size={16} />
       </button>
+      
       <span className="quantity-value">{isUpdating ? '...' : currentQuantity}</span>
+      
       <button 
         onClick={(e) => { e.stopPropagation(); handleQuantityChange(currentQuantity + 1); }} 
-        disabled={isUpdating}
+        // ✨ [수정] 현재 수량이 제한 수량 이상이면 + 버튼을 아예 비활성화 (누를 수 없게 됨)
+        disabled={isUpdating || (limitQuantity !== Infinity && currentQuantity >= limitQuantity)}
+        className="qty-btn plus"
       >
         <Plus size={16} />
       </button>
     </div>
   );
 };
-
-
 // 주문 카드 컴포넌트
 const OrderCard: React.FC<{
   order: Order;
