@@ -30,15 +30,16 @@ const AdminLayout = React.lazy(() => import('@/components/admin/AdminLayout')); 
 const DashboardPage = React.lazy(() => import('@/pages/admin/DashboardPage'));const ProductListPageAdmin = React.lazy(() => import('@/pages/admin/ProductListPageAdmin'));
 const ProductAddAdminPage = React.lazy(() => import('@/pages/admin/ProductAddAdminPage'));
 const SalesRoundEditPage = React.lazy(() => import('@/pages/admin/SalesRoundEditPage'));
-const RaffleEventAdminPage = React.lazy(() => import('@/pages/admin/RaffleEventAdminPage'));
+// const RaffleEventAdminPage = React.lazy(() => import('@/pages/admin/RaffleEventAdminPage')); // ❌ 삭제됨
 const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
-const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage'));
+// const BannerAdminPage = React.lazy(() => import('@/pages/admin/BannerAdminPage')); // ❌ 삭제됨
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
 const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
 const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage'));
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
-const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage'));
+const PickupCheckPage = React.lazy(() => import('@/pages/admin/PickupCheckPage')); // ⬅️ [추가] 픽업 체크 페이지
+// const DataAdminPage = React.lazy(() => import('@/pages/admin/DataAdminPage')); // ❌ 삭제됨
 
 
 const queryClient = new QueryClient({
@@ -120,18 +121,19 @@ const router = createBrowserRouter([
             children: [
                 { index: true, element: <DashboardPage /> },
                 { path: 'dashboard', element: <DashboardPage /> },
+                { path: 'pickup-check', element: <PickupCheckPage /> }, // ⬅️ [추가] 픽업 체크 라우트
                 { path: 'quick-check', element: <QuickCheckPage /> },
                 { path: 'prepaid-check', element: <PrepaidCheckPage /> },
                 { path: 'products', element: <ProductListPageAdmin /> },
                 { path: 'products/add', element: <ProductAddAdminPage /> },
                 { path: 'products/edit/:productId/:roundId', element: <SalesRoundEditPage /> },
-                { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> },
+                // { path: 'events/:productId/:roundId', element: <RaffleEventAdminPage /> }, // ❌ 삭제됨
                 { path: 'orders', element: <OrderManagementPage /> },
                 { path: 'create-order', element: <CreateOrderPage /> },
                 { path: 'users', element: <UserListPage /> },
                 { path: 'users/:userId', element: <UserDetailPage /> },
-                { path: 'banners', element: <BannerAdminPage /> },
-                { path: 'data-tools', element: <DataAdminPage /> },
+                // { path: 'banners', element: <BannerAdminPage /> }, // ❌ 삭제됨
+                // { path: 'data-tools', element: <DataAdminPage /> }, // ❌ 삭제됨
             ]
           }
         ]
