@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProductsWithStock } from '@/firebase';
-import type { Product, SalesRound } from '@/shared/types';
+import type { Product, SalesRound, StorageType } from '@/shared/types'; // ✅ StorageType 추가
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { safeToDate } from '@/utils/productUtils';
 import dayjs, { Dayjs } from 'dayjs';
@@ -21,6 +21,7 @@ interface PickupEvent {
   pickupDate: number;
   variantCount: number;
   price: number; // ✅ 가격 정보 추가
+  storageType: StorageType; // ✅ 보관 타입 필드 추가
 }
 
 const PickupCheckPage: React.FC = () => {
@@ -58,6 +59,7 @@ const PickupCheckPage: React.FC = () => {
                     pickupDate: pDate.getTime(),
                     variantCount: round.variantGroups?.length || 0,
                     price: firstPrice, // ✅ 가격 데이터 저장
+                    storageType: product.storageType, // ✅ 이 줄을 추가해서 보관 정보 저장
                   });
                 }
               }
@@ -89,7 +91,22 @@ const PickupCheckPage: React.FC = () => {
 
   const selectedDateEvents = useMemo(() => {
     const dateKey = selectedDate.format('YYYY-MM-DD');
-    return eventsByDate[dateKey] || [];
+    const list = eventsByDate[dateKey] || [];
+
+    // ✅ 정렬 로직 추가: 냉장(1) -> 냉동(2) -> 실온(3)
+    return list.sort((a, b) => {
+      const priority: Record<string, number> = {
+        'FRESH': 1, 'COLD': 1,  // 냉장/신선 (1순위)
+        'FROZEN': 2,            // 냉동 (2순위)
+        'ROOM': 3               // 실온 (3순위)
+      };
+
+      // 우선순위 점수 가져오기 (없으면 뒤로 보냄)
+      const scoreA = priority[a.storageType] ?? 99;
+      const scoreB = priority[b.storageType] ?? 99;
+
+      return scoreA - scoreB;
+    });
   }, [selectedDate, eventsByDate]);
 
   const generateCalendarDays = (): Dayjs[] => {
@@ -167,28 +184,57 @@ const PickupCheckPage: React.FC = () => {
           </div>
         </div>
 
-        {/* --- 리스트 영역 --- */}
+{/* --- 리스트 영역 --- */}
         <div className="event-list-section">
-  <div className="list-header compact-header">
-    {/* ✅ 요청하신 대로 문구와 날짜 포맷(MM/DD(요일)) 변경 */}
-    <h3>🔥 {selectedDate.format('MM/DD(ddd)')} 입고완료! 🔥</h3>
-  </div>
+          <div className="list-header compact-header">
+            <h3>🔥 {selectedDate.format('MM/DD(ddd)')} 입고완료! 🔥</h3>
+          </div>
 
-  <div className="event-list-content compact-list">
+          <div className="event-list-content compact-list">
             {selectedDateEvents.length > 0 ? (
-              <ul className="pickup-items-compact">
-  {selectedDateEvents.map((item) => (
-    <li key={item.uniqueId} className="pickup-row">
-      <span className="row-product-name">
-        {/* ✅ 맨 앞에 체크 이모티콘 추가 */}
-        ✔️ {item.productName} 
-        <span style={{ color: '#888', fontWeight: 400, marginLeft: '4px' }}>
-          ({item.price.toLocaleString()}원)
-        </span>
-      </span>
-    </li>
-  ))}
-</ul>
+              <>
+                {/* 1. 신선제품 당일픽업 그룹 (냉장, 신선) */}
+                {selectedDateEvents.filter(item => ['FRESH', 'COLD'].includes(item.storageType)).length > 0 && (
+                  <div className="pickup-group">
+                    <h4 className="group-title">** 신선제품 당일픽업 **</h4>
+                    <ul className="pickup-items-compact">
+                      {selectedDateEvents
+                        .filter(item => ['FRESH', 'COLD'].includes(item.storageType))
+                        .map((item) => (
+                          <li key={item.uniqueId} className="pickup-row">
+                            <span className="row-product-name">
+                              ✔️ {item.productName} 
+                              <span style={{ color: '#888', fontWeight: 400, marginLeft: '4px' }}>
+                                ({item.price.toLocaleString()}원)
+                              </span>
+                            </span>
+                          </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 2. 일반제품 2일픽업 그룹 (냉동, 실온) */}
+                {selectedDateEvents.filter(item => ['FROZEN', 'ROOM'].includes(item.storageType)).length > 0 && (
+                  <div className="pickup-group">
+                    <h4 className="group-title">** 일반제품 2일픽업 **</h4>
+                    <ul className="pickup-items-compact">
+                      {selectedDateEvents
+                        .filter(item => ['FROZEN', 'ROOM'].includes(item.storageType))
+                        .map((item) => (
+                          <li key={item.uniqueId} className="pickup-row">
+                            <span className="row-product-name">
+                              ✔️ {item.productName} 
+                              <span style={{ color: '#888', fontWeight: 400, marginLeft: '4px' }}>
+                                ({item.price.toLocaleString()}원)
+                              </span>
+                            </span>
+                          </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="empty-state">
                 <MapPin size={32} />

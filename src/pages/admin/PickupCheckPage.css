@@ -293,3 +293,16 @@
   font-weight: 600;
   color: #888;
 }
+
+/* 그룹핑 스타일 추가 */
+.pickup-group {
+  margin-bottom: 1.5rem;
+}
+
+.group-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #d63384; /* 강조색 (원하시면 #333으로 변경 가능) */
+  margin: 0 0 0.5rem 0.2rem;
+  padding-top: 0.5rem;
+}
