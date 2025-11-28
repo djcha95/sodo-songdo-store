@@ -5,7 +5,7 @@ import React from 'react';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ExternalLink, Menu, Zap, PlusSquare, Wallet,
-  CalendarCheck // ⬅️ CalendarCheck 아이콘 추가
+  CalendarCheck, ClipboardList // ⬅️ ClipboardList 아이콘 추가
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -41,26 +41,21 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
       <nav className="sidebar-nav">
         <ul>
           <MenuItem to="/admin/dashboard" icon={<Home size={18} />} text="대시보드" isSidebarOpen={isSidebarOpen} end={true} />
-           {/* text="이벤트 관리" 줄 삭제됨 */}
-          {/* ⬇️ [추가] 픽업 체크 메뉴 */}
           <MenuItem 
             to="/admin/pickup-check" 
             icon={<CalendarCheck size={18} />} 
             text="수진이의 픽업체쿠!" 
             isSidebarOpen={isSidebarOpen} 
           />
-          {/* ⬆️ [추가] 픽업 체크 메뉴 */}
           <MenuItem to="/admin/quick-check" icon={<Zap size={18} />} text="빠른 예약확인" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/prepaid-check" icon={<Wallet size={18} />} text="선입금 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/orders" icon={<ShoppingCart size={18} />} text="주문 통합 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/create-order" icon={<PlusSquare size={18} />} text="새 주문 생성" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/users" icon={<Users size={18} />} text="고객 관리" isSidebarOpen={isSidebarOpen} />
+          {/* ⬇️ [추가] 재고 관리 메뉴 */}
+          <MenuItem to="/admin/stock" icon={<ClipboardList size={18} />} text="현장판매 재고" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products" icon={<Package size={18} />} text="상품 목록" isSidebarOpen={isSidebarOpen} end={true} />
           <MenuItem to="/admin/products/add" icon={<PlusSquare size={18} />} text="새 상품 등록" isSidebarOpen={isSidebarOpen} />
-          {/* text="카테고리 일괄 변경" 줄 삭제됨 */}
-          {/* text="카테고리 관리" 줄 삭제됨 */}
-          {/* text="배너 관리" 줄 삭제됨 */}
-          {/* text="데이터 보정" 줄 삭제됨 */}
         </ul>
       </nav>
 

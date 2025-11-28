@@ -1,0 +1,366 @@
+/* src/styles/ModernProduct.css */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+.customer-page-container.modern-list-page,
+.customer-page-container.modern-list-page *,
+.desktop-app-wrapper * {
+    box-sizing: border-box;
+}
+
+.customer-page-container.modern-list-page {
+    font-family: "Pretendard", -apple-system, sans-serif;
+    color: #1E293B;
+}
+
+/* 데스크탑 앱 뷰 레이아웃 */
+.desktop-app-wrapper {
+    width: 100%; 
+    min-height: 100vh; 
+    background-color: #F3F4F6;
+    display: flex; 
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.mobile-app-view {
+    width: 100%; 
+    max-width: 500px; 
+    background-color: #FFFFFF;
+    min-height: 100vh; 
+    box-shadow: 0 0 25px rgba(0,0,0,0.08);
+    position: relative; 
+    padding-bottom: 80px; 
+    transition: max-width 0.3s ease;
+    overflow-x: hidden;
+}
+
+@media (min-width: 1024px) {
+    .mobile-app-view { max-width: 900px; }
+    
+    .songdo-product-list { 
+        display: grid; 
+        grid-template-columns: repeat(2, minmax(0, 1fr)); 
+        gap: 16px; 
+        width: 100%;
+    }
+    
+    .songdo-card { 
+        border: 1px solid #F1F5F9; 
+        border-radius: 12px; 
+        margin-bottom: 0; 
+        width: 100%;
+    }
+}
+
+/* 헤더 스타일 */
+.songdo-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 12px 20px;
+    background: #fff; 
+    position: sticky; 
+    top: 0; 
+    z-index: 50; 
+    border-bottom: 1px solid #E2E8F0; 
+    min-height: 60px;
+}
+
+.songdo-logo { font-size: 24px; font-weight: 900; color: #1E293B; cursor: pointer; letter-spacing: -0.5px; margin: 0; }
+.songdo-header-right { display: flex; align-items: center; gap: 4px; }
+
+/* 아이콘 버튼 (장바구니 등) */
+.songdo-icon-btn { 
+    background: none; 
+    border: none; 
+    padding: 8px; 
+    cursor: pointer; 
+    color: #334155; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 텍스트 버튼 (예약내역) */
+.songdo-text-btn {
+    background: none;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+    padding: 8px 10px;
+    cursor: pointer;
+    letter-spacing: -0.3px;
+    transition: color 0.2s;
+}
+.songdo-text-btn:hover {
+    color: #1E293B;
+}
+
+/* 공지 배너 */
+.songdo-notice-banner { background: #F8FAFC; padding: 12px 20px; border-bottom: 1px solid #F1F5F9; }
+/* 공지 텍스트 가독성 개선 */
+.notice-text { font-size: 14px; color: #334155; display: block; line-height: 1.5; }
+.notice-highlight { font-weight: 700; color: #0F172A; }
+
+/* 탭 스타일 */
+.songdo-tabs-wrapper { 
+    position: sticky; 
+    top: 60px; /* 헤더 높이 */
+    z-index: 40; 
+    background: #fff; 
+    padding: 0 20px; 
+    border-bottom: 1px solid #E2E8F0; 
+}
+.songdo-tabs { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+.songdo-tabs::-webkit-scrollbar { display: none; }
+.songdo-tab-item { padding: 14px 0; font-size: 14px; color: #94A3B8; font-weight: 600; cursor: pointer; background: none; border: none; white-space: nowrap; position: relative; }
+.songdo-tab-item.active { color: #1E293B; }
+.songdo-tab-item.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 2px; background: #1E293B; }
+
+/* 카드 스타일 전면 수정 */
+.songdo-card { 
+    display: flex; 
+    flex-direction: column; /* 세로 정렬로 변경 */
+    padding: 20px; 
+    border-bottom: 1px solid #F1F5F9; 
+    cursor: pointer; 
+    gap: 12px; /* 상단과 하단 사이 간격: 16px -> 12px로 줄임 */
+    background: #fff; 
+}
+
+.songdo-card.onsite {
+    background-color: #F9FAFB;
+    box-shadow: none;
+    border-bottom: 1px solid #E2E8F0;
+}
+@media (max-width: 1023px) { .songdo-card:last-child { border-bottom: none; } }
+
+
+/* [1] 상단 영역 (이미지 + 정보) */
+.songdo-card-header {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+}
+
+.songdo-card-thumb { 
+    width: 100px; 
+    height: 100px; 
+    border-radius: 8px; 
+    overflow: hidden; 
+    flex-shrink: 0; 
+    background: #f4f4f5; 
+    position: relative; 
+}
+.songdo-img { width: 100%; height: 100%; object-fit: cover; }
+.songdo-onsite-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; line-height: 1.2; text-align: center; }
+
+/* 텍스트 정보 영역 (기존 -info) */
+.songdo-card-info { flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+.songdo-card-info-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px; /* 항목 간 간격: 4px -> 2px로 최소화 */
+}
+
+
+.songdo-tags { display: flex; gap: 6px; margin-bottom: 4px; /* 6px -> 4px */ align-items: center; flex-wrap: wrap; }
+.tag { font-size: 10px; padding: 3px 6px; border-radius: 4px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; }
+.tag.primary { background: #FFF7ED; color: #F97316; } 
+.tag.secondary { background: #F1F5F9; color: #334155; } 
+.tag.onsite { background: #F3F4F6; color: #4B5563; }
+.deadline-text { font-size: 11px; color: #64748B; font-weight: 500; white-space: nowrap; }
+.deadline-text.urgent { color: #DC2626; font-weight: 700; }
+.songdo-title { 
+    font-size: 16px; 
+    font-weight: 600; 
+    color: #0F172A; 
+    margin: 0 0 2px 0; /* 4px -> 2px로 축소 */ 
+    line-height: 1.3; /* 1.4 -> 1.3으로 축소 */
+    display: -webkit-box; 
+    -webkit-line-clamp: 2; 
+    line-clamp: 2; 
+    -webkit-box-orient: vertical; 
+    overflow: hidden; 
+}
+
+/* 픽업일 텍스트 스타일 */
+.pickup-info-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 2px; /* 8px -> 2px로 축소 */
+    letter-spacing: -0.3px;
+    line-height: 1.4;
+}
+
+.stock-status-area { margin-bottom: 4px; /* 8px -> 4px로 축소 */ display: flex; align-items: center; gap: 8px; }
+.stock-bar-bg { flex: 1; height: 6px; background: #E2E8F0; border-radius: 3px; max-width: 80px; overflow: hidden; }
+.stock-bar-fill { height: 100%; border-radius: 3px; }
+.stock-bar-fill.primary { background: #F97316; } 
+.stock-bar-fill.secondary { background: #334155; }
+.stock-text { font-size: 11px; font-weight: 600; }
+.stock-text.primary { color: #F97316; } 
+.stock-text.secondary { color: #334155; }
+.stock-unlimited { font-size: 12px; color: #059669; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+
+/* [2] 하단 영역 (가격 + 버튼) */
+.songdo-card-bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 4px;
+}
+
+/* 가격 영역 */
+.price-area {
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+  margin-top: 2px; /* 4px -> 2px로 축소 */
+}
+.price-label { font-size: 11px; font-weight: 700; padding: 2px 5px; border-radius: 4px; margin-right: 6px; align-self: center; white-space: nowrap; flex-shrink: 0; }
+.price-label.primary { color: #EA580C; background-color: #FFEDD5; }
+.price-label.secondary { color: #475569; background-color: #F1F5F9; }
+.price-label.onsite { color: #4B5563; background-color: #F3F4F6; }
+
+.price { 
+    font-size: 20px; 
+    font-weight: 800; 
+    color: #0F172A; 
+    letter-spacing: -0.5px;
+}
+.unit { 
+    font-size: 15px; 
+    color: #64748B; 
+    font-weight: 500; 
+    white-space: nowrap;
+    margin-left: 2px;
+}
+
+/* 버튼 그룹 - 전체 너비 사용하도록 수정 */
+.qty-control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%; /* 부모 너비 100% 사용 */
+}
+
+/* 수량 조절 스테퍼 디자인 개선 - 비율 2:1로 확장 */
+.qty-stepper {
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    background: #F1F5F9; 
+    border: none; 
+    border-radius: 8px; 
+    padding: 0; 
+    height: 48px; /* 44px -> 48px로 높이 키움 */
+    flex: 2; /* 비율 2: 공간을 더 많이 차지함 */
+}
+
+.qty-btn {
+    width: 44px; /* 36px -> 44px로 터치 영역 확대 */
+    height: 100%; 
+    display: flex; align-items: center; justify-content: center; 
+    background: transparent; border: none; cursor: pointer; 
+    color: #475569; 
+    font-size: 18px; 
+    transition: background 0.2s;
+    border-radius: 8px;
+}
+.qty-btn:active { background: rgba(0,0,0,0.1); }
+.qty-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.qty-val { flex: 1; text-align: center; font-size: 16px; font-weight: 700; color: #1E293B; }
+
+/* 장바구니 버튼 디자인 개선 - 비율 2:1로 확장 */
+.btn-cart {
+    height: 48px; /* 44px -> 48px로 높이 맞춤 */
+    border-radius: 8px; 
+    cursor: pointer; border: none; 
+    display: flex; align-items: center; justify-content: center; 
+    background: #1E293B; color: #fff; transition: background 0.2s;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    flex: 1; /* 비율 1: 수량 조절보다는 작지만 충분히 넓게 */
+    min-width: 60px; /* 최소 너비 보장 */
+}
+.btn-cart:hover { background: #0F172A; }
+.btn-cart:active { transform: translateY(1px); }
+.songdo-card.primary .btn-cart { background: #F97316; }
+.songdo-card.primary .btn-cart:hover { background: #EA580C; }
+
+/* 현장판매 단순 텍스트 버튼 - 100% 너비, 48px 높이로 수정 */
+.btn-onsite-simple {
+    background: #F1F5F9;
+    color: #64748B;
+    padding: 12px; /* 높이 48px에 맞게 패딩 조정 */
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    width: 100%; /* 꽉 채움 */
+    text-align: center;
+}
+
+
+/* 현장판매 전용 배너 */
+.onsite-banner {
+    width: 100%;
+    background-color: #F3F4F6;
+    color: #475569;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 14px;
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-sizing: border-box;
+}
+
+@media (min-width: 1024px) {
+    /* 데스크탑에서 카드 레이아웃은 여전히 Grid Item 내에서 세로형으로 유지 */
+    .songdo-card {
+        flex-direction: column; 
+    }
+    
+    /* 데스크탑에서 하단 레이아웃은 그대로 flex-row, space-between 유지 */
+    .songdo-card-bottom-row {
+        justify-content: space-between;
+    }
+    
+    .price-area { width: auto; } 
+    /* 데스크탑에서도 버튼 그룹이 100%를 차지하는 대신, 컨텐츠 너비에 맞게 조정하도록 재정의 */
+    .qty-control-group { 
+        width: auto; 
+        gap: 8px; 
+    }
+    
+    /* 데스크탑에서는 버튼과 스테퍼의 크기를 모바일처럼 100% 확장하지 않고, 기존의 고정 너비 또는 적절한 비율을 사용하도록 flex 속성 재정의 */
+    .qty-stepper {
+        width: 110px; /* 원본의 고정 너비 재정의 */
+        flex: none; /* 확장하지 않음 */
+    }
+    .btn-cart {
+        width: 52px; /* 원본의 고정 너비 재정의 */
+        flex: none; /* 확장하지 않음 */
+    }
+}
+
+/* 하단 컨트롤 줄 – 전체 폭 사용, 오른쪽 정렬 (이 클래스는 더 이상 사용되지 않을 수 있지만, 안전을 위해 남겨둡니다) */
+.songdo-card-bottom-row.controls-only {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
+}

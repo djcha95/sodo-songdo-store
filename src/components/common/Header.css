@@ -25,33 +25,37 @@
   align-items: center;
 }
 
+/* 모던 레이아웃일 때 최대 너비 조정 */
+.header-content.modern-layout {
+  max-width: 900px; /* 모던 리스트 최대폭에 맞춤 */
+}
+
 .header-left, .header-right {
   display: flex;
   align-items: center;
   height: 100%;
 }
 
-/* --- 페이지 탭 (공동구매, 추가예약) --- */
+/* --- 페이지 탭 --- */
 .header-page-tabs {
   display: flex;
   align-items: center;
-  gap: 0.75rem; /* ✅ [수정] 1rem -> 0.75rem (버튼 사이 간격을 더 줄입니다) */
+  gap: 0.75rem;
   height: 100%;
 }
 .page-tab {
   display: flex;
   align-items: center;
-  gap: 0.3rem; /* ✅ [수정] 아이콘과 텍스트 사이 간격을 0.4rem -> 0.3rem으로 줄임 */
+  gap: 0.3rem;
   height: 100%;
   padding: 0 0.25rem;
-  font-size: 0.95rem; /* ✅ [수정] 1rem -> 0.95rem (글자 크기를 약간 더 줄입니다) */
+  font-size: 0.95rem;
   font-weight: 700;
   color: #888;
   position: relative;
   transition: color 0.2s ease-in-out;
   white-space: nowrap;
 }
-
 .page-tab::after {
   content: '';
   position: absolute;
@@ -63,39 +67,34 @@
   transform: scaleX(0);
   transition: transform 0.3s ease, background-color 0.3s ease;
 }
-
-.page-tab.active {
-  color: var(--text-color-dark);
-}
-
-.page-tab.active::after {
-  transform: scaleX(1);
-}
-
+.page-tab.active { color: var(--text-color-dark); }
+.page-tab.active::after { transform: scaleX(1); }
 .page-tab.primary.active { color: #f97316; }
 .page-tab.primary.active::after { background-color: #f97316; }
-
 .page-tab.secondary.active { color: #3b82f6; } 
 .page-tab.secondary.active::after { background-color: #3b82f6; }
 
-/* --- 브랜드 로고 --- */
+/* 1. 브랜드 로고: 진지하고 묵직한 스타일 */
 .header-brand .brand-link {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--text-color-dark);
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+  font-size: 1.45rem; /* 크기를 살짝 키움 */
+  font-weight: 900; /* 가장 두꺼운 폰트 */
+  color: #0F172A; /* 완전 검정보다는 아주 깊은 네이비블랙 */
   text-decoration: none;
+  letter-spacing: -1.5px; /* ✅ 자간을 좁혀서 단단하고 밀도 있는 느낌 (핵심) */
+  line-height: 1;
 }
 
 /* --- 오른쪽 네비게이션 --- */
 .header-nav {
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* 버튼 사이 간격 */
+  gap: 0.5rem;
 }
 
-/* '예약내역' 버튼 기본 스타일 */
+/* 기본 버튼 (텍스트 링크 스타일) */
 .header-nav .nav-item {
-  font-size: 0.875rem; /* (유지) 이 크기가 적절해 보입니다 */
+  font-size: 0.875rem;
   font-weight: 600;
   color: #555;
   text-decoration: none;
@@ -107,29 +106,106 @@
 .header-nav .nav-item:hover {
   background-color: #f3f4f6;
 }
-
 .header-nav .nav-item.active {
   background-color: #111827;
   color: #ffffff;
 }
 
-/* ✅ [수정] 관리자 버튼에만 적용될 더 구체적인 스타일 규칙 */
+/* 2. 예약내역/쇼핑하기 버튼: 눈에 띄는 솔리드 버튼 스타일 */
+/* 공통 모던 버튼 스타일 (구조) */
+.header-nav .nav-item.modern-text-btn {
+  /* 기존 background: none 제거 */
+  font-size: 0.9rem;
+  font-weight: 700;
+  
+  /* 버튼 형태 잡기 */
+  padding: 10px 18px; /* 넉넉한 패딩으로 버튼감 살리기 */
+  border-radius: 6px; /* 둥글지만 살짝 각진 느낌 (너무 둥글면 귀여워짐) */
+  
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* 살짝 떠있는 입체감 */
+  
+  margin-right: 4px; /* 장바구니 아이콘과의 간격 */
+  
+  /* 추가된 부분 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 호버 효과: 살짝 연해지며 눌리는 느낌 */
+.header-nav .nav-item.modern-text-btn:hover {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* 클릭 효과 */
+.header-nav .nav-item.modern-text-btn:active {
+  transform: translateY(2px);
+}
+
+/* 활성화 상태 (현재 페이지일 때) */
+.header-nav .nav-item.modern-text-btn.active {
+  background-color: #0F172A !important; /* 더 진한 색 */
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); /* 안으로 눌린 느낌 */
+}
+
+/* 기본 버튼 (예약내역) - 진한 먹색: history-mode */
+.header-nav .nav-item.modern-text-btn.history-mode {
+  background-color: #1E293B !important; /* 진한 먹색 배경 */
+  color: #ffffff !important; /* 흰색 글씨 */
+  border: 1px solid #1E293B; /* 테두리 */
+}
+.header-nav .nav-item.modern-text-btn.history-mode:hover {
+  background-color: #334155 !important;
+}
+
+/* ✅ [신규] 쇼핑하기 버튼 - 눈에 띄는 오렌지색: shop-mode */
+.header-nav .nav-item.modern-text-btn.shop-mode {
+  background-color: #F97316 !important; /* 밝고 쨍한 오렌지 */
+  color: #ffffff !important;
+  border: 1px solid #F97316;
+  
+  /* 애니메이션 강조 (선택사항) */
+  animation: pulse-soft 2s infinite;
+}
+
+.header-nav .nav-item.modern-text-btn.shop-mode:hover {
+  background-color: #EA580C !important; /* 호버 시 조금 더 진하게 */
+  /* transform: translateY(1px); // 공통 호버에 이미 포함 */
+}
+
+/* 살짝 쿵쿵 뛰는 효과 (주목도 UP) */
+@keyframes pulse-soft {
+  0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+}
+
+/* ✅ [신규] 장바구니 아이콘 버튼 */
+.nav-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #334155;
+  transition: color 0.2s;
+}
+.nav-icon-btn:hover {
+  color: #0F172A;
+}
+
+/* 관리자 버튼 */
 .header-nav .nav-item.admin-link {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background-color: #fffbeB; /* 부드러운 노란색 배경 */
-  color: #b45309; /* 진한 주황색 텍스트 */
-  border: 1px solid #fde68a; /* 노란색 테두리 */
+  background-color: #fffbeB;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
-
-.header-nav .nav-item.admin-link:hover {
-  background-color: #fef3c7;
-}
-
-/* ✅ [수정] .active 상태일 때도 우선순위를 높여서 적용 */
-.header-nav .nav-item.admin-link.active {
-  background-color: #f59e0b; /* 활성화 시 진한 주황색 */
-  color: #ffffff;
-  border-color: #f59e0b;
-}
+.header-nav .nav-item.admin-link:hover { background-color: #fef3c7; }
+.header-nav .nav-item.admin-link.active { background-color: #f59e0b; color: #ffffff; border-color: #f59e0b; }

@@ -5,9 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { cancelOrder } from '@/firebase/orderService';
 import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Order, OrderItem, OrderStatus } from '@/shared/types';
-// 💡 [수정] Firestore DB 직접 조회를 위한 import 추가
 import { 
   Timestamp, getFirestore, collection, query, where, 
   orderBy, limit, startAfter, getDocs, type QueryConstraint
@@ -16,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, Info, XCircle, Plus, Minus
+  PackageX, Hourglass, CreditCard, Info, XCircle, Plus, Minus, ChevronDown
 } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
@@ -24,10 +23,8 @@ import toast from 'react-hot-toast';
 import { showToast, showPromiseToast } from '@/utils/toastUtils';
 import './OrderHistoryPage.css';
 
-
 // Firebase Functions 설정
 const functions = getFunctions(getApp(), 'asia-northeast3');
-// 💡 [추가] Firestore DB 인스턴스
 const db = getFirestore(getApp());
 const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity: number }, { success: boolean, message: string }>(functions, 'updateOrderQuantity');
 
@@ -49,79 +46,57 @@ const SafeThumb: React.FC<{ src?: string; alt: string; className?: string; }> = 
   return <img src={imageSrc} alt={alt} className="w-full h-full object-cover rounded" loading="lazy" onError={handleError} />;
 };
 
-
 // 날짜 관련 유틸 함수
 const safeToDate = (date: any): Date | null => {
   if (!date) return null;
-
-  // ✅ [추가] 백엔드에서 숫자로 보낸 epoch milliseconds 처리
-  if (typeof date === 'number') {
-    return new Date(date);
-  }
-
+  if (typeof date === 'number') return new Date(date);
   if (date instanceof Date) return date;
-
-  // Firestore Timestamp-like (.toDate() method)
   if (typeof date?.toDate === 'function') return date.toDate();
-
-  // Plain object { _seconds: ... } (from SDK)
+  
   if (date && typeof date._seconds === 'number' && typeof date._nanoseconds === 'number') {
-    try {
-      return new Timestamp(date._seconds, date._nanoseconds).toDate();
-    } catch (e) {
-      console.error("Failed to convert _seconds object to Date:", date, e);
-      return null;
-    }
+    try { return new Timestamp(date._seconds, date._nanoseconds).toDate(); } 
+    catch (e) { console.error("Failed to convert _seconds object:", date); return null; }
   }
-
-  // Plain object { seconds: ... } (from raw data / functions response)
+  
   if (date && typeof date.seconds === 'number' && typeof date.nanoseconds === 'number') {
-    try {
-      return new Date(date.seconds * 1000 + date.nanoseconds / 1000000);
-    } catch (e) {
-      console.error("Failed to convert seconds object to Date:", date, e);
-      return null;
-    }
+    try { return new Date(date.seconds * 1000 + date.nanoseconds / 1000000); } 
+    catch (e) { console.error("Failed to convert seconds object:", date); return null; }
   }
 
-  // ISO string 지원
   if (typeof date === 'string') {
     const d = new Date(date);
     return isNaN(d.getTime()) ? null : d;
   }
-
-  // 빈 객체 {} 또는 기타
   return null;
 };
-const formatPickupDateHeader = (date: Date): string => `${date.getMonth() + 1}/${date.getDate()}(${['일', '월', '화', '수', '목', '금', '토'][date.getDay()]}) 픽업상품`;
 
+const formatPickupDateHeader = (date: Date): string => `${date.getMonth() + 1}/${date.getDate()}(${['일', '월', '화', '수', '목', '금', '토'][date.getDay()]}) 픽업상품`;
 
 // 취소 가능 여부 확인 로직
 const getCancellationDetails = (order: Order): { cancellable: boolean; isPenalty: boolean; reason: string | null; } => {
   const isCancellableStatus = order.status === 'RESERVED' || order.status === 'PREPAID';
-  if (!isCancellableStatus) return { cancellable: false, isPenalty: false, reason: '이미 처리된 주문입니다.' };
+  if (!isCancellableStatus) return { cancellable: false, isPenalty: false, reason: null };
 
-  const createdAt = safeToDate(order.createdAt);
-  const pickupDate = safeToDate(order.pickupDate);
+  const createdAt = order.createdAt instanceof Date ? order.createdAt : safeToDate(order.createdAt);
+  const pickupDate = order.pickupDate instanceof Date ? order.pickupDate : safeToDate(order.pickupDate);
+  
   if (!createdAt || !pickupDate) return { cancellable: false, isPenalty: false, reason: '날짜 정보 오류' };
 
   const finalCancelDeadline = dayjs(pickupDate).hour(13).minute(0).second(0).toDate();
   const penaltyDeadline = dayjs(createdAt).add(1, 'day').hour(13).minute(0).second(0).toDate();
   const now = new Date();
 
-  if (now > finalCancelDeadline) return { cancellable: false, isPenalty: false, reason: '픽업일 마감 시간이 지났습니다.' };
+  if (now > finalCancelDeadline) return { cancellable: false, isPenalty: false, reason: '취소 가능 시간이 지났습니다.' };
   
   return { cancellable: true, isPenalty: now > penaltyDeadline, reason: null };
 };
 
-// ✅ [수정] 서버로 보낼 lastVisible을 ISO로 정규화하고, 받은 데이터를 Date로 즉시 변환
 const usePaginatedOrders = (uid?: string) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
-  // Firestore startAfter용 커서
   const [lastVisible, setLastVisible] = useState<{
     pickupDate: Timestamp | null;
     createdAt: Timestamp | null;
@@ -129,7 +104,6 @@ const usePaginatedOrders = (uid?: string) => {
   const lastVisibleRef = useRef(lastVisible);
   lastVisibleRef.current = lastVisible;
 
-  // ✅ fetchOrders는 uid만 의존하게
   const fetchOrders = useCallback(
     async (isInitial = false) => {
       if (!uid) {
@@ -138,14 +112,12 @@ const usePaginatedOrders = (uid?: string) => {
         return;
       }
 
-      if (isInitial) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
+      if (isInitial) setLoading(true);
+      else setLoadingMore(true);
 
       try {
         const ordersRef = collection(db, "orders");
+        // ✅ [유지] 10개씩 끊어서 가져오면 대략 최근 주문 위주로 먼저 보임
         const queryConstraints: QueryConstraint[] = [
           where("userId", "==", uid),
           orderBy("pickupDate", "desc"),
@@ -153,16 +125,9 @@ const usePaginatedOrders = (uid?: string) => {
           limit(10),
         ];
 
-        // ✅ 커서 적용
         const cursorPayload = isInitial ? null : lastVisibleRef.current;
-        if (
-          cursorPayload &&
-          cursorPayload.pickupDate &&
-          cursorPayload.createdAt
-        ) {
-          queryConstraints.push(
-            startAfter(cursorPayload.pickupDate, cursorPayload.createdAt)
-          );
+        if (cursorPayload?.pickupDate && cursorPayload?.createdAt) {
+          queryConstraints.push(startAfter(cursorPayload.pickupDate, cursorPayload.createdAt));
         }
 
         const q = query(ordersRef, ...queryConstraints);
@@ -178,20 +143,12 @@ const usePaginatedOrders = (uid?: string) => {
           } as unknown as Order;
         });
 
-        // 💡 [수정]: ID를 기준으로 중복 제거
         setOrders(prev => {
-          // 1) 이번에 쓸 전체 리스트를 만들고
           const combined = isInitial ? newOrders : [...prev, ...newOrders];
-
-          // 2) id 기준으로 Map에 저장하여 중복 제거 (마지막으로 들어온 항목이 유지됨)
           const map = new Map<string, Order>();
           combined.forEach((order) => {
-            if (order && order.id) {
-              map.set(order.id, order);
-            }
+            if (order && order.id) map.set(order.id, order);
           });
-
-          // 3) 중복 제거된 배열 반환
           return Array.from(map.values());
         });
 
@@ -207,29 +164,25 @@ const usePaginatedOrders = (uid?: string) => {
           setHasMore(false);
         }
 
-        if (newOrders.length < 10) {
-          setHasMore(false);
-        }
+        if (newOrders.length < 10) setHasMore(false);
       } catch (error: any) {
-        console.error("Order fetching error (DB Direct):", error);
+        console.error("Order fetching error:", error);
+        setHasMore(false); 
+        setLastVisible(null);
+        
         if (error.code === "failed-precondition") {
-          showToast(
-            "error",
-            "예약 내역을 불러오는데 필요한 DB 인덱스가 없습니다. (Firestore 콘솔 확인 필요)"
-          );
+          showToast("error", "DB 인덱스 필요 (콘솔 확인)");
         } else {
           showToast("error", "예약 내역을 불러오는데 실패했습니다.");
         }
-        setHasMore(false);
       } finally {
         setLoading(false);
         setLoadingMore(false);
       }
     },
-    [uid] // ✅ 여기서 uid만!
+    [uid]
   );
 
-  // ✅ uid 바뀔 때만 초기화 + 첫 페이지 로드
   useEffect(() => {
     if (uid) {
       setOrders([]);
@@ -244,47 +197,32 @@ const usePaginatedOrders = (uid?: string) => {
     }
   }, [uid, fetchOrders]);
 
-  // 추가 로드(무한스크롤용)
   const loadMore = useCallback(() => {
-    // ✅ 여기서만 loadingMore, hasMore를 검사
-    if (!loadingMore && hasMore) {
-      fetchOrders(false);
-    }
+    if (!loadingMore && hasMore) fetchOrders(false);
   }, [loadingMore, hasMore, fetchOrders]);
 
   return { orders, setOrders, loading, loadingMore, hasMore, loadMore };
 };
 
-// 수량 조절 컴포넌트 (수정본)
+// 수량 조절 컴포넌트
 const QuantityControls: React.FC<{
   order: Order;
   onUpdate: (orderId: string, newQuantity: number) => void;
 }> = ({ order, onUpdate }) => {
   const [currentQuantity, setCurrentQuantity] = useState(order.items[0].quantity);
   const [isUpdating, setIsUpdating] = useState(false);
-  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ✨ [수정] 구매 제한 수량을 아주 안전하게 가져오는 로직
-  // DB에 값이 없거나(undefined), 문자열("5")로 저장되어 있어도 숫자로 정확히 변환합니다.
   const item = order.items[0];
   const rawLimit = (item as any).limitQuantity;
+  const limitQuantity = (rawLimit !== undefined && rawLimit !== null) ? Number(rawLimit) : Infinity;
   
-  // 값이 있으면 숫자로 변환, 없으면 무제한(Infinity)
-  const limitQuantity = (rawLimit !== undefined && rawLimit !== null) 
-    ? Number(rawLimit) 
-    : Infinity;
-  
-  useEffect(() => {
-    setCurrentQuantity(order.items[0].quantity);
-  }, [order.items]);
+  useEffect(() => { setCurrentQuantity(order.items[0].quantity); }, [order.items]);
 
   const handleQuantityChange = (newQuantity: number) => {
     if (newQuantity < 1 || isUpdating) return;
-
-    // ✨ [수정] 문지기 역할 강화: 제한 수량이 있고, 그것을 넘으려 하면 차단
     if (limitQuantity !== Infinity && newQuantity > limitQuantity) {
-        showToast('error', `구매 한도 초과! 최대 ${limitQuantity}개까지만 가능합니다.`);
-        // 강제로 현재 수량을 제한 수량(또는 기존 수량)으로 맞춤 (UI 튕김 방지)
+        showToast('error', `최대 ${limitQuantity}개까지만 가능합니다.`);
         setCurrentQuantity(Math.min(currentQuantity, limitQuantity));
         return;
     }
@@ -315,18 +253,14 @@ const QuantityControls: React.FC<{
     <div className="quantity-controls">
       <button 
         onClick={(e) => { e.stopPropagation(); handleQuantityChange(currentQuantity - 1); }} 
-        // 1개 이하일 때는 - 버튼 비활성화
         disabled={isUpdating || currentQuantity <= 1}
         className="qty-btn minus"
       >
         <Minus size={16} />
       </button>
-      
       <span className="quantity-value">{isUpdating ? '...' : currentQuantity}</span>
-      
       <button 
         onClick={(e) => { e.stopPropagation(); handleQuantityChange(currentQuantity + 1); }} 
-        // ✨ [수정] 현재 수량이 제한 수량 이상이면 + 버튼을 아예 비활성화 (누를 수 없게 됨)
         disabled={isUpdating || (limitQuantity !== Infinity && currentQuantity >= limitQuantity)}
         className="qty-btn plus"
       >
@@ -335,6 +269,7 @@ const QuantityControls: React.FC<{
     </div>
   );
 };
+
 // 주문 카드 컴포넌트
 const OrderCard: React.FC<{
   order: Order;
@@ -356,7 +291,7 @@ const OrderCard: React.FC<{
     };
   }, [order.status, order.wasPrepaymentRequired]);
 
-  const { cancellable } = useMemo(() => getCancellationDetails(order), [order]);
+  const { cancellable, reason } = useMemo(() => getCancellationDetails(order), [order]);
   const isQuantityEditable = (order.status === 'RESERVED' || order.status === 'PREPAID');
   const isInactive = order.status === 'CANCELED' || order.status === 'LATE_CANCELED' || order.status === 'NO_SHOW';
 
@@ -369,7 +304,6 @@ const OrderCard: React.FC<{
     <motion.div
       className={`order-card-v3 ${isSelected ? 'selected' : ''} ${cancellable ? 'cancellable' : ''} ${isInactive ? 'canceled-order' : ''}`}
       layoutId={order.id}
-      key={order.id}
       onClick={handleClick}
       whileTap={cancellable && !isInactive ? { scale: 0.98 } : {}}
     >
@@ -393,12 +327,17 @@ const OrderCard: React.FC<{
               </div>
             ) : null}
           </div>
+          
+          {!cancellable && reason && !isInactive && (
+            <div className="order-notice-message" style={{ marginTop: '8px', fontSize: '12px', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Info size={12} /> <span>{reason}</span>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
   );
 });
-
 
 const OrderHistoryPage: React.FC = () => {
   const { user } = useAuth();
@@ -407,22 +346,13 @@ const OrderHistoryPage: React.FC = () => {
   const [selectedOrderKeys, setSelectedOrderKeys] = useState<Set<string>>(new Set());
   const [cancellationRequest, setCancellationRequest] = useState<CancellationRequest | null>(null);
 
-  const handleScroll = useCallback(() => {
-    if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200 && !loading && !loadingMore && hasMore) {
-      loadMore();
-    }
-  }, [loading, loadingMore, hasMore, loadMore]);
-
-  useEffect(() => { 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+  // ✅ [삭제] 기존 무한 스크롤(scroll listener) 로직 삭제됨
 
   const groupedOrders = useMemo(() => {
     const groups: { [date: string]: Order[] } = {};
     orders.forEach(order => {
-      const date = safeToDate(order.pickupDate);
-      if (date) {
+      const date = order.pickupDate as unknown as Date; 
+      if (date && date instanceof Date) {
         const dateStr = dayjs(date).format('YYYY-MM-DD');
         if (!groups[dateStr]) groups[dateStr] = [];
         groups[dateStr].push(order);
@@ -546,12 +476,35 @@ const OrderHistoryPage: React.FC = () => {
             </motion.div>
           ))}
         </AnimatePresence>
+
+        {/* ✅ [추가] 더보기 버튼 (수동 로딩) */}
+        {hasMore && (
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0 40px' }}>
+            <button 
+              onClick={loadMore} 
+              disabled={loadingMore}
+              className="common-button button-secondary"
+              style={{ width: '100%', maxWidth: '300px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              {loadingMore ? (
+                <span>로딩 중...</span>
+              ) : (
+                <>
+                  <ChevronDown size={18} />
+                  <span>지난 내역 더보기</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <div className="customer-page-container">
+      {/* ✅ [삭제] 헤더 및 뒤로가기 버튼 영역 삭제됨 */}
+      
       <div className="order-history-page">
         <AnimatePresence mode="wait">
           <motion.div key="orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -559,7 +512,6 @@ const OrderHistoryPage: React.FC = () => {
           </motion.div>
         </AnimatePresence>
 
-        {loadingMore && <div className="loading-more-spinner"><SodomallLoader /></div>}
         {!hasMore && orders.length > 0 && <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>}
         
         <AnimatePresence>

@@ -7,7 +7,7 @@ import { AlertCircle, Info, Zap } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'loading';
 
-// ✅ [수정] 커스텀 토스트의 기본 스타일을 제거하기 위한 공용 옵션
+// 기본 스타일 옵션 (유지)
 const customToastOptions = {
   duration: Infinity, 
   style: {
@@ -25,29 +25,37 @@ const customToastOptions = {
  * @param duration 표시 시간 (기본값: 2000ms)
  */
 export const showToast = (type: ToastType, message: string, duration: number = 2000) => {
+  let toastId: string;
+
   switch (type) {
     case 'success':
-      toast.success(message, { duration });
+      toastId = toast.success(message, { duration });
       break;
     case 'error':
-      toast.error(message, { duration });
+      toastId = toast.error(message, { duration });
       break;
     case 'info':
-      toast(message, { duration, icon: 'ℹ️' });
+      toastId = toast(message, { duration, icon: 'ℹ️' });
       break;
     case 'loading':
-      toast.loading(message);
+      toastId = toast.loading(message);
       break;
     default:
-      toast(message, { duration });
+      toastId = toast(message, { duration });
       break;
+  }
+
+  // ✅ [수정] 모바일 '호버(터치) 시 멈춤' 현상 방지: 강제 종료 타이머 추가
+  // loading 타입이나 무한 지속이 아닌 경우에만 적용
+  if (type !== 'loading' && duration !== Infinity) {
+    setTimeout(() => {
+      toast.dismiss(toastId);
+    }, duration + 500); // 애니메이션 고려하여 duration보다 0.5초 뒤에 확실히 닫음
   }
 };
 
 /**
- * @description Promise 기반의 토스트를 표시합니다. (성공/실패 시 2초 후 자동 닫힘)
- * @param promise 처리할 Promise 객체
- * @param handlers 상태별 콜백 함수 (loading, success, error). success/error 함수는 메시지(string)를 반환해야 합니다.
+ * @description Promise 기반의 토스트를 표시합니다.
  */
 export const showPromiseToast = <T, E = Error>(
   promise: Promise<T>,
@@ -57,31 +65,34 @@ export const showPromiseToast = <T, E = Error>(
     error: (err: E) => string;
   }
 ) => {
-  // ✅ [수정] 각 Promise마다 고유 ID를 생성하여 토스트가 겹치거나 사라지지 않는 문제를 해결합니다.
   const toastId = toast.loading(handlers.loading);
 
   promise
     .then((data) => {
       const message = handlers.success(data);
-      // ✅ 생성된 ID를 사용하여 해당 토스트를 성공 상태로 업데이트합니다.
       toast.success(message, {
         id: toastId,
         duration: 2000,
       });
+      
+      // ✅ [수정] 성공 시에도 강제 종료 타이머 가동
+      setTimeout(() => toast.dismiss(toastId), 2500);
     })
     .catch((err) => {
       const message = handlers.error(err);
-      // ✅ 생성된 ID를 사용하여 해당 토스트를 실패 상태로 업데이트합니다.
       toast.error(message, {
         id: toastId,
         duration: 2000,
       });
+      
+      // ✅ [수정] 실패 시에도 강제 종료 타이머 가동
+      setTimeout(() => toast.dismiss(toastId), 2500);
     });
 
   return promise;
 };
 
-
+// ... (아래 showConfirmationToast 등 나머지 코드는 기존과 동일하게 유지) ...
 interface ConfirmationToastProps {
   t: Toast;
   icon?: React.ReactNode;
@@ -94,9 +105,6 @@ interface ConfirmationToastProps {
   confirmButtonClass?: 'button-danger' | 'button-accent';
 }
 
-/**
- * @description 확인/취소 버튼이 포함된 커스텀 토스트를 표시합니다.
- */
 export const showConfirmationToast = ({
   t,
   icon = <AlertCircle style={{ color: 'var(--warning-color)' }} />,
@@ -138,7 +146,6 @@ export const showConfirmationToast = ({
   );
 };
 
-// OrderHistoryPage에서 사용되던 특정 토스트들을 유틸리티 함수로 분리
 export const showCancelOrderToast = (onConfirm: () => void) => {
   toast((t) => showConfirmationToast({
     t,
@@ -150,32 +157,3 @@ export const showCancelOrderToast = (onConfirm: () => void) => {
     onConfirm,
   }), customToastOptions);
 };
-
-export const showCancelWaitlistToast = (itemName: string, quantity: number, onConfirm: () => void) => {
-  toast((t) => showConfirmationToast({
-    t,
-    icon: <AlertCircle />,
-    title: '대기 취소',
-    message: (
-      <>
-        <strong>{itemName}</strong> ({quantity}개) 대기 신청을 취소하시겠습니까?
-      </>
-    ),
-    confirmButtonText: '취소 확정',
-    cancelButtonText: '유지',
-    onConfirm,
-  }), customToastOptions);
-};
-
-export const showUseTicketToast = (onConfirm: () => void) => {
-  toast((t) => showConfirmationToast({
-    t,
-    icon: <Zap size={20} />,
-    title: '순번 상승권 사용',
-    message: '50 포인트를 사용하여 이 상품의 대기 순번을 가장 앞으로 옮기시겠습니까?',
-    confirmButtonText: '포인트 사용',
-    cancelButtonText: '취소',
-    onConfirm,
-    confirmButtonClass: 'button-accent',
-  }), customToastOptions);
-}

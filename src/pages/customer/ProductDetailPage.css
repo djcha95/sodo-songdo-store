@@ -685,14 +685,16 @@
 
 /* --- ✅ [수정] 통합 선입금 안내 모달 스타일 --- */
 .prepayment-modal-overlay {
-    position: flex;
+    position: fixed; /* 🐛 [수정] position: flex; -> position: fixed; */
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.6);
     display: flex;
-    justify-content: center;
+    align-items: center; /* 추가: 모달 중앙 정렬 */
+    justify-content: center; /* 추가: 모달 중앙 정렬 */
+    z-index: 1000; /* 추가: 다른 모달과의 z-index 충돌 방지 */
 }
   
 .prepayment-modal-content {

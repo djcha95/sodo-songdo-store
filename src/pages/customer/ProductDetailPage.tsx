@@ -61,13 +61,7 @@ const formatDateWithDay = (dateInput: Date | Timestamp | null | undefined): stri
     return `${date.format('M.D')}(${days[date.day()]})`;
 };
 
-const formatDateTimeWithDay = (dateInput: Date | Timestamp | null | undefined): string => {
-    if (!dateInput) return '미정';
-    const date = dayjs(safeToDate(dateInput));
-    if (!date.isValid()) return '날짜 오류';
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return `${date.format('M.D(ddd) HH:mm')}`;
-};
+/* 💡 [삭제] 사용되지 않는 formatDateTimeWithDay 함수를 제거합니다. */
 
 
 const formatExpirationDate = (dateInput: Date | Timestamp | null | undefined): string => {
@@ -1042,37 +1036,41 @@ const ProductDetailPage: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    {/* 1번째 PurchasePanel (일반적인 경우) */}
-                    {(actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'ON_SITE_SALE' || actionState === 'AWAITING_STOCK') && (
+                    {/* 👇 [통합] PurchasePanel (모든 상태를 포함) */}
+                    {(actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'ON_SITE_SALE' || actionState === 'AWAITING_STOCK' || actionState === 'ENDED') && (
                         <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
-                            <>
-                                <OptionSelector
-                                    round={displayRound}
-                                    selectedVariantGroup={selectedVariantGroup}
-                                    onVariantGroupChange={(vg) => {
-                                        setSelectedVariantGroup(vg);
-                                        selectInitialItemForVg(vg);
-                                        setQuantity(1);
-                                        showToast('success', `'${vg.groupName}' 옵션을 선택했어요.`);
-                                    }}
-                                    actionState={actionState}
-                                />
-                                {selectedVariantGroup && (
-                                    <ItemSelector
+                            
+                            {/* 옵션/아이템 선택 컴포넌트는 ENDED 상태일 때 숨김 */}
+                            {actionState !== 'ENDED' && (
+                                <>
+                                    <OptionSelector
+                                        round={displayRound}
                                         selectedVariantGroup={selectedVariantGroup}
-                                        selectedItem={selectedItem}
-                                        onItemChange={(item) => {
-                                            setSelectedItem(item);
+                                        onVariantGroupChange={(vg) => {
+                                            setSelectedVariantGroup(vg);
+                                            selectInitialItemForVg(vg);
                                             setQuantity(1);
-                                            // ✅ [수정] 아이템 변경 토스트는 아이템이 있을 때만
-                                            if (item) {
-                                                showToast('success', `'${item.name}'으로 변경했어요.`);
-                                            }
+                                            showToast('success', `'${vg.groupName}' 옵션을 선택했어요.`);
                                         }}
                                         actionState={actionState}
                                     />
-                                )}
-                            </>
+                                    {selectedVariantGroup && (
+                                        <ItemSelector
+                                            selectedVariantGroup={selectedVariantGroup}
+                                            selectedItem={selectedItem}
+                                            onItemChange={(item) => {
+                                                setSelectedItem(item);
+                                                setQuantity(1);
+                                                // ✅ [수정] 아이템 변경 토스트는 아이템이 있을 때만
+                                                if (item) {
+                                                    showToast('success', `'${item.name}'으로 변경했어요.`);
+                                                }
+                                            }}
+                                            actionState={actionState}
+                                        />
+                                    )}
+                                </>
+                            )}
                             <PurchasePanel
                                 actionState={actionState}
                                 round={displayRound}
@@ -1082,22 +1080,6 @@ const ProductDetailPage: React.FC = () => {
                                 setQuantity={setQuantity}
                                 onPurchaseAction={handlePurchaseAction}
                                 reservationStatus={reservationStatus} // ✅ [추가] reservationStatus 전달
-                                myPurchasedCount={myPurchasedCount} // 👈 [추가] 값 전달
-                            />
-                        </div>
-                    )}
-                    {/* 2번째 PurchasePanel (전량 마감/ENDED 상태일 때) */}
-                    {actionState === 'ENDED' && (
-                        <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
-                            <PurchasePanel
-                                actionState={actionState}
-                                round={displayRound}
-                                selectedVariantGroup={selectedVariantGroup}
-                                selectedItem={selectedItem}
-                                quantity={quantity}
-                                setQuantity={setQuantity}
-                                onPurchaseAction={handlePurchaseAction}
-                                reservationStatus={reservationStatus}
                                 myPurchasedCount={myPurchasedCount} // 👈 [추가] 값 전달
                             />
                         </div>

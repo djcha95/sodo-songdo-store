@@ -27,15 +27,21 @@ const CustomerLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // ✅ [수정] 메인('/')도 이제 모던 페이지입니다.
+  const isModernPage = 
+    location.pathname === '/' ||
+    location.pathname.startsWith('/modern') || 
+    location.pathname.includes('/history') ||
+    location.pathname.includes('/product/'); // 상세 페이지 포함
+
   const scrollToSection = useCallback((section: 'primary' | 'secondary') => {
     const ref = section === 'primary' ? primaryRef : secondaryRef;
     if (!ref.current) return;
     
-    // ✅ [수정] 스크롤 시작 전에 탭 활성 상태를 즉시 업데이트합니다.
     setActiveSection(section);
     setIsNavigating(true);
     
-    const STICKY_HEADER_TOP_OFFSET = 60;
+    const STICKY_HEADER_TOP_OFFSET = 60; 
     const EXTRA_MARGIN = 15;
     const elementPosition = ref.current.getBoundingClientRect().top;
     const offsetPosition = window.pageYOffset + elementPosition - (STICKY_HEADER_TOP_OFFSET + EXTRA_MARGIN);
@@ -45,20 +51,13 @@ const CustomerLayout: React.FC = () => {
     setTimeout(() => {
       setIsNavigating(false);
     }, 1000);
-  }, []);
+  }, [location.pathname]);
 
+  // 기존 스크롤 스파이 로직 (레거시 페이지용)
   useEffect(() => {
-    if (location.state?.scrollTo) {
-      const { scrollTo } = location.state;
-      setTimeout(() => {
-        scrollToSection(scrollTo);
-        navigate(location.pathname, { replace: true, state: {} });
-      }, 100);
-    }
-  }, [location.state, navigate, scrollToSection]);
+    // ✅ 모던 페이지인 경우 작동하지 않음
+    if (isModernPage) return;
 
-  useEffect(() => {
-    if (location.pathname !== '/') return;
     const handleScroll = () => {
       if (!primaryRef.current || !secondaryRef.current || isNavigating) return;
       
@@ -74,16 +73,20 @@ const CustomerLayout: React.FC = () => {
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [location.pathname, activeSection, isNavigating]);
+  }, [location.pathname, activeSection, isNavigating, isModernPage]);
 
   return (
     <TabContext.Provider value={{ activeSection, scrollToSection, isNavigating }}>
-      <div className="customer-layout-container">
-        <Header />
-        <main className="customer-main-content">
+      {/* 1. Header는 최상위에 위치 */}
+      <Header />
+      
+      {/* 2. 래퍼는 메인 컨텐츠만 감싸도록 변경 */}
+      <div className={isModernPage ? "desktop-app-wrapper" : "customer-layout-container"}>
+        <main className={isModernPage ? "mobile-app-view" : "customer-main-content"}>
           <Outlet context={{ primaryRef, secondaryRef }} />
         </main>
       </div>
+      
     </TabContext.Provider>
   );
 };

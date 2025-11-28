@@ -2,26 +2,27 @@
 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { HttpsCallable } from 'firebase/functions'; // ✅ [유지] HttpsCallable 타입 import
-import { 
-  getFirestore, collection, addDoc, query, doc, getDoc, getDocs, 
-  updateDoc, writeBatch, increment, arrayUnion, where, Timestamp, 
-  runTransaction, 
-  orderBy, limit, startAfter, // ✅ [유지] DB 직접 조회를 위한 Firestore 함수
-  type DocumentData, type DocumentReference, type WriteBatch 
+import type { HttpsCallable } from 'firebase/functions';
+import {
+  getFirestore, collection, addDoc, query, doc, getDoc, getDocs,
+  updateDoc, writeBatch, increment, arrayUnion, where, Timestamp,
+  runTransaction,
+  orderBy, limit, startAfter, // DB 직접 조회를 위한 Firestore 함수
+  type DocumentData, type DocumentReference, type WriteBatch,
+  type QueryConstraint
 } from 'firebase/firestore';
 import { getStorage, ref, deleteObject } from 'firebase/storage';
 import { uploadImages } from './generalService';
 import { getReservedQuantitiesMap } from './orderService';
 import { getUserDocById } from './userService';
 
-// ✅ [유지] '구' 파일과 '신' 파일의 모든 타입을 통합합니다.
-import type { 
-  Product, SalesRound, SalesRoundStatus, VariantGroup, 
-  ProductItem, CartItem, LoyaltyTier 
+// ✅ '구' 파일과 '신' 파일의 모든 타입을 통합합니다.
+import type {
+  Product, SalesRound, SalesRoundStatus, VariantGroup,
+  ProductItem, CartItem, LoyaltyTier
 } from '@/shared/types';
 
-// ✅ [유지] WaitlistInfo 타입을 여기에 직접 정의합니다.
+// ✅ WaitlistInfo 타입을 여기에 직접 정의합니다.
 // (공용 타입이 아니라, 이 파일에서만 데이터를 조합해 쓰는 커스텀 타입입니다)
 export interface WaitlistInfo {
   productId: string;
@@ -52,7 +53,7 @@ function overlayKey(productId: string, roundId: string, vgId: string) {
 }
 
 function applyReservedOverlay(product: Product, reservedMap: Map<string, number>): Product {
-  // 💡 [유지] salesHistory 배열 방어 로직
+  // 💡 salesHistory 배열 방어 로직
   if (!Array.isArray(product?.salesHistory)) return product;
 
   product.salesHistory = product.salesHistory.map((round) => {
@@ -70,7 +71,7 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 // 🚀 '최신식' Cloud Function 호출 함수
 // ========================================================
 
-// [유지] 각 action에 대한 개별 callable 생성
+// 각 action에 대한 개별 callable 생성
 const addProductWithFirstRoundCallable = httpsCallable(functions, 'addProductWithFirstRound');
 const addNewSalesRoundCallable = httpsCallable(functions, 'addNewSalesRound');
 const updateProductCoreInfoCallable = httpsCallable(functions, 'updateProductCoreInfo');
@@ -86,7 +87,7 @@ const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock
 
 // --- 1. 신규 상품 + 첫 회차 등록 ---
 export const addProductWithFirstRound = async (
-  productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived'>,
+  productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived' | 'isOnsite'>,
   salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>,
   imageFiles: File[],
   creationDate: Date
@@ -155,7 +156,7 @@ export const updateSalesRound = async (
 export const getProductById = async (productId: string): Promise<Product | null> => {
   const result = await getProductByIdCallable({ productId });
   const { product } = result.data as { product: Product | null };
-  
+
   if (product) {
     const reservedMap = await getReservedQuantitiesMap();
     return applyReservedOverlay(product, reservedMap);
@@ -179,31 +180,73 @@ export const deleteSalesRounds = async (
 
 // --- 8. 대기자 명단 조회 (서버) ---
 export const getWaitlistForRound = async (productId: string, roundId: string): Promise<any[]> => {
-    const result = await getWaitlistForRoundCallable({ productId, roundId });
-    return result.data as any[];
+  const result = await getWaitlistForRoundCallable({ productId, roundId });
+  return result.data as any[];
 }
 
 // --- 9. 재고 수정 (서버) ---
 export const updateMultipleVariantGroupStocks = async (
-    updates: { productId: string; roundId: string; variantGroupId: string; newStock: number }[]
+  updates: { productId: string; roundId: string; variantGroupId: string; newStock: number }[]
 ): Promise<any> => {
-    const result = await updateMultipleVariantGroupStocksCallable({ updates });
-    return result.data;
+  const result = await updateMultipleVariantGroupStocksCallable({ updates });
+  return result.data;
 };
 
 // --- 10. 판매 상태 일괄 변경 (서버) ---
 export const updateMultipleSalesRoundStatuses = async (
   updates: { productId: string; roundId: string; newStatus: SalesRoundStatus }[]
 ): Promise<any> => {
-    const result = await updateMultipleSalesRoundStatusesCallable({ updates });
-    return result.data;
+  const result = await updateMultipleSalesRoundStatusesCallable({ updates });
+  return result.data;
 };
+
+// ========================================================
+// 11. [수정] 현장판매(Onsite) 수동 전환 토글 (최상위 필드 동기화 추가)
+// ========================================================
+export const toggleSalesRoundOnsiteStatus = async (
+  productId: string,
+  roundId: string,
+  isOnsite: boolean
+): Promise<void> => {
+  const productRef = doc(db, 'products', productId);
+
+  await runTransaction(db, async (transaction) => {
+    const productDoc = await transaction.get(productRef);
+    if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
+
+    const productData = productDoc.data() as Product;
+    if (!Array.isArray(productData.salesHistory)) {
+      throw new Error("salesHistory 데이터가 손상되었습니다.");
+    }
+
+    // 1. 해당 라운드 상태 업데이트
+    const newSalesHistory = productData.salesHistory.map(r => {
+      if (r.roundId === roundId) {
+        return {
+          ...r,
+          isManuallyOnsite: isOnsite,
+          // 현장판매 전환 시 manualStatus가 ended나 sold_out이면 안 되므로 selling 상태 보장 (선택사항)
+          // 여기서는 원본 요청대로 단순히 플래그만 변경합니다.
+        };
+      }
+      return r;
+    });
+
+    // 2. ✅ [핵심] 최상위 'isOnsite' 플래그 동기화
+    // 모든 라운드 중 하나라도 현장판매 중이면 true, 아니면 false
+    const hasAnyOnsiteRound = newSalesHistory.some(r => r.isManuallyOnsite === true);
+
+    transaction.update(productRef, {
+      salesHistory: newSalesHistory,
+      isOnsite: hasAnyOnsiteRound // 검색용 필드 업데이트
+    });
+  });
+};
+
 
 // ========================================================
 // 📦 '구' 파일에서 가져온 클라이언트 함수
 // ========================================================
-
-// --- ❌ [삭제] 11. 카테고리 일괄 이동 (moveProductsToCategory) 함수 전체 삭제 (요청 2) ---
 
 // --- 12. 사용자 대기열 조회 ---
 export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
@@ -214,9 +257,9 @@ export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> =
   allProductsSnapshot.docs.forEach(doc => {
     const product = { id: doc.id, ...doc.data() } as Product;
 
-    // 💡 [유지] salesHistory 배열 방어 코드
-    if (!Array.isArray(product.salesHistory)) return; 
-    
+    // 💡 salesHistory 배열 방어 코드
+    if (!Array.isArray(product.salesHistory)) return;
+
     (product.salesHistory || []).forEach(round => {
       if (round.waitlist && round.waitlist.length > 0) {
         const sortedWaitlist = [...round.waitlist].sort((a, b) => {
@@ -358,11 +401,11 @@ export const cancelWaitlistEntry = async (
     if (!productDoc.exists()) throw new Error("상품을 찾을 수 없습니다.");
     const productData = productDoc.data() as Product;
 
-    // 💡 [유지] salesHistory 배열 방어 코드
+    // 💡 salesHistory 배열 방어 코드
     if (!Array.isArray(productData.salesHistory)) {
       throw new Error("상품 데이터에 salesHistory 배열이 없습니다.");
     }
-    
+
     const newSalesHistory = [...productData.salesHistory];
     const roundIndex = newSalesHistory.findIndex(r => r.roundId === roundId);
     if (roundIndex === -1) throw new Error("판매 회차를 찾을 수 없습니다.");
@@ -390,7 +433,7 @@ export const updateItemStock = async (
     if (!productSnap.exists()) throw new Error("상품을 찾을 수 없습니다.");
     const product = productSnap.data() as Product;
 
-    // 💡 [유지] salesHistory 배열 방어 코드
+    // 💡 salesHistory 배열 방어 코드
     if (!Array.isArray(product.salesHistory)) {
       throw new Error("상품 데이터에 salesHistory 배열이 없습니다.");
     }
@@ -415,37 +458,51 @@ export const updateItemStock = async (
 };
 
 // ========================================================
-// 🚀 '최신식' 상품 목록 조회 (페이지네이션)
+// 🚀 [수정] '최신식' 상품 목록 조회 (탭별 필터링 적용)
 // ========================================================
 
-// 📦 상품 목록 + 재고 조회 (Firestore 직접 조회 버전)
 export interface GetProductsWithStockResponse {
   products: Product[];
-  lastVisible: number | null; // timestamp (millis)
+  lastVisible: number | null;
 }
+
+// ✅ 탭 타입 정의
+type ProductTabType = 'all' | 'today' | 'additional' | 'onsite';
 
 type GetProductsWithStockPayload = {
   pageSize?: number;
-  lastVisible?: number | null; // timestamp (millis)
+  lastVisible?: number | null;
+  tab?: ProductTabType | null; // ✅ 탭 파라미터 추가
 };
 
 export const getProductsWithStock = async (
   payload: GetProductsWithStockPayload
 ): Promise<GetProductsWithStockResponse> => {
   try {
-    const { pageSize = 10, lastVisible = null } = payload;
-    
-    const queryConstraints: any[] = [];
-    
-    // 1. 보관 처리 안 된 것만
-    queryConstraints.push(where('isArchived', '==', false));
+    const { pageSize = 10, lastVisible = null, tab = 'all' } = payload; // tab 기본값 'all'
 
-    // 2. createdAt 기준 내림차순
+    const queryConstraints: QueryConstraint[] = []; // 타입을 QueryConstraint[]로 명시
+
+    // 1. ✅ 탭별 필터링 로직 분기
+    if (tab === 'onsite') {
+      // [현장판매 탭]: isOnsite가 true인 것만 가져옴 (매우 빠름)
+      queryConstraints.push(where('isOnsite', '==', true));
+      // 현장판매는 보통 종료된 것도 포함해서 보여줄지, active만 보여줄지 결정해야 함.
+      // 일단 '보관(Archive)'된 것은 제외
+      queryConstraints.push(where('isArchived', '==', false));
+    } else {
+      // [전체 / 오늘의공구 / 추가예약]: 기존 로직 (활성 상품 전체 로드)
+      // 'today'와 'additional'은 시간 기준이라 DB 쿼리로 완벽 분리가 어려움 -> Fetch 후 프론트 필터링 유지
+      queryConstraints.push(where('isArchived', '==', false));
+    }
+
+    // 2. 정렬 (createdAt 내림차순)
     queryConstraints.push(orderBy('createdAt', 'desc'));
 
     // 3. 페이지네이션 커서
     if (lastVisible) {
       const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
+      // startAfter는 정렬 필드의 값으로 사용해야 하므로, 여기서 'createdAt' 필드를 사용
       queryConstraints.push(startAfter(lastVisibleTimestamp));
     }
 
@@ -478,20 +535,48 @@ export const getProductsWithStock = async (
     return { products, lastVisible: newLastVisible };
 
   } catch (error: any) {
-    console.error("Error fetching products directly from Firestore:", error);
+    console.error("Error fetching products:", error);
+    // ✅ 인덱스 에러 발생 시 콘솔에 링크가 뜹니다. 해당 링크를 클릭해서 인덱스를 생성해주세요.
     if (error.code === 'failed-precondition') {
-       throw new Error("상품 목록을 불러오는 데 필요한 데이터베이스 인덱스가 없습니다. Firestore 콘솔에서 인덱스를 생성해주세요.");
+      throw new Error("DB 인덱스가 필요합니다. 콘솔(F12)의 링크를 클릭하여 생성해주세요.");
     }
-    throw new Error("상품 재고 정보를 불러오는 데 실패했습니다. (Firestore 직접 조회 오류)");
+    throw new Error("상품 로드 실패");
+  }
+};
+
+
+// =================================================================
+// ✅ [신규] 기존 데이터 일괄 복구 (마이그레이션) 스크립트
+// 기존에 등록된 상품들은 'isOnsite' 필드가 없으므로, 이걸 한번 돌려서 생성해줘야 합니다.
+// =================================================================
+export const syncAllProductsOnsiteStatus = async () => {
+  console.log("🔄 현장판매 상태 동기화 시작...");
+  const snapshot = await getDocs(collection(db, 'products'));
+  const batch = writeBatch(db);
+  let count = 0;
+
+  snapshot.docs.forEach(doc => {
+    const data = doc.data() as Product;
+    // salesHistory 중 하나라도 isManuallyOnsite가 true인지 확인
+    const isActuallyOnsite = data.salesHistory?.some(r => r.isManuallyOnsite === true) ?? false;
+
+    // 현재 필드값이 없거나 실제 상태와 다르면 업데이트
+    if (data.isOnsite !== isActuallyOnsite) {
+      batch.update(doc.ref, { isOnsite: isActuallyOnsite });
+      count++;
+    }
+  });
+
+  if (count > 0) {
+    await batch.commit();
+    console.log(`✅ ${count}개의 상품 상태가 동기화되었습니다.`);
+  } else {
+    console.log("✅ 동기화할 상품이 없습니다.");
   }
 };
 
 // =================================================================
-// ✅ [신규 추가] 리팩토링으로 인해 이름이 변경된 함수 별칭 (Alias)
-// =================================================================
-
-// =================================================================
-// ✅ 기존 함수들에 대한 별칭 (호환용)
+// ✅ 기존 함수들에 대한 별칭 수정
 // =================================================================
 
 /**
@@ -513,16 +598,19 @@ export const getAllProducts = () =>
   });
 
 /**
- * @deprecated `getProductsWithStock` 사용 권장
- * 기존 시그니처 유지: (pageSize, lastVisible, category)
+ * @deprecated ModernProductList에서 사용하는 함수
+ * tab 파라미터를 받을 수 있도록 수정
+ * 기존 시그니처 유지: (pageSize, lastVisible, category, tab)
  * category는 무시
  */
 export const getPaginatedProductsWithStock = (
   pageSize: number,
   lastVisible: number | null,
-  category: string | null,
+  category: string | null, // 얘는 안 씀
+  tab: ProductTabType = 'all' // ✅ tab 추가
 ) =>
   getProductsWithStock({
     pageSize,
     lastVisible,
+    tab
   });

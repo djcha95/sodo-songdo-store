@@ -150,6 +150,7 @@ export interface Product {
   tags?: string[];
   hashtags?: string[];
   reservedQuantities?: { [key: string]: number };
+  isOnsite?: boolean;
 }
 
 export interface CartItem {

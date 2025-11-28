@@ -66,36 +66,42 @@ export const safeToDate = (date: any): Date | null => {
     const parsedDate = new Date(date);
     if (!isNaN(parsedDate.getTime())) return parsedDate;
   }
-  console.warn('Unsupported date format encountered:', date);
   return null;
 };
 
+// ✅ [핵심 수정] 1시 룰 강제 적용
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
   const publishAt = safeToDate(round.publishAt);
   const deadlineDate = safeToDate(round.deadlineDate);
   const pickupDate = safeToDate(round.pickupDate);
 
-  // deadlineDate가 있으면, publishAt이 이상해도 무조건 이걸 사용합니다.
+  let primaryEnd: dayjs.Dayjs | null = null;
+  let secondaryEnd: dayjs.Dayjs | null = null;
+
+  // 1. [1차 마감: 설정된 날짜 혹은 다음날 13:00]
   if (deadlineDate) {
-    const primaryEnd = dayjs(deadlineDate);
-    const secondaryEnd = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0) : null;
-    return { primaryEnd, secondaryEnd };
-  }
-
-  // deadlineDate가 없을 때만 기존 방식(publishAt 기준 +1일)을 사용합니다.
-  if (publishAt) {
+    // 관리자가 날짜를 지정했으면 그 날 13:00
+    primaryEnd = dayjs(deadlineDate).hour(13).minute(0).second(0).millisecond(0);
+  } else if (publishAt) {
+    // 지정 안 했으면 오픈일 기준 다음 날 (토->월)
     const publishDay = dayjs(publishAt);
-    let primaryEndFallback = publishDay.add(1, 'day').hour(13).minute(0).second(0);
-    const dayOfWeek = primaryEndFallback.day();
-    if (dayOfWeek === 6) primaryEndFallback = primaryEndFallback.add(2, 'day'); // 토요일 -> 월요일
-    else if (dayOfWeek === 0) primaryEndFallback = primaryEndFallback.add(1, 'day'); // 일요일 -> 월요일
+    let targetEndDay = publishDay.add(1, 'day'); 
 
-    const secondaryEndFallback = pickupDate ? dayjs(pickupDate).hour(13).minute(0).second(0) : null;
-    return { primaryEnd: primaryEndFallback, secondaryEnd: secondaryEndFallback };
+    const dayOfWeek = publishDay.day(); // 0(일) ~ 6(토)
+    if (dayOfWeek === 6) { 
+        targetEndDay = publishDay.add(2, 'day'); // 토요일 -> 월요일
+    } 
+    
+    // 시간은 무조건 오후 1시(13:00)
+    primaryEnd = targetEndDay.hour(13).minute(0).second(0).millisecond(0);
   }
 
-  // 둘 다 없으면 null 반환
-  return { primaryEnd: null, secondaryEnd: null };
+  // 2. [2차 마감: 픽업 당일 13:00]
+  if (pickupDate) {
+    secondaryEnd = dayjs(pickupDate).hour(13).minute(0).second(0).millisecond(0);
+  }
+
+  return { primaryEnd, secondaryEnd };
 };
 
 export const getDisplayRound = (product: Product): OriginalSalesRound | null => {
@@ -103,22 +109,20 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
   const now = dayjs();
 
   const getPhasePriority = (round: OriginalSalesRound): number => {
+    const { secondaryEnd } = getDeadlines(round);
+    
+    // 2차 마감까지 지났거나 수동/DB 종료이면 최하위
+    if ((secondaryEnd && now.isAfter(secondaryEnd)) || round.manualStatus === 'ended' || round.status === 'ended') return 5;
+    
     const publishAt = safeToDate(round.publishAt);
-    const deadlineDate = safeToDate(round.deadlineDate);
 
-    // 1. '마감일'이 존재하고 현재 시간보다 이전이면 '종료(5순위)' 처리
-    if (deadlineDate && now.isAfter(deadlineDate)) return 5;
-
-    // 2. 수동 '종료' 또는 DB '종료'는 항상 최하순위
-    if (round.manualStatus === 'ended' || round.status === 'ended') return 5;
-
-    // 3. [1순위] 'scheduled' 상태이지만 발행일이 지났으면 '판매 중'으로 취급
+    // 1순위: 'scheduled'이나 발행일 지남
     if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 1;
 
-    // 4. [2순위] 이미 'selling' 중인 경우
+    // 2순위: 'selling' 중
     if (round.status === 'selling') return 2;
 
-    // 5. [3순위] 미래에 판매될 예정인 경우
+    // 3순위: 미래에 판매 예정
     if (round.status === 'scheduled' && publishAt && now.isBefore(publishAt)) return 3;
 
     return 4; // 기타 상태
@@ -126,17 +130,12 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
 
   const sortedHistory = [...product.salesHistory]
     .filter(r => {
-      // [핵심 수정] 불완전한 회차를 강력하게 필터링합니다.
-      // 1. Draft 상태 제외
+      // Draft 상태 제외
       if (r.status === 'draft') return false;
 
-      // 2. 필수 날짜 데이터가 없는 '좀비 회차' 제외
-      // publishAt이나 deadlineDate 중 하나라도 유효하지 않으면 표시하지 않음
+      // ✅ [수정] deadlineDate는 없어도 됩니다(자동계산). publishAt만 있으면 표시!
       const pDate = safeToDate(r.publishAt);
-      const dDate = safeToDate(r.deadlineDate);
-
-      // 날짜 정보가 아예 없으면 화면에 띄울 수 없으므로 제외
-      if (!pDate || !dDate) return false;
+      if (!pDate) return false; 
 
       return true;
     })
@@ -170,9 +169,9 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
     return 'SCHEDULED';
   }
 
-  // 1B. 모든 판매 기간이 종료되었으면 '판매 종료'
-  const salesHasEnded = (secondaryEnd && now.isAfter(secondaryEnd)) || (!secondaryEnd && primaryEnd && now.isAfter(primaryEnd));
-  if (salesHasEnded) {
+  // 1B. 종료 조건: 2차 마감일이 있으면 2차 마감 후 종료, 없으면 1차 마감 후 종료
+  const finalDeadline = secondaryEnd || primaryEnd;
+  if (finalDeadline && now.isAfter(finalDeadline)) {
     return 'ENDED';
   }
 
@@ -196,6 +195,7 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
 
   if (!hasMultipleOptions) {
     const stockInfo = getStockInfo(round.variantGroups[0] as VariantGroup);
+    // 단일 옵션인 경우에도 재고가 0인지 다시 확인 (isAllOptionsSoldOut에서 확인했지만 안전 장치)
     if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
       return 'AWAITING_STOCK';
     }

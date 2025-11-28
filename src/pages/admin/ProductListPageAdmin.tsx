@@ -3,10 +3,11 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate } from 'react-router-dom';
-import { updateMultipleVariantGroupStocks, deleteSalesRounds, updateSalesRound, getProductsWithStock, updateProductCoreInfo } from '@/firebase';
+import { updateMultipleVariantGroupStocks, deleteSalesRounds, updateSalesRound, getProductsWithStock, updateProductCoreInfo, toggleSalesRoundOnsiteStatus } from '@/firebase';
+import { ensureInventoryItem, archiveInventoryItem } from '@/firebase/inventory'; // ✅ 추가
 import type { Product, SalesRound, VariantGroup, StorageType, ProductItem } from '@/shared/types';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2 } from 'lucide-react';
+import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2, Store } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './ProductListPageAdmin.css';
 import dayjs from 'dayjs';
@@ -19,8 +20,11 @@ import { reportError } from '@/utils/logger';
 import { Timestamp } from 'firebase/firestore';
 import { safeToDate, getDeadlines, getStockInfo } from '@/utils/productUtils';
 
+// ... (기존 인터페이스 및 헬퍼 함수들은 생략없이 그대로 유지. 변경점 없음)
+// ... (InlineEditor 컴포넌트들 그대로 유지)
+
 // =================================================================
-// 📌 타입 정의 및 헬퍼 함수
+// 📌 타입 정의 및 헬퍼 함수 (기존 내용 유지)
 // =================================================================
 
 interface EnrichedVariantGroup extends VariantGroup {
@@ -39,7 +43,6 @@ interface EnrichedRoundItem {
   productImage: string;
   round: SalesRound;
   createdAt: number;
-  // ✅ [수정 1] publishAt(판매시작일) 대신 pickupDate(픽업일) 사용
   pickupDate: number; 
   storageType: StorageType;
   status: SimplifiedStatus;
@@ -48,7 +51,6 @@ interface EnrichedRoundItem {
 }
 
 type SimplifiedStatus = '판매예정' | '1차 공구중' | '2차 공구중' | '매진' | '판매종료' | '데이터 오류' | '옵션 오류';
-// ✅ [수정 1] 정렬 키에 'publishAt'을 'pickupDate'로 변경
 type SortableKeys = 'createdAt' | 'productName' | 'status' | 'pickupDate' | 'expirationDate';
 
 const storageTypeOptions: { key: StorageType; name: string; icon: React.ReactNode }[] = [
@@ -71,7 +73,6 @@ const formatDateShortMMDD = (dateInput: any): string => {
 
 const getSimplifiedStatus = (round: SalesRound, remainingStock: number | string): SimplifiedStatus => {
   const now = dayjs();
-  // 판매예정 상태를 위해 publishAt은 그대로 사용
   const publishAt = safeToDate(round.publishAt); 
   const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
@@ -108,7 +109,7 @@ const CopyableId: React.FC<{ id: string }> = ({ id }) => {
   );
 };
 
-// --- 인라인 편집 컴포넌트들 ---
+// --- 인라인 편집 컴포넌트들 (기존 유지) ---
 const InlineEditor: React.FC<{
   initialValue: string | number | null;
   type: 'text' | 'number' | 'price';
@@ -233,7 +234,7 @@ const InlineDateEditor: React.FC<{
   return (<span className="editable-field" onClick={() => setIsEditing(true)}> {displayValue} </span>);
 };
 
-// --- 페이지네이션 ---
+// --- 페이지네이션 (기존 유지) ---
 const PaginationControls: React.FC<{ currentPage: number; totalPages: number; onPageChange: (page: number) => void; itemsPerPage: number; onItemsPerPageChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; totalItems: number; }> = ({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }) => {
   if (totalItems === 0 || totalPages <= 1) return null;
   return (
@@ -246,7 +247,6 @@ const PaginationControls: React.FC<{ currentPage: number; totalPages: number; on
     </div>
   );
 };
-
 
 // =================================================================
 // 📌 메인 컴포넌트
@@ -321,7 +321,6 @@ const ProductListPageAdmin: React.FC = () => {
           productImage: p.imageUrls?.[0] || '/placeholder.svg',
           round: r,
           createdAt: safeToDate(r.createdAt)?.getTime() || 0,
-          // ✅ [수정 2] 데이터 매핑 부분에서 pickupDate 연결
           pickupDate: (r.pickupDate ? safeToDate(r.pickupDate) : null)?.getTime() || 0,
           storageType: p.storageType,
           status: overallStatus,
@@ -350,7 +349,6 @@ const ProductListPageAdmin: React.FC = () => {
       let aVal: any; let bVal: any;
 
       if (key === 'createdAt') { aVal = a.createdAt; bVal = b.createdAt; }
-      // ✅ [수정 2] 정렬 로직에 pickupDate 사용
       else if (key === 'pickupDate') { aVal = a.pickupDate; bVal = b.pickupDate; }
       else if (key === 'expirationDate') { aVal = a.expirationDate ?? 0; bVal = b.expirationDate ?? 0; }
       else if (key === 'productName') { aVal = a.productName; bVal = b.productName; }
@@ -373,7 +371,6 @@ const ProductListPageAdmin: React.FC = () => {
 
   const handleUpdate = useCallback(async (
     uniqueId: string,
-    // ✅ [수정 3] field 타입 변경: 'publishAt' -> 'pickupDate'
     field: 'price' | 'stock' | 'storageType' | 'expirationDate' | 'pickupDate',
     newValue: string | number | StorageType,
     extraData: { productId: string; roundId: string; vgId?: string; itemId?: string }
@@ -388,7 +385,6 @@ const ProductListPageAdmin: React.FC = () => {
       if (field === 'storageType') {
         backendPromise = updateProductCoreInfo(productId, { storageType: newValue as StorageType }, [], [], []);
       }
-      // ✅ [수정 3] '픽업일' 수정 로직으로 변경 및 updateSalesRound 호출
       else if (field === 'pickupDate') {
         const newDate = Timestamp.fromDate(new Date(newValue as number));
         backendPromise = updateSalesRound(productId, roundId, { pickupDate: newDate });
@@ -439,6 +435,37 @@ const ProductListPageAdmin: React.FC = () => {
       setUpdatingItems(prev => ({ ...prev, [loadingKey]: false }));
     }
   }, [pageData, fetchData]);
+
+  // ✅ [수정] 현장판매 전환 토글 함수 (Inventory 연동 추가)
+  const handleToggleOnsite = async (productId: string, roundId: string, currentStatus: boolean, productName: string, price: number | null) => {
+    const loadingKey = `${productId}-${roundId}-onsite`;
+    setUpdatingItems(prev => ({ ...prev, [loadingKey]: true }));
+    
+    try {
+      const nextStatus = !currentStatus;
+      
+      // 1. 상품 상태 변경
+      await toggleSalesRoundOnsiteStatus(productId, roundId, nextStatus);
+
+      // 2. Inventory 데이터 동기화
+      if (nextStatus) {
+        // 현장판매 ON: 재고 데이터 보장 (없으면 생성)
+        await ensureInventoryItem(productId, productName, price || 0);
+        toast.success('현장판매 상품으로 전환 및 재고표가 생성되었습니다.');
+      } else {
+        // 현장판매 OFF: 재고 데이터 숨김 (선택 사항)
+        await archiveInventoryItem(productId);
+        toast.success('예약 상품으로 복귀되었습니다.');
+      }
+      
+      await fetchData();
+    } catch (error: any) {
+      reportError('ProductListPageAdmin.handleToggleOnsite', error);
+      toast.error(`상태 변경 실패: ${error.message}`);
+    } finally {
+      setUpdatingItems(prev => ({ ...prev, [loadingKey]: false }));
+    }
+  };
 
   const handleSortChange = (key: SortableKeys) => { setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' })); };
 
@@ -517,7 +544,6 @@ const ProductListPageAdmin: React.FC = () => {
                 <th className="th-align-center sortable-header" onClick={() => handleSortChange('expirationDate')} style={{ width: '90px' }}>
                   유통기한 {sortConfig.key === 'expirationDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                 </th>
-                {/* ✅ [수정 4] 헤더 텍스트 '픽업일'로 변경 및 정렬 키 'pickupDate' 연결 */}
                 <th className="th-align-center sortable-header" onClick={() => handleSortChange('pickupDate')} style={{ width: '80px' }}>
                   픽업일 {sortConfig.key === 'pickupDate' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                 </th>
@@ -526,7 +552,7 @@ const ProductListPageAdmin: React.FC = () => {
                 </th>
                 <th className="th-align-right" style={{ width: '110px' }}>가격</th>
                 <th className="th-align-right" style={{ width: '130px' }}>예약/재고</th>
-                <th className="th-align-center" style={{ width: '100px' }}>관리</th>
+                <th className="th-align-center" style={{ width: '120px' }}>관리</th>
               </tr>
             </thead>
             <tbody>
@@ -535,6 +561,10 @@ const ProductListPageAdmin: React.FC = () => {
                   const isExpandable = item.enrichedVariantGroups.length > 1;
                   const isExpanded = expandedRoundIds.has(item.uniqueId);
                   const firstVg = item.enrichedVariantGroups[0];
+                  // ✅ 현장 판매 여부 확인
+                  const isOnsite = !!item.round.isManuallyOnsite;
+                  const loadingOnsiteKey = `${item.productId}-${item.round.roundId}-onsite`;
+                  const isOnsiteLoading = updatingItems[loadingOnsiteKey];
 
                   return (
                     <React.Fragment key={item.uniqueId}>
@@ -555,7 +585,10 @@ const ProductListPageAdmin: React.FC = () => {
                           <div className="product-name-cell-simple">
                             <img src={item.productImage} alt={item.productName} className="product-thumbnail-small" />
                             <div className="product-name-text">
-                              <span className="product-group-name">{item.productName}</span>
+                              <span className="product-group-name">
+                                {isOnsite && <span className="onsite-badge" title="현장판매 전용">🏢</span>}
+                                {item.productName}
+                              </span>
                               <span className="round-name-separator">/</span>
                               <span className="round-name-text-inline">{item.round.roundName.replace(' 판매', '')}</span>
                             </div>
@@ -577,7 +610,6 @@ const ProductListPageAdmin: React.FC = () => {
                             />
                           ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
                         </td>
-                        {/* ✅ [수정 4] 마스터 행에 픽업일 표시 및 에디터 연결 */}
                         <td className="td-align-center td-nowrap">
                           <InlineDateEditor
                             initialValue={item.pickupDate}
@@ -615,6 +647,23 @@ const ProductListPageAdmin: React.FC = () => {
                         <td className="td-align-center td-nowrap">
                           <div className="action-buttons-wrapper inline-actions">
                             <button onClick={() => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } })} className="admin-action-button add-round" title="새 회차 추가"><Plus size={16} /></button>
+                            
+                            {/* ✅ [수정] 현장판매 전환 버튼 - Inventory 연동 인자 추가 */}
+                            <button 
+                              onClick={() => handleToggleOnsite(
+                                item.productId, 
+                                item.round.roundId, 
+                                isOnsite,
+                                item.productName,
+                                firstVg ? firstVg.price : 0 // 대표 가격 전달
+                              )}
+                              className={`admin-action-button ${isOnsite ? 'active-onsite' : ''}`}
+                              title={isOnsite ? "예약 판매로 전환" : "현장 판매로 전환"}
+                              disabled={isOnsiteLoading}
+                            >
+                              {isOnsiteLoading ? <Loader2 size={16} className="animate-spin" /> : <Store size={16} />}
+                            </button>
+
                             <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="상세 수정"><Edit size={16} /></button>
                             <button onClick={() => handleDelete(item.productId, item.round.roundId, item.productName, item.round.roundName)} className="admin-action-button danger" title="삭제"><Trash2 size={16} /></button>
                           </div>
@@ -635,7 +684,6 @@ const ProductListPageAdmin: React.FC = () => {
                               isLoading={updatingItems[`${item.uniqueId}-expirationDate-${vg.id}`]}
                             />
                           </td>
-                          {/* ✅ [수정 4] 상세 행에 픽업일 표시 및 에디터 연결 (줄 맞춤) */}
                           <td className="td-align-center td-nowrap">
                             <InlineDateEditor
                                 initialValue={item.pickupDate}
