@@ -425,15 +425,26 @@ export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> 
 
 export const getReservedQuantitiesMap = async (): Promise<Map<string, number>> => {
   const quantitiesMap = new Map<string, number>();
-  const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
+  
+  // ✅ [수정] 'PICKED_UP'(픽업완료) 상태를 배열에 추가했습니다.
+  // 이제 픽업을 완료해도 재고 카운트(한정수량)가 줄어들지 않고 유지됩니다.
+  // 취소된 주문은 이 목록에 없으므로 자연스럽게 재고가 반환됩니다.
+  const q = query(
+    collection(db, 'orders'), 
+    where('status', 'in', ['RESERVED', 'PREPAID', 'PICKED_UP'])
+  );
+  
   const querySnapshot = await getDocs(q);
 
   querySnapshot.forEach((docSnap) => {
     const order = docSnap.data() as Order;
     (order.items || []).forEach((item: OrderItem) => {
+      // 키 생성: 상품ID-회차ID-옵션ID
       const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+      
       const unit = Number(item.stockDeductionAmount ?? 1);
       const qty = Number(item.quantity ?? 0) * unit;
+      
       quantitiesMap.set(key, (quantitiesMap.get(key) || 0) + qty);
     });
   });
