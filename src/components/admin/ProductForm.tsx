@@ -233,7 +233,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   // ❌ [삭제] const [isParsingWithAI, setIsParsingWithAI] = useState(false); (Request 3 - 수정 1)
   // ✅ [수정] eventType에 'ANNIVERSARY' 추가
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY'>('NONE');
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS'>('NONE');
 
 
   useEffect(() => {
@@ -365,7 +365,7 @@ if (mode === 'editRound' && roundId && product) {
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
           // ✅ [수정] eventType 타입 변경 반영
-          setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY');
+setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS');
 
 const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
@@ -1141,12 +1141,14 @@ const settingsSummary = useMemo(() => {
                   <Gift size={16} className="input-icon" />
                   <select 
                     value={eventType} 
-                    onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY')}
+                    onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS')}
                   >
                     <option value="NONE">일반 상품</option>
                     <option value="CHUSEOK">🌕 추석 특집</option>
                     {/* ✅ [추가] 1주년 이벤트 옵션 추가 */}
                     <option value="ANNIVERSARY">🎉 1주년 기념 🎉</option>
+                    {/* 🎄 [추가] 크리스마스 이벤트 옵션 추가 */}
+                    <option value="CHRISTMAS">🎁 크리스마스 특집 🎁</option>
                   </select>
                 </div>
               </div>

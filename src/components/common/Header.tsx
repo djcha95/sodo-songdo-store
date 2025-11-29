@@ -15,25 +15,21 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const tabContext = useTabs();
 
-  // ✅ [수정] 경로 확인 로직 업데이트 (메인 '/' 포함)
+  // ✅ 경로 확인 로직
   const isModernPage = 
     location.pathname === '/' || 
     location.pathname.startsWith('/modern') || 
-    location.pathname.startsWith('/product'); // 상세화면 포함
+    location.pathname.startsWith('/product'); 
 
   const isHistoryPage = location.pathname === '/mypage/history';
   
-  // ✅ [수정] 스위칭 버튼 로직
-  // 예약내역 페이지 -> '쇼핑하기' (클릭 시 메인 '/'으로 이동)
-  // 그 외(메인 등) -> '예약내역' (클릭 시 '/mypage/history'로 이동)
+  // ✅ 스위칭 버튼 로직
   const navButtonConfig = isHistoryPage
-    ? { to: '/', label: '쇼핑하기', styleClass: 'shop-mode' } // to: '/' 로 변경
+    ? { to: '/', label: '쇼핑하기', styleClass: 'shop-mode' } 
     : { to: '/mypage/history', label: '예약내역', styleClass: 'history-mode' };
 
-  // ✅ [수정] 탭 표시 여부: 모던 페이지(메인 포함)는 헤더 탭을 숨김
-  // 레거시 페이지('/simple')인 경우에만 표시
+  // 탭 표시 여부
   const shouldShowTabs = location.pathname.startsWith('/simple');
-  
   const isOnLegacyOrderPage = location.pathname.startsWith('/simple');
 
   const handleScroll = () => {
@@ -84,7 +80,8 @@ const Header: React.FC = () => {
           ) : (
             <div className="header-brand">
               <NavLink to="/" className="brand-link">
-                송도공구마켓
+                {/* 🎄 크리스마스 분위기 로고 */}
+                🎄 송도공구마켓
               </NavLink>
             </div>
           )}

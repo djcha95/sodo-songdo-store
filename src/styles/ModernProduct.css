@@ -10,6 +10,13 @@
 .customer-page-container.modern-list-page {
     font-family: "Pretendard", -apple-system, sans-serif;
     color: #1E293B;
+    /* 🎄 전체 배경을 은은한 크리스마스 느낌으로 */
+    background: radial-gradient(
+      circle at top,
+      #fff7f7 0%,
+      #f9fafb 35%,
+      #eef7ff 100%
+    );
 }
 
 /* 데스크탑 앱 뷰 레이아웃 */
@@ -25,7 +32,13 @@
 .mobile-app-view {
     width: 100%; 
     max-width: 500px; 
-    background-color: #FFFFFF;
+    /* 기존 흰 배경 대신 은은한 크리스마스 톤 그라데이션 */
+    background: radial-gradient(
+      circle at top,
+      #ffffff 0%,
+      #fff7f7 35%,
+      #eef7ff 100%
+    );
     min-height: 100vh; 
     box-shadow: 0 0 25px rgba(0,0,0,0.08);
     position: relative; 
@@ -363,4 +376,109 @@
   align-items: center;
   width: 100%;
   margin-top: 8px;
+}
+
+/* ========================= */
+/* 🎄 연말 / 기획전 섹션    */
+/* ========================= */
+
+.songdo-event-section {
+  padding: 16px 20px 12px;
+  background: radial-gradient(
+    circle at top left,
+    #fef2f2 0,
+    #f9fafb 35%,
+    #ecfdf3 100%
+  ); /* 💡 마지막 색을 연한 초록으로 변경 */
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.songdo-event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.songdo-event-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #b91c1c;
+  background: linear-gradient(90deg, #fee2e2, #fef9c3); /* 🎄 레드+골드 느낌 */
+}
+
+.songdo-event-title {
+  margin: 6px 0 2px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: -0.3px;
+}
+
+.songdo-event-sub {
+  margin: 0;
+  font-size: 12px;
+  color: #64748B;
+}
+
+/* 가로 슬라이더 트랙 */
+.songdo-event-track {
+  margin: 10px -20px 0;
+  padding: 8px 20px 8px; /* 패딩 수정 */
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x mandatory;
+}
+.songdo-event-track::-webkit-scrollbar {
+  height: 4px;
+}
+.songdo-event-track::-webkit-scrollbar-thumb {
+  background: #CBD5F5;
+  border-radius: 999px;
+}
+
+/* 🎄 기획전 배너 – 조금 더 작게 (약 2/3 크기) */
+.songdo-event-banner {
+  flex: 0 0 auto;
+  width: 66%;
+  max-width: 280px;
+  border: none;
+  padding: 0;
+  background: none;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  scroll-snap-align: start;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+  cursor: pointer;
+}
+.event-banner-img {
+  width: 100%;
+  display: block;
+}
+
+/* 배너 위 왼쪽 위에 붙는 작은 라벨 */
+.event-banner-tag {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+}
+
+/* 이벤트 태그 색상 (카드 내부에 사용) */
+.tag.event {
+  background: #fef3c7;
+  color: #b45309;
 }

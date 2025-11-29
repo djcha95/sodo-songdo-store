@@ -87,6 +87,31 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     };
   }, [product]);
 
+  // ✅ 이벤트 타입에 따른 라벨 (COSMETICS, CHRISTMAS 포함)
+  const eventLabel = useMemo(() => {
+    const type = (product.displayRound as any)?.eventType as
+      | 'NONE'
+      | 'ANNIVERSARY'
+      | 'CHUSEOK'
+      | 'CHRISTMAS'
+      | 'COSMETICS'
+      | string
+      | undefined;
+
+    switch (type) {
+      case 'ANNIVERSARY':
+        return '🎉 1주년 기념';
+      case 'CHUSEOK':
+        return '🍂 추석 특집';
+      case 'CHRISTMAS':
+        return '🎄 크리스마스 특가';
+      case 'COSMETICS':
+        return '💄 뷰티 특가';
+      default:
+        return null;
+    }
+  }, [product.displayRound]);
+
   useEffect(() => {
     const checkMyHistory = async () => {
       if (!user || !cardData?.singleOptionItem || !cardData?.displayRound)
@@ -175,7 +200,8 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
         arrivalDate: cardData.displayRound.arrivalDate || null,
         pickupDate: cardData.displayRound.pickupDate,
         deadlineDate: cardData.displayRound.deadlineDate,
-        isPrepaymentRequired: cardData.displayRound.isPrepaymentRequired ?? false,
+        isPrepaymentRequired:
+          cardData.displayRound.isPrepaymentRequired ?? false,
       };
 
       const orderPayload = {
@@ -232,9 +258,7 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     )} 마감`;
     isUrgent = primaryEnd.diff(dayjs(), 'hour') < 6;
   } else if (phase === 'secondary' && secondaryEnd) {
-    deadlineText = `${secondaryEnd
-      .locale('ko')
-      .format('M/D(ddd) HH:mm')} 마감`;
+    deadlineText = `${secondaryEnd.locale('ko').format('M/D(ddd) HH:mm')} 마감`;
   }
 
   const stockInfo = cardData.singleOptionVg
@@ -291,10 +315,9 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
               {phase === 'onsite' && (
                 <span className="tag onsite">매장구매</span>
               )}
+              {eventLabel && <span className="tag event">{eventLabel}</span>}
               {phase !== 'onsite' && (
-                <span
-                  className={`deadline-text ${isUrgent ? 'urgent' : ''}`}
-                >
+                <span className={`deadline-text ${isUrgent ? 'urgent' : ''}`}>
                   {deadlineText}
                 </span>
               )}
@@ -330,7 +353,7 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
               </div>
             )}
 
-            {/* 👉 가격 블럭을 정보 영역 안으로 이동 */}
+            {/* 가격 블럭 */}
             <div className="price-area">
               <span className={`price-label ${phase}`}>{priceLabel}</span>
               <span className="price">

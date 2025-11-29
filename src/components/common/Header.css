@@ -1,15 +1,16 @@
 /* src/components/common/Header.css */
 
 .new-customer-header {
-  background-color: #ffffff;
-  border-bottom: 1px solid #f0f0f0;
+  background-color: rgba(255, 255, 255, 0.95); /* 살짝 투명도 줘서 배경 비치게 */
+  backdrop-filter: blur(8px); /* 블러 효과 */
+  border-bottom: 1px solid #FECACA; /* 🎄 테두리를 연한 빨강으로 변경 */
   position: sticky;
   top: 0;
   width: 100%;
   z-index: 1010;
   height: 60px;
   transition: top 0.3s ease-in-out;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 2px 10px rgba(185, 28, 28, 0.05); /* 그림자도 아주 연한 붉은빛 */
 }
 
 .new-customer-header.visible { top: 0; }
@@ -25,9 +26,8 @@
   align-items: center;
 }
 
-/* 모던 레이아웃일 때 최대 너비 조정 */
 .header-content.modern-layout {
-  max-width: 900px; /* 모던 리스트 최대폭에 맞춤 */
+  max-width: 900px; 
 }
 
 .header-left, .header-right {
@@ -69,20 +69,24 @@
 }
 .page-tab.active { color: var(--text-color-dark); }
 .page-tab.active::after { transform: scaleX(1); }
-.page-tab.primary.active { color: #f97316; }
-.page-tab.primary.active::after { background-color: #f97316; }
-.page-tab.secondary.active { color: #3b82f6; } 
-.page-tab.secondary.active::after { background-color: #3b82f6; }
 
-/* 1. 브랜드 로고: 진지하고 묵직한 스타일 */
+/* 🎄 탭 활성화 색상 변경 */
+.page-tab.primary.active { color: #DC2626; } /* 크리스마스 레드 */
+.page-tab.primary.active::after { background-color: #DC2626; }
+
+.page-tab.secondary.active { color: #15803d; } /* 크리스마스 그린 */
+.page-tab.secondary.active::after { background-color: #15803d; }
+
+/* 🎄 1. 브랜드 로고: 크리스마스 레드 스타일 */
 .header-brand .brand-link {
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-  font-size: 1.45rem; /* 크기를 살짝 키움 */
-  font-weight: 900; /* 가장 두꺼운 폰트 */
-  color: #0F172A; /* 완전 검정보다는 아주 깊은 네이비블랙 */
+  font-size: 1.45rem; 
+  font-weight: 900; 
+  color: #B91C1C; /* 🎄 진한 레드 컬러 */
   text-decoration: none;
-  letter-spacing: -1.5px; /* ✅ 자간을 좁혀서 단단하고 밀도 있는 느낌 (핵심) */
+  letter-spacing: -1.0px; 
   line-height: 1;
+  text-shadow: 0 1px 2px rgba(185, 28, 28, 0.1); /* 살짝 입체감 */
 }
 
 /* --- 오른쪽 네비게이션 --- */
@@ -92,7 +96,6 @@
   gap: 0.5rem;
 }
 
-/* 기본 버튼 (텍스트 링크 스타일) */
 .header-nav .nav-item {
   font-size: 0.875rem;
   font-weight: 600;
@@ -111,78 +114,57 @@
   color: #ffffff;
 }
 
-/* 2. 예약내역/쇼핑하기 버튼: 눈에 띄는 솔리드 버튼 스타일 */
-/* 공통 모던 버튼 스타일 (구조) */
+/* 모던 버튼 공통 */
 .header-nav .nav-item.modern-text-btn {
-  /* 기존 background: none 제거 */
   font-size: 0.9rem;
   font-weight: 700;
-  
-  /* 버튼 형태 잡기 */
-  padding: 10px 18px; /* 넉넉한 패딩으로 버튼감 살리기 */
-  border-radius: 6px; /* 둥글지만 살짝 각진 느낌 (너무 둥글면 귀여워짐) */
-  
+  padding: 10px 18px; 
+  border-radius: 8px; /* 조금 더 둥글게 */
   transition: all 0.2s ease;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* 살짝 떠있는 입체감 */
-  
-  margin-right: 4px; /* 장바구니 아이콘과의 간격 */
-  
-  /* 추가된 부분 */
+  box-shadow: 0 2px 5px rgba(0,0,0,0.08); 
+  margin-right: 4px; 
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-/* 호버 효과: 살짝 연해지며 눌리는 느낌 */
 .header-nav .nav-item.modern-text-btn:hover {
   transform: translateY(1px);
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
-
-/* 클릭 효과 */
 .header-nav .nav-item.modern-text-btn:active {
   transform: translateY(2px);
 }
 
-/* 활성화 상태 (현재 페이지일 때) */
-.header-nav .nav-item.modern-text-btn.active {
-  background-color: #0F172A !important; /* 더 진한 색 */
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); /* 안으로 눌린 느낌 */
-}
-
-/* 기본 버튼 (예약내역) - 진한 먹색: history-mode */
+/* 🎄 2. 예약내역 버튼 - 크리스마스 트리 (Deep Green) */
 .header-nav .nav-item.modern-text-btn.history-mode {
-  background-color: #1E293B !important; /* 진한 먹색 배경 */
-  color: #ffffff !important; /* 흰색 글씨 */
-  border: 1px solid #1E293B; /* 테두리 */
+  background-color: #15803d !important; /* 🎄 진한 초록 */
+  color: #ffffff !important; 
+  border: 1px solid #14532d; 
 }
 .header-nav .nav-item.modern-text-btn.history-mode:hover {
-  background-color: #334155 !important;
+  background-color: #166534 !important;
 }
 
-/* ✅ [신규] 쇼핑하기 버튼 - 눈에 띄는 오렌지색: shop-mode */
+/* 🎄 3. 쇼핑하기 버튼 - 산타 레드 (Bright Red) */
 .header-nav .nav-item.modern-text-btn.shop-mode {
-  background-color: #F97316 !important; /* 밝고 쨍한 오렌지 */
+  background-color: #DC2626 !important; /* 🎄 밝은 빨강 */
   color: #ffffff !important;
-  border: 1px solid #F97316;
-  
-  /* 애니메이션 강조 (선택사항) */
+  border: 1px solid #B91C1C;
   animation: pulse-soft 2s infinite;
 }
 
 .header-nav .nav-item.modern-text-btn.shop-mode:hover {
-  background-color: #EA580C !important; /* 호버 시 조금 더 진하게 */
-  /* transform: translateY(1px); // 공통 호버에 이미 포함 */
+  background-color: #EF4444 !important; 
 }
 
-/* 살짝 쿵쿵 뛰는 효과 (주목도 UP) */
 @keyframes pulse-soft {
-  0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); } /* 빨간 그림자 */
+  70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }
 
-/* ✅ [신규] 장바구니 아이콘 버튼 */
+/* 장바구니 아이콘 */
 .nav-icon-btn {
   background: none;
   border: none;
@@ -195,7 +177,7 @@
   transition: color 0.2s;
 }
 .nav-icon-btn:hover {
-  color: #0F172A;
+  color: #B91C1C; /* 호버시 레드 */
 }
 
 /* 관리자 버튼 */
