@@ -2,38 +2,36 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Timestamp } from 'firebase/firestore';
-import type { UserDocument, Order, OrderItem, LoyaltyTier, OrderStatus } from '@/shared/types';
+import type { 
+    UserDocument, 
+    Order, 
+    OrderItem, 
+    LoyaltyTier, 
+    OrderStatus,
+    UniversalTimestamp,
+    AggregatedOrderGroup // ✅ [수정] shared/types에서 직접 import
+} from '@/shared/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
     updateMultipleOrderStatuses,
     revertOrderStatus,
     deleteMultipleOrders,
-    processPartialPickup, // [수정] splitAndUpdateOrderStatus 대신 processPartialPickup 사용
+    processPartialPickup,
     splitBundledOrder,
     cancelOrder,
     revertFinalizedOrder
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
+// ✅ [신규] 우리가 만든 집계 유틸리티 import
+import { aggregateOrders } from '@/utils/orderAggregation'; 
 import toast from 'react-hot-toast';
 import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle, Undo2, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
 
-import type { UniversalTimestamp } from '@/shared/types'; // [추가]
-
-// ✅ [추가] AggregatedOrderGroup 타입을 이 파일에 직접 정의합니다.
-export interface AggregatedOrderGroup {
-    groupKey: string;
-    customerInfo: Order['customerInfo'];
-    item: OrderItem;
-    totalQuantity: number;
-    totalPrice: number;
-    status: OrderStatus;
-    pickupDate: UniversalTimestamp | Date;
-    pickupDeadlineDate?: UniversalTimestamp | Date | null;
-    originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
-}
+// ❌ [삭제] 중복 정의된 인터페이스 삭제함
+// export interface AggregatedOrderGroup { ... }
 
 interface CustomerActionTabsProps {
     user: UserDocument;
@@ -42,7 +40,6 @@ interface CustomerActionTabsProps {
     onActionSuccess: () => void;
     onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
 }
-
 
 const convertToDate = (date: UniversalTimestamp | Date | null | undefined): Date | null => {
     if (!date) return null;
@@ -106,7 +103,6 @@ const ActionableOrderTable: React.FC<{
                         </thead>
                         <tbody>
                             {sortedOrders.map(order => {
-                                // [수정] '되돌리기' 버튼이 CANCELED, LATE_CANCELED 상태에서도 보이도록 조건 변경
                                 const isRevertable = ['PICKED_UP', 'NO_SHOW', 'CANCELED', 'LATE_CANCELED'].includes(order.status);
                                 const isSplittable = Array.isArray(order.items) && order.items.length > 1;
 
@@ -219,46 +215,26 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
     orders = [], 
     onStatUpdate, 
     onActionSuccess,
-    // ✅ [수정] onMarkAsNoShow prop을 받습니다.
     onMarkAsNoShow 
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('pickup');
     const [selectedGroupKeys, setSelectedGroupKeys] = useState<string[]>([]);
     const [splitInfo, setSplitInfo] = useState<SplitInfo | null>(null);
 
-
+    // ✅ [핵심 수정] aggregateOrders 유틸리티를 사용하여 로직을 단순화하고 표준화합니다.
     const aggregatedPickupOrders = useMemo<AggregatedOrderGroup[]>(() => {
+        // 1. 픽업 탭에 표시할 상태 필터링 (RESERVED, PREPAID)
         const pickupOrders = orders.filter(o => o.status === 'RESERVED' || o.status === 'PREPAID');
-        const groups = new Map<string, AggregatedOrderGroup>();
-        pickupOrders.forEach(order => {
-            order.items.forEach(item => {
-                const groupKey = `${order.userId}-${item.productId}-${item.itemId}-${order.status}`;
-                const itemPrice = (item.unitPrice || 0) * item.quantity;
+        
+        // 2. 유틸리티 함수로 집계 (중복 로직 제거)
+        const groups = aggregateOrders(pickupOrders);
 
-                if (groups.has(groupKey)) {
-                    const existingGroup = groups.get(groupKey)!;
-                    existingGroup.totalQuantity += item.quantity;
-                    existingGroup.totalPrice += itemPrice;
-                    existingGroup.originalOrders.push({ orderId: order.id, quantity: item.quantity, status: order.status });
-                } else {
-                    groups.set(groupKey, {
-                        groupKey, customerInfo: order.customerInfo, item,
-                        totalQuantity: item.quantity,
-                        totalPrice: itemPrice,
-                        status: order.status, pickupDate: order.pickupDate, pickupDeadlineDate: order.pickupDeadlineDate,
-                        originalOrders: [{ orderId: order.id, quantity: item.quantity, status: order.status }]
-                    });
-                }
-            });
-        });
-
-        const sortedGroups = Array.from(groups.values()).sort((a, b) => {
+        // 3. 날짜순 정렬 (유틸리티는 순서를 보장하지 않으므로 여기서 수행)
+        return groups.sort((a, b) => {
             const dateA = convertToDate(a.pickupDate)?.getTime() || 0;
             const dateB = convertToDate(b.pickupDate)?.getTime() || 0;
             return dateA - dateB;
         });
-
-        return sortedGroups;
     }, [orders]);
 
     const selectedGroups = useMemo(() =>
@@ -266,10 +242,10 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
         [aggregatedPickupOrders, selectedGroupKeys]
     );
 
-const handleSelectGroup = useCallback((groupKey: string) => {
+    const handleSelectGroup = useCallback((groupKey: string) => {
         if(splitInfo) { toast.error('수량 변경 후에는 먼저 부분 픽업 처리를 완료해주세요.'); return; }
         setSelectedGroupKeys(prev => prev.includes(groupKey) ? prev.filter(key => key !== groupKey) : [...prev, groupKey]);
-    }, [splitInfo]); // splitInfo가 바뀔 때만 함수를 새로 만듭니다.
+    }, [splitInfo]);
 
     const handleQuantityChange = useCallback((group: AggregatedOrderGroup, newQuantity: number) => {
         if (newQuantity < group.totalQuantity) {
@@ -278,14 +254,12 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                 return; 
             }
             setSplitInfo({ group, newQuantity });
-            setSelectedGroupKeys([group.groupKey]); // 수량 변경 시 해당 카드만 자동 선택
+            setSelectedGroupKeys([group.groupKey]);
         } else {
             setSplitInfo(null);
-            // 수량이 원래대로 돌아오면 선택 해제
             setSelectedGroupKeys(prev => prev.filter(key => key !== group.groupKey));
         }
-    }, []); // 의존성이 없으므로 처음 한 번만 함수를 만듭니다.
-
+    }, []);
 
     const handleStatusUpdate = (status: OrderStatus) => {
         if (selectedGroupKeys.length === 0) return;
@@ -400,7 +374,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
         );
     };
 
-    // [수정] 기존 handleSplit을 부분 픽업 로직으로 전면 교체
     const handlePartialPickup = () => {
         if (!splitInfo) return;
 
@@ -425,7 +398,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
         });
         
         confirmationPromise.then(() => {
-            // 백엔드 정책과 일치: 부분 픽업 시 -50점
             const PENALTY_POINTS = -50; 
             const pointsForPickedUpItems = Math.round(group.item.unitPrice * newQuantity * 0.01);
             const totalPointChange = pointsForPickedUpItems + PENALTY_POINTS;
@@ -441,7 +413,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                 { loading: '부분 픽업 처리 중...', success: '부분 픽업 및 페널티가 적용되었습니다.', error: '부분 픽업 처리 실패' }
             );
         }).catch(() => {
-           // 사용자가 확인 창에서 '아니오'를 누르면 아무 작업도 하지 않음
            console.log("Partial pickup was canceled by the user.");
         });
     };
@@ -517,7 +488,6 @@ const handleSelectGroup = useCallback((groupKey: string) => {
                         {splitInfo.group.item.productName}: <strong>{splitInfo.newQuantity}개</strong> ({(newPrice).toLocaleString()}원)
                     </span>
                     <div className="cat-footer-actions">
-                         {/* [수정] 버튼 텍스트와 핸들러 변경 */}
                          <button onClick={handlePartialPickup} className="common-button button-pickup">
                             <GitCommit size={16} /> 부분 픽업 처리
                          </button>
@@ -545,21 +515,14 @@ const handleSelectGroup = useCallback((groupKey: string) => {
             <div className="cat-action-footer">
                 <span className="cat-footer-summary">{selectedGroupKeys.length}건 선택 / {totalSelectedPrice.toLocaleString()}원</span>
                 <div className="cat-footer-actions">
-                    {/* [핵심 수정] 버튼 구성 변경 */}
                     <button onClick={() => handleStatusUpdate('PICKED_UP')} className="common-button button-pickup"><CheckCircle size={20} /> 픽업</button>
                     {prepaymentButton}
-                    
-                    {/* [추가] '노쇼' 버튼 (빨간색) */}
                     <button onClick={() => handleStatusUpdate('NO_SHOW')} className="common-button button-danger">
                         <AlertTriangle size={16} /> 노쇼
                     </button>
-                    
-                    {/* [수정] '취소' 버튼 (회색) */}
                     <button onClick={handleCancelOrder} className="common-button button-secondary">
                         <XCircle size={16} /> 취소
                     </button>
-
-                    {/* [삭제] '삭제' 버튼 제거됨 */}
                 </div>
             </div>
         )

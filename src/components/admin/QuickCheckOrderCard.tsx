@@ -1,24 +1,16 @@
 // src/components/admin/QuickCheckOrderCard.tsx
 
 import React, { useState, useEffect } from 'react';
-import type { OrderStatus, OrderItem, UniversalTimestamp, Order } from '@/shared/types';
+// ✅ [수정] AggregatedOrderGroup을 shared/types에서 import (로컬 선언 삭제됨)
+import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/shared/types';
 import toast from 'react-hot-toast';
 import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 import './QuickCheckOrderCard.css';
 import { formatKRW } from '@/utils/number';
 
-export interface AggregatedOrderGroup {
-    groupKey: string;
-    customerInfo: Order['customerInfo']; // Order 타입에서 가져옴
-    item: OrderItem;
-    totalQuantity: number;
-    totalPrice: number;
-    status: OrderStatus;
-    pickupDate: UniversalTimestamp | Date;
-    pickupDeadlineDate?: UniversalTimestamp | Date | null;
-    originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
-}
+// ❌ [삭제됨] 로컬 인터페이스 정의 삭제
+// export interface AggregatedOrderGroup { ... }
 
 interface OrderCardProps {
   group: AggregatedOrderGroup;
@@ -26,7 +18,7 @@ interface OrderCardProps {
   isSelected: boolean;
   onQuantityChange: (group: AggregatedOrderGroup, newQuantity: number) => void;
   isFuture: boolean;
-  // onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
+  // onMarkAsNoShow prop 제거됨
 }
 
 // 개별 품목 행: 수량 편집 UX/에러 처리 강화
@@ -115,7 +107,6 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
     isSelected, 
     onQuantityChange, 
     isFuture,
-    // onMarkAsNoShow // ✅ [수정] prop 제거
 }) => {
   const { groupKey, status, item, totalPrice, customerInfo, pickupDate, pickupDeadlineDate, totalQuantity } = group;
 
@@ -169,8 +160,6 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
   const handleItemQuantityUpdate = (newQuantity: number) => {
     onQuantityChange(group, newQuantity);
   };
-  
-  // ✅ [수정] '노쇼 처리' 버튼과 관련된 핸들러 및 상태 변수들이 제거되었습니다.
 
   return (
     <div 
@@ -205,7 +194,6 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
             <span>노쇼 처리됨</span>
         </div>
       )}
-      {/* ✅ [핵심 수정] '노쇼 처리' 버튼을 제거하고 항상 가격을 표시하도록 수정 */}
       <div className="qco-bottom-row">
         <span className="qco-customer-name" title={`전화번호: ${customerInfo.phone}`}>{customerInfo.name}</span>
         <span className="qco-total-price">{formatKRW(totalPrice)}원</span>

@@ -473,3 +473,4 @@ export const getPrepaidOrders = async (): Promise<Order[]> => {
     throw new Error('선입금 주문 목록을 불러오는 데 실패했습니다.');
   }
 };
+

@@ -283,3 +283,18 @@ export interface Banner {
   isActive: boolean;
   createdAt: UniversalTimestamp; // 범용 타입 사용
 }
+
+// ✅ [신규 추가] 프론트엔드 집계용 타입 (QuickCheck 등에서 사용)
+// CustomerFocusView.tsx 오류 해결을 위해 이곳에 정의합니다.
+export interface AggregatedOrderGroup {
+  groupKey: string;
+  customerInfo: CustomerInfo;
+  item: OrderItem;
+  totalQuantity: number;
+  totalPrice: number;
+  status: OrderStatus;
+  pickupDate: UniversalTimestamp | Date;
+  pickupDeadlineDate?: UniversalTimestamp | Date | null;
+  // 원래 어떤 주문들이 합쳐졌는지 추적 (기존 데이터 호환성 및 개별 취소 대비)
+  originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
+}

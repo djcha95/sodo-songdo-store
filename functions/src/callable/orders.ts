@@ -186,6 +186,8 @@ for (const item of cartItems) {
   }
 );
 
+// functions/src/callable/orders.ts 의 submitOrder 함수 전체 교체
+
 export const submitOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
@@ -198,7 +200,7 @@ export const submitOrder = onCall(
       items: OrderItem[];
       totalPrice: number;
       customerInfo: CustomerInfo;
-      pickupDate?: AdminTimestamp | null;
+      pickupDate?: AdminTimestamp | null; // 단일 픽업일 경우 (현재 로직상 아이템 내부 pickupDate 사용 권장)
       wasPrepaymentRequired?: boolean;
       notes?: string;
     };
@@ -209,6 +211,7 @@ export const submitOrder = onCall(
 
     try {
       const result = await db.runTransaction(async (transaction) => {
+        // 1. 사용자 정보 조회 및 등급 확인
         const userRef = db.collection("users").withConverter(userConverter).doc(userId);
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists) {
@@ -221,6 +224,7 @@ export const submitOrder = onCall(
             throw new HttpsError("permission-denied", "공구제한 등급은 현재 주문하실 수 없습니다. 관리자에게 문의해주세요.");
         }
 
+        // 2. 상품 정보 조회 (Product & SalesRound)
         const productIds = [...new Set(client.items.map(i => i.productId))];
         const productSnaps = await Promise.all(
           productIds.map(id => db.collection("products").withConverter(productConverter).doc(id).get())
@@ -231,10 +235,13 @@ export const submitOrder = onCall(
           productDataMap.set(s.id, { ...s.data(), id: s.id } as Product);
         }
 
+        // 3. 전체 예약된 재고량 계산 (Global Reserved Stock)
+        // 주의: 여기서 조회하는 ordersSnap에는 '내가 지금 업데이트하려는 주문'도 포함되어 있을 수 있음.
         const reservedMap = new Map<string, number>();
         const ordersQuery = db.collection("orders")
           .withConverter(orderConverter)
           .where("status", "in", ["RESERVED", "PREPAID"]);
+        
         const ordersSnap = await transaction.get(ordersQuery);
         ordersSnap.forEach(doc => {
           const order = doc.data();
@@ -245,94 +252,109 @@ export const submitOrder = onCall(
           }
         });
 
-        // ✅ [수정] 1. 사용자의 기존 주문(RESERVED, PREPAID)을 미리 조회합니다.
+        // 4. 사용자의 기존 활성 주문 조회 (병합 대상 찾기용)
         const userOrdersQuery = db.collection("orders")
             .withConverter(orderConverter)
             .where("userId", "==", userId)
-            .where("status", "in", ["RESERVED", "PREPAID"]);
+            .where("status", "in", ["RESERVED", "PREPAID"]); // 선입금 대기중인 것도 합칠 수 있으면 합침
         const userOrdersSnap = await transaction.get(userOrdersQuery);
 
-        // ✅ [수정] 2. 기존 주문을 ItemId 기준으로 맵에 저장합니다. (빠른 탐색용)
-        const existingItemMap = new Map<string, QueryDocumentSnapshot<Order>>();
+        // ✅ [핵심] 기존 주문 맵핑 (Key: ProductId-RoundId-VariantId-PickupDate)
+        // 같은 상품이라도 픽업 날짜가 다르면 다른 주문으로 처리해야 함.
+        const existingOrderMap = new Map<string, QueryDocumentSnapshot<Order>>();
+        
         userOrdersSnap.docs.forEach(doc => {
-            const item = doc.data().items[0]; // 주문당 1개 아이템 전제
+            const orderData = doc.data();
+            const item = orderData.items[0]; // 시스템상 주문당 1개 아이템
             if (item) {
-                // (productId-roundId-variantGroupId-itemId) 조합으로 고유 키 생성
-                const key = `${item.productId}-${item.roundId}-${item.variantGroupId}-${item.itemId}`;
-                existingItemMap.set(key, doc);
+                // 픽업 날짜 비교를 위해 millis로 변환
+                const pickupMillis = toEpochMillis(orderData.pickupDate) || 0;
+                const key = `${item.productId}-${item.roundId}-${item.variantGroupId}-${pickupMillis}`;
+                existingOrderMap.set(key, doc);
             }
         });
 
-        const txRequestMap = new Map<string, number>();
-        for (const item of client.items) {
-          const product = productDataMap.get(item.productId);
-          if (!product) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
-          const round = product.salesHistory.find(r => r.roundId === item.roundId);
-          if (!round) throw new HttpsError("not-found", "판매 회차 정보를 찾을 수 없습니다.");
-          const vg = round.variantGroups.find(v => v.id === item.variantGroupId) || (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
-          if (!vg) throw new HttpsError("not-found", "옵션 그룹 정보를 찾을 수 없습니다.");
-          const required = item.quantity * (item.stockDeductionAmount || 1);
-          const key = `${item.productId}-${item.roundId}-${vg.id || 'default'}`;
-          txRequestMap.set(key, (txRequestMap.get(key) || 0) + required);
-
-          if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
-            const alreadyReserved = reservedMap.get(key) || 0;
-            const after = alreadyReserved + (txRequestMap.get(key) || 0);
-            if (after > vg.totalPhysicalStock) {
-              const remain = Math.max(0, vg.totalPhysicalStock - alreadyReserved);
-              throw new HttpsError("failed-precondition", `재고 부족: ${product.groupName} - ${vg.groupName} (가능 수량: ${remain})`);
-            }
-          }
-        }
-
-        // ✅ [수정] 3. 생성/업데이트된 ID를 분리하여 저장
         const createdOrderIds: string[] = [];
         const updatedOrderIds: string[] = [];
         const phoneLast4 = (client.customerInfo?.phone || "").slice(-4);
 
-        for (const single of client.items) { // 'single'이 프론트에서 보낸 추가할 아이템
+        // 5. 주문 처리 루프
+        for (const singleItem of client.items) {
           
-          // ✅ [수정] 4. 이 아이템이 기존 주문 맵에 있는지 확인
-          const itemKey = `${single.productId}-${single.roundId}-${single.variantGroupId}-${single.itemId}`;
-          const existingOrderDoc = existingItemMap.get(itemKey);
+          const product = productDataMap.get(singleItem.productId);
+          if (!product) throw new HttpsError("not-found", "상품 정보를 찾을 수 없습니다.");
+          
+          const round = product.salesHistory.find(r => r.roundId === singleItem.roundId);
+          if (!round) throw new HttpsError("not-found", "판매 회차 정보를 찾을 수 없습니다.");
+          
+          const vg = round.variantGroups.find(v => v.id === singleItem.variantGroupId) || (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
+          if (!vg) throw new HttpsError("not-found", "옵션 그룹 정보를 찾을 수 없습니다.");
 
-          if (existingOrderDoc) {
-              // --- (A) 기존 주문이 있으면: UPDATE ---
-              const existingOrder = existingOrderDoc.data();
+          // 재고 체크 (재고는 '옵션 그룹' 단위로 관리된다고 가정)
+          const stockKey = `${singleItem.productId}-${singleItem.roundId}-${vg.id || 'default'}`;
+          const currentReserved = reservedMap.get(stockKey) || 0;
+          const requiredAmount = singleItem.quantity * (singleItem.stockDeductionAmount || 1);
+
+          // 재고 부족 여부 확인
+          if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
+             // 남은 재고 = 전체 - 현재까지 예약된 양
+             // 참고: 만약 '기존 주문 업데이트'라면, 기존 주문의 수량은 이미 currentReserved에 포함되어 있음.
+             // 따라서 requiredAmount(추가분)만 남은 재고(remaining)보다 작으면 됨.
+             const remaining = vg.totalPhysicalStock - currentReserved;
+             if (requiredAmount > remaining) {
+                throw new HttpsError("failed-precondition", `재고 부족: ${product.groupName} - ${vg.groupName} (주문가능: ${Math.floor(remaining / (singleItem.stockDeductionAmount || 1))}개)`);
+             }
+          }
+
+          // 병합 키 생성
+          // 클라이언트에서 보낸 item의 pickupDate 혹은 round의 pickupDate 사용
+          // (보통 item.pickupDate가 우선순위를 가짐)
+          const targetPickupDate = singleItem.pickupDate ? singleItem.pickupDate : round.pickupDate;
+          const targetPickupMillis = toEpochMillis(targetPickupDate) || 0;
+          
+          const mergeKey = `${singleItem.productId}-${singleItem.roundId}-${singleItem.variantGroupId}-${targetPickupMillis}`;
+          const existingDoc = existingOrderMap.get(mergeKey);
+
+          if (existingDoc) {
+              // =================================================
+              // (A) 기존 주문 병합 (UPDATE)
+              // =================================================
+              const existingOrder = existingDoc.data();
               const existingItem = existingOrder.items[0];
-              const newQuantity = existingItem.quantity + single.quantity;
+              
+              const newQuantity = existingItem.quantity + singleItem.quantity;
               const newTotalPrice = existingItem.unitPrice * newQuantity;
 
-              const updatedItem = { ...existingItem, quantity: newQuantity };
+              const updatedItem = { 
+                  ...existingItem, 
+                  quantity: newQuantity 
+                  // 주의: stockDeduction 등은 기존 값 유지하거나 최신으로 갱신
+              };
               
-              transaction.update(existingOrderDoc.ref, {
+              transaction.update(existingDoc.ref, {
                   items: [updatedItem],
                   totalPrice: newTotalPrice,
-                  notes: (existingOrder.notes || "") + `\n[수량 추가] ${single.quantity}개 추가 (총 ${newQuantity}개)`
+                  notes: (existingOrder.notes || "") + `\n[추가주문] +${singleItem.quantity}개 (총 ${newQuantity}개)`
               });
-              updatedOrderIds.push(existingOrderDoc.id);
+              updatedOrderIds.push(existingDoc.id);
+
+              // 한 트랜잭션 내에서 같은 상품을 또 주문할 경우 대비 (재고 맵 업데이트)
+              reservedMap.set(stockKey, currentReserved + requiredAmount);
 
           } else {
-              // --- (B) 기존 주문이 없으면: CREATE (기존 로직) ---
-              const product = productDataMap.get(single.productId);
-              if (!product) {
-                throw new HttpsError("internal", `주문 처리 중 오류 발생: 상품 정보를 찾을 수 없습니다 (ID: ${single.productId})`);
-              }
-              const round = product.salesHistory.find(r => r.roundId === single.roundId)!;
-              if (!round?.pickupDate) {
-                throw new HttpsError("invalid-argument", "상품의 픽업 날짜가 설정되지 않았습니다.");
-              }
-
+              // =================================================
+              // (B) 신규 주문 생성 (CREATE)
+              // =================================================
               const newOrderRef = db.collection("orders").doc();
               const newOrder: Omit<Order, "id"> = {
                 userId,
                 customerInfo: { ...client.customerInfo, phoneLast4 },
-                items: [single], // 1개 아이템 배열
-                totalPrice: single.unitPrice * single.quantity,
+                items: [singleItem], 
+                totalPrice: singleItem.unitPrice * singleItem.quantity,
                 orderNumber: `SODOMALL-${Date.now()}-${createdOrderIds.length}`,
                 status: "RESERVED",
                 createdAt: AdminTimestamp.now(),
-                pickupDate: round.pickupDate,
+                pickupDate: targetPickupDate, // 정확한 픽업일 저장
                 pickupDeadlineDate: round.pickupDeadlineDate ?? null,
                 notes: client.notes ?? "",
                 isBookmarked: false,
@@ -341,10 +363,12 @@ export const submitOrder = onCall(
 
               transaction.set(newOrderRef, newOrder);
               createdOrderIds.push(newOrderRef.id);
+
+              // 재고 맵 업데이트
+              reservedMap.set(stockKey, currentReserved + requiredAmount);
           }
         }
 
-        // ✅ [수정] 5. 생성/업데이트된 ID를 구분하여 반환
         return { success: true, orderIds: createdOrderIds, updatedOrderIds };
       });
 
