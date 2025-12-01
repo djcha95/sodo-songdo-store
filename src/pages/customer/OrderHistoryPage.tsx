@@ -97,11 +97,9 @@ const usePaginatedOrders = (uid?: string) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
-  const [lastVisible, setLastVisible] = useState<{
-    pickupDate: Timestamp | null;
-    createdAt: Timestamp | null;
-  } | null>(null);
-  const lastVisibleRef = useRef(lastVisible);
+  // ✅ [변경] 이제 커서는 복잡한 객체가 아니라 'createdAt(Timestamp)' 하나만 사용합니다.
+  const [lastVisible, setLastVisible] = useState<Timestamp | null>(null);
+  const lastVisibleRef = useRef<Timestamp | null>(lastVisible);
   lastVisibleRef.current = lastVisible;
 
   const fetchOrders = useCallback(
@@ -117,33 +115,44 @@ const usePaginatedOrders = (uid?: string) => {
 
       try {
         const ordersRef = collection(db, "orders");
-        // ✅ [유지] 10개씩 끊어서 가져오면 대략 최근 주문 위주로 먼저 보임
+
+        // ✅ [핵심 수정 1] 쿼리에서 'pickupDate' 정렬을 제거했습니다.
+        // 이제 pickupDate가 없는 예전 데이터도 필터링되지 않고 모두 가져옵니다.
         const queryConstraints: QueryConstraint[] = [
           where("userId", "==", uid),
-          orderBy("pickupDate", "desc"),
-          orderBy("createdAt", "desc"),
+          orderBy("createdAt", "desc"), // 생성일 기준 정렬만 유지
           limit(10),
         ];
 
-        const cursorPayload = isInitial ? null : lastVisibleRef.current;
-        if (cursorPayload?.pickupDate && cursorPayload?.createdAt) {
-          queryConstraints.push(startAfter(cursorPayload.pickupDate, cursorPayload.createdAt));
+        // ✅ [변경] 커서도 createdAt 하나만 사용합니다.
+        const cursor = isInitial ? null : lastVisibleRef.current;
+        if (cursor) {
+          queryConstraints.push(startAfter(cursor));
         }
 
         const q = query(ordersRef, ...queryConstraints);
         const snapshot = await getDocs(q);
 
+        // ✅ [핵심 수정 2] 데이터 매핑 시 fallback 로직 추가
         const newOrders = snapshot.docs.map((doc) => {
           const data = doc.data();
+
+          const realCreatedAt = safeToDate(data.createdAt);
+          const realPickupDate = safeToDate(data.pickupDate);
+
+          // 픽업일이 없으면 생성일을 대신 사용 -> UI 그룹핑이 정상 작동함
+          const effectivePickupDate = realPickupDate || realCreatedAt || null;
+
           return {
             ...data,
             id: doc.id,
-            createdAt: safeToDate(data.createdAt),
-            pickupDate: safeToDate(data.pickupDate),
+            createdAt: realCreatedAt,
+            pickupDate: effectivePickupDate,
           } as unknown as Order;
         });
 
-        setOrders(prev => {
+        // 기존의 중복 제거 및 데이터 합치기 로직 유지
+        setOrders((prev) => {
           const combined = isInitial ? newOrders : [...prev, ...newOrders];
           const map = new Map<string, Order>();
           combined.forEach((order) => {
@@ -152,24 +161,32 @@ const usePaginatedOrders = (uid?: string) => {
           return Array.from(map.values());
         });
 
+        // ✅ [변경] 다음 페이지를 위한 커서 업데이트 (createdAt 기준)
         const lastDoc = snapshot.docs[snapshot.docs.length - 1];
         if (lastDoc) {
           const lastDocData = lastDoc.data();
-          setLastVisible({
-            pickupDate: lastDocData.pickupDate as Timestamp,
-            createdAt: lastDocData.createdAt as Timestamp,
-          });
+          const lastCreatedAt = lastDocData.createdAt as Timestamp | undefined;
+
+          if (lastCreatedAt) {
+            setLastVisible(lastCreatedAt);
+          } else {
+            // createdAt조차 없으면 더 이상 페이지네이션 불가
+            setLastVisible(null);
+            setHasMore(false);
+          }
         } else {
           setLastVisible(null);
           setHasMore(false);
         }
 
+        // 10개 미만이면 더 이상 데이터 없음
         if (newOrders.length < 10) setHasMore(false);
+
       } catch (error: any) {
         console.error("Order fetching error:", error);
-        setHasMore(false); 
+        setHasMore(false);
         setLastVisible(null);
-        
+
         if (error.code === "failed-precondition") {
           showToast("error", "DB 인덱스 필요 (콘솔 확인)");
         } else {
@@ -203,7 +220,6 @@ const usePaginatedOrders = (uid?: string) => {
 
   return { orders, setOrders, loading, loadingMore, hasMore, loadMore };
 };
-
 // 수량 조절 컴포넌트
 const QuantityControls: React.FC<{
   order: Order;
