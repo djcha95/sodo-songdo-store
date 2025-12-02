@@ -2,20 +2,36 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    
-    <link rel="icon" type="image/png" href="/sodomall-logo.png" />
-    
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sodomall</title>
 
-    <meta property="og:title" content="소도몰 - 초특가 공동구매마켓" />
-    <meta property="og:description" content="소비자도 도매가로!" />
-    <meta property="og:image" content="https://www.sodo-songdo.store/sodomall_wel.png" />
-    <meta property="og:url" content="https://www.sodo-songdo.store/" />
-    <meta property="og:site_name" content="소도몰" />
+    <!-- ✅ favicon (로고 아이콘) -->
+    <link rel="icon" type="image/png" href="/songdopick-logo.png" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SONGDOPICK - 송도주민의 똑똑한 쇼핑생활</title>
+
+    <!-- ✅ 카카오톡 / 인스타그램 / 메시지 공유 시 미리보기 -->
+    <meta property="og:title" content="SONGDOPICK - 송도주민의 똑똑한 쇼핑생활" />
+    <meta
+      property="og:description"
+      content="송도 이웃과 함께 즐기는 프리미엄 공동구매 플랫폼, SONGDOPICK."
+    />
+    <meta
+      property="og:image"
+      content="https://www.songdopick.kr/songdopick_og.png"
+    />
+    <meta property="og:url" content="https://www.songdopick.kr/" />
+    <meta property="og:site_name" content="SONGDOPICK" />
     <meta property="og:type" content="website" />
-    
+
     <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #ffffff;
+        color: #000000;
+        font-family: "Pretendard", "Noto Sans KR", sans-serif;
+      }
+
       #app-loading-indicator {
         position: fixed;
         top: 0;
@@ -25,28 +41,35 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        background-color: #f8f9fa;
+        background-color: #ffffff;
         z-index: 9999;
       }
+
       .initial-spinner {
         width: 40px;
         height: 40px;
         border: 4px solid rgba(0, 0, 0, 0.1);
-        border-left-color: #4B8B3B; /* Primary color */
+        border-left-color: #000000; /* 브랜드 컬러 블랙 */
         border-radius: 50%;
         animation: spin 1s linear infinite;
       }
+
       @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+          transform: rotate(360deg);
+        }
       }
     </style>
   </head>
   <body>
+    <!-- ✅ 사이트 초기 로딩 시 표시 -->
     <div id="root">
       <div id="app-loading-indicator">
         <div class="initial-spinner"></div>
       </div>
     </div>
+
+    <!-- ✅ React 엔트리포인트 -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
