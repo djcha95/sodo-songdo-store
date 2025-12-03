@@ -71,7 +71,7 @@ const calculateServerSideMissionStatus = async (
 
 
 export const claimMissionReward = https.onCall({
-  cors: [/localhost:\d+/, "https://sodo-songdo.store", "https://www.sodo-songdo.store"],
+  cors: [/localhost:\d+/, "https://sodo-songdo.store", "https://www.sodo-songdo.store", "https://songdopick.store", "https://www.songdopick.store"],
   region: "asia-northeast3",
 }, async (request) => {
   if (!request.auth) {

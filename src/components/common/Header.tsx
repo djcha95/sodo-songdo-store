@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTabs } from '@/layouts/CustomerLayout';
-import { Flame, Clock, ShieldCheck, ShoppingBag, ArrowLeft, ArrowRight } from 'lucide-react'; 
+import { Flame, Clock, ShieldCheck } from 'lucide-react'; 
 import './Header.css';
 
 const Header: React.FC = () => {
@@ -23,12 +23,11 @@ const Header: React.FC = () => {
 
   const isHistoryPage = location.pathname === '/mypage/history';
   
-  // ✅ 스위칭 버튼 로직
+  // ✅ 스위칭 버튼 로직 (텍스트 약간 수정)
   const navButtonConfig = isHistoryPage
-    ? { to: '/', label: '쇼핑하기', styleClass: 'shop-mode' } 
+    ? { to: '/', label: '홈으로', styleClass: 'shop-mode' } 
     : { to: '/mypage/history', label: '예약내역', styleClass: 'history-mode' };
 
-  // 탭 표시 여부
   const shouldShowTabs = location.pathname.startsWith('/simple');
   const isOnLegacyOrderPage = location.pathname.startsWith('/simple');
 
@@ -80,8 +79,8 @@ const Header: React.FC = () => {
           ) : (
             <div className="header-brand">
               <NavLink to="/" className="brand-link">
-                {/* 🎄 크리스마스 분위기 로고 */}
-                🎄 송도공구마켓
+                {/* 🎄 크리스마스 분위기 로고 + 송도픽 네이밍 */}
+                🎄 송도PICK
               </NavLink>
             </div>
           )}

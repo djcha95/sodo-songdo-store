@@ -1,6 +1,6 @@
 // /api/og.js  (ESM, Node 18+)
-const ABS_BASE = 'https://www.sodo-songdo.store';           // ← 배포 도메인
-const FALLBACK_IMG = `${ABS_BASE}/sodomall-preview.png`;     // ← 이미지 없을 때 대체 이미지
+const ABS_BASE = 'https://www.songdopick.store';               // ✅ [수정] index.html 기준 도메인 변경
+const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`;       // ✅ [수정] index.html 기준 OG 이미지 변경
 const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
 
 // 텍스트 가공 유틸: HTML 제거 → 공백 정리 → 180자 자르기
@@ -61,9 +61,9 @@ export default async function handler(req, res) {
   const id = req.query?.id ? String(req.query.id) : '';
   const pageUrl = id ? `${ABS_BASE}/product/${encodeURIComponent(id)}` : ABS_BASE;
 
-  // 기본값(폴백)
-  let title = id ? '상품 미리보기' : '소도몰';
-  let description = '소도몰에서 특별한 상품을 만나보세요!';
+  // ✅ [수정] 기본값: index.html의 메타 태그 내용과 일치시킴
+  let title = id ? '상품 미리보기' : 'SONGDOPICK - 송도주민의 똑똑한 쇼핑생활';
+  let description = '송도 이웃과 함께 즐기는 프리미엄 공동구매 플랫폼, SONGDOPICK.';
   let image = FALLBACK_IMG;
 
   // 상품 데이터 불러오기
@@ -101,8 +101,9 @@ export default async function handler(req, res) {
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:url" content="${esc(pageUrl)}" />
-<meta property="og:site_name" content="소도몰" />
-<meta property="og:type" content="product" />
+<!-- ✅ [수정] 사이트명 변경 -->
+<meta property="og:site_name" content="SONGDOPICK" />
+<meta property="og:type" content="${id ? 'product' : 'website'}" />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />

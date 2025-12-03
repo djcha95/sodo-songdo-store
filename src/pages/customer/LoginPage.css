@@ -4,94 +4,125 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  /* [수정] 배경색을 약간 푸른 빛이 도는 하얀색으로 변경 */
-  background-color: #f7f9fc;
+  min-height: 100vh;
+  /* 깨끗한 웜 화이트 배경 */
+  background-color: #f9fafb;
   padding: 20px;
   box-sizing: border-box;
 }
 
 .login-box {
   background-color: #ffffff;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 48px 32px;
+  border-radius: 20px; /* 더 부드러운 곡선 */
+  /* 그림자는 은은하고 고급스럽게 */
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   text-align: center;
   box-sizing: border-box;
-  animation: fadeIn 0.8s ease-in-out;
+  border: 1px solid #f0f0f0;
+  animation: fadeIn 0.6s ease-out;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(15px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* 브랜드 영역 */
+.brand-area {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .title {
-  margin-bottom: -14px;
-  /* [수정] 브랜드 색상에 맞춰 파랑색으로 */
-  color: #007bff;
-  font-size: 36px;
+  margin: 0;
+  /* 🎄 크리스마스 포인트: 진한 레드 */
+  color: #B91C1C;
+  font-family: "Pretendard", sans-serif;
+  font-size: 32px;
   font-weight: 800;
   letter-spacing: -1px;
+  line-height: 1.2;
+}
+
+.brand-en {
+  font-size: 12px;
+  font-weight: 600;
+  color: #B91C1C; /* 로고와 동일 계열 */
+  letter-spacing: 2px;
+  margin-top: 4px;
+  opacity: 0.8;
 }
 
 .subtitle {
-  margin-top: 15px;
-  margin-bottom: 10px;
-  color: #666; /* 텍스트 색상 조정 */
-  font-size: 16px; /* 폰트 크기가 지정되지 않아 추가했습니다. */
+  margin-top: 12px;
+  margin-bottom: 40px;
+  color: #555; /* 차분한 그레이 */
+  font-size: 16px;
   font-weight: 500;
+  word-break: keep-all;
 }
 
 .social-login-options {
-  margin-top: 25px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 12px;
 }
 
-/* [수정] 카카오 로그인 버튼 디자인 - 노란색으로 복구 */
+/* 카카오 로그인 버튼 */
 .kakao-login-button {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 18px;
-  background-color: #fee500;
-  color: #3c1e1e;
+  padding: 16px;
+  background-color: #FEE500; /* 카카오 공식 컬러 */
+  color: #191919; /* 가독성 좋은 블랙 */
   border: none;
   border-radius: 12px;
-  font-size: 18px;
-  font-weight: bold;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-  box-shadow: 0 4px 15px rgba(254, 229, 0, 0.4);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .kakao-login-button:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(254, 229, 0, 0.6);
+  background-color: #fadd00;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .kakao-login-button:active {
   transform: translateY(0);
-  box-shadow: 0 2px 10px rgba(254, 229, 0, 0.4);
 }
 
 .kakao-login-button:disabled {
-  background-color: #f7e68a;
+  background-color: #f2f2f2;
+  color: #999;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
 .error-message {
-  color: #d9534f; /* 오류 색상 조정 */
-  font-size: 14px;
-  margin-top: 15px; /* 버튼과의 간격 추가 */
-  margin-bottom: -10px; /* 아래쪽 여백 조정 */
-  line-height: 1.5;
+  color: #DC2626; /* 에러는 밝은 레드 */
+  font-size: 13px;
+  margin-top: 16px;
 }
-/* 마지막에 있던 불필요한 '}'를 제거했습니다. */
+
+.login-footer {
+  margin-top: 32px;
+  border-top: 1px solid #eee;
+  padding-top: 16px;
+}
+
+.login-footer p {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
+}

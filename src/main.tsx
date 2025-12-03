@@ -25,7 +25,7 @@ const SimpleOrderPage = React.lazy(() => import('./pages/customer/SimpleOrderPag
 
 // ✅ 모던 디자인 (이제 메인 페이지!)
 const ModernProductList = React.lazy(() => import('./pages/customer/ModernProductList')); 
-
+const BeautyProductList = React.lazy(() => import('./pages/customer/BeautyProductList'));
 const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetailPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
@@ -124,6 +124,15 @@ const router = createBrowserRouter([
                   { path: "product/:productId", element: <ProductDetailPage /> }
                 ]
               },
+
+              { 
+  path: "beauty", 
+  element: <BeautyProductList />,
+  // 뷰티 페이지에서 상품 상세로 들어갈 때를 대비해 자식 라우트 추가
+  children: [
+    { path: "product/:productId", element: <ProductDetailPage /> }
+  ]
+},
 
               { path: "mypage/history", element: <OrderHistoryPage /> },
             ]

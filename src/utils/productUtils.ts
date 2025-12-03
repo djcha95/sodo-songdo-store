@@ -69,7 +69,13 @@ export const safeToDate = (date: any): Date | null => {
   return null;
 };
 
-// ✅ [핵심 수정] 1시 룰 강제 적용
+// 헬퍼: 주어진 날짜의 오후 2시(14:00) 구하기
+const getOpenTime = (date: Date | null): Date | null => {
+  if (!date) return null;
+  // 입력된 날짜의 시/분/초를 무시하고 14:00:00으로 강제 설정
+  return dayjs(date).hour(14).minute(0).second(0).millisecond(0).toDate();
+};
+
 export const getDeadlines = (round: OriginalSalesRound): { primaryEnd: dayjs.Dayjs | null, secondaryEnd: dayjs.Dayjs | null } => {
   const publishAt = safeToDate(round.publishAt);
   const deadlineDate = safeToDate(round.deadlineDate);
@@ -114,15 +120,17 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
     // 2차 마감까지 지났거나 수동/DB 종료이면 최하위
     if ((secondaryEnd && now.isAfter(secondaryEnd)) || round.manualStatus === 'ended' || round.status === 'ended') return 5;
     
-    const publishAt = safeToDate(round.publishAt);
+    // ✅ [수정] 원본 날짜 대신 '오후 2시' 적용된 날짜 사용
+    const rawPublishAt = safeToDate(round.publishAt);
+    const publishAt = getOpenTime(rawPublishAt); // 14:00 적용
 
-    // 1순위: 'scheduled'이나 발행일 지남
+    // 1순위: 'scheduled'이나 발행일(14:00) 지남 -> 판매중
     if (round.status === 'scheduled' && publishAt && now.isSameOrAfter(publishAt)) return 1;
 
-    // 2순위: 'selling' 중
+    // 2순위: DB상 상태가 이미 'selling'인 경우
     if (round.status === 'selling') return 2;
 
-    // 3순위: 미래에 판매 예정
+    // 3순위: 미래에 판매 예정 (14:00 전)
     if (round.status === 'scheduled' && publishAt && now.isBefore(publishAt)) return 3;
 
     return 4; // 기타 상태
@@ -130,23 +138,17 @@ export const getDisplayRound = (product: Product): OriginalSalesRound | null => 
 
   const sortedHistory = [...product.salesHistory]
     .filter(r => {
-      // Draft 상태 제외
       if (r.status === 'draft') return false;
-
-      // ✅ [수정] deadlineDate는 없어도 됩니다(자동계산). publishAt만 있으면 표시!
       const pDate = safeToDate(r.publishAt);
       if (!pDate) return false; 
-
       return true;
     })
     .sort((a, b) => {
       const priorityA = getPhasePriority(a);
       const priorityB = getPhasePriority(b);
 
-      // 우선순위가 다르면 우선순위 낮은(숫자 작은) 것부터
       if (priorityA !== priorityB) return priorityA - priorityB;
 
-      // 우선순위가 같으면 '생성일' 최신순으로
       return (safeToDate(b.createdAt)?.getTime() ?? 0) - (safeToDate(a.createdAt)?.getTime() ?? 0);
     });
 
@@ -161,10 +163,14 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
 
   // 1. 판매 기간 확인
   const now = dayjs();
-  const publishAt = safeToDate(round.publishAt);
+  
+  // ✅ [수정] 오픈 시간을 해당일의 14:00:00으로 강제 변환
+  const rawPublishAt = safeToDate(round.publishAt);
+  const publishAt = getOpenTime(rawPublishAt); 
+
   const { primaryEnd, secondaryEnd } = getDeadlines(round);
 
-  // 1A. 아직 판매 시작 전이면 '판매 예정'
+  // 1A. 아직 판매 시작 전(14:00 전)이면 '판매 예정'
   if (publishAt && now.isBefore(publishAt)) {
     return 'SCHEDULED';
   }
@@ -185,7 +191,6 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
   };
 
   // 3. 재고 상태와 판매 기간에 따라 상태 결정
-  // 재고가 없거나 수동 품절인 경우 'AWAITING_STOCK' 반환
   if (isAllOptionsSoldOut() || round.manualStatus === 'sold_out') {
     return 'AWAITING_STOCK';
   }
@@ -195,7 +200,6 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
 
   if (!hasMultipleOptions) {
     const stockInfo = getStockInfo(round.variantGroups[0] as VariantGroup);
-    // 단일 옵션인 경우에도 재고가 0인지 다시 확인 (isAllOptionsSoldOut에서 확인했지만 안전 장치)
     if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
       return 'AWAITING_STOCK';
     }

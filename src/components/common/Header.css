@@ -1,16 +1,17 @@
 /* src/components/common/Header.css */
 
 .new-customer-header {
-  background-color: rgba(255, 255, 255, 0.95); /* 살짝 투명도 줘서 배경 비치게 */
-  backdrop-filter: blur(8px); /* 블러 효과 */
-  border-bottom: 1px solid #FECACA; /* 🎄 테두리를 연한 빨강으로 변경 */
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  /* 🎄 테두리: 연한 크리스마스 레드 */
+  border-bottom: 1px solid #FECACA;
   position: sticky;
   top: 0;
   width: 100%;
   z-index: 1010;
   height: 60px;
   transition: top 0.3s ease-in-out;
-  box-shadow: 0 2px 10px rgba(185, 28, 28, 0.05); /* 그림자도 아주 연한 붉은빛 */
+  box-shadow: 0 2px 10px rgba(185, 28, 28, 0.05);
 }
 
 .new-customer-header.visible { top: 0; }
@@ -55,6 +56,9 @@
   position: relative;
   transition: color 0.2s ease-in-out;
   white-space: nowrap;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 .page-tab::after {
   content: '';
@@ -70,23 +74,22 @@
 .page-tab.active { color: var(--text-color-dark); }
 .page-tab.active::after { transform: scaleX(1); }
 
-/* 🎄 탭 활성화 색상 변경 */
-.page-tab.primary.active { color: #DC2626; } /* 크리스마스 레드 */
+/* 🎄 탭 활성화 색상: 레드 & 그린 */
+.page-tab.primary.active { color: #DC2626; }
 .page-tab.primary.active::after { background-color: #DC2626; }
 
-.page-tab.secondary.active { color: #15803d; } /* 크리스마스 그린 */
+.page-tab.secondary.active { color: #15803d; }
 .page-tab.secondary.active::after { background-color: #15803d; }
 
-/* 🎄 1. 브랜드 로고: 크리스마스 레드 스타일 */
+/* 🎄 브랜드 로고: 송도픽 스타일 */
 .header-brand .brand-link {
-  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 1.45rem; 
-  font-weight: 900; 
-  color: #B91C1C; /* 🎄 진한 레드 컬러 */
+  font-weight: 800; /* 조금 더 굵게 */
+  color: #B91C1C; /* 🎄 크리스마스 레드 */
   text-decoration: none;
-  letter-spacing: -1.0px; 
+  letter-spacing: -1px; 
   line-height: 1;
-  text-shadow: 0 1px 2px rgba(185, 28, 28, 0.1); /* 살짝 입체감 */
 }
 
 /* --- 오른쪽 네비게이션 --- */
@@ -118,10 +121,10 @@
 .header-nav .nav-item.modern-text-btn {
   font-size: 0.9rem;
   font-weight: 700;
-  padding: 10px 18px; 
-  border-radius: 8px; /* 조금 더 둥글게 */
+  padding: 9px 16px; 
+  border-radius: 10px; /* 약간 더 둥글게 */
   transition: all 0.2s ease;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.08); 
+  box-shadow: 0 2px 4px rgba(0,0,0,0.06); 
   margin-right: 4px; 
   display: inline-flex;
   align-items: center;
@@ -129,16 +132,16 @@
 }
 
 .header-nav .nav-item.modern-text-btn:hover {
-  transform: translateY(1px);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.08);
 }
 .header-nav .nav-item.modern-text-btn:active {
-  transform: translateY(2px);
+  transform: translateY(1px);
 }
 
-/* 🎄 2. 예약내역 버튼 - 크리스마스 트리 (Deep Green) */
+/* 🎄 예약내역 버튼 (Deep Green) */
 .header-nav .nav-item.modern-text-btn.history-mode {
-  background-color: #15803d !important; /* 🎄 진한 초록 */
+  background-color: #15803d !important;
   color: #ffffff !important; 
   border: 1px solid #14532d; 
 }
@@ -146,11 +149,12 @@
   background-color: #166534 !important;
 }
 
-/* 🎄 3. 쇼핑하기 버튼 - 산타 레드 (Bright Red) */
+/* 🎄 홈/쇼핑하기 버튼 (Bright Red) */
 .header-nav .nav-item.modern-text-btn.shop-mode {
-  background-color: #DC2626 !important; /* 🎄 밝은 빨강 */
+  background-color: #DC2626 !important;
   color: #ffffff !important;
   border: 1px solid #B91C1C;
+  /* 애니메이션 유지 */
   animation: pulse-soft 2s infinite;
 }
 
@@ -159,25 +163,9 @@
 }
 
 @keyframes pulse-soft {
-  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); } /* 빨간 그림자 */
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); } 
   70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
   100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-}
-
-/* 장바구니 아이콘 */
-.nav-icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #334155;
-  transition: color 0.2s;
-}
-.nav-icon-btn:hover {
-  color: #B91C1C; /* 호버시 레드 */
 }
 
 /* 관리자 버튼 */

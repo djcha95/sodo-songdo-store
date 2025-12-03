@@ -18,6 +18,8 @@ export const allowedOrigins = [
   "https://sodomall.vercel.app",
   "https://sodo-songdo.store",
   "https://www.sodo-songdo.store",
+  "https://songdopick.store",      // 새 도메인
+  "https://www.songdopick.store",  // 새 도메인 www
 ];
 
 // onRequest 핸들러에서 App Check 검증이 필요할 때 사용

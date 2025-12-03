@@ -6,7 +6,9 @@
       "http://127.0.0.1:5173",
       "https://sso-do.web.app",
       "https://sso-do.firebaseapp.com",
-      "https://sodo-songdo.store"
+      "https://sodo-songdo.store",
+      "https://songdopick.store",
+      "https://www.songdopick.store"
     ],
     "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
     "responseHeader": ["*"],

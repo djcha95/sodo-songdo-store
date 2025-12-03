@@ -8,13 +8,11 @@ import React, {
   useRef,
 } from 'react';
 import { useAuth } from '@/context/AuthContext';
-// 👇 getPaginatedProductsWithStock 외에 이벤트 상품만 가져오는 함수가 필요합니다.
-// 만약 서비스 파일에 없다면 아래 useEffect 안에서 직접 구현하거나 서비스에 추가해야 합니다.
 import { getPaginatedProductsWithStock } from '@/firebase/productService'; 
-import { getFirestore, collection, query, where, getDocs, orderBy } from 'firebase/firestore'; // 👈 직접 쿼리용 (임시)
-import { getApp } from 'firebase/app'; // 👈 Firebase App
+import { getFirestore, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { getApp } from 'firebase/app';
 
-import type { Product } from '@/shared/types';
+import type { Product, SalesRound } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import ModernProductCard from '@/components/customer/ModernProductCard';
 import {
@@ -27,6 +25,8 @@ import { usePageRefs } from '@/layouts/CustomerLayout';
 import { Outlet, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import Snowfall from 'react-snowfall';
+import { ChevronRight, Gift } from 'lucide-react'; // ✅ Gift 아이콘 추가
+import { showToast } from '@/utils/toastUtils'; // ✅ 토스트 메시지 추가
 import '@/styles/ModernProduct.css';
 
 // ✅ 탭 구성
@@ -43,8 +43,9 @@ const ModernProductList: React.FC = () => {
   const navigate = useNavigate();
   const { userDocument } = useAuth();
 
-  // ✅ 1. 이벤트(Hero) 상품을 위한 별도 state 추가
+  // ✅ 1. 이벤트(Hero) & 뷰티(Beauty) 상품을 위한 state
   const [heroProducts, setHeroProducts] = useState<Product[]>([]);
+  const [beautyProducts, setBeautyProducts] = useState<Product[]>([]);
   const [heroLoading, setHeroLoading] = useState(true);
 
   // 일반 상품 state
@@ -74,52 +75,45 @@ const ModernProductList: React.FC = () => {
     lastVisibleRef.current = lastVisible;
   }, [lastVisible]);
 
-  // ✅ 2. [신규 로직] 이벤트 상품만 별도로 '먼저' 불러오기
-  // 페이지네이션(스크롤)을 기다리지 않고 즉시 로딩합니다.
+  // ✅ 2. [신규 로직] 이벤트 및 뷰티 상품 먼저 불러오기
   useEffect(() => {
-    const fetchHeroProducts = async () => {
+    const fetchSpecialProducts = async () => {
       try {
-        // ※ 주의: 아래는 예시 쿼리입니다. 실제 DB 구조(컬렉션명, 필드명)에 맞춰야 합니다.
-        // 보통 'rounds'나 'products'에서 eventType이 NONE이 아닌 것을 쿼리합니다.
-        // 만약 productService에 'getActiveEventProducts()' 같은 함수를 만들었다면 그걸 쓰세요.
+        const { products: fetched } = await getPaginatedProductsWithStock(100, null, null, 'all'); 
         
-        const db = getFirestore(getApp());
-        // 예: 현재 진행중이고, 이벤트 타입이 있는 라운드/상품을 가져온다고 가정
-        // (실제로는 기존 getPaginatedProductsWithStock 로직을 참고하여 필터링만 다르게 적용)
-        
-        // 💡 팁: 가장 쉬운 방법은 '페이지네이션 없이' getPaginatedProductsWithStock을 
-        // 탭이 'all'일 때 한 50개 정도 넉넉히 가져와서 클라이언트에서 필터링하는 방법도 있지만,
-        // 여기서는 "이벤트"만 타겟팅하는 별도 쿼리를 권장합니다.
-        
-        // 임시 방편: 일단 로직 분리를 위해 기존 함수를 쓰되, 
-        // 실제로는 '이벤트 상품만 가져오는 API'를 호출하는 것이 정석입니다.
-        // 여기선 "기존 리스트와 별개로 동작한다"는 구조를 잡습니다.
-        
-        // (가상 코드: 이벤트 상품 전용 Fetch)
-        const { products: events } = await getPaginatedProductsWithStock(50, null, null, 'all'); 
-        
-        // 받아온 것 중 진짜 이벤트 상품만 골라내기
-        const filteredEvents = events.filter(p => {
-             const r = getDisplayRound(p);
-             return r && r.eventType && r.eventType !== 'NONE';
+        // 1) 이벤트 상품 필터
+        const events = fetched.filter(p => {
+           const r = getDisplayRound(p);
+           const hasEventTag = r && r.eventType && r.eventType !== 'NONE';
+           if (!hasEventTag) return false;
+           const actionState = determineActionState(r, null); 
+           return actionState !== 'ENDED'; 
         });
+        setHeroProducts(events);
+        
+        // 2) 뷰티 상품 필터 (이벤트 타입이 COSMETICS인 것들)
+        // 현재는 '아무것도 없는' 상태이므로 빈 배열일 확률이 높지만 로직은 유지
+        const beauty = fetched.filter(p => {
+          const r = getDisplayRound(p);
+          return r && r.eventType === 'COSMETICS';
+        });
+        setBeautyProducts(beauty);
 
-        setHeroProducts(filteredEvents);
       } catch (e) {
-        console.error("이벤트 상품 로드 실패", e);
+        console.error("특수 상품 로드 실패", e);
       } finally {
         setHeroLoading(false);
       }
     };
 
-    fetchHeroProducts();
+    fetchSpecialProducts();
   }, []);
 
   // 3. 탭 변경 로직 (일반 상품)
   useEffect(() => {
     const loadTabProducts = async () => {
       setLoading(true);
-      setProducts([]); // 탭 바뀔 때 일반 상품 초기화
+      setProducts([]); 
       setLastVisible(null);
       setHasMore(true);
       autoFetchCount.current = 0;
@@ -150,7 +144,7 @@ const ModernProductList: React.FC = () => {
     loadTabProducts();
   }, [activeTab]);
 
-  // 4. 무한 스크롤 로직 (기존 유지)
+  // 4. 무한 스크롤 로직
   const fetchNextPage = useCallback(async () => {
     if (isFetchingRef.current || !hasMoreRef.current) return;
 
@@ -187,7 +181,6 @@ const ModernProductList: React.FC = () => {
     }
   }, [activeTab]);
 
-  // ... (IntersectionObserver 부분 기존 유지) ...
   const onIntersect = useCallback(
     (entries: IntersectionObserverEntry[]) => {
       const entry = entries[0];
@@ -220,26 +213,38 @@ const ModernProductList: React.FC = () => {
   }, [loading, hasMore]);
 
 
-  // ✅ 5. 데이터 가공 (이벤트 섹션용 / 일반 리스트용 분리)
+  // ✅ 5. 데이터 가공
   
-  // (1) 상단 배너용: heroProducts State 기반으로 가공
+  // (1) 상단 배너용: heroProducts
   const processedEventProducts = useMemo(() => {
     return heroProducts.map(product => {
        const round = getDisplayRound(product);
-       // 필요하면 actionState 등 계산...
-       return { ...product, displayRound: round };
+       return { 
+         ...product, 
+         displayRound: round as any 
+       };
     }).filter(p => p.displayRound);
   }, [heroProducts]);
 
-  // (2) 하단 리스트용: products State 기반 + ✨상단에 있는건 제외✨
+  // (2) 뷰티 섹션용: beautyProducts
+  const processedBeautyProducts = useMemo(() => {
+    return beautyProducts.map(product => {
+      const round = getDisplayRound(product);
+      return { 
+        ...product, 
+        displayRound: round as any,
+        isPreorder: true
+      };
+    })
+    .filter(p => p.displayRound)
+    .slice(0, 7);
+  }, [beautyProducts]);
+
+  // (3) 하단 리스트용: products
   const normalProducts = useMemo(() => {
     const now = dayjs();
     
-    // 상단 배너에 이미 떠있는 상품 ID 목록
-    const heroIds = new Set(processedEventProducts.map(p => p.id));
-
     const processed = products
-      .filter(p => !heroIds.has(p.id)) // 👈 [중복 제거] 이미 상단에 떴으면 리스트에선 숨김 (선택사항)
       .map((product) => {
         const round = getDisplayRound(product);
         if (!round || round.status === 'draft') return null;
@@ -269,7 +274,7 @@ const ModernProductList: React.FC = () => {
 
         return {
           ...product,
-          displayRound: round,
+          displayRound: round as any,
           actionState,
           phase,
           isLowStock: remaining > 0 && remaining < 10,
@@ -281,13 +286,8 @@ const ModernProductList: React.FC = () => {
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
 
-    // 이벤트 타입이 없는(일반) 상품만 필터링 (혹은 탭 로직 적용)
-    // *주의: 이미 heroIds로 걸러냈으므로 여기서 eventType 체크는 굳이 안 해도 되지만, 안전장치로 둠
-    const normalBase = processed.filter(
-       p => (!p.displayRound?.eventType || p.displayRound.eventType === 'NONE')
-    );
+    const normalBase = processed;
 
-    // 탭 필터링 적용
     let normalVisible = normalBase;
     if (activeTab === 'today') {
       normalVisible = normalBase.filter((p) => p.phase === 'primary');
@@ -302,9 +302,9 @@ const ModernProductList: React.FC = () => {
     }
 
     return normalVisible;
-  }, [products, userDocument, activeTab, processedEventProducts]);
+  }, [products, userDocument, activeTab]); // 중복 필터링 제거하여 모든 상품 표시
 
-  // ... (자동 다음 페이지 로드 useEffect 유지) ...
+  // 자동 페이징
   useEffect(() => {
      if (
       loading ||
@@ -325,118 +325,119 @@ const ModernProductList: React.FC = () => {
   }, [loading, isLoadingMore, hasMore, activeTab, normalProducts.length, fetchNextPage]);
 
 
-  // ✅ 이벤트 섹션 메타데이터 (processedEventProducts 사용)
+  // 이벤트 섹션 메타데이터
   const eventSectionMeta = useMemo(() => {
     if (processedEventProducts.length === 0) return null;
-
-    const types = new Set(
-      processedEventProducts
-        .map(
-          (p) => (p.displayRound as any)?.eventType
-        )
-        .filter(Boolean)
-    );
-    // ... (기존 텍스트 로직 그대로 유지) ...
-    let chip = '🎄 연말 & 기획전';
-    let title = '지금만 진행되는 한정 특가 모음';
-    let sub = '케이크, 계란 같은 특별 기획 상품을 가장 먼저 확인해보세요!';
-    
-    if (types.has('COSMETICS') && types.size === 1) { /*...*/ } 
-    // ...
-    // (기존 코드의 if/else 로직 복붙해서 쓰시면 됩니다)
-    
-    // (편의상 중략, 기존 로직 그대로 사용)
-    if (types.has('COSMETICS') && types.size === 1) {
-      chip = '💄 뷰티 기획전';
-      title = '예뻐지는 시간, 뷰티 기획전';
-      sub = '클렌징부터 선크림까지, 매일 쓰기 좋은 뷰티템을 모았어요.';
-    } else if (types.has('CHRISTMAS') && types.size === 1) {
-      chip = '🎄 크리스마스 한정';
-      title = '올해만 만나볼 수 있는 크리스마스 특가';
-      sub = '연말 파티, 가족 모임을 위한 케이크와 간식을 준비했어요.';
-    } else if (types.has('ANNIVERSARY') && types.size === 1) {
-      chip = '🎉 1주년 기념';
-      title = '소도몰 1주년 감사 기획전';
-      sub = '1년 동안 사랑해주셔서 감사합니다.';
-    }
-
-    return { chip, title, sub };
+    return { 
+      chip: '🎄 연말 & 기획전', 
+      title: '지금만 진행되는 한정 특가 모음', 
+      sub: '케이크, 계란 같은 특별 기획 상품을 가장 먼저 확인해보세요!' 
+    };
   }, [processedEventProducts]);
 
   const bannerContent = useMemo(() => {
-      // ... (기존과 동일)
-      switch (activeTab) {
+    switch (activeTab) {
       case 'today': return { title: '🔥 오늘의 공구', desc: '오늘 오후 1시 ~ 내일 오후 1시까지 진행되는 하루 한정 공구입니다.' };
       case 'additional': return { title: '🔁 추가 예약', desc: '1차 공구 후 남은 수량을 픽업일 오후 1시까지 추가로 예약 받습니다.' };
       case 'onsite': return { title: '🏢 현장 판매', desc: '온라인 예약 없이 매장에서 바로 구매 가능한 상품입니다.' };
-      default: return { title: '📢 송도공구마켓', desc: '매일 오후 1시 오픈! 오늘 진행 중인 공구를 한눈에 확인해보세요.' };
+      default: return { title: '📢 송도PICK', desc: '매일 오후 1시 오픈! 오늘 진행 중인 공구를 한눈에 확인해보세요.' };
     }
   }, [activeTab]);
 
-  // ✅ 로딩 처리: 일반 상품 로딩 중이라도 이벤트 상품이 있으면 화면 보여줌
-  // (둘 다 로딩 중일 때만 로더 표시)
   if (loading && heroLoading && products.length === 0 && heroProducts.length === 0) {
     return <SodomallLoader />;
   }
 
-  // 데이터 여부 확인
-  const isEmptyAll = processedEventProducts.length === 0 && normalProducts.length === 0;
+  const isEmptyAll = processedEventProducts.length === 0 && normalProducts.length === 0 && processedBeautyProducts.length === 0;
 
   return (
     <>
+      {/* ❄️ 눈송이 효과 */}
       <Snowfall
         snowflakeCount={60}
         style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 9999 }}
       />
 
       <div className="customer-page-container modern-list-page">
-        {/* 2. 🎄 연말/기획전 섹션 (processedEventProducts 사용) */}
+        {/* 1. 🎄 기존 이벤트 섹션 */}
         {processedEventProducts.length > 0 && eventSectionMeta && (
           <section className="songdo-event-section">
             <div className="songdo-event-header">
-               {/* ... 기존 UI ... */}
               <div>
                 <div className="songdo-event-chip">{eventSectionMeta.chip}</div>
                 <h2 className="songdo-event-title">{eventSectionMeta.title}</h2>
                 <p className="songdo-event-sub">{eventSectionMeta.sub}</p>
               </div>
             </div>
-
             <div className="songdo-event-track">
-              {processedEventProducts.map((p) => {
-                const type = (p.displayRound as any)?.eventType;
-                let badge = '🎁 기획전';
-                if (type === 'ANNIVERSARY') badge = '🎉 1주년 기념';
-                else if (type === 'CHRISTMAS') badge = '🎄 크리스마스 한정';
-                else if (type === 'COSMETICS') badge = '💄 뷰티 특가';
-
-                return (
-                  <button
-                    key={`${p.id}-${(p.displayRound as any).roundId}-event`}
-                    type="button"
-                    className="songdo-event-banner"
-                    onClick={() => navigate(`/product/${p.id}`)}
-                  >
-                    <img src={p.imageUrls?.[0]} alt={p.groupName} className="event-banner-img" />
-                    <div className="event-banner-tag">{badge}</div>
-                  </button>
-                );
-              })}
+              {processedEventProducts.map((p) => (
+                <button
+                  key={`event-${p.id}`}
+                  className="songdo-event-banner"
+                  onClick={() => navigate(`/product/${p.id}`)}
+                >
+                  <img src={p.imageUrls?.[0]} alt={p.groupName} className="event-banner-img" />
+                  <div className="event-banner-tag">기획전</div>
+                </button>
+              ))}
             </div>
           </section>
         )}
 
-        {/* 안내 문구 */}
-        {processedEventProducts.length > 0 && normalProducts.length > 0 && (
-          <section style={{ textAlign: 'center', padding: '6px 0 12px', fontSize: 13, color: '#64748B' }}>
-            ↓ 아래로 스크롤하시면 일반 상품들이 나옵니다
+        {/* ✅ 2. [수정됨] 뷰티 런칭 배너 (티저 형태) */}
+        {/* 클릭 시 페이지 이동 대신 토스트 메시지 띄움 */}
+        <div 
+          className="beauty-launch-banner" 
+          onClick={() => showToast('info', '🎅 산타가 열심히 포장 중이에요!')}
+        >
+          <div className="beauty-banner-content">
+            {/* 칩 색상을 그레이톤으로 차분하게 변경하여 '준비중' 느낌 전달 */}
+            <span className="beauty-chip" style={{background: '#64748B'}}>COMING SOON</span>
+            <h2 className="beauty-title">베리맘 · 끌리글램 런칭 준비중!</h2>
+            <p className="beauty-desc">설레는 만남을 준비하고 있어요 💖</p>
+            {/* CTA 텍스트 변경 */}
+            <span className="beauty-cta" style={{color: '#64748B', display:'flex', alignItems:'center'}}>
+              조금만 기다려주세요! <Gift size={14} style={{marginLeft:'4px'}} />
+            </span>
+          </div>
+          <div className="beauty-banner-deco">🎁</div>
+        </div>
+
+        {/* ✅ 3. 뷰티 사전예약 섹션 (상품이 없으면 자동으로 숨겨짐) */}
+        {processedBeautyProducts.length > 0 && (
+          <section className="beauty-curation-section">
+            <div className="section-header" onClick={() => navigate('/beauty')}>
+              <div>
+                <span className="small-label">💄 Beauty Pick</span>
+                <h3 className="section-title">베리맘 · 끌리글램 뷰티 사전예약</h3>
+                <p className="section-sub">송도픽에서만 먼저 만나는 겨울 뷰티 라인</p>
+              </div>
+              <button className="view-all-btn">
+                전체보기 <ChevronRight size={16} />
+              </button>
+            </div>
+            <div className="beauty-product-grid">
+              {processedBeautyProducts.map((p) => (
+                <ModernProductCard
+                  key={`beauty-${p.id}`}
+                  product={p}
+                  actionState={determineActionState(p.displayRound as any, userDocument as any)}
+                  phase={'primary'} 
+                  isPreorder={true}
+                />
+              ))}
+            </div>
           </section>
         )}
 
-        <section className="songdo-notice-banner">
-            {/* ... 기존 배너 UI ... */}
-            <span className="notice-text">
-            <span className="notice-highlight">{bannerContent.title}: </span>
+
+        {/* 공지사항 배너 */}
+        <section 
+          className="songdo-notice-banner" 
+          style={{background:'rgba(255,255,255,0.1)', border:'none', color:'#fff'}}
+        >
+            <span className="notice-text" style={{color:'#fff'}}>
+            <span className="notice-highlight" style={{color:'#FFD700'}}>{bannerContent.title}: </span>
             {bannerContent.desc}
           </span>
         </section>
@@ -457,7 +458,6 @@ const ModernProductList: React.FC = () => {
         </nav>
 
         <div ref={primaryRef} className="songdo-product-list">
-          {/* normalProducts 사용 */}
           {!isEmptyAll && normalProducts.length > 0 ? (
             normalProducts.map((p) => (
               <ModernProductCard
@@ -468,11 +468,10 @@ const ModernProductList: React.FC = () => {
               />
             ))
           ) : (
-             // 로딩이 끝났는데도 없으면
              !loading && (
               <div className="empty-state">
                 <p style={{ padding: '60px 0', textAlign: 'center', color: '#94A3B8' }}>
-                  해당하는 상품이 없습니다.
+                  진행 중인 일반 공구가 없습니다.
                 </p>
               </div>
             )
