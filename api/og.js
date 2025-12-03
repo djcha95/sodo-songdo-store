@@ -1,6 +1,6 @@
 // /api/og.js  (ESM, Node 18+)
-const ABS_BASE = 'https://www.songdopick.store';           // ← 배포 도메인
-const FALLBACK_IMG = `${ABS_BASE}/songdopick-logo.png`;     // ← 이미지 없을 때 대체 이미지
+const ABS_BASE = 'https://www.sodo-songdo.store';           // ← 배포 도메인
+const FALLBACK_IMG = `${ABS_BASE}/sodomall-preview.png`;     // ← 이미지 없을 때 대체 이미지
 const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
 
 // 텍스트 가공 유틸: HTML 제거 → 공백 정리 → 180자 자르기
