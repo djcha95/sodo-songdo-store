@@ -1,13 +1,11 @@
 // /api/og.js  (ESM, Node 18+)
-const ABS_BASE = 'https://www.songdopick.kr';               // ✅ index.html 기준 도메인 (kr)
+const ABS_BASE = 'https://www.songdopick.kr';               // ✅ 도메인
 const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`;       // ✅ 기본 배너 이미지
 const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
 
 // ✅ [1] 12월인지 확인하는 함수 (서버 시간 기준)
 const isDecember = () => {
   const now = new Date();
-  // 한국 시간 보정 (UTC+9)이 필요하다면 아래처럼 처리 가능하지만, 
-  // OG는 대략적인 날짜만 맞으면 되므로 기본 UTC 기준으로도 충분합니다.
   return (now.getMonth() + 1) === 12;
 };
 
@@ -19,7 +17,8 @@ const PICK_PREFIX = isDecember()
 // 텍스트 가공 유틸
 const stripTags = (html = '') => String(html).replace(/<[^>]*>/g, '');
 const normalizeSpaces = (s = '') => s.replace(/\s+/g, ' ').trim();
-const limitChars = (s = '', max = 180) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
+const limitChars = (s = '', max = 180) =>
+  (s.length > max ? s.slice(0, max - 1) + '…' : s);
 
 // HTML 속성 이스케이프
 const esc = (s) =>
@@ -78,10 +77,12 @@ export default async function handler(req, res) {
     // 🏠 메인 홈페이지 공유일 때
     if (isDecember()) {
       title = '🎄 [송도픽] 12월 오늘의 PICK & 크리스마스 특가';
-      description = '송도 이웃들이 직접 선택한 12월의 추천 공구상품! 크리스마스 시즌 한정 특가를 지금 만나보세요.';
+      description =
+        '송도 이웃들이 직접 선택한 12월의 추천 공구상품! 크리스마스 시즌 한정 특가를 지금 만나보세요.';
     } else {
       title = 'SONGDOPICK - 송도주민의 똑똑한 쇼핑생활';
-      description = '송도 이웃과 함께 즐기는 프리미엄 공동구매 플랫폼, SONGDOPICK.';
+      description =
+        '송도 이웃과 함께 즐기는 프리미엄 공동구매 플랫폼, SONGDOPICK.';
     }
   } else {
     // 📦 상품 공유일 때 (기본값)
@@ -89,26 +90,30 @@ export default async function handler(req, res) {
     description = '송도픽에서 특별한 상품을 만나보세요!';
   }
 
-  // 상품 데이터가 있으면 덮어쓰기
+  // ✅ 상품 데이터가 있으면 덮어쓰기
   if (id) {
     const data = await fetchJson(PRODUCT_API(id));
     if (data) {
       // 1) 제목: "🎄 오늘의 PICK | 상품명" 패턴 적용
       const rawBaseTitle = data.groupName || data.title || title;
       const decoratedTitle = `${PICK_PREFIX}${rawBaseTitle}`; // 접두사 붙이기
-      
       title = composeTitle(decoratedTitle, data.hashtags);
 
       // 2) 설명: 데이터가 없으면 '추천 문구' Fallback 사용
       const rawDesc = data.description || '';
-      const cooked = limitChars(normalizeSpaces(stripTags(rawDesc)), 180);
+      const cooked = limitChars(
+        normalizeSpaces(stripTags(rawDesc)),
+        180
+      );
 
       if (cooked) {
         description = cooked;
       } else if (isDecember()) {
-        description = '송도 이웃들이 선택한 12월의 추천 상품! 오늘의 PICK을 지금 바로 만나보세요.';
+        description =
+          '송도 이웃들이 선택한 12월의 추천 상품! 오늘의 PICK을 지금 바로 만나보세요.';
       } else {
-        description = '송도 이웃들이 선택한 오늘의 추천 상품! 한정 수량으로 진행되는 공구입니다.';
+        description =
+          '송도 이웃들이 선택한 오늘의 추천 상품! 한정 수량으로 진행되는 공구입니다.';
       }
 
       // 3) 이미지
@@ -117,6 +122,7 @@ export default async function handler(req, res) {
     }
   }
 
+  // OG 이미지는 /api/img로 래핑
   const wrapped = `${ABS_BASE}/api/img?src=${encodeURIComponent(image)}`;
 
   const html = `<!doctype html>
@@ -144,6 +150,11 @@ export default async function handler(req, res) {
 <body>미리보기 전용</body>
 </html>`;
 
-  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=60');
+  // ✅ 여기서 Content-Type을 반드시 지정해주자!
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader(
+    'Cache-Control',
+    'public, max-age=60, s-maxage=60, stale-while-revalidate=60'
+  );
   res.status(200).send(html);
 }
