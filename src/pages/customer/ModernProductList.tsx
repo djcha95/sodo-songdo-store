@@ -24,7 +24,8 @@ import {
   getDeadlines,
   determineActionState,
   getStockInfo,
-// } from '@/utils/productUtils'; // 절대 경로 -> 상대 경로
+  safeToDate,
+  // } from '@/utils/productUtils'; // 절대 경로 -> 상대 경로
 } from '../../utils/productUtils';
 // import { usePageRefs } from '@/layouts/CustomerLayout'; // 절대 경로 -> 상대 경로
 import { usePageRefs } from '../../layouts/CustomerLayout';
@@ -307,7 +308,17 @@ const ModernProductList: React.FC = () => {
     if (activeTab === 'today') {
       normalVisible = normalBase.filter((p) => p.phase === 'primary');
     } else if (activeTab === 'additional') {
-      normalVisible = normalBase.filter((p) => p.phase === 'secondary');
+      // 1. 2차(추가예약) 상품만 필터링
+      const filtered = normalBase.filter((p) => p.phase === 'secondary');
+      
+      // 2. 픽업일(pickupDate) 기준 오름차순 정렬 (이른 날짜가 먼저 오도록)
+      normalVisible = filtered.sort((a, b) => {
+        // safeToDate는 이미 import 되어 있습니다.
+        const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() || 0;
+        const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() || 0;
+        return dateA - dateB;
+      });
+      
     } else if (activeTab === 'onsite') {
       normalVisible = normalBase.filter((p) => p.phase === 'onsite');
     } else {
