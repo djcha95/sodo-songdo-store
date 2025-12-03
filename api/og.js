@@ -1,6 +1,6 @@
 // /api/og.js  (ESM, Node 18+)
 
-// 이 도메인 하나만 쓴다 (프론트 + API + 이미지 전부)
+// 이 도메인 하나로 통일 (프론트 + API + 이미지)
 const ABS_BASE = 'https://www.songdopick.store';
 const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`;
 const PRODUCT_API = (id) =>
@@ -12,7 +12,7 @@ const isDecember = () => {
   return (now.getMonth() + 1) === 12;
 };
 
-// ✅ 시기에 따라 말머리 설정
+// ✅ 시기에 따른 말머리 설정
 const PICK_PREFIX = isDecember()
   ? '🎄 오늘의 PICK | '
   : '오늘의 PICK | ';
