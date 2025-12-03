@@ -1,21 +1,23 @@
 // /api/og.js  (ESM, Node 18+)
-const ABS_BASE = 'https://www.songdopick.store';      // ✅ 실제 배포 도메인
-const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`; // ✅ 존재하는 og 이미지 파일
-const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
 
+// 이 도메인 하나만 쓴다 (프론트 + API + 이미지 전부)
+const ABS_BASE = 'https://www.songdopick.store';
+const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`;
+const PRODUCT_API = (id) =>
+  `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
 
-// ✅ [1] 12월인지 확인하는 함수 (서버 시간 기준)
+// ✅ 12월인지 확인 (서버 기준)
 const isDecember = () => {
   const now = new Date();
   return (now.getMonth() + 1) === 12;
 };
 
-// ✅ [2] 시기에 따른 말머리 설정
+// ✅ 시기에 따라 말머리 설정
 const PICK_PREFIX = isDecember()
   ? '🎄 오늘의 PICK | '
   : '오늘의 PICK | ';
 
-// 텍스트 가공 유틸
+// 텍스트 가공 유틸: HTML 제거 → 공백 정리 → 180자 자르기
 const stripTags = (html = '') => String(html).replace(/<[^>]*>/g, '');
 const normalizeSpaces = (s = '') => s.replace(/\s+/g, ' ').trim();
 const limitChars = (s = '', max = 180) =>
@@ -28,9 +30,10 @@ const esc = (s) =>
     .replace(/</g, '&lt;')
     .replace(/"/g, '&quot;');
 
+// JSON 가져오기(에러에 강하게)
 async function fetchJson(url) {
   try {
-    const r = await fetch(url, { next: { revalidate: 60 } });
+    const r = await fetch(url, { next: { revalidate: 60 } }); // 60초 캐시
     if (!r.ok) return null;
     return await r.json();
   } catch {
@@ -38,6 +41,7 @@ async function fetchJson(url) {
   }
 }
 
+// 대표 이미지 고르기: image → mainImage → imageUrls[0] → thumbnail
 function pickImageFromData(data) {
   const pick =
     data?.image ||
@@ -47,12 +51,14 @@ function pickImageFromData(data) {
     '';
 
   if (!pick) return '';
+  // 절대경로가 아니면 사이트 기준으로 보정 (songdopick.store)
   if (!/^https?:\/\//i.test(pick)) {
     return `${ABS_BASE}${pick.startsWith('/') ? '' : '/'}${pick}`;
   }
   return pick;
 }
 
+// 해시태그 3개까지 제목에 붙이기
 function composeTitle(base, hashtags) {
   const list = Array.isArray(hashtags) ? hashtags : [];
   const normalized = list
@@ -62,20 +68,23 @@ function composeTitle(base, hashtags) {
     .map((t) => (t.startsWith('#') ? t : `#${t}`));
   const top3 = normalized.slice(0, 3).join(' ');
   const composed = top3 ? `${base} · ${top3}` : base;
+  // 너무 길면 살짝 자르기
   return composed.length > 80 ? composed.slice(0, 79) + '…' : composed;
 }
 
 export default async function handler(req, res) {
   const id = req.query?.id ? String(req.query.id) : '';
-  const pageUrl = id ? `${ABS_BASE}/product/${encodeURIComponent(id)}` : ABS_BASE;
+  const pageUrl = id
+    ? `${ABS_BASE}/product/${encodeURIComponent(id)}`
+    : ABS_BASE;
 
-  // ✅ [3] 기본값 설정 (홈 공유 시)
+  // ✅ 기본값: 홈 / 상품 공통 폴백
   let title;
   let description;
   let image = FALLBACK_IMG;
 
   if (!id) {
-    // 🏠 메인 홈페이지 공유일 때
+    // 🏠 메인 페이지 공유
     if (isDecember()) {
       title = '🎄 [송도픽] 12월 오늘의 PICK & 크리스마스 특가';
       description =
@@ -86,21 +95,21 @@ export default async function handler(req, res) {
         '송도 이웃과 함께 즐기는 프리미엄 공동구매 플랫폼, SONGDOPICK.';
     }
   } else {
-    // 📦 상품 공유일 때 (기본값)
+    // 📦 상품 공유 (데이터 불러오기 전 기본값)
     title = '상품 미리보기';
     description = '송도픽에서 특별한 상품을 만나보세요!';
   }
 
-  // ✅ 상품 데이터가 있으면 덮어쓰기
+  // 상품 데이터 불러오기
   if (id) {
     const data = await fetchJson(PRODUCT_API(id));
     if (data) {
-      // 1) 제목: "🎄 오늘의 PICK | 상품명" 패턴 적용
+      // 1) 제목: "🎄 오늘의 PICK | 상품명" + 해시태그(최대3)
       const rawBaseTitle = data.groupName || data.title || title;
-      const decoratedTitle = `${PICK_PREFIX}${rawBaseTitle}`; // 접두사 붙이기
+      const decoratedTitle = `${PICK_PREFIX}${rawBaseTitle}`;
       title = composeTitle(decoratedTitle, data.hashtags);
 
-      // 2) 설명: 데이터가 없으면 '추천 문구' Fallback 사용
+      // 2) 설명: HTML 제거 → 공백 정리 → 180자 제한
       const rawDesc = data.description || '';
       const cooked = limitChars(
         normalizeSpaces(stripTags(rawDesc)),
@@ -117,13 +126,13 @@ export default async function handler(req, res) {
           '송도 이웃들이 선택한 오늘의 추천 상품! 한정 수량으로 진행되는 공구입니다.';
       }
 
-      // 3) 이미지
+      // 3) 대표 이미지 선택
       const picked = pickImageFromData(data);
       if (picked) image = picked;
     }
   }
 
-  // OG 이미지는 /api/img로 래핑
+  // 1200x630 리사이즈 프록시로 래핑
   const wrapped = `${ABS_BASE}/api/img?src=${encodeURIComponent(image)}`;
 
   const html = `<!doctype html>
@@ -151,7 +160,7 @@ export default async function handler(req, res) {
 <body>미리보기 전용</body>
 </html>`;
 
-  // ✅ 여기서 Content-Type을 반드시 지정해주자!
+  // ✅ Content-Type 명시 + 캐시
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader(
     'Cache-Control',
