@@ -70,10 +70,10 @@ if (typeof window !== "undefined") {
     if (!siteKey) {
       console.warn("[AppCheck] VITE_APP_CHECK_SITE_KEY is missing.");
     } else {
-      initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider(siteKey),
-        isTokenAutoRefreshEnabled: true,
-      });
+     // initializeAppCheck(app, {
+     //   provider: new ReCaptchaV3Provider(siteKey),
+      //  isTokenAutoRefreshEnabled: true,
+      //});
       w.__appCheckInited = true;
     }
   }
