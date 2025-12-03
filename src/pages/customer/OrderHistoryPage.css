@@ -7,17 +7,20 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* 폰트 및 기본 컬러는 ModernProduct.css의 상위 컨테이너를 상속받음 */
 }
 
+/* 뷰 토글 */
 .view-toggle-container {
   display: flex;
   justify-content: center;
   gap: 10px;
-  background-color: #f3f4f6; /* Tailwind gray-100 */
+  background-color: rgba(255, 255, 255, 0.1); /* 반투명 배경 */
   padding: 8px;
   border-radius: 12px;
   max-width: 400px;
   margin: 0 auto;
+  border: 1px solid rgba(255,255,255,0.1);
 }
 
 .toggle-btn {
@@ -27,10 +30,10 @@
   font-weight: 600;
   border: none;
   background-color: transparent;
-  color: #4b5563; /* Tailwind gray-600 */
+  color: #94a3b8; /* 비활성 텍스트 밝은 회색 */
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: all 0.2s ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,9 +42,9 @@
 }
 
 .toggle-btn.active {
-  background-color: #ffffff;
-  color: #1d4ed8; /* Tailwind indigo-700 */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  background-color: #D42426; /* 크리스마스 레드 포인트 */
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(212, 36, 38, 0.4);
 }
 
 .date-header-container {
@@ -51,14 +54,16 @@
   flex-wrap: wrap; 
   gap: 4px 16px;
   margin-bottom: 12px;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15); /* 구분선 밝게 변경 */
+  padding-bottom: 8px;
 }
 
 .date-header {
   font-size: 1.2rem;
-  font-weight: 700;
-  color: #111827;
+  font-weight: 800; /* 조금 더 굵게 */
+  color: #f1f5f9; /* 어두운 배경 위 밝은 텍스트 */
   margin-top: 16px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3); /* 가독성 그림자 */
 }
 
 .cancel-instruction {
@@ -66,7 +71,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: #cbd5e1; /* 안내 문구 밝은 회색 */
   white-space: nowrap;
 }
 
@@ -80,13 +85,14 @@
 }
 
 .order-card-v3 {
-  background-color: #fff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  background-color: #fff; /* 카드 내부는 밝게 유지 */
+  border-radius: 16px; /* Modern 스타일처럼 둥글게 */
+  border: 1px solid rgba(255,255,255,0.1); /* 외곽선 살짝 */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
   overflow: hidden;
-  user-select: none; /* 텍스트 선택 방지 */
+  user-select: none;
+  position: relative;
 }
 
 .order-card-v3.cancellable {
@@ -95,12 +101,13 @@
 
 .order-card-v3.cancellable:not(.selected):hover {
   transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 20px rgba(255, 215, 0, 0.15); /* 호버 시 금색 은은한 광 */
+  border-color: rgba(255, 215, 0, 0.3);
 }
 
 .card-v3-body {
   display: flex;
-  padding: 12px;
+  padding: 16px; /* 패딩 약간 증가 */
   gap: 12px;
   align-items: center;
 }
@@ -109,9 +116,10 @@
   flex-shrink: 0;
   width: 72px;
   height: 72px;
-  border-radius: 8px;
+  border-radius: 12px; /* 둥글게 */
   overflow: hidden;
   background-color: #f3f4f6;
+  border: 1px solid #e2e8f0;
 }
 
 .item-image {
@@ -124,7 +132,7 @@
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -139,7 +147,7 @@
 .product-name-top {
   font-weight: 700;
   font-size: 1rem;
-  color: #1f2937;
+  color: #1e293b; /* 카드 내부 텍스트는 어둡게 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -151,17 +159,18 @@
   align-items: baseline;
   gap: 6px;
   font-size: 0.9rem;
-  color: #4b5563;
+  color: #64748b;
   flex-wrap: wrap;
 }
 
 .item-option-name {
-  font-weight: 500;
+  font-weight: 600;
+  color: #334155;
 }
 
 .item-quantity {
-  font-weight: 500;
-  color: #1d4ed8;
+  font-weight: 700;
+  color: #D42426; /* 수량 강조 색상 (레드) */
 }
 
 /* =================================================================
@@ -172,30 +181,32 @@
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   flex-shrink: 0;
   white-space: nowrap;
+  letter-spacing: -0.3px;
 }
 
 .status-badge > svg, .waitlist-order-badge > svg {
   flex-shrink: 0;
 }
 
+/* 색상 톤 조정 (Modern 테마와 어울리게) */
 /* 🟠 선입금 필요: 주황색 */
-.status-prepayment_required { background-color: #f97316; color: #ffffff; }
+.status-prepayment_required { background-color: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
 /* 💎 예약 완료: 청록색 */
-.status-reserved { background-color: #14b8a6; color: #ffffff; }
+.status-reserved { background-color: #ecfdf5; color: #059669; border: 1px solid #d1fae5; }
 /* 🟡 선입금 완료: 호박색 */
-.status-prepaid { background-color: #f59e0b; color: #ffffff; }
+.status-prepaid { background-color: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
 /* 🔵 픽업/처리 완료: 파란색 */
 .status-picked_up,
-.status-completed { background-color: #3b82f6; color: #ffffff; }
+.status-completed { background-color: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
 /* 🔴 취소됨 */
-.status-canceled, .status-late_canceled { background-color: #ef4444; color: #ffffff; }
+.status-canceled, .status-late_canceled { background-color: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
 /* 🚨 노쇼: 진한 빨간색 */
-.status-no_show { background-color: #d90429; color: #ffffff; }
+.status-no_show { background-color: #450a0a; color: #fecaca; }
 
 .date-info-badge {
   background-color: #e5e7eb;
@@ -221,21 +232,22 @@
   gap: 16px;
   margin-top: 24px;
 }
-.empty-icon { color: #9ca3af; }
-.empty-title { font-size: 1.5rem; font-weight: 700; color: #1f2937; }
-.empty-description { font-size: 1rem; color: #6b7280; margin-bottom: 12px; }
+.empty-icon { color: #64748b; opacity: 0.5; }
+.empty-title { font-size: 1.5rem; font-weight: 700; color: #f1f5f9; /* 밝은색 */ }
+.empty-description { font-size: 1rem; color: #cbd5e1; /* 밝은 회색 */ margin-bottom: 12px; }
 .go-to-shop-btn {
-  background-color: #1d4ed8;
+  background-color: #D42426; /* 레드 버튼 */
   color: white;
   padding: 12px 24px;
-  border-radius: 8px;
+  border-radius: 12px;
   border: none;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.2s;
+  box-shadow: 0 4px 15px rgba(212, 36, 38, 0.4);
+  transition: transform 0.2s;
 }
-.go-to-shop-btn:hover { background-color: #1e40af; }
+.go-to-shop-btn:hover { transform: scale(1.02); background-color: #b91c1c; }
 
 /* =================================================================
    📌 대기 목록 카드 스타일
@@ -275,9 +287,19 @@
 .end-of-list-message {
   text-align: center;
   padding: 30px 0;
-  color: #9ca3af;
+  color: #64748b; /* 어두운 배경에서 은은하게 보일 색상 */
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+.common-button.button-secondary {
+    background-color: rgba(255,255,255,0.1) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    backdrop-filter: blur(5px);
+}
+.common-button.button-secondary:hover {
+    background-color: rgba(255,255,255,0.2) !important;
 }
 
 
@@ -373,9 +395,14 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.order-card-v3.selected,
+.order-card-v3.selected {
+  border-color: #D42426;
+  background-color: #fff0f0; /* 아주 연한 붉은 배경 */
+  box-shadow: 0 0 0 2px rgba(212, 36, 38, 0.2);
+}
+
 .waitlist-card.selected {
-  border-color: #3b82f6;
+  border-color: #3b82f6; /* 대기 목록 카드는 원래 선택 색상 유지 */
   background-color: #eff6ff;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
@@ -384,31 +411,29 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: #f3f4f6;
-  border-radius: 16px;
+  background-color: #f1f5f9;
+  border-radius: 8px;
   padding: 4px;
 }
 
 .order-history-page .quantity-controls button {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   border: none;
   background-color: #fff;
-  color: #1d4ed8;
-  font-size: 1.2rem;
-  font-weight: 600;
+  color: #1e293b;
+  font-size: 1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   transition: background-color 0.2s, transform 0.1s;
 }
 
 .order-history-page .quantity-controls button:hover {
-  background-color: #eef2ff;
+  background-color: #e2e8f0;
 }
 
 .order-history-page .quantity-controls button:active {
@@ -422,12 +447,36 @@
 }
 
 .order-history-page .quantity-controls .quantity-value {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  min-width: 24px;
+  min-width: 20px;
   text-align: center;
-  color: #1f2937;
+  color: #1e293b;
 }
+
+/* =================================================================
+   📌 취소된 카드 스타일
+   ================================================================= */
+.order-card-v3.canceled-order {
+  background-color: rgba(255, 255, 255, 0.8); /* 약간 투명하게 */
+  opacity: 0.6;
+  border-color: transparent;
+  cursor: default;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.order-card-v3.canceled-order .item-image {
+  filter: grayscale(100%); /* 이미지 흑백 처리 */
+}
+
+/* 취소된 항목은 호버 효과나 선택 효과를 제거 */
+.order-card-v3.canceled-order:hover,
+.order-card-v3.canceled-order.selected {
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-color: transparent;
+}
+
 
 /* =================================================================
    📌 플로팅 액션 버튼 (FAB) - 신규 추가
@@ -444,12 +493,12 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.875rem 1.25rem;
-  background-color: #ef4444; /* var(--danger-color) */
+  padding: 14px 24px;
+  background-color: #D42426; /* 레드 */
   color: white;
   border: none;
   border-radius: 9999px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   font-size: 1rem;
   font-weight: 700;
@@ -459,6 +508,7 @@
 
 .fab-cancel-btn:hover,
 .fab-cancel-btn:focus {
+  background-color: #b91c1c;
   transform: scale(1.05);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
   outline: none;
@@ -466,25 +516,4 @@
 
 .fab-cancel-btn:active {
   transform: scale(0.98);
-}
-
-/* src/pages/customer/OrderHistoryPage.css 에 추가 */
-
-.order-card-v3.canceled-order {
-  background-color: #f8f9fa; /* 옅은 회색 배경 */
-  opacity: 0.7;
-  cursor: default;
-  transition: background-color 0.2s, opacity 0.2s;
-}
-
-.order-card-v3.canceled-order .item-image {
-  filter: grayscale(100%); /* 이미지 흑백 처리 */
-}
-
-/* 취소된 항목은 호버 효과나 선택 효과를 제거 */
-.order-card-v3.canceled-order:hover,
-.order-card-v3.canceled-order.selected {
-  transform: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-color: #e9ecef;
 }

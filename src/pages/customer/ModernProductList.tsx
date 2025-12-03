@@ -7,27 +7,36 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
-import { useAuth } from '@/context/AuthContext';
-import { getPaginatedProductsWithStock } from '@/firebase/productService'; 
+// import { useAuth } from '@/context/AuthContext'; // 절대 경로 -> 상대 경로
+import { useAuth } from '../../context/AuthContext';
+// import { getPaginatedProductsWithStock } from '@/firebase/productService'; // 절대 경로 -> 상대 경로
+import { getPaginatedProductsWithStock } from '../../firebase/productService';
 import { getFirestore, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
 
-import type { Product, SalesRound } from '@/shared/types';
-import SodomallLoader from '@/components/common/SodomallLoader';
-import ModernProductCard from '@/components/customer/ModernProductCard';
+import type { Product, SalesRound } from '../../shared/types'; // 절대 경로 -> 상대 경로
+// import SodomallLoader from '@/components/common/SodomallLoader'; // 절대 경로 -> 상대 경로
+import SodomallLoader from '../../components/common/SodomallLoader';
+// import ModernProductCard from '@/components/customer/ModernProductCard'; // 절대 경로 -> 상대 경로
+import ModernProductCard from '../../components/customer/ModernProductCard';
 import {
   getDisplayRound,
   getDeadlines,
   determineActionState,
   getStockInfo,
-} from '@/utils/productUtils';
-import { usePageRefs } from '@/layouts/CustomerLayout';
+// } from '@/utils/productUtils'; // 절대 경로 -> 상대 경로
+} from '../../utils/productUtils';
+// import { usePageRefs } from '@/layouts/CustomerLayout'; // 절대 경로 -> 상대 경로
+import { usePageRefs } from '../../layouts/CustomerLayout';
 import { Outlet, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
+// import Snowfall from 'react-snowfall'; // 외부 라이브러리이므로 그대로 유지
 import Snowfall from 'react-snowfall';
 import { ChevronRight, Gift } from 'lucide-react'; // ✅ Gift 아이콘 추가
-import { showToast } from '@/utils/toastUtils'; // ✅ 토스트 메시지 추가
-import '@/styles/ModernProduct.css';
+// import { showToast } from '@/utils/toastUtils'; // 절대 경로 -> 상대 경로
+import { showToast } from '../../utils/toastUtils';
+// import '@/styles/ModernProduct.css'; // 절대 경로 -> 상대 경로
+import '../../styles/ModernProduct.css';
 
 // ✅ 탭 구성
 const TABS = [
@@ -100,7 +109,7 @@ const ModernProductList: React.FC = () => {
         setBeautyProducts(beauty);
 
       } catch (e) {
-        console.error("특수 상품 로드 실패", e);
+        console.error("특수 상품 로드 실패", e); // 특수 상품 로드 실패
       } finally {
         setHeroLoading(false);
       }
@@ -134,7 +143,7 @@ const ModernProductList: React.FC = () => {
         setLastVisible(initialLastVisible);
         setHasMore(!!initialLastVisible && initialProducts.length === PAGE_SIZE);
       } catch (err) {
-        console.error('상품 로드 실패:', err);
+        console.error('상품 로드 실패:', err); // 상품 로드 실패
       } finally {
         setLoading(false);
         isFetchingRef.current = false;
@@ -260,7 +269,13 @@ const ModernProductList: React.FC = () => {
         if (round.isManuallyOnsite) {
           phase = 'onsite';
         } else {
-          if (actionState === 'ENDED' || actionState === 'AWAITING_STOCK')
+          // ✅ [수정] actionState === 'SCHEDULED' 조건 추가
+          // 2시 전(SCHEDULED)이면 리스트에서 아예 숨깁니다.
+          if (
+            actionState === 'ENDED' || 
+            actionState === 'AWAITING_STOCK' || 
+            actionState === 'SCHEDULED'
+          )
             return null;
 
           if (primaryEnd && now.isBefore(primaryEnd)) phase = 'primary';
