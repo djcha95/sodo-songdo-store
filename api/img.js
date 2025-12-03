@@ -1,14 +1,14 @@
-// /api/img.js  (ESM, Node 18+)
-// - src 쿼리로 원본 이미지 받아서 1200x630으로 맞춰주는 프록시(프로젝트에 있는 기존 로직 유지)
-// - 아래 함수로 Firebase Storage URL에 alt=media 자동 부착 → 봇/카톡이 확실히 이미지를 읽을 수 있음
+// /api/img.js
+import { URL } from 'url';
 
 function normalizeFirebaseUrl(u) {
   try {
     const url = new URL(u);
-    if (url.hostname === 'firebasestorage.googleapis.com') {
-      if (!url.searchParams.has('alt')) {
-        url.searchParams.set('alt', 'media');
-      }
+    if (
+      url.hostname === "firebasestorage.googleapis.com" ||
+      url.hostname.endsWith(".firebasestorage.app")
+    ) {
+      if (!url.searchParams.has("alt")) url.searchParams.set("alt", "media");
       return url.toString();
     }
   } catch {}
@@ -16,39 +16,45 @@ function normalizeFirebaseUrl(u) {
 }
 
 export default async function handler(req, res) {
-  const srcRaw = typeof req.query?.src === 'string' ? req.query.src : '';
-  const src = normalizeFirebaseUrl(srcRaw);
-
-  if (!src) {
-    res.status(400).send('missing src');
+  const srcRaw = req.query?.src;
+  
+  if (!srcRaw) {
+    res.status(400).send("missing src");
     return;
   }
 
+  const src = normalizeFirebaseUrl(String(srcRaw));
+
   try {
-    // ▼ 여기부터는 프로젝트에 쓰던 리사이즈 로직 그대로 사용
-    // 예: fetch(src) → 버퍼 → sharp().resize(1200, 630, { fit: 'contain', background: '#fff' }) → image/jpeg 반환
+    // 1. 원본 이미지 가져오기
     const r = await fetch(src);
-    if (!r.ok) {
-      res.status(502).send('bad upstream');
-      return;
-    }
-    const buf = Buffer.from(await r.arrayBuffer());
+    if (!r.ok) throw new Error("upstream fetch failed");
+    
+    const arrayBuffer = await r.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
 
-    // sharp 사용 예시 (이미 sharp 설치/구성 돼 있다면)
-    // const sharp = (await import('sharp')).default;
-    // const out = await sharp(buf)
-    //   .resize(1200, 630, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
-    //   .jpeg({ quality: 85 })
-    //   .toBuffer();
-    // res.setHeader('Content-Type', 'image/jpeg');
-    // res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    // res.status(200).send(out);
+    // ✅ 핵심: Sharp 로드 (주석 해제됨!)
+    const sharp = (await import("sharp")).default;
 
-    // 만약 sharp 없이 프록시만 하신다면:
-    res.setHeader('Content-Type', r.headers.get('content-type') || 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.status(200).send(buf);
+    // ✅ 1200x630 강제 리사이즈 + 흰 배경
+    const outputBuffer = await sharp(buf)
+      .resize(1200, 630, {
+        fit: "contain",
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+        position: 'center'
+      })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+
+    res.setHeader("Content-Type", "image/jpeg");
+    // 캐시를 길게 잡아서 다음번엔 빠르게 뜨도록 함
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.status(200).send(outputBuffer);
+
   } catch (e) {
-    res.status(500).send('image error');
+    console.error("Sharp Failed:", e);
+    // 🚨 에러 발생 시(이미지가 너무 크거나 등등) -> 그냥 기본 썸네일로 리다이렉트
+    // 이렇게 하면 설명글은 무조건 나옵니다.
+    res.redirect(302, "https://www.songdopick.store/sodomall-preview.png");
   }
 }
