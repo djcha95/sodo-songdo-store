@@ -21,6 +21,7 @@
     "@tippyjs/react": "^4.2.6",
     "@types/react-collapsible": "^2.2.1",
     "@types/react-joyride": "^2.0.2",
+    "@vercel/og": "^0.8.5",
     "axios": "^1.7.2",
     "date-fns": "^4.1.0",
     "date-holidays": "^3.24.4",

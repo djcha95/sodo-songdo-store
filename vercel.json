@@ -3,6 +3,7 @@
   "routes": [
     { "src": "^/api/og$", "dest": "/api/og" },
     { "src": "^/api/img$", "dest": "/api/img" },
+    { "src": "^/api/thumbnail$", "dest": "/api/thumbnail" }, 
     { "src": "^/api/product$", "dest": "/api/product" },
 
     {
