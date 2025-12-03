@@ -1,42 +1,42 @@
 {
   "version": 2,
-  "functions": {
-    "api/img.js": {
-      "memory": 1024,
-      "maxDuration": 10
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/fonts/(.*)\\.(woff2)$",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    { "source": "/(sodomall-logo\\.png|sodomall_wel\\.png)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+    {
+      "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" }]
     }
-  },
-  "routes": [
-    { "src": "^/api/og$", "dest": "/api/og" },
-    { "src": "^/api/img$", "dest": "/api/img" },
-    { "src": "^/api/thumbnail$", "dest": "/api/thumbnail" }, 
-    { "src": "^/api/product$", "dest": "/api/product" },
-
+  ],
+  "rewrites": [
     {
-      "src": "^/api/(?!og$)(?!img$)(?!product$)(?!thumbnail$)(.*)",
-      "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
+      "source": "/api/((?!og$|img$|product$).*)",
+      "destination": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     },
-
-    { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
-
     {
-      "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|html|woff2?)$",
-      "dest": "/$1.$2"
-    },
-
-    {
-      "src": "^/product/([A-Za-z0-9_-]+)$",
+      "source": "/product/:id",
       "has": [
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(KakaoTalk|kakaotalk|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|LinkedInBot|Googlebot|bingbot|Yeti|Daum|Instagram).*"
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|LinkedInBot|Googlebot|bingbot|Yeti|Daum|KakaoTalk-Scrap).*"
         }
       ],
-      "dest": "/api/og?id=$1"
+      "missing": [
+        { "type": "header", "key": "sec-fetch-mode", "value": "navigate" }
+      ],
+      "destination": "/api/og?id=:id"
     },
-
-    { "src": "^/product/.*$", "dest": "/index.html" },
-    { "src": "^(?!/api/).*$", "dest": "/index.html" }
+    {
+      "source": "/((?!api/|assets/|fonts/|_next/|favicon.ico|sw.js).*)",
+      "destination": "/index.html"
+    }
   ]
 }
