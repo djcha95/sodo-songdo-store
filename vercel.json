@@ -5,12 +5,18 @@
     { "src": "^/api/img$", "dest": "/api/img" },
     { "src": "^/api/product$", "dest": "/api/product" },
 
-    { "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)", "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1" },
+    {
+      "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)",
+      "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
+    },
 
     { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
 
-    { "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|html|woff2?)$", "dest": "/$1.$2" },
-    
+    {
+      "src": "^/(.*)\\.(css|js|mjs|map|png|jpg|jpeg|webp|gif|svg|ico|txt|xml|json|html|woff2?)$",
+      "dest": "/$1.$2"
+    },
+
     {
       "src": "^/product/([A-Za-z0-9_-]+)$",
       "has": [
@@ -19,9 +25,6 @@
           "key": "user-agent",
           "value": ".*(KakaoTalk|kakaotalk|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|LinkedInBot|Googlebot|bingbot|Yeti|Daum|Instagram).*"
         }
-      ],
-      "missing": [
-        { "type": "header", "key": "sec-fetch-mode", "value": "navigate" }
       ],
       "dest": "/api/og?id=$1"
     },
