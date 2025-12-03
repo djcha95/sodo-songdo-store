@@ -7,7 +7,7 @@
     { "src": "^/api/product$", "dest": "/api/product" },
 
     {
-      "src": "^/api/(?!og$)(?!img$)(?!product$)(.*)",
+      "src": "^/api/(?!og$)(?!img$)(?!product$)(?!thumbnail$)(.*)",
       "dest": "https://asia-northeast3-sso-do.cloudfunctions.net/$1"
     },
 
