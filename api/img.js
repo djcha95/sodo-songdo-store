@@ -54,8 +54,14 @@ export default async function handler(req, res) {
     res.status(200).send(outputBuffer);
 
   } catch (e) {
-    console.error("Image processing error:", e);
-    // Sharp 실패 시 원본이라도 보내주는 폴백 (혹은 500)
-    res.status(500).send("Image processing failed");
+    // 🚨 Sharp 실패 시 기본 이미지로 리다이렉트하는 수정된 로직 🚨
+    console.error("Sharp Failed:", e); // Vercel 로그에서 확인 가능하도록
+
+    // 방법 A: 그냥 기본 이미지로 리다이렉트 (추천: 비율 유지됨)
+    // 미리 만들어둔 1200x630짜리 png 파일 주소로 보내버립니다.
+    res.redirect(302, "https://www.songdopick.store/songdopick_og.png");
+    
+    // 또는 방법 B: 그냥 500 에러를 냄 (디버깅용)
+    // res.status(500).send("Image processing failed");
   }
 }

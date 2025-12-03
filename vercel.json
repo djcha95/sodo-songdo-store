@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "functions": {
+    "api/img.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "routes": [
     { "src": "^/api/og$", "dest": "/api/og" },
     { "src": "^/api/img$", "dest": "/api/img" },
