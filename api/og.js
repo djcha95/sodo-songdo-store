@@ -1,7 +1,8 @@
 // /api/og.js  (ESM, Node 18+)
-const ABS_BASE = 'https://www.songdopick.kr';               // ✅ 도메인
-const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`;       // ✅ 기본 배너 이미지
+const ABS_BASE = 'https://www.songdopick.store';      // ✅ 실제 배포 도메인
+const FALLBACK_IMG = `${ABS_BASE}/songdopick_og.png`; // ✅ 존재하는 og 이미지 파일
 const PRODUCT_API = (id) => `${ABS_BASE}/api/product?id=${encodeURIComponent(id)}`;
+
 
 // ✅ [1] 12월인지 확인하는 함수 (서버 시간 기준)
 const isDecember = () => {
