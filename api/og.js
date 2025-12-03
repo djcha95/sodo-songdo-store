@@ -51,15 +51,17 @@ export default async function handler(req, res) {
       }
 
       // 4. 이미지 선택
-      const picked = pickImageFromData(data);
-      if (picked) image = picked;
+  const picked = pickImageFromData(data);
+  if (picked) image = picked;
     }
   }
 
-  // 5. 이미지 비율 고정 (1200x630) - 이게 설명 나오게 하는 핵심
-  const wrapped = `${ABS_BASE}/api/img?src=${encodeURIComponent(image)}`;
+  // ✅ 수정할 부분: 뒤에 '&v=2'를 붙여서 주소를 다르게 만듭니다.
+  // 카카오톡: "어? 주소가 다르네? 새로 다운받아야겠다." -> 그때 Sharp로 잘린 이미지가 넘어감
+  const wrapped = `${ABS_BASE}/api/img?src=${encodeURIComponent(image)}&v=2`; 
 
   const html = `<!doctype html>
+  
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
