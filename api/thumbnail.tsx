@@ -4,12 +4,13 @@ export const config = {
   runtime: 'edge',
 };
 
-export default function handler(req) {
+// ✅ 수정된 부분: req 뒤에 ': Request'를 붙여서 정체를 밝혀줌
+export default function handler(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const src = searchParams.get('src');
 
-    // 이미지가 없으면 기본값 처리 (필요시 수정)
+    // 이미지가 없으면 기본값 처리
     if (!src) {
       return new Response('No image provided', { status: 400 });
     }
@@ -23,7 +24,7 @@ export default function handler(req) {
             width: '100%',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#ffffff', // 배경색 (흰색)
+            backgroundColor: '#ffffff',
           }}
         >
           {/* 이미지: 비율 유지하며 꽉 차게 (contain) */}
