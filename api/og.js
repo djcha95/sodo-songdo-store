@@ -133,7 +133,7 @@ export default async function handler(req, res) {
   }
 
 // ✅ 1200x630 캔버스 생성기(고급 방식)로 교체: /api/img 대신 /api/thumbnail 사용
-  const wrapped = `${ABS_BASE}/api/thumbnail?src=${encodeURIComponent(image)}`;
+  const wrapped = `${ABS_BASE}/api/img?src=${encodeURIComponent(image)}`;
 
   const html = `<!doctype html>
 <html lang="ko">
