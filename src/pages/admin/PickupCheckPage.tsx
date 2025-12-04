@@ -1,16 +1,17 @@
 // src/pages/admin/PickupCheckPage.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProductsWithStock } from '@/firebase';
-import type { Product, SalesRound, StorageType } from '@/shared/types'; // ✅ StorageType 추가
+import type { Product, SalesRound, StorageType } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { safeToDate } from '@/utils/productUtils';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
 import './PickupCheckPage.css';
-import { ChevronLeft, ChevronRight, CalendarCheck, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarCheck, MapPin, Copy, RefreshCcw, MousePointerClick } from 'lucide-react'; 
 import toast from 'react-hot-toast';
+import html2canvas from 'html2canvas';
 
 // 캘린더에 표시할 데이터 타입
 interface PickupEvent {
@@ -20,9 +21,12 @@ interface PickupEvent {
   productName: string;
   pickupDate: number;
   variantCount: number;
-  price: number; // ✅ 가격 정보 추가
-  storageType: StorageType; // ✅ 보관 타입 필드 추가
+  price: number;
+  storageType: StorageType;
 }
+
+// 상품의 상태 타입 정의 (기본 -> 작게 -> 숨김)
+type ItemState = 'NORMAL' | 'SHRUNK' | 'HIDDEN';
 
 const PickupCheckPage: React.FC = () => {
   useDocumentTitle('수진이의 픽업체쿠!');
@@ -32,6 +36,12 @@ const PickupCheckPage: React.FC = () => {
   
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectedDate, setSelectedDate] = useState(dayjs());
+
+  // 이미지 캡쳐를 위한 ref
+  const captureRef = useRef<HTMLDivElement>(null);
+  
+  // 각 상품의 상태를 관리하는 Map (ID -> 상태)
+  const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,7 +57,7 @@ const PickupCheckPage: React.FC = () => {
               if (round.pickupDate) {
                 const pDate = safeToDate(round.pickupDate);
                 
-                // ✅ 대표 가격 추출 (첫 번째 옵션 그룹의 첫 번째 아이템 가격)
+                // 대표 가격 추출 (첫 번째 옵션 그룹의 첫 번째 아이템 가격)
                 const firstPrice = round.variantGroups?.[0]?.items?.[0]?.price ?? 0;
 
                 if (pDate) {
@@ -58,8 +68,8 @@ const PickupCheckPage: React.FC = () => {
                     productName: product.groupName,
                     pickupDate: pDate.getTime(),
                     variantCount: round.variantGroups?.length || 0,
-                    price: firstPrice, // ✅ 가격 데이터 저장
-                    storageType: product.storageType, // ✅ 이 줄을 추가해서 보관 정보 저장
+                    price: firstPrice,
+                    storageType: product.storageType,
                   });
                 }
               }
@@ -93,21 +103,55 @@ const PickupCheckPage: React.FC = () => {
     const dateKey = selectedDate.format('YYYY-MM-DD');
     const list = eventsByDate[dateKey] || [];
 
-    // ✅ 정렬 로직 추가: 냉장(1) -> 냉동(2) -> 실온(3)
+    // 정렬 로직: 냉장(1) -> 냉동(2) -> 실온(3)
     return list.sort((a, b) => {
       const priority: Record<string, number> = {
-        'FRESH': 1, 'COLD': 1,  // 냉장/신선 (1순위)
-        'FROZEN': 2,            // 냉동 (2순위)
-        'ROOM': 3               // 실온 (3순위)
+        'FRESH': 1, 'COLD': 1,
+        'FROZEN': 2,
+        'ROOM': 3
       };
 
-      // 우선순위 점수 가져오기 (없으면 뒤로 보냄)
       const scoreA = priority[a.storageType] ?? 99;
       const scoreB = priority[b.storageType] ?? 99;
 
       return scoreA - scoreB;
     });
   }, [selectedDate, eventsByDate]);
+  
+  // ★ 추가: 화면에 보여줄 최종 리스트 (HIDDEN 상태인 항목은 아예 제거되어 당겨짐)
+  const visibleEvents = useMemo(() => {
+    return selectedDateEvents.filter(item => {
+      const state = itemStates[item.uniqueId] || 'NORMAL';
+      return state !== 'HIDDEN';
+    });
+  }, [selectedDateEvents, itemStates]);
+
+
+  // 상품 클릭 시 상태 순환 함수 (Normal -> Shrunk -> Hidden -> Normal)
+  const handleItemClick = (id: string) => {
+    setItemStates(prev => {
+      const currentState = prev[id] || 'NORMAL';
+      let nextState: ItemState = 'NORMAL';
+
+      if (currentState === 'NORMAL') nextState = 'SHRUNK';      // 1번 클릭: 작게
+      else if (currentState === 'SHRUNK') nextState = 'HIDDEN'; // 2번 클릭: 숨김 (캡처 시 제외)
+      else nextState = 'NORMAL';                                 // 3번 클릭: 원상복구
+
+      // 상태 변경에 따른 토스트 메시지
+      if (nextState === 'SHRUNK') toast('글자가 작게 표시됩니다.', { icon: '🤏' });
+      // HIDDEN 상태는 visibleEvents에서 아예 제거되어 리스트가 당겨짐
+      else if (nextState === 'HIDDEN') toast('이 상품은 안내문에서 제거됩니다. (취소하려면 다시 클릭)', { icon: '✂️' });
+      else toast('원래 크기로 돌아왔습니다.', { icon: '👀' });
+
+      return { ...prev, [id]: nextState };
+    });
+  };
+
+  // 상태 초기화 (다시 보이기)
+  const resetStates = () => {
+    setItemStates({});
+    toast.success('모든 상품 설정이 초기화되었습니다.');
+  };
 
   const generateCalendarDays = (): Dayjs[] => {
     const startOfMonth = currentMonth.startOf('month');
@@ -134,7 +178,7 @@ const PickupCheckPage: React.FC = () => {
     setCurrentMonth(now);
     setSelectedDate(now);
   };
-
+    
   if (loading) return <SodomallLoader message="픽업 일정을 불러오는 중..." />;
 
   return (
@@ -184,7 +228,7 @@ const PickupCheckPage: React.FC = () => {
           </div>
         </div>
 
-{/* --- 리스트 영역 --- */}
+        {/* --- 리스트 영역 (관리용) --- */}
         <div className="event-list-section">
           <div className="list-header compact-header">
             <h3>🔥 {selectedDate.format('MM/DD(ddd)')} 입고완료! 🔥</h3>
@@ -244,6 +288,87 @@ const PickupCheckPage: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* --- ▼▼▼ 업그레이드된 이미지 생성 섹션 ▼▼▼ --- */}
+      <div className="image-generator-container">
+        <h2 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>📸 뚜디니의 픽업 안내문 만들기</h2>
+        <p style={{ marginBottom: '1.5rem', color: '#666', fontSize: '0.95rem', display:'flex', alignItems:'center', justifyContent:'center', gap:'5px' }}>
+          <MousePointerClick size={18}/> 상품을 클릭해보세요: 
+          <strong>[작게]</strong> → <strong>[삭제(당겨짐)]</strong> → <strong>[원래대로]</strong> 순서로 바뀝니다.
+        </p>
+
+        {/* 캡쳐될 영역 (그라데이션 프레임 포함) */}
+        <div ref={captureRef} className="capture-frame">
+          <div className="pickup-notice-card">
+            
+            {/* 1. 헤더 */}
+            <div className="notice-header">
+              <span className="notice-date-badge">
+                {selectedDate.format('M월 D일 (ddd)')}
+              </span>
+              <h2 className="notice-title">입고완료! 픽업와주세요!</h2>
+            </div>
+
+            {/* 2. 그리드 (visibleEvents 사용: HIDDEN 항목은 아예 제거됨) */}
+            <div className="notice-grid">
+              {visibleEvents.map((item) => {
+                // 색상 결정
+                let colorClass = 'text-black';
+                if (['FRESH', 'COLD'].includes(item.storageType)) colorClass = 'text-red';
+                else if (item.storageType === 'FROZEN') colorClass = 'text-blue';
+
+                // 현재 상태 확인 (기본값: NORMAL)
+                const currentState = itemStates[item.uniqueId] || 'NORMAL';
+                
+                // 클래스 조합: 색상 + 상태별 스타일(shrink)
+                const isShrunk = currentState === 'SHRUNK';
+
+                return (
+                  <div 
+                    key={item.uniqueId} 
+                    className="notice-item"
+                    onClick={() => handleItemClick(item.uniqueId)} // 클릭 시 상태 순환
+                    title="클릭: 작게 -> 삭제(당겨짐) -> 원상복구"
+                  >
+                    <span className={`notice-item-text ${colorClass} ${isShrunk ? 'state-shrunk' : ''}`}>
+                      {item.productName}
+                      {item.variantCount > 1 && <span style={{fontSize:'0.6em', marginLeft:'4px'}}>({item.variantCount}종)</span>}
+                    </span>
+                  </div>
+                );
+              })}
+              
+              {/* 빈칸 채우기 (짝수 맞춤) */}
+              {visibleEvents.length % 2 !== 0 && (
+                <div className="notice-item" style={{ background: '#f5f5f5', cursor: 'default' }}></div>
+              )}
+            </div>
+
+            {/* 3. 푸터 */}
+            <div className="notice-footer">
+              <div className="footer-msg">
+                📦 보관기간: 입고일 포함 <span className="text-black">2일</span>
+              </div>
+              <div className="footer-highlight">
+                🚨 신선/냉장(빨강)은 당일 픽업 필수!
+              </div>
+            </div>
+            
+            <div className="footer-deco">
+              S O D O M A L L &nbsp; S O N G D O
+            </div>
+          </div>
+        </div>
+
+        {/* 버튼들 */}
+        <div className="action-buttons">
+          <button onClick={resetStates} className="btn-reset">
+            <RefreshCcw size={18} style={{marginRight:'5px'}}/> 초기화 (다시 보이기)
+          </button>
+        </div>
+      </div>
+      {/* --- ▲▲▲ 이미지 생성 섹션 끝 ▲▲▲ --- */}
+
     </div>
   );
 };
