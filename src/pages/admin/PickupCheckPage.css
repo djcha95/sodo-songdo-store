@@ -309,6 +309,8 @@
 
 /* src/pages/admin/PickupCheckPage.css 맨 아래 */
 
+/* src/pages/admin/PickupCheckPage.css 맨 아래 */
+
 /* --- 스크린샷용 프레임 컨테이너 --- */
 .image-generator-container {
   margin-top: 3rem;
@@ -319,7 +321,39 @@
   border: 1px solid #eee;
 }
 
-/* 프레임 (그라데이션 배경) */
+/* 모드 전환 탭 */
+.mode-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.mode-tab {
+  padding: 10px 20px;
+  border-radius: 50px;
+  border: 2px solid #eee;
+  background: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-tab.active-arrival {
+  background: #fff0f5;
+  border-color: #ff69b4;
+  color: #d63384;
+}
+
+.mode-tab.active-noshow {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  color: #1976d2;
+}
+
+/* 프레임 (기본: 입고알림 - 붉은 계열) */
 .capture-frame {
   width: 600px; 
   margin: 0 auto 1.5rem auto;
@@ -327,12 +361,19 @@
   background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%);
   box-shadow: 0 20px 40px rgba(0,0,0,0.1);
   box-sizing: border-box; 
-  /* 스크린샷 찍기 좋게 정렬 */
   display: flex;
   justify-content: center;
+  transition: background 0.5s; /* 배경색 부드럽게 변경 */
 }
 
-/* 알림장 카드 (종이 질감) */
+/* ★ 테마 2: 노쇼 줍줍 (푸른 계열) ★ */
+.capture-frame.theme-blue {
+  background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); /* 보라+핑크 몽환적 */
+  /* 또는 시원한 파랑을 원하시면 아래 주석 해제 */
+  /* background: linear-gradient(120deg, #89f7fe 0%, #66a6ff 100%); */
+}
+
+/* 알림장 카드 */
 .pickup-notice-card {
   width: 100%;
   background: #ffffff;
@@ -348,12 +389,29 @@
 /* 헤더 */
 .notice-header { text-align: center; margin-bottom: 15px; }
 .notice-date-badge { display: inline-block; background: #000; color: #fff; padding: 6px 20px; border-radius: 50px; font-weight: 800; font-size: 1.2rem; margin-bottom: 8px; box-shadow: 0 3px 5px rgba(0,0,0,0.2); }
-.notice-title { font-size: 2.2rem; font-weight: 900; color: #d32f2f; margin: 0; line-height: 1.1; letter-spacing: -1.5px; }
+
+/* 제목 (고정된 텍스트) */
+.notice-title {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #d32f2f;
+  margin: 0;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
+  text-align: center;
+  padding: 0;
+  font-family: inherit;
+}
+/* 노쇼 모드일 때 제목 색상 */
+.theme-blue .notice-title {
+  color: #3f51b5; /* 파란색 계열 */
+}
+
 
 /* 그리드 레이아웃 */
 .notice-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr; /* 2열 배치 */
+  grid-template-columns: 1fr 1fr; 
   border-top: 2px solid #000;
   border-left: 2px solid #000;
   margin-bottom: auto; 
@@ -365,42 +423,19 @@
   background: #fff;
   min-height: 60px;
   padding: 4px 6px;
-  
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  
-  border-right: 2px solid #000;
-  border-bottom: 2px solid #000;
-  
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.2s;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  border-right: 2px solid #000; border-bottom: 2px solid #000;
+  cursor: pointer; user-select: none; transition: background 0.2s;
 }
-
-.notice-item:hover {
-  background-color: #ffebee;
-}
+.notice-item:hover { background-color: #ffebee; }
 
 /* 텍스트 기본 스타일 */
 .notice-item-text {
-  font-size: 1.5rem;
-  font-weight: 800;
-  line-height: 1.1;
-  word-break: keep-all;
-  letter-spacing: -1.5px;
-  display: inline-block;
-  max-width: 100%;
-  transition: all 0.2s;
+  font-size: 1.5rem; font-weight: 800; line-height: 1.1;
+  word-break: keep-all; letter-spacing: -1.5px;
+  display: inline-block; max-width: 100%; transition: all 0.2s;
 }
-
-/* ★ 상태 1: 글자 작게 (색상은 원래 클래스 따라감) ★ */
-.notice-item-text.state-shrunk {
-  font-size: 1.2rem !important;
-  letter-spacing: -2px !important;
-  /* color: ... 제거함 (원래 색 유지) */
-}
+.notice-item-text.state-shrunk { font-size: 1.2rem !important; letter-spacing: -2px !important; }
 
 /* 색상 유틸 */
 .text-red { color: #d32f2f; }
@@ -417,3 +452,48 @@
 .action-buttons { display: flex; justify-content: center; gap: 15px; }
 .btn-reset { background: #333; color: #fff; border: none; padding: 12px 30px; font-size: 1.1rem; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
 .btn-reset:hover { background: #555; transform: translateY(-2px); }
+
+
+/* ★ 추가: 수동 입력 영역 스타일 */
+.manual-input-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  background: #fff;
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.input-product-name {
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+  width: 200px;
+}
+
+.select-storage-type {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.btn-add-manual {
+  padding: 10px 20px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-add-manual:hover {
+  background: #555;
+}
