@@ -450,10 +450,6 @@ const PickupCheckPage: React.FC = () => {
           <button onClick={resetStates} className="btn-reset">
             <RefreshCcw size={18} style={{marginRight:'5px'}}/> 초기화
           </button>
-          {/* 이미지 복사 버튼 추가 */}
-          <button onClick={handleCopyImage} className="btn-reset" style={{ background: '#d63384' }}>
-            <Copy size={20} style={{marginRight:'5px'}}/> 이미지 복사하기
-          </button>
         </div>
       </div>
     </div>
