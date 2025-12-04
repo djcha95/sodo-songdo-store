@@ -9,9 +9,9 @@ import { safeToDate } from '@/utils/productUtils';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
 import './PickupCheckPage.css';
-import { ChevronLeft, ChevronRight, CalendarCheck, RefreshCcw, Bell, ShoppingBag, Plus, Copy } from 'lucide-react'; 
+import { ChevronLeft, ChevronRight, CalendarCheck, RefreshCcw, Bell, ShoppingBag, Plus, Copy, MapPin } from 'lucide-react'; 
 import toast from 'react-hot-toast';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas'; // html2canvas import 필요
 
 // 캘린더 데이터 타입
 interface PickupEvent {
@@ -25,17 +25,17 @@ interface PickupEvent {
   storageType: StorageType;
 }
 
-// ★ 수동 추가 아이템 타입
+// 수동 추가 아이템 타입
 interface ManualItem {
   uniqueId: string;
   productName: string;
   storageType: StorageType;
-  variantCount?: number; // 수동 추가는 0 또는 1로 간주
+  variantCount?: number;
 }
 
-// 상태 타입: 기본 -> 작게 -> 숨김
+// 상태 타입
 type ItemState = 'NORMAL' | 'SHRUNK' | 'HIDDEN';
-// 모드 타입: 입고알림 vs 노쇼줍줍
+// 모드 타입
 type ViewMode = 'ARRIVAL' | 'NOSHOW';
 
 const PickupCheckPage: React.FC = () => {
@@ -47,25 +47,23 @@ const PickupCheckPage: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectedDate, setSelectedDate] = useState(dayjs());
 
-  // 이미지 캡쳐를 위한 ref
+  // 이미지 캡쳐 ref
   const captureRef = useRef<HTMLDivElement>(null);
 
+  // 최신 기능용 상태들
   const [viewMode, setViewMode] = useState<ViewMode>('ARRIVAL'); 
   const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
-
-  // ★ 수동 추가 상태 관리
   const [manualItems, setManualItems] = useState<ManualItem[]>([]);
   const [inputName, setInputName] = useState('');
-  const [inputType, setInputType] = useState<StorageType>('FRESH'); // 기본값: 신선(빨강)
-
+  const [inputType, setInputType] = useState<StorageType>('FRESH');
 
   // 모드 변경 시 초기화
   useEffect(() => {
     setItemStates({});
-    setManualItems([]); // 모드 바뀌면 수동 추가한 것도 초기화
+    setManualItems([]); 
   }, [viewMode]);
 
-  // 데이터 로딩 (기존 유지)
+  // 데이터 로딩
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -116,15 +114,24 @@ const PickupCheckPage: React.FC = () => {
     return map;
   }, [events]);
 
-  const calendarEvents = useMemo(() => eventsByDate[selectedDate.format('YYYY-MM-DD')] || [], [selectedDate, eventsByDate]);
+  // ★ [오른쪽 리스트용] 선택된 날짜의 이벤트 (정렬 적용)
+  const selectedDateEvents = useMemo(() => {
+    const dateKey = selectedDate.format('YYYY-MM-DD');
+    const list = eventsByDate[dateKey] || [];
+    return list.sort((a, b) => {
+      const priority: Record<string, number> = { 'FRESH': 1, 'COLD': 1, 'FROZEN': 2, 'ROOM': 3 };
+      const scoreA = priority[a.storageType] ?? 99;
+      const scoreB = priority[b.storageType] ?? 99;
+      return scoreA - scoreB;
+    });
+  }, [selectedDate, eventsByDate]);
 
-  // 이미지 생성용 이벤트 가져오기
+  // ★ [이미지 생성기용] 이벤트 가져오기 (노쇼 로직 포함)
   const imageGeneratorEvents = useMemo(() => {
     const targetDateKey = selectedDate.format('YYYY-MM-DD');
     if (viewMode === 'ARRIVAL') {
       return eventsByDate[targetDateKey] || [];
     } else {
-      // 노쇼 모드 날짜 계산 로직
       const yesterday = selectedDate.subtract(1, 'day').format('YYYY-MM-DD');
       const dayBeforeYesterday = selectedDate.subtract(2, 'day').format('YYYY-MM-DD');
       const freshItems = (eventsByDate[yesterday] || []).filter(item => ['FRESH', 'COLD'].includes(item.storageType));
@@ -133,14 +140,15 @@ const PickupCheckPage: React.FC = () => {
     }
   }, [selectedDate, eventsByDate, viewMode]);
 
-  // ★ 최종 리스트 = [자동 불러온 것] + [수동 추가한 것] 합치기
+// ★ 최종 리스트 = [자동 불러온 것] + [수동 추가한 것] 합치기
   const combinedEvents = useMemo(() => {
-    // 1. 자동 리스트 변환 (ManualItem 타입으로 통일)
+    // 1. 자동 리스트 변환
     const autoItems = imageGeneratorEvents.map(item => ({
       uniqueId: item.uniqueId,
       productName: item.productName,
       storageType: item.storageType,
-      variantCount: item.variantCount
+      variantCount: item.variantCount,
+      price: item.price // 👈 [중요] 이 줄을 꼭 추가해주세요! (가격을 챙깁니다)
     }));
 
     // 2. 수동 리스트 합치기
@@ -152,57 +160,41 @@ const PickupCheckPage: React.FC = () => {
       return (priority[a.storageType] ?? 99) - (priority[b.storageType] ?? 99);
     });
   }, [imageGeneratorEvents, manualItems]);
-
-  // ★ 숨김 필터링 (최종 화면 표시용)
+  
+  // ★ [화면 표시용] 숨김 필터링
   const finalVisibleEvents = useMemo(() => {
     return combinedEvents.filter(item => itemStates[item.uniqueId] !== 'HIDDEN');
   }, [combinedEvents, itemStates]);
 
-
-  // 클릭 핸들러 (NORMAL -> SHRUNK -> HIDDEN -> NORMAL)
+  // 핸들러들
   const handleItemClick = (id: string) => {
     setItemStates(prev => {
       const currentState = prev[id] || 'NORMAL';
-      let nextState: ItemState = 'NORMAL';
-
-      if (currentState === 'NORMAL') nextState = 'SHRUNK';      // 1번 클릭: 작게
-      else if (currentState === 'SHRUNK') nextState = 'HIDDEN'; // 2번 클릭: 숨김 (캡처 시 제외)
-      else nextState = 'NORMAL';                                 // 3번 클릭: 원상복구
-
-      // 상태 변경에 따른 토스트 메시지 
-      if (nextState === 'SHRUNK') toast('글자가 작게 표시됩니다.', { icon: '🤏' });
-      else if (nextState === 'HIDDEN') toast('이 상품은 안내문에서 제거됩니다. (취소하려면 다시 클릭)', { icon: '✂️' });
-      else toast('원래 크기로 돌아왔습니다.', { icon: '👀' });
-
-      return { ...prev, [id]: nextState };
+      if (currentState === 'NORMAL') return { ...prev, [id]: 'SHRUNK' };
+      else return { ...prev, [id]: 'HIDDEN' };
     });
   };
 
-  // ★ 수동 추가 핸들러
   const handleAddManualItem = () => {
-    if (!inputName.trim()) {
-      toast.error('상품 이름을 입력해주세요!');
-      return;
-    }
+    if (!inputName.trim()) return toast.error('상품명 입력!');
     const newItem: ManualItem = {
-      uniqueId: `manual-${Date.now()}`, // 고유 ID 생성
+      uniqueId: `manual-${Date.now()}`,
       productName: inputName,
       storageType: inputType,
-      variantCount: 0, // 수동 추가는 variantCount 0으로 설정 (표시 X)
+      variantCount: 0,
     };
     setManualItems(prev => [...prev, newItem]);
-    setInputName(''); // 입력창 초기화
-    toast.success('상품이 추가되었습니다!');
+    setInputName('');
+    toast.success('추가됨!');
   };
 
-  // 초기화 핸들러
   const resetStates = () => {
     setItemStates({});
-    setManualItems([]); // 수동 추가한 것도 싹 비우기
+    setManualItems([]);
     toast.success('초기화 완료!');
   };
 
-  // 캘린더 관련 로직 (기존 유지)
+  // 캘린더 생성
   const calendarDays = useMemo(() => {
     const start = currentMonth.startOf('month').startOf('week');
     const end = currentMonth.endOf('month').endOf('week');
@@ -211,56 +203,6 @@ const PickupCheckPage: React.FC = () => {
     while (d.isBefore(end)) { days.push(d); d = d.add(1, 'day'); }
     return days;
   }, [currentMonth]);
-
-  // ★ 이미지 클립보드 복사 함수 (첫 번째 파일에서 가져옴)
-  const handleCopyImage = async () => {
-    if (!captureRef.current) return;
-
-    captureRef.current.classList.add('capture-mode');
-
-    try {
-      const canvas = await html2canvas(captureRef.current, {
-        scale: 2, // 고해상도
-        backgroundColor: null, 
-        useCORS: true,
-        scrollY: 0, 
-        x: 0,
-      });
-
-      captureRef.current.classList.remove('capture-mode');
-
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          toast.error('이미지 생성 실패 ㅠㅠ');
-          return;
-        }
-        
-        // 클립보드 복사 시도
-        try {
-          // navigator.clipboard.write가 존재하는 환경일 때만 실행
-          if (window.ClipboardItem && navigator.clipboard.write) {
-             const item = new ClipboardItem({ 'image/png': blob });
-             await navigator.clipboard.write([item]);
-             toast.success('복사 완료! 카톡에 붙여넣기 하세요.');
-             return;
-          }
-        } catch (err) {
-          console.warn('Clipboard write failed, falling back to download:', err);
-        }
-        
-        // 실패 시 (or 지원하지 않는 환경 시) 다운로드
-        const link = document.createElement('a');
-        link.download = `픽업안내_${selectedDate.format('MMDD')}.png`;
-        link.href = canvas.toDataURL();
-        link.click();
-        toast.success('이미지로 저장되었습니다.');
-      });
-    } catch (error) {
-      console.error(error);
-      captureRef.current?.classList.remove('capture-mode');
-      toast.error('오류가 발생했습니다.');
-    }
-  };
 
   if (loading) return <SodomallLoader message="로딩 중..." />;
 
@@ -298,158 +240,147 @@ const PickupCheckPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 리스트 영역 (관리용 - 단순 리스트 표시) */}
+        {/* --- 리스트 영역 (완벽 수정 버전) --- */}
         <div className="event-list-section">
           <div className="list-header compact-header">
-            <h3>📅 {selectedDate.format('MM/DD')} 리스트</h3>
+            {/* 제목이 모드에 따라 바뀝니다 */}
+            <h3 style={viewMode === 'NOSHOW' ? { color: '#1565c0' } : {}}>
+              {viewMode === 'ARRIVAL' 
+                ? `🔥 ${selectedDate.format('MM/DD(ddd)')} 입고완료! 🔥` 
+                : `📢 노쇼분 오늘부터 현장판매 📢`}
+            </h3>
           </div>
+
           <div className="event-list-content compact-list">
-            {calendarEvents.length > 0 ? (
-              <ul className="pickup-items-compact">
-                {calendarEvents.map(item => (
-                  <li key={item.uniqueId} className="pickup-row">
-                    <span className="row-product-name">{item.productName}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : <div className="empty-state"><p>입고 없음</p></div>}
+            {finalVisibleEvents.length > 0 ? (
+              <>
+                {/* [모드 1] 입고 알림: 그룹 나눠서 보여주기 (예전 스타일 복구) */}
+                {viewMode === 'ARRIVAL' ? (
+                  <>
+                    {/* 1. 신선제품 그룹 */}
+                    {finalVisibleEvents.filter(item => ['FRESH', 'COLD'].includes(item.storageType)).length > 0 && (
+                      <div className="pickup-group">
+                        <h4 className="group-title">** 신선제품 당일픽업 **</h4>
+                        <ul className="pickup-items-compact">
+                          {finalVisibleEvents
+                            .filter(item => ['FRESH', 'COLD'].includes(item.storageType))
+                            .map(item => (
+                              <li key={item.uniqueId} className="pickup-row">
+                                <span className="row-product-name">
+                                  ✔️ {item.productName}
+                                  {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {/* 2. 일반제품 그룹 */}
+                    {finalVisibleEvents.filter(item => ['FROZEN', 'ROOM'].includes(item.storageType)).length > 0 && (
+                      <div className="pickup-group">
+                        <h4 className="group-title">** 일반제품 2일픽업 **</h4>
+                        <ul className="pickup-items-compact">
+                          {finalVisibleEvents
+                            .filter(item => ['FROZEN', 'ROOM'].includes(item.storageType))
+                            .map(item => (
+                              <li key={item.uniqueId} className="pickup-row">
+                                <span className="row-product-name">
+                                  ✔️ {item.productName}
+                                  {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* [모드 2] 노쇼 줍줍: 그냥 쭉 나열하기 (현장판매 리스트 스타일) */
+                  <ul className="pickup-items-compact">
+                    {finalVisibleEvents.map(item => (
+                      <li key={item.uniqueId} className="pickup-row">
+                        <span className="row-product-name">
+                          ✔️ {item.productName}
+                          {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <div className="empty-state">
+                <MapPin size={32} />
+                <p>{viewMode === 'ARRIVAL' ? '입고 일정 없음' : '노쇼 물량 없음'}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
       
-      {/* --- ▼▼▼ 이미지 생성기 (모드 기능 추가) ▼▼▼ --- */}
+      {/* --- 이미지 생성기 (최신 기능: 노쇼 줍줍 + 수동 추가) --- */}
       <div className="image-generator-container">
-        
-        {/* 모드 전환 탭 */}
         <div className="mode-tabs">
-          <button 
-            className={`mode-tab ${viewMode === 'ARRIVAL' ? 'active-arrival' : ''}`}
-            onClick={() => setViewMode('ARRIVAL')}
-          >
-            <Bell size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 
-            입고 알림
+          <button className={`mode-tab ${viewMode === 'ARRIVAL' ? 'active-arrival' : ''}`} onClick={() => setViewMode('ARRIVAL')}>
+            <Bell size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 입고 알림
           </button>
-          <button 
-            className={`mode-tab ${viewMode === 'NOSHOW' ? 'active-noshow' : ''}`}
-            onClick={() => setViewMode('NOSHOW')}
-          >
-            <ShoppingBag size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 
-            노쇼 줍줍
+          <button className={`mode-tab ${viewMode === 'NOSHOW' ? 'active-noshow' : ''}`} onClick={() => setViewMode('NOSHOW')}>
+            <ShoppingBag size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 노쇼 줍줍
           </button>
         </div>
 
-        {/* ★ 상품 직접 추가 영역 ★ */}
         <div className="manual-input-area">
-          <input 
-            type="text" 
-            className="input-product-name" 
-            placeholder="추가할 상품명 입력" 
-            value={inputName}
-            onChange={(e) => setInputName(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddManualItem()}
-          />
-          <select 
-            className="select-storage-type"
-            value={inputType}
-            onChange={(e) => setInputType(e.target.value as StorageType)}
-          >
+          <input type="text" className="input-product-name" placeholder="상품명 입력" value={inputName} onChange={(e) => setInputName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleAddManualItem()} />
+          <select className="select-storage-type" value={inputType} onChange={(e) => setInputType(e.target.value as StorageType)}>
             <option value="FRESH">🔴 신선/냉장 (빨강)</option>
             <option value="FROZEN">🔵 냉동 (파랑)</option>
             <option value="ROOM">⚫ 실온 (검정)</option>
-            <option value="COLD">🔴 냉장 (빨강)</option>
           </select>
-          <button className="btn-add-manual" onClick={handleAddManualItem}>
-            <Plus size={16} style={{marginRight:'4px'}}/> 추가
-          </button>
+          <button className="btn-add-manual" onClick={handleAddManualItem}><Plus size={16} style={{marginRight:'4px'}}/> 추가</button>
         </div>
 
-        <h2 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>
-          {viewMode === 'ARRIVAL' ? '📸 입고 안내문' : '📸 현장판매 리스트'}
-        </h2>
-        <p style={{ marginBottom: '1.5rem', color: '#666', fontSize: '0.95rem' }}>
-          {viewMode === 'NOSHOW' ? 
-            '자동계산된 줍줍 리스트입니다.' : 
-            '오늘 입고 리스트입니다.'}
-          <br/>빠진 상품은 위에서 직접 추가하세요!
-        </p>
-
+        <h2 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>{viewMode === 'ARRIVAL' ? '📸 입고 안내문' : '📸 현장판매 리스트'}</h2>
+        
         {/* 캡쳐 프레임 */}
         <div ref={captureRef} className={`capture-frame ${viewMode === 'NOSHOW' ? 'theme-blue' : ''}`}>
           <div className="pickup-notice-card">
-            
-            {/* 1. 헤더 */}
             <div className="notice-header">
-              <span className="notice-date-badge">
-                {selectedDate.format('M월 D일 (ddd)')}
-              </span>
-              {/* 고정된 제목 (customTitle/input 대신) */}
-              <h2 className="notice-title">
-                {viewMode === 'ARRIVAL' ? '입고완료! 픽업와주세요!' : '노쇼분 현장판매 시작!'}
-              </h2>
+              <span className="notice-date-badge">{selectedDate.format('M월 D일 (ddd)')}</span>
+              <h2 className="notice-title">{viewMode === 'ARRIVAL' ? '입고완료! 픽업와주세요!' : '노쇼분 현장판매 시작!'}</h2>
             </div>
-
-            {/* 2. 그리드 */}
             <div className="notice-grid">
               {finalVisibleEvents.length > 0 ? finalVisibleEvents.map((item) => {
                 let colorClass = 'text-black';
                 if (['FRESH', 'COLD'].includes(item.storageType)) colorClass = 'text-red';
                 else if (item.storageType === 'FROZEN') colorClass = 'text-blue';
-
                 const isShrunk = itemStates[item.uniqueId] === 'SHRUNK';
 
                 return (
-                  <div 
-                    key={item.uniqueId} 
-                    className="notice-item"
-                    onClick={() => handleItemClick(item.uniqueId)} 
-                  >
+                  <div key={item.uniqueId} className="notice-item" onClick={() => handleItemClick(item.uniqueId)}>
                     <span className={`notice-item-text ${colorClass} ${isShrunk ? 'state-shrunk' : ''}`}>
                       {item.productName}
-                      {/* variantCount가 1보다 클 때만 표시 */}
                       {(item.variantCount && item.variantCount > 1) && <span style={{fontSize:'0.6em', marginLeft:'4px'}}>({item.variantCount}종)</span>}
                     </span>
                   </div>
                 );
               }) : (
-                // 목록이 없을 때 표시
-                <div style={{gridColumn:'span 2', padding:'40px', textAlign:'center', color:'#999', fontSize:'1.2rem', fontWeight:700}}>
-                  상품이 없습니다. 직접 추가해보세요!
-                </div>
+                <div style={{gridColumn:'span 2', padding:'40px', textAlign:'center', color:'#999', fontSize:'1.2rem', fontWeight:700}}>상품이 없습니다. 추가해보세요!</div>
               )}
-              
-              {/* 빈칸 채우기 */}
-              {finalVisibleEvents.length > 0 && finalVisibleEvents.length % 2 !== 0 && (
-                <div className="notice-item" style={{ background: '#f5f5f5', cursor: 'default' }}></div>
-              )}
+              {finalVisibleEvents.length > 0 && finalVisibleEvents.length % 2 !== 0 && <div className="notice-item" style={{ background: '#f5f5f5', cursor: 'default' }}></div>}
             </div>
-
-            {/* 3. 푸터 */}
             <div className="notice-footer">
               <div className="footer-msg">
-                {viewMode === 'ARRIVAL' ? (
-                  <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></>
-                ) : (
-                  <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>
-                )}
+                {viewMode === 'ARRIVAL' ? <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></> : <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>}
               </div>
-              <div className="footer-highlight">
-                {viewMode === 'ARRIVAL' ? (
-                   '🚨 신선/냉장(빨강)은 당일 픽업 필수!'
-                ) : (
-                  '💸 마감임박! 놓치면 품절입니다!'
-                )}
-              </div>
+              <div className="footer-highlight">{viewMode === 'ARRIVAL' ? '🚨 신선/냉장(빨강)은 당일 픽업 필수!' : '💸 마감임박! 놓치면 품절입니다!'}</div>
             </div>
-            
             <div className="footer-deco">S O D O M A L L &nbsp; S O N G D O</div>
           </div>
         </div>
 
-        {/* 버튼 */}
         <div className="action-buttons">
-          <button onClick={resetStates} className="btn-reset">
-            <RefreshCcw size={18} style={{marginRight:'5px'}}/> 초기화
-          </button>
+          <button onClick={resetStates} className="btn-reset"><RefreshCcw size={18} style={{marginRight:'5px'}}/> 초기화</button>
         </div>
       </div>
     </div>
