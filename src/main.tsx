@@ -117,21 +117,23 @@ const router = createBrowserRouter([
           },
 
 {
-  element: <AuthLayout />, // 🔐 여기부터 안쪽 children만 로그인 필수
+  element: <AuthLayout />, 
   children: [
-    // 메인 모던 리스트 ("/")
+    // ✅ ModernProductList가 "부모"가 되어야 합니다.
     {
-      index: true, // == path: ""
+      path: "/",  // index: true 대신 path: "/" 사용
       element: <ModernProductList />,
-    },
-    // ▶ 메인 상세페이지 ("/product/:productId")
-    {
-      path: "product/:productId",
-      element: <ProductDetailPage />,
+      children: [
+        // ✅ 상세 페이지가 "자식"으로 들어가야 리스트 위에 뜹니다 (리스트 유지됨)
+        {
+          path: "product/:productId",
+          element: <ProductDetailPage />,
+        },
+      ],
     },
 
-    // 기존 심플 디자인 ("/simple")
-    {
+// 기존 심플 디자인 ("/simple")
+          {
       path: "simple",
       element: <SimpleOrderPage />,
       children: [
@@ -139,31 +141,31 @@ const router = createBrowserRouter([
       ],
     },
 
-    // "/modern" 경로 (호환용)
-    {
-      path: "modern",
-      element: <ModernProductList />,
-      children: [
-        { path: "product/:productId", element: <ProductDetailPage /> },
-      ],
-    },
+          // "/modern" 경로 (호환용)
+          {
+            path: "modern",
+            element: <ModernProductList />,
+            children: [
+              { path: "product/:productId", element: <ProductDetailPage /> },
+            ],
+          },
 
-    // 뷰티 리스트 ("/beauty")
-    {
-      path: "beauty",
-      element: <BeautyProductList />,
-      children: [
-        { path: "product/:productId", element: <ProductDetailPage /> },
-      ],
-    },
+          // 뷰티 리스트 ("/beauty")
+          {
+            path: "beauty",
+            element: <BeautyProductList />,
+            children: [
+              { path: "product/:productId", element: <ProductDetailPage /> },
+            ],
+          },
 
-    // 마이페이지 > 예약 내역 ("/mypage/history")
-    {
-      path: "mypage/history",
-      element: <OrderHistoryPage />,
-    },
-  ],
-},
+          // 마이페이지 > 예약 내역 ("/mypage/history")
+          {
+            path: "mypage/history",
+            element: <OrderHistoryPage />,
+          },
+        ],
+      },
         ],
       },
 

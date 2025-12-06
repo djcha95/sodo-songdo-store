@@ -1,6 +1,6 @@
 // src/layouts/CustomerLayout.tsx
 
-import React, { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react';
+import React, { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
 import { Outlet, useOutletContext, useLocation, useNavigate } from 'react-router-dom';
 import Header from '@/components/common/Header';
 import './CustomerLayout.css';
@@ -28,6 +28,7 @@ const CustomerLayout: React.FC = () => {
   const navigate = useNavigate();
 
   // ✅ [수정] 메인('/')도 이제 모던 페이지입니다.
+  // location이 변경될 때마다 계산되지만, true/false 결과가 바뀌지 않으면 렌더링에 영향 없음
   const isModernPage = 
     location.pathname === '/' ||
     location.pathname.startsWith('/modern') || 
@@ -41,6 +42,7 @@ const CustomerLayout: React.FC = () => {
     setActiveSection(section);
     setIsNavigating(true);
     
+    // 모던 페이지(desktop-app-wrapper)에서는 window 스크롤을 사용
     const STICKY_HEADER_TOP_OFFSET = 60; 
     const EXTRA_MARGIN = 15;
     const elementPosition = ref.current.getBoundingClientRect().top;
@@ -51,11 +53,10 @@ const CustomerLayout: React.FC = () => {
     setTimeout(() => {
       setIsNavigating(false);
     }, 1000);
-  }, [location.pathname]);
+  }, []); // 의존성 배열 비움 (Ref는 stable하므로)
 
   // 기존 스크롤 스파이 로직 (레거시 페이지용)
   useEffect(() => {
-    // ✅ 모던 페이지인 경우 작동하지 않음
     if (isModernPage) return;
 
     const handleScroll = () => {
@@ -75,15 +76,29 @@ const CustomerLayout: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [location.pathname, activeSection, isNavigating, isModernPage]);
 
+  // ✅ [중요 최적화] Context 객체들을 useMemo로 감싸서
+  // 라우트 이동(location 변경) 시에도 객체 참조가 유지되도록 함
+  const tabContextValue = useMemo(() => ({ 
+    activeSection, 
+    scrollToSection, 
+    isNavigating 
+  }), [activeSection, scrollToSection, isNavigating]);
+
+  const outletContextValue = useMemo(() => ({ 
+    primaryRef, 
+    secondaryRef 
+  }), [primaryRef, secondaryRef]); // Refs는 변경되지 않지만 명시
+
   return (
-    <TabContext.Provider value={{ activeSection, scrollToSection, isNavigating }}>
+    <TabContext.Provider value={tabContextValue}>
       {/* 1. Header는 최상위에 위치 */}
       <Header />
       
       {/* 2. 래퍼는 메인 컨텐츠만 감싸도록 변경 */}
       <div className={isModernPage ? "desktop-app-wrapper" : "customer-layout-container"}>
         <main className={isModernPage ? "mobile-app-view" : "customer-main-content"}>
-          <Outlet context={{ primaryRef, secondaryRef }} />
+          {/* Outlet에 전달되는 context가 변경되지 않아야 하위 컴포넌트가 유지됨 */}
+          <Outlet context={outletContextValue} />
         </main>
       </div>
       

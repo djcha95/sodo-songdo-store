@@ -3,16 +3,39 @@
   "headers": [
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     },
     {
       "source": "/fonts/(.*)\\.(woff2)$",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     },
-    { "source": "/(sodomall-logo\\.png|sodomall_wel\\.png)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+    {
+      "source": "/(sodomall-logo\\.png|sodomall_wel\\.png)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    },
     {
       "source": "/index.html",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, max-age=0, must-revalidate"
+        }
+      ]
     }
   ],
   "rewrites": [
@@ -30,7 +53,11 @@
         }
       ],
       "missing": [
-        { "type": "header", "key": "sec-fetch-mode", "value": "navigate" }
+        {
+          "type": "header",
+          "key": "sec-fetch-mode",
+          "value": "navigate"
+        }
       ],
       "destination": "/api/og?id=:id"
     },
