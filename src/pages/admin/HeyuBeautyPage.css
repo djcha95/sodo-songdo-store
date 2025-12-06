@@ -1,0 +1,12 @@
+/* src/styles/HeyuBeauty.css */
+.heyu-hero {
+  background: linear-gradient(to bottom right, #ffffff, #f8f8f8);
+}
+
+.heyu-gallery img {
+  transition: transform 0.4s ease;
+}
+
+.heyu-gallery img:hover {
+  transform: scale(1.02);
+}

@@ -4,12 +4,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTabs } from '@/layouts/CustomerLayout';
-import { Flame, Clock, ShieldCheck } from 'lucide-react'; 
+import { Flame, Clock, ShieldCheck, Menu } from 'lucide-react'; 
+import SideMenu from './SideMenu';
 import './Header.css';
 
 const Header: React.FC = () => {
   const { isAdmin } = useAuth();
   const [isVisible, setIsVisible] = useState(true);
+  const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
+
   const lastScrollY = useRef(0);
   const location = useLocation();
   const navigate = useNavigate();
@@ -55,60 +58,86 @@ const Header: React.FC = () => {
     }
   };
 
+  const handleOpenSideMenu = () => setIsSideMenuOpen(true);
+  const handleCloseSideMenu = () => setIsSideMenuOpen(false);
+
+  // 🔔 현재는 헤더에서 알림 패널을 직접 열지 않으므로 no-op 전달
+  const handleOpenNotificationsFromSideMenu = () => {
+    // 나중에 알림 패널을 헤더 쪽에서 열고 싶으면 이 부분을 구현하면 됨.
+  };
+
   return (
-    <header className={`new-customer-header ${isVisible ? 'visible' : 'hidden'}`}>
-      <div className={`header-content ${isModernPage || isHistoryPage ? 'modern-layout' : ''}`}>
-        <div className="header-left">
-          {shouldShowTabs && tabContext ? (
-            <div className="header-page-tabs">
-              <button
-                className={`page-tab primary ${tabContext.activeSection === 'primary' ? 'active' : ''}`}
-                onClick={() => handleTabClick('primary')}
-              >
-                <Flame size={16} />
-                <span>공동구매</span>
-              </button>
-              <button
-                className={`page-tab secondary ${tabContext.activeSection === 'secondary' ? 'active' : ''}`}
-                onClick={() => handleTabClick('secondary')}
-              >
-                <Clock size={16} />
-                <span>추가예약</span>
-              </button>
-            </div>
-          ) : (
-            <div className="header-brand">
-              <NavLink to="/" className="brand-link">
-                {/* 🎄 크리스마스 분위기 로고 + 송도픽 네이밍 */}
-                🎄 송도PICK
-              </NavLink>
-            </div>
-          )}
-        </div>
+    <>
+      <header className={`new-customer-header ${isVisible ? 'visible' : 'hidden'}`}>
+        <div className={`header-content ${isModernPage || isHistoryPage ? 'modern-layout' : ''}`}>
+          <div className="header-left">
+            {shouldShowTabs && tabContext ? (
+              <div className="header-page-tabs">
+                <button
+                  className={`page-tab primary ${tabContext.activeSection === 'primary' ? 'active' : ''}`}
+                  onClick={() => handleTabClick('primary')}
+                >
+                  <Flame size={16} />
+                  <span>공동구매</span>
+                </button>
+                <button
+                  className={`page-tab secondary ${tabContext.activeSection === 'secondary' ? 'active' : ''}`}
+                  onClick={() => handleTabClick('secondary')}
+                >
+                  <Clock size={16} />
+                  <span>추가예약</span>
+                </button>
+              </div>
+            ) : (
+              <div className="header-brand">
+                {/* 🍔 햄버거 버튼 추가 */}
+                <button
+                  className="hamburger-btn"
+                  onClick={handleOpenSideMenu}
+                  aria-label="메뉴 열기"
+                >
+                  <Menu size={22} />
+                </button>
 
-        <div className="header-right">
-          <nav className="header-nav">
-            {/* 스위칭 버튼 */}
-            <NavLink
-              to={navButtonConfig.to}
-              className={`nav-item modern-text-btn ${navButtonConfig.styleClass}`}
-            >
-              {navButtonConfig.label}
-            </NavLink>
-
-            {isAdmin && (
-              <NavLink
-                to="/admin"
-                className={({ isActive }) => `nav-item admin-link ${isActive ? 'active' : ''}`}
-              >
-                <ShieldCheck size={16} />
-                <span>관리</span>
-              </NavLink>
+                <NavLink to="/" className="brand-link">
+                  {/* 🎄 송도픽 로고 */}
+                  🎄 송도PICK
+                </NavLink>
+              </div>
             )}
-          </nav>
+          </div>
+
+          <div className="header-right">
+            <nav className="header-nav">
+              {/* 스위칭 버튼 */}
+              <NavLink
+                to={navButtonConfig.to}
+                className={`nav-item modern-text-btn ${navButtonConfig.styleClass}`}
+              >
+                {navButtonConfig.label}
+              </NavLink>
+
+              {isAdmin && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) => `nav-item admin-link ${isActive ? 'active' : ''}`}
+                >
+                  <ShieldCheck size={16} />
+                  <span>관리</span>
+                </NavLink>
+              )}
+            </nav>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* 🌟 사이드메뉴 연결 */}
+      <SideMenu
+        isOpen={isSideMenuOpen}
+        onClose={handleCloseSideMenu}
+        onOpenNotifications={handleOpenNotificationsFromSideMenu}
+      />
+    </>
   );
 };
 

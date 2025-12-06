@@ -127,6 +127,7 @@ export interface SalesRound {
   manualStatus?: SalesRoundStatus | null;
   isManuallyOnsite?: boolean;
   eventType?: string | null;
+  sourceType?: 'SODOMALL' | 'SONGDOPICK_ONLY';
   // entryCount 제거
 }
 

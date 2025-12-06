@@ -1,161 +1,213 @@
 /* src/components/common/SideMenu.css */
 
-.sidemenu-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1900;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+/* 전체 오버레이 */
+.side-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0); /* 처음엔 투명 */
+  transition: background 0.2s ease-out;
 }
 
-.sidemenu-overlay.open {
-    opacity: 1;
-    visibility: visible;
+.side-menu-overlay.open {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.55); /* 어두운 배경 오버레이 */
 }
 
-.sidemenu-panel {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 80%;
-    max-width: 320px;
-    height: 100%;
-    background-color: #fff;
-    z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease-in-out;
-    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1);
+.side-menu-panel {
+  position: absolute;
+  top: 0;
+  left: 0; /* 🔁 오른쪽 대신 왼쪽 고정 */
+  width: min(80%, 320px);
+  height: 100%;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%); /* 🔁 왼쪽 바깥에서 시작 */
+  transition: transform 0.25s ease-out;
+  box-shadow: 8px 0 30px rgba(15, 23, 42, 0.35); /* 🔁 그림자 방향 반대로 */
 }
 
-.sidemenu-panel.open {
-    transform: translateX(0);
+.side-menu-overlay.open .side-menu-panel {
+  transform: translateX(0);
 }
 
-.sidemenu-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px;
-    border-bottom: 1px solid var(--border-color);
+/* 헤더 영역 */
+.side-menu-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 18px 10px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.user-profile-section {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.side-menu-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.user-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: var(--accent-color);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    font-weight: 600;
+.side-menu-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
-.user-info {
-    display: flex;
-    flex-direction: column;
+.side-menu-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+  color: #0f172a;
+  letter-spacing: -0.5px;
 }
 
-.user-name {
-    font-weight: 600;
-    font-size: 1rem;
+.side-menu-sub {
+  font-size: 11px;
+  margin: 0;
+  color: #6b7280;
+  max-width: 220px;
+  line-height: 1.5;
 }
 
-.user-tier {
-    font-size: 0.8rem;
-    color: var(--text-color-light);
+.side-menu-close-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  margin-left: 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
 }
 
-.sidemenu-close-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-color-dark);
-    padding: 8px;
+.side-menu-close-btn:active {
+  background: #e5e7eb;
 }
 
-.sidemenu-links {
-    flex-grow: 1;
-    padding: 16px 0;
-    display: flex;
-    flex-direction: column;
+/* 링크 영역 */
+.side-menu-links {
+  flex: 1;
+  padding: 10px 0 8px;
+  overflow-y: auto;
 }
 
-.sidemenu-link {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 24px;
-    text-decoration: none;
-    color: var(--text-color-dark);
-    font-size: 1rem;
-    font-weight: 500;
-    transition: background-color 0.2s, color 0.2s;
-    /* ✅ [추가] button 요소와 a 요소가 동일하게 보이도록 스타일 리셋 */
-    background: none;
-    border: none;
-    width: 100%;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit; /* 폰트 상속 */
+.side-menu-link {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s ease-out;
 }
 
-.sidemenu-link:hover {
-    background-color: var(--background-light);
+.side-menu-link:hover {
+  background: #f9fafb;
 }
 
-.sidemenu-link.active {
-    color: var(--accent-color);
-    font-weight: 700;
-    background-color: var(--accent-color-light);
+.side-menu-link.active {
+  background: #fef2f2;
 }
 
-/* ✅ [추가] 사이드 메뉴 내 알림 뱃지 스타일 */
-.sidemenu-notification-badge {
-    margin-left: auto;
-    background-color: var(--accent-color);
-    color: white;
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 10px;
-    min-width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
+.side-menu-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #0f172a;
+  flex-shrink: 0;
 }
 
-.sidemenu-footer {
-    padding: 16px;
-    border-top: 1px solid var(--border-color);
+.side-menu-link.active .side-menu-icon-wrap {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
-.logout-button {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 12px 8px;
-    border: none;
-    background: none;
-    cursor: pointer;
-    text-align: left;
-    font-size: 1rem;
-    color: var(--text-color-light);
+.side-menu-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.side-menu-main-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.side-menu-sub-text {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* 🔥 섹션 레이블 스타일 추가 */
+.side-menu-section-label {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8; /* slate-400 */
+  margin-top: 20px;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* 하단 영역 */
+.side-menu-footer {
+  padding: 10px 16px 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.side-menu-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5563;
+  text-decoration: none;
+  margin-bottom: 6px;
+}
+
+.side-menu-footer-link svg {
+  color: #0f172a;
+}
+
+.side-menu-footer-copy {
+  font-size: 10px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* 스크롤바 커스터마이징 (모바일에선 거의 안 보이지만) */
+.side-menu-links::-webkit-scrollbar {
+  width: 4px;
+}
+.side-menu-links::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 999px;
+}
+
+/* 데스크탑에서도 자연스럽게 보이도록 */
+@media (min-width: 1024px) {
+  .side-menu-panel {
+    width: 360px;
+  }
 }

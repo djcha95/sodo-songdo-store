@@ -36,7 +36,8 @@ interface ManualItem {
 // 상태 타입
 type ItemState = 'NORMAL' | 'SHRUNK' | 'HIDDEN';
 // 모드 타입
-type ViewMode = 'ARRIVAL' | 'NOSHOW';
+// 1. ViewMode 타입에 'CLOSING' 추가
+type ViewMode = 'ARRIVAL' | 'NOSHOW' | 'CLOSING';
 
 const PickupCheckPage: React.FC = () => {
   useDocumentTitle('수진이의 픽업체쿠!');
@@ -126,12 +127,21 @@ const PickupCheckPage: React.FC = () => {
     });
   }, [selectedDate, eventsByDate]);
 
-  // ★ [이미지 생성기용] 이벤트 가져오기 (노쇼 로직 포함)
+  // 2. [이미지 생성기용] 이벤트 가져오기 (마감임박 로직 수정됨)
   const imageGeneratorEvents = useMemo(() => {
     const targetDateKey = selectedDate.format('YYYY-MM-DD');
+    
     if (viewMode === 'ARRIVAL') {
+      // ARRIVAL: 오늘(선택된 날짜) 픽업인 상품
       return eventsByDate[targetDateKey] || [];
+      
+    } else if (viewMode === 'CLOSING') {
+      // ★ [수정됨] CLOSING: 예약 마감 임박 (D-1) -> 픽업일이 내일인 상품
+      const tomorrow = selectedDate.add(1, 'day').format('YYYY-MM-DD');
+      return eventsByDate[tomorrow] || [];
+      
     } else {
+      // NOSHOW: 기존 로직 유지 (신선=어제, 일반=그저께)
       const yesterday = selectedDate.subtract(1, 'day').format('YYYY-MM-DD');
       const dayBeforeYesterday = selectedDate.subtract(2, 'day').format('YYYY-MM-DD');
       const freshItems = (eventsByDate[yesterday] || []).filter(item => ['FRESH', 'COLD'].includes(item.storageType));
@@ -206,6 +216,7 @@ const PickupCheckPage: React.FC = () => {
 
   if (loading) return <SodomallLoader message="로딩 중..." />;
 
+  // 3. 렌더링 부분 수정 시작
   return (
     <div className="pickup-check-container">
       <header className="pickup-header">
@@ -244,10 +255,16 @@ const PickupCheckPage: React.FC = () => {
         <div className="event-list-section">
           <div className="list-header compact-header">
             {/* 제목이 모드에 따라 바뀝니다 */}
-            <h3 style={viewMode === 'NOSHOW' ? { color: '#1565c0' } : {}}>
-              {viewMode === 'ARRIVAL' 
-                ? `🔥 ${selectedDate.format('MM/DD(ddd)')} 입고완료! 🔥` 
-                : `📢 노쇼분 오늘부터 현장판매 📢`}
+            <h3 style={
+              viewMode === 'NOSHOW' ? { color: '#1565c0' } : 
+              viewMode === 'CLOSING' ? { color: '#e65100' } : {} // 마감임박 색상
+            }>
+              {viewMode === 'ARRIVAL' && `🔥 ${selectedDate.format('MM/DD(ddd)')} 입고완료! 🔥`}
+              
+              {/* [수정] 내일 픽업일인 상품들이므로 오늘 마감된다는 멘트 */}
+              {viewMode === 'CLOSING' && `⏳ 예약 마감 임박!⏳`}
+              
+              {viewMode === 'NOSHOW' && `📢 노쇼분 오늘부터 현장판매 📢`}
             </h3>
           </div>
 
@@ -296,12 +313,12 @@ const PickupCheckPage: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  /* [모드 2] 노쇼 줍줍: 그냥 쭉 나열하기 (현장판매 리스트 스타일) */
+                  /* [모드 2/3] 노쇼 줍줍 & 마감 임박: 그냥 쭉 나열하기 */
                   <ul className="pickup-items-compact">
                     {finalVisibleEvents.map(item => (
                       <li key={item.uniqueId} className="pickup-row">
                         <span className="row-product-name">
-                          ✔️ {item.productName}
+                          {viewMode === 'CLOSING' ? '⏳' : '✔️'} {item.productName}
                           {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
                         </span>
                       </li>
@@ -312,7 +329,11 @@ const PickupCheckPage: React.FC = () => {
             ) : (
               <div className="empty-state">
                 <MapPin size={32} />
-                <p>{viewMode === 'ARRIVAL' ? '입고 일정 없음' : '노쇼 물량 없음'}</p>
+                <p>
+                  {viewMode === 'ARRIVAL' && '입고 일정 없음'}
+                  {viewMode === 'CLOSING' && '마감 임박 상품 없음'}
+                  {viewMode === 'NOSHOW' && '노쇼 물량 없음'}
+                </p>
               </div>
             )}
           </div>
@@ -324,6 +345,10 @@ const PickupCheckPage: React.FC = () => {
         <div className="mode-tabs">
           <button className={`mode-tab ${viewMode === 'ARRIVAL' ? 'active-arrival' : ''}`} onClick={() => setViewMode('ARRIVAL')}>
             <Bell size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 입고 알림
+          </button>
+          {/* ★ 마감임박 버튼 추가 */}
+          <button className={`mode-tab ${viewMode === 'CLOSING' ? 'active-closing' : ''}`} onClick={() => setViewMode('CLOSING')}>
+            <CalendarCheck size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 마감 임박
           </button>
           <button className={`mode-tab ${viewMode === 'NOSHOW' ? 'active-noshow' : ''}`} onClick={() => setViewMode('NOSHOW')}>
             <ShoppingBag size={18} style={{marginRight:'5px', verticalAlign:'text-bottom'}}/> 노쇼 줍줍
@@ -340,15 +365,29 @@ const PickupCheckPage: React.FC = () => {
           <button className="btn-add-manual" onClick={handleAddManualItem}><Plus size={16} style={{marginRight:'4px'}}/> 추가</button>
         </div>
 
-        <h2 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>{viewMode === 'ARRIVAL' ? '📸 입고 안내문' : '📸 현장판매 리스트'}</h2>
+        <h2 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>
+          {viewMode === 'ARRIVAL' && '📸 입고 안내문'}
+          {viewMode === 'CLOSING' && '📸 예약 마감 경고장'} {/* 멘트 수정 */}
+          {viewMode === 'NOSHOW' && '📸 현장판매 리스트'}
+        </h2>
         
-        {/* 캡쳐 프레임 */}
-        <div ref={captureRef} className={`capture-frame ${viewMode === 'NOSHOW' ? 'theme-blue' : ''}`}>
+        {/* 캡쳐 프레임 스타일 동적 변경 */}
+        <div ref={captureRef} className={`capture-frame ${viewMode === 'NOSHOW' ? 'theme-blue' : viewMode === 'CLOSING' ? 'theme-orange' : ''}`}>
           <div className="pickup-notice-card">
             <div className="notice-header">
+              {/* 날짜 뱃지 */}
               <span className="notice-date-badge">{selectedDate.format('M월 D일 (ddd)')}</span>
-              <h2 className="notice-title">{viewMode === 'ARRIVAL' ? '입고완료! 픽업와주세요!' : '노쇼분 현장판매 시작!'}</h2>
+              <h2 className="notice-title">
+                {viewMode === 'ARRIVAL' && '입고완료! 픽업와주세요!'}
+                
+                {/* [수정] 예약 마감 강조 */}
+                {viewMode === 'CLOSING' && '추가공구 곧 마감됩니다!'} 
+                
+                {viewMode === 'NOSHOW' && '노쇼분 현장판매 시작!'}
+              </h2>
             </div>
+            
+            {/* 그리드 아이템들 (기존 로직 유지) */}
             <div className="notice-grid">
               {finalVisibleEvents.length > 0 ? finalVisibleEvents.map((item) => {
                 let colorClass = 'text-black';
@@ -365,15 +404,31 @@ const PickupCheckPage: React.FC = () => {
                   </div>
                 );
               }) : (
-                <div style={{gridColumn:'span 2', padding:'40px', textAlign:'center', color:'#999', fontSize:'1.2rem', fontWeight:700}}>상품이 없습니다. 추가해보세요!</div>
+                <div style={{gridColumn:'span 2', padding:'40px', textAlign:'center', color:'#999', fontSize:'1.2rem', fontWeight:700}}>
+                  {viewMode === 'CLOSING' ? '마감 임박 상품이 없습니다.' : '상품이 없습니다. 추가해보세요!'}
+                </div>
               )}
+              {/* 홀수일 때 빈칸 채우기 */}
               {finalVisibleEvents.length > 0 && finalVisibleEvents.length % 2 !== 0 && <div className="notice-item" style={{ background: '#f5f5f5', cursor: 'default' }}></div>}
             </div>
+
             <div className="notice-footer">
               <div className="footer-msg">
-                {viewMode === 'ARRIVAL' ? <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></> : <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>}
+                {viewMode === 'ARRIVAL' && <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></>}
+                
+                {/* [수정] 마감 시각 강조 */}
+                {viewMode === 'CLOSING' && <>⏰ 내일 <span className="text-red" style={{fontWeight:900}}>오후 1시</span> 예약 칼마감!</>}
+                
+                {viewMode === 'NOSHOW' && <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>}
               </div>
-              <div className="footer-highlight">{viewMode === 'ARRIVAL' ? '🚨 신선/냉장(빨강)은 당일 픽업 필수!' : '💸 마감임박! 놓치면 품절입니다!'}</div>
+              <div className="footer-highlight">
+                {viewMode === 'ARRIVAL' && '🚨 신선/냉장(빨강)은 당일 픽업 필수!'}
+                
+                {/* [수정] 품절 경고 */}
+                {viewMode === 'CLOSING' && '지금 주문 안 하시면 재고 없습니다!'}
+                
+                {viewMode === 'NOSHOW' && '💸 마감임박! 놓치면 품절입니다!'}
+              </div>
             </div>
             <div className="footer-deco">S O D O M A L L &nbsp; S O N G D O</div>
           </div>

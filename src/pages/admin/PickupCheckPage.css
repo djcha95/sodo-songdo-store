@@ -497,3 +497,24 @@
 .btn-add-manual:hover {
   background: #555;
 }
+
+/* 버튼: 마감임박 (주황색) */
+.mode-tab.active-closing {
+  background: #fff3e0;
+  border-color: #ff9800;
+  color: #f57c00;
+}
+
+/* ★ 테마 3: 마감 임박 (주황/경고 계열) ★ */
+.capture-frame.theme-orange {
+  background: linear-gradient(135deg, #fce38a 0%, #f38181 100%); /* 따뜻한 경고색 */
+}
+
+/* 마감임박 모드일 때 제목 색상 */
+.theme-orange .notice-title {
+  color: #e65100; /* 짙은 주황 */
+}
+
+.theme-orange .footer-highlight {
+  color: #e65100;
+}

@@ -158,11 +158,193 @@
 .songdo-tab-item.active { color: #fff; } /* 활성 탭 흰색 */
 .songdo-tab-item.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 2px; background: #fff; } /* 활성 탭 흰색 언더라인 */
 
+/* src/styles/ModernProduct.css */
+
+/* =============================== */
+/* 🧡 메인 이벤트 히어로 배너 (화려한 버전) */
+/* =============================== */
+
+.event-hero-wrapper {
+  margin: 16px 16px 12px;
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  /* 더 깊은 그림자로 입체감 줌 */
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2), 0 5px 15px rgba(0,0,0,0.1);
+  background: transparent;
+  transform: translateZ(0); /* 모바일 성능 최적화 */
+}
+
+.event-hero-slider {
+  display: flex;
+  width: 100%;
+  transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1); /* 더 부드러운 움직임 */
+}
+
+/* [수정] 슬라이드 개별 스타일: 아래 패딩을 늘려서 여유 공간 확보 */
+.event-hero-slide {
+  min-width: 100%;
+  padding: 20px 24px 32px 24px; /* 아래쪽(3번째 값)을 32px로 늘림 */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* [신규 추가] 슬라이더 점(Dots) 위치 잡아주기 */
+.event-hero-dots {
+  position: absolute;
+  bottom: 10px; /* 배너 바닥에서 10px 위로 */
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.event-hero-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.event-hero-dot.active {
+  background: #111;
+  width: 18px; /* 활성화되면 길어지게 */
+  border-radius: 10px;
+}
+
+/* ✨ [NEW] 뻔쩍뻔쩍! 빛이 지나가는 효과 (Shimmer) */
+.event-hero-slide::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-25deg);
+  animation: shimmer 3s infinite; /* 3초마다 반짝임 */
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  20% { left: 200%; } /* 쓱 지나감 */
+  100% { left: 200%; } /* 대기 */
+}
+
+/* 내부 컨텐츠 래퍼 */
+.event-hero-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  position: relative;
+  z-index: 1; /* 빛 효과보다 위에 글씨가 있어야 함 */
+}
+
+.event-hero-content {
+  flex: 1;
+  padding-right: 12px;
+  text-shadow: 0 2px 10px rgba(255,255,255,0.5); /* 글씨 뒤에 은은한 광 */
+}
+
+/* 칩 스타일 더 고급스럽게 */
+.event-hero-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  margin-bottom: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  color: #111;
+}
+
+.event-hero-title {
+  margin: 0 0 4px;
+  font-size: 19px; /* 폰트 조금 키움 */
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  color: #111;
+}
+
+.event-hero-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.85;
+  color: #333;
+  font-weight: 500;
+}
+
+/* 버튼 디자인 더 튀게 */
+.event-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 800;
+  background: #111;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3); /* 그림자 진하게 */
+  transition: transform 0.2s;
+}
+.event-hero-cta:active {
+  transform: scale(0.95);
+}
+
+/* 🖼️ 이미지(액자) 영역 - 여기가 중요! */
+.event-hero-image-wrap {
+  flex-shrink: 0;
+  width: 90px;
+  height: 90px;
+  border-radius: 18px; /* 부드러운 사각형 */
+  overflow: hidden;
+  background: #fff;
+  
+  /* 사진을 돋보이게 하는 액자 효과 */
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); /* 붕 뜬 느낌 */
+}
+
+/* 사진이 들어오면 꽉 차게 */
+.event-hero-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 이미지가 없을 때 숨김 처리 (JS에서 이미지가 없으면 렌더링 안 하지만 혹시 몰라서) */
+.event-hero-image-wrap:empty {
+  display: none;
+}
+
 /* ========================================= */
 /* 이벤트 섹션 스타일 */
 /* ========================================= */
 .songdo-event-section { 
-    padding: 16px 20px 12px; 
+    padding: 2px 20px 12px; 
     background: transparent; /* 배경 투명하게 */
     border-bottom: 1px solid rgba(255,255,255,0.1); 
     color: #fff; /* 텍스트 흰색 */
@@ -172,7 +354,7 @@
     color: #b91c1c; background: linear-gradient(90deg, #fee2e2, #fef9c3); 
 }
 .songdo-event-title { 
-    margin: 6px 0 2px; font-size: 16px; font-weight: 800; 
+    margin: 4px 0 2px; font-size: 16px; font-weight: 800; 
     color: #fff; /* 흰색 */
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
     letter-spacing: -0.3px; 
@@ -392,3 +574,162 @@
 .section-title { font-size: 18px; font-weight: 800; color: #111; margin: 0 0 4px; }
 .section-sub { font-size: 12px; color: #888; margin: 0; }
 .view-all-btn { background: none; border: none; font-size: 12px; color: #666; display: flex; align-items: center; gap: 2px; padding: 4px; cursor: pointer; }
+
+/* src/styles/ModernProduct.css 맨 아래 추가 */
+
+/* --- 소분류 필터 (Source Filter) --- */
+.source-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0 4px; /* 탭 아래 적당한 여백 */
+    overflow-x: auto;
+    /* 스크롤바 숨김 */
+    -ms-overflow-style: none; 
+    scrollbar-width: none; 
+}
+.source-filter-row::-webkit-scrollbar {
+    display: none;
+}
+
+.source-filter-btn {
+    background: rgba(255, 255, 255, 0.05); /* 평소엔 아주 연한 반투명 */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94A3B8; /* 비활성 텍스트: 슬레이트 그레이 */
+    padding: 6px 14px;
+    border-radius: 20px; /* 둥근 캡슐 모양 */
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.source-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+}
+
+/* 활성화 상태: 밝게 빛나며 강조 */
+.source-filter-btn.active {
+    background: rgba(255, 255, 255, 0.9);
+    color: #0F172A; /* 배경이 밝으니 글씨는 어둡게 */
+    border-color: #fff;
+    font-weight: 700;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); /* 살짝 빛나는 효과 */
+}
+
+/* 버튼 사이 구분선 (선택사항 - 디자인에 따라 제거 가능) */
+.filter-divider {
+    width: 1px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 2px;
+}
+
+/* 아래 코드는 기존 코드와 중복되어 제거되었지만, 혹시 이후에 참조할 수 있도록 주석 처리합니다. 
+.event-hero-image-wrap {
+  flex-shrink: 0;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.45);
+  border: 2px solid rgba(248, 250, 252, 0.7);
+}
+
+.event-hero-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+*/
+
+/* 헤이유뷰티룸 배너 전용: 블랙&화이트 톤 */
+.event-hero-image-wrap.heyu-bw {
+  border-color: rgba(249, 250, 251, 0.95);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7);
+}
+
+.event-hero-image-wrap.heyu-bw img {
+  filter: grayscale(1);
+}
+
+/* src/styles/ModernProduct.css */
+
+/* ... (기존 위쪽 코드는 그대로 유지) ... */
+
+/* =============================== */
+/* 🧡 메인 이벤트 히어로 배너 수정 */
+/* =============================== */
+
+/* 각 슬라이드: Flex Box로 변경하여 내부 정렬 */
+.event-hero-slide {
+  min-width: 100%;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  display: flex; /* Flex 적용 */
+  align-items: center;
+  justify-content: center; /* 가운데 정렬 */
+  color: #111827;
+  background-size: cover;
+  background-position: center;
+  cursor: pointer; /* 클릭 가능하다는 표시 */
+}
+
+/* 텍스트와 이미지를 감싸는 내부 래퍼 (신규 추가) */
+.event-hero-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 양끝 정렬 */
+  width: 100%;
+  max-width: 100%;
+  gap: 12px; /* 텍스트와 이미지 사이 간격 */
+}
+
+/* 텍스트 영역 */
+.event-hero-content {
+  flex: 1; /* 남은 공간 모두 차지 */
+  min-width: 0; /* 텍스트 말줄임 등을 위해 필요 */
+  padding-right: 4px; /* 이미지와 너무 붙지 않게 */
+}
+
+/* 이미지 럭셔리 스타일 수정 */
+.event-hero-image-wrap {
+  flex-shrink: 0; /* 크기 줄어들지 않게 */
+  width: 88px;
+  height: 88px;
+  border-radius: 16px; /* 둥근 사각형이 더 모던해 보임 */
+  overflow: hidden;
+  /* 럭셔리한 그림자: 부드럽게 퍼지는 느낌 */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: #fff; /* 이미지가 투명할 경우를 대비 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.event-hero-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* 꽉 차게 */
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+/* 헤이유뷰티룸 배너 전용: 블랙&화이트 톤 */
+.event-hero-image-wrap.heyu-bw {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2); /* 그림자 조금 더 진하게 */
+}
+
+/* 데스크탑일 때 이미지 살짝 키우기 */
+@media (min-width: 1024px) {
+  .event-hero-image-wrap {
+    width: 120px;
+    height: 120px;
+    border-radius: 20px;
+  }
+}

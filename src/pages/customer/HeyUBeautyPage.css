@@ -1,0 +1,691 @@
+/* src/pages/customer/HeyUBeautyPage.css */
+
+.heyu-page {
+  padding: 32px 20px 80px;
+  max-width: 960px;
+  margin: 0 auto;
+  font-family: "Pretendard", -apple-system, system-ui, sans-serif;
+  color: #111827;
+  line-height: 1.6;
+}
+
+/* 상단 태그 */
+.heyu-breadcrumb {
+  font-size: 13px; /* 크기 UP */
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #6b7280; /* 조금 더 진하게 */
+  margin-bottom: 20px;
+}
+
+/* ================= HERO ================= */
+.heyu-hero {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 32px;
+  padding: 36px;
+  border-radius: 24px;
+  background: radial-gradient(circle at top left, #ffffff 0, #f3f4f6 100%);
+  border: 1px solid rgba(229, 231, 235, 1);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
+  margin-bottom: 56px;
+}
+
+@media (max-width: 768px) {
+  .heyu-hero {
+    grid-template-columns: 1fr;
+    padding: 24px;
+    gap: 28px;
+  }
+}
+
+.heyu-hero-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+}
+
+.heyu-collab-tag {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 8px 14px;
+  border-radius: 99px;
+  background: #111827;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.heyu-hero-title {
+  font-size: 28px;
+  line-height: 1.35;
+  margin: 0;
+  color: #374151;
+  font-weight: 500;
+}
+
+.heyu-hero-title span {
+  font-size: 34px; /* 크기 UP */
+  font-weight: 800;
+  color: #111827;
+  display: block;
+  margin-top: 6px;
+}
+
+@media (max-width: 768px) {
+  .heyu-hero-title { font-size: 22px; }
+  .heyu-hero-title span { font-size: 26px; }
+}
+
+.heyu-hero-desc {
+  font-size: 16px; /* 크기 UP (기존 14px) */
+  line-height: 1.7;
+  color: #374151; /* 진하게 */
+  margin: 0;
+  word-break: keep-all; /* 단어 단위 줄바꿈 */
+}
+
+.heyu-hero-desc strong {
+  color: #111827;
+  font-weight: 700;
+}
+
+/* Highlight Box */
+.heyu-hero-highlight {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 14px;
+}
+
+@media (max-width: 600px) {
+  .heyu-hero-highlight { grid-template-columns: 1fr; }
+}
+
+.heyu-hero-highlight-item {
+  background: rgba(255,255,255,0.85);
+  border: 1px solid #d1d5db; /* 테두리 조금 더 진하게 */
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.heyu-highlight-label {
+  font-size: 12px; /* 크기 UP */
+  font-weight: 800;
+  color: #6b7280;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.heyu-highlight-main {
+  font-size: 20px; /* 크기 UP */
+  font-weight: 800;
+  color: #b91c1c;
+  margin-bottom: 6px;
+}
+
+.heyu-highlight-sub {
+  font-size: 14px; /* 크기 UP */
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.heyu-highlight-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 14px; /* 크기 UP */
+  color: #1f2937; /* 진하게 */
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.heyu-highlight-list li { margin-bottom: 6px; }
+.price-emphasis { font-weight: 800; color: #b91c1c; margin-left: 4px; }
+
+/* Hero Right (Image) */
+.heyu-hero-right {
+  display: flex;
+  align-items: center;
+}
+
+.heyu-hero-image-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 0.85;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+  cursor: pointer; /* 클릭 가능 표시 */
+}
+
+.heyu-hero-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+.heyu-hero-image-card:hover .heyu-hero-image { transform: scale(1.03); }
+
+.heyu-logo-badge {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(4px);
+  padding: 10px 16px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.heyu-logo-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.heyu-logo-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* ================= COMMON ================= */
+.heyu-section { margin-bottom: 72px; }
+
+.heyu-section-title {
+  font-size: 22px; /* 크기 UP */
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 10px;
+}
+
+.heyu-section-sub {
+  font-size: 15px; /* 크기 UP */
+  color: #4b5563;
+  margin: 0 0 24px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+/* Intro Grid */
+.heyu-intro-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 768px) { .heyu-intro-grid { grid-template-columns: 1fr; } }
+
+.heyu-intro-card {
+  background: #f9fafb;
+  border-radius: 18px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+}
+
+.heyu-intro-card h3 {
+  font-size: 17px; /* 크기 UP */
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.heyu-intro-card p {
+  font-size: 15px; /* 크기 UP */
+  line-height: 1.6;
+  color: #374151; /* 진하게 */
+  margin: 0;
+  word-break: keep-all;
+}
+
+/* ⭐ Review Section (NEW) */
+.heyu-review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 768px) { .heyu-review-grid { grid-template-columns: 1fr; } }
+
+.heyu-review-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.review-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #374151;
+  margin-bottom: 12px;
+  font-style: italic;
+  font-weight: 500;
+  word-break: keep-all;
+}
+
+.review-user {
+  font-size: 13px;
+  color: #9ca3af;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* Benefit Grid */
+.heyu-benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 850px) { .heyu-benefit-grid { grid-template-columns: 1fr; } }
+
+.heyu-benefit-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 26px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.heyu-benefit-card.primary {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+}
+
+.heyu-benefit-card.primary .highlight-strong {
+  /* 배경색과 대비되는 밝은 색으로 변경합니다. */
+  color: #fbbf24; /* 푸터에서 사용된 노란색 강조색 */
+}
+
+.heyu-benefit-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #9ca3af;
+  margin-bottom: 10px;
+}
+
+.heyu-benefit-card.primary .heyu-benefit-label { color: #d1d5db; }
+
+.heyu-benefit-card h3 {
+  font-size: 18px; /* 크기 UP */
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.heyu-benefit-card p {
+  font-size: 15px; /* 크기 UP */
+  line-height: 1.6;
+  color: #374151; /* 진하게 */
+  margin: 0;
+  word-break: keep-all;
+}
+.heyu-benefit-card.primary p { color: #d1d5db; }
+.heyu-benefit-card.primary strong { color: #fbbf24; }
+
+.heyu-benefit-price {
+  margin-top: 14px !important;
+  font-weight: 700;
+  font-size: 16px; /* 크기 UP */
+}
+.heyu-benefit-price .before { text-decoration: line-through; color: #9ca3af; margin-right: 8px; }
+.heyu-benefit-price .arrow { margin-right: 8px; color: #d1d5db; }
+.heyu-benefit-price .after { color: #dc2626; }
+
+/* Gallery */
+.heyu-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 600px) {
+  .heyu-gallery-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+이거만 안
+.heyu-gallery-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #e5e7eb;
+  cursor: pointer; /* 클릭 커서 */
+}
+
+.heyu-gallery-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s, filter 0.3s;
+}
+.heyu-gallery-item:hover .heyu-gallery-img {
+  transform: scale(1.05);
+  filter: brightness(0.9);
+}
+
+.zoom-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.heyu-gallery-item:hover .zoom-icon { opacity: 1; }
+
+/* ⭐ Modal Style (NEW) */
+.heyu-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.heyu-modal-content {
+  position: relative;
+  max-width: 1000px;
+  max-height: 90vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.heyu-modal-content img {
+  max-width: 100%;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.heyu-modal-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 32px;
+  cursor: pointer;
+  padding: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ================= INFO & GUIDE SECTION ================= */
+.heyu-info-container {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 36px;
+  align-items: start;
+}
+@media (max-width: 800px) { .heyu-info-container { grid-template-columns: 1fr; } }
+
+/* Guide List */
+.heyu-guide-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.heyu-guide-list li {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.step-num {
+  font-size: 16px; /* 크기 UP */
+  font-weight: 800;
+  color: #d1d5db;
+  font-family: monospace;
+  margin-top: 2px;
+}
+
+.heyu-guide-list strong { color: #111827; font-weight: 700; font-size: 16px; }
+.heyu-guide-list div { font-size: 15px; line-height: 1.6; color: #374151; font-weight: 500; }
+
+/* Shop Info Card */
+.heyu-shop-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+}
+
+.shop-name {
+  font-size: 18px; /* 크기 UP */
+  font-weight: 800;
+  margin: 0 0 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+}
+
+.shop-detail-item {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.icon-box { font-size: 20px; }
+
+.text-box .label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+.text-box .value {
+  font-size: 15px; /* 크기 UP */
+  font-weight: 500;
+  color: #1f2937; /* 진하게 */
+  line-height: 1.5;
+  white-space: pre-line;
+  word-break: keep-all;
+}
+.sub-note {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 6px;
+  display: block;
+}
+
+.guide-box {
+  background: #f9fafb;
+  padding: 14px;
+  border-radius: 12px;
+}
+.full-width { width: 100%; }
+
+.shop-actions {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.action-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 15px; /* 크기 UP */
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 0.2s;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.action-btn.map { background: #03C75A; color: white; }
+.action-btn.insta {
+  background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  color: white;
+}
+.action-btn:hover { opacity: 0.9; }
+
+/* Footer */
+.heyu-footer-section {
+  text-align: center;
+  padding: 48px 24px;
+  background: #111827;
+  border-radius: 24px;
+  color: #e5e7eb;
+}
+/* ⭐ [추가/수정] 푸터 내부의 하이라이트 텍스트 색상 오버라이드 */
+.heyu-footer-section .highlight-yellow {
+  /* 현재: color: #ffffff; 으로 설정되어 있지만,
+     더 확실하게 대비를 높이려면 형광펜 효과를 제거합니다. */
+  
+  /* 1. 텍스트 색상을 흰색(#ffffff)으로 유지하고 */
+  color: #ffffff;
+  
+  /* 2. 어두운 배경 위에서 대비를 높이기 위해 형광펜 배경 효과를 제거 (또는 변경) */
+  background: none; /* 형광펜 배경 제거 */
+  padding: 0; /* 불필요한 패딩 제거 */
+}
+
+.heyu-footer-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: #9ca3af;
+}
+.heyu-footer-text {
+  font-size: 14px; /* 크기 UP */
+  line-height: 1.8;
+  opacity: 0.95;
+  margin: 0;
+  font-weight: 400;
+}
+
+/* ... 기존 코드 아래에 추가 ... */
+
+/* 하단 면책 조항 스타일 */
+.heyu-disclaimer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15); /* 연한 구분선 */
+  text-align: left; /* 약관은 보통 왼쪽 정렬이 읽기 편함 */
+}
+
+.heyu-disclaimer ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.heyu-disclaimer li {
+  position: relative;
+  padding-left: 10px;
+  font-size: 11px; /* 본문보다 작게 */
+  color: #6b7280; /* 회색으로 힘 빼기 */
+  line-height: 1.5;
+  margin-bottom: 6px;
+  word-break: keep-all;
+}
+
+/* 리스트 앞 점(bullet) 커스텀 */
+.heyu-disclaimer li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #4b5563;
+}
+
+/* src/pages/customer/HeyUBeautyPage.css */
+
+/* ... (기존 스타일 유지) ... */
+
+/* ================= COMMON ================= */
+.heyu-section { margin-bottom: 72px; }
+
+.heyu-section-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 10px;
+}
+
+.heyu-section-sub {
+  font-size: 15px;
+  color: #4b5563;
+  margin: 0 0 24px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+/* ⭐ [NEW] 하이라이트 스타일 */
+.highlight-yellow {
+  /* 연한 형광펜 효과 */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 65%, #fef08a 65%);
+  padding: 0 2px;
+  font-weight: 700;
+  color: #111827; /* 기본 텍스트 색상은 진하게 유지 */
+}
+.highlight-strong {
+  /* 더블 볼드 강조 */
+  font-weight: 900;
+  color: #111827;
+}
+
+
+/* Intro Grid */
+.heyu-intro-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 768px) { .heyu-intro-grid { grid-template-columns: 1fr; } }
+
+.heyu-intro-card {
+  background: #f9fafb;
+  border-radius: 18px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.heyu-intro-card:hover {
+  transform: translateY(-4px); /* 마우스 오버 시 살짝 떠오르는 효과 */
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+}
+
+.heyu-intro-card h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+/* ... (나머지 스타일 유지) ... */

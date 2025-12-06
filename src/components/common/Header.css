@@ -179,3 +179,27 @@
 }
 .header-nav .nav-item.admin-link:hover { background-color: #fef3c7; }
 .header-nav .nav-item.admin-link.active { background-color: #f59e0b; color: #ffffff; border-color: #f59e0b; }
+
+/* 👉 헤더 왼쪽 로고 + 햄버거 정렬용 */
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* 🍔 햄버거 버튼 스타일 */
+.hamburger-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  margin-right: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #B91C1C; /* 로고 레드와 톤 맞춤 */
+}
+
+.hamburger-btn:active {
+  transform: translateY(1px);
+}

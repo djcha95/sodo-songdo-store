@@ -1,0 +1,179 @@
+/* src/pages/customer/SongdoPickAboutPage.css */
+
+/* ================= PAGE WRAPPER ================= */
+.songdo-info-page {
+  /* Partner 페이지와 동일한 레이아웃 구조 */
+  padding: 32px 20px 80px;  /* 좌우 20px 여백은 여기서만 관리 */
+  max-width: 768px;
+  margin: 0 auto;
+  font-family: "Pretendard", -apple-system, system-ui, sans-serif;
+  color: #111827;
+}
+
+/* ================= HEADER ================= */
+.songdo-info-header {
+  /* 제휴 페이지 헤더와 동일한 느낌으로 */
+  margin-bottom: 40px;
+  padding: 20px 0;               /* 좌우 패딩 없음 (컨테이너가 이미 20px 보유) */
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.songdo-info-chip {
+  display: inline-block;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #fef08a;
+  color: #111827;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+
+.songdo-info-title {
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.songdo-info-subtitle {
+  margin-top: 8px;
+  font-size: 16px;
+  color: #475569;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+/* ================= SECTION COMMON ================= */
+.songdo-info-section {
+  /* Partner 섹션과 같은 카드 레이아웃 */
+  margin-top: 36px;          /* 위쪽 간격만 관리 */
+  padding: 24px;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.songdo-info-section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #fef08a;
+  display: inline-block;
+}
+
+/* 텍스트 스타일 */
+.songdo-info-text {
+  font-size: 16px;
+  color: #374151;
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+
+.songdo-info-text strong {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.songdo-info-text.small {
+  font-size: 14px;
+  margin-top: 4px;
+  color: #6b7280;
+  padding-left: 0;
+  border-left: none;
+}
+
+/* ================= LISTS ================= */
+.songdo-info-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.songdo-info-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  color: #374151;
+}
+
+.songdo-info-list li span:last-child {
+  font-weight: 500;
+}
+
+.songdo-info-badge {
+  min-width: 90px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.songdo-info-badge-alt {
+  background: #4b5563;
+}
+
+/* Bullet list (Benefit 스타일 재사용) */
+.songdo-info-bullet-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 10px 0 0;
+}
+
+.songdo-info-bullet-list li {
+  position: relative;
+  padding-left: 28px;
+  font-size: 16px;
+  color: #374151;
+  margin-bottom: 8px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.songdo-info-bullet-list li::before {
+  content: "✨";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 18px;
+}
+
+/* ================= HIGHLIGHT BOX ================= */
+.songdo-info-highlight-box {
+  /* 섹션 안에서만 정렬 – 좌우 마진 X */
+  margin-top: 12px;
+  padding: 24px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-left: 8px solid #fef08a;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+
+  font-size: 16px;
+  color: #111827;
+  line-height: 1.6;
+  font-weight: 500;
+  text-align: left;
+}
+
+.songdo-info-highlight-box strong {
+  font-weight: 900;
+  color: #111827;
+}
+
+.songdo-info-highlight-box p {
+  margin: 4px 0;
+}

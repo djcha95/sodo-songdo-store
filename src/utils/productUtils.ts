@@ -20,6 +20,7 @@ export interface VariantGroup extends OriginalVariantGroup {
 
 export interface SalesRound extends OriginalSalesRound {
   variantGroups: VariantGroup[];
+  sourceType?: 'SODOMALL' | 'SONGDOPICK_ONLY';
 }
 
 export interface StockInfo {

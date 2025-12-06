@@ -3,13 +3,11 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!-- ✅ favicon (로고 아이콘) -->
     <link rel="icon" type="image/png" href="/songdopick-logo.png" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SONGDOPICK - 송도주민의 똑똑한 쇼핑생활</title>
 
-    <!-- ✅ 카카오톡 / 인스타그램 / 메시지 공유 시 미리보기 -->
     <meta property="og:title" content="SONGDOPICK - 송도주민의 똑똑한 쇼핑생활" />
     <meta
       property="og:description"
@@ -22,6 +20,8 @@
     <meta property="og:url" content="https://www.songdopick.store/" />
     <meta property="og:site_name" content="SONGDOPICK" />
     <meta property="og:type" content="website" />
+
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=d3d9ad6394a41f92ce4bb276a0448a6f&autoload=false"></script>
 
     <style>
       html, body {
@@ -62,14 +62,12 @@
     </style>
   </head>
   <body>
-    <!-- ✅ 사이트 초기 로딩 시 표시 -->
     <div id="root">
       <div id="app-loading-indicator">
         <div class="initial-spinner"></div>
       </div>
     </div>
 
-    <!-- ✅ React 엔트리포인트 -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
