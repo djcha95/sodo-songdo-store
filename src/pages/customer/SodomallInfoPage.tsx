@@ -99,10 +99,10 @@ const SodomallInfoPage: React.FC = () => {
     address: '인천 연수구 랜드마크로 68 랜드마크시티센트럴더샵 상가 401동 1층 101호',
     phone: '010-6312-2767',
     kakaoUrl: 'http://pf.kakao.com/_CxjNKn',
-    openChatUrl: 'https://open.kakao.com/', // 필요 시 실제 링크로 변경
+    openChatUrl: 'https://open.kakao.com/o/g917Hh9g', // ✅ 찐 정보방 링크 연결 완료!
     lat: 37.41479492734981,
     lng: 126.61947334941975,
-    logoSrc: '/images/sodomall/sodomall-logo.png', // ✅ 로고 파일 연결
+    logoSrc: '/images/sodomall/sodomall-logo.png',
   };
 
   // 모달 제어
@@ -384,14 +384,25 @@ const SodomallInfoPage: React.FC = () => {
             </li>
           </ul>
 
-          <div className="mobile-only-contacts">
+          <div className="mobile-only-contacts" style={{ flexDirection: 'column', gap: '8px' }}>
+             {/* 🔥 [추가] 오픈채팅방 (가장 중요!) */}
+             <a
+              href={STORE_INFO.openChatUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-simple-kakao"
+              style={{ background: '#371d1e', color: '#fae100' }} // 색상 반전으로 강조
+            >
+              <MessageCircle size={18} /> 📣 입고/픽업 실시간 알림방 (참여)
+            </a>
+
             <a
               href={STORE_INFO.kakaoUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-simple-kakao"
             >
-              <MessageCircle size={18} /> 소도몰 송도랜드마크점
+              <MessageCircle size={18} /> 소도몰 카카오 채널
             </a>
           </div>
         </div>
@@ -439,23 +450,28 @@ const SodomallInfoPage: React.FC = () => {
               <a href={`tel:${STORE_INFO.phone}`} className="btn-action btn-call">
                 <Phone size={18} /> 전화 문의
               </a>
+              
+              {/* 🔥 [추가] 오픈채팅방 버튼 */}
               {STORE_INFO.openChatUrl && (
                 <a
                   href={STORE_INFO.openChatUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-action btn-kakao"
+                  style={{ fontWeight: 800 }} // 글자 더 굵게
                 >
-                  <MessageCircle size={18} /> 소도몰 오픈채팅
+                  <MessageCircle size={18} /> 실시간 공구/입고 알림방
                 </a>
               )}
+              
               <a
                 href={STORE_INFO.kakaoUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-action btn-kakao"
+                style={{ background: '#fee500', opacity: 0.8 }} // 오픈채팅보다 살짝 연하게 구분
               >
-                <MessageCircle size={18} /> 소도몰 송도랜드마크점
+                <MessageCircle size={18} /> 소도몰 카카오 채널
               </a>
             </div>
           </div>
