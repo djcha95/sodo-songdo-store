@@ -458,7 +458,7 @@ export const updateItemStock = async (
 };
 
 // ========================================================
-// 🚀 [수정] '최신식' 상품 목록 조회 (탭별 필터링 적용)
+// 🚀 [수정] '최신식' 상품 목록 조회 (탭별 필터링 적용 + 예약오버레이 옵션)
 // ========================================================
 
 export interface GetProductsWithStockResponse {
@@ -472,27 +472,52 @@ type ProductTabType = 'all' | 'today' | 'additional' | 'onsite';
 type GetProductsWithStockPayload = {
   pageSize?: number;
   lastVisible?: number | null;
-  tab?: ProductTabType | null; // ✅ 탭 파라미터 추가
+  tab?: ProductTabType | null;
+  /**
+   * 예약수량 오버레이를 적용할지 여부
+   * - true: getReservedQuantitiesMap 호출 + applyReservedOverlay 적용
+   * - false: 그냥 products 컬렉션 데이터만 사용 (리스트/프리뷰용으로 빠름)
+   */
+  withReservedOverlay?: boolean;
+};
+
+// 🔁 예약수량 Map 캐시 (같은 세션에서 여러 번 재사용)
+const RESERVED_CACHE_TTL_MS = 30_000; // 30초 정도 유지
+let reservedOverlayCache:
+  | { map: Map<string, number>; fetchedAt: number }
+  | null = null;
+
+const getReservedQuantitiesMapCached = async (): Promise<Map<string, number>> => {
+  if (
+    reservedOverlayCache &&
+    Date.now() - reservedOverlayCache.fetchedAt < RESERVED_CACHE_TTL_MS
+  ) {
+    return reservedOverlayCache.map;
+  }
+
+  const map = await getReservedQuantitiesMap();
+  reservedOverlayCache = { map, fetchedAt: Date.now() };
+  return map;
 };
 
 export const getProductsWithStock = async (
   payload: GetProductsWithStockPayload
 ): Promise<GetProductsWithStockResponse> => {
   try {
-    const { pageSize = 10, lastVisible = null, tab = 'all' } = payload; // tab 기본값 'all'
+    const {
+      pageSize = 10,
+      lastVisible = null,
+      tab = 'all',
+      withReservedOverlay = true, // ✅ 기본값: true (기존 동작 유지)
+    } = payload;
 
-    const queryConstraints: QueryConstraint[] = []; // 타입을 QueryConstraint[]로 명시
+    const queryConstraints: QueryConstraint[] = [];
 
-    // 1. ✅ 탭별 필터링 로직 분기
+    // 1. 탭별 필터링
     if (tab === 'onsite') {
-      // [현장판매 탭]: isOnsite가 true인 것만 가져옴 (매우 빠름)
       queryConstraints.push(where('isOnsite', '==', true));
-      // 현장판매는 보통 종료된 것도 포함해서 보여줄지, active만 보여줄지 결정해야 함.
-      // 일단 '보관(Archive)'된 것은 제외
       queryConstraints.push(where('isArchived', '==', false));
     } else {
-      // [전체 / 오늘의공구 / 추가예약]: 기존 로직 (활성 상품 전체 로드)
-      // 'today'와 'additional'은 시간 기준이라 DB 쿼리로 완벽 분리가 어려움 -> Fetch 후 프론트 필터링 유지
       queryConstraints.push(where('isArchived', '==', false));
     }
 
@@ -502,29 +527,34 @@ export const getProductsWithStock = async (
     // 3. 페이지네이션 커서
     if (lastVisible) {
       const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
-      // startAfter는 정렬 필드의 값으로 사용해야 하므로, 여기서 'createdAt' 필드를 사용
       queryConstraints.push(startAfter(lastVisibleTimestamp));
     }
 
-    // 4. 페이지 사이즈
+    // 4. limit
     queryConstraints.push(limit(pageSize));
 
     const productsRef = collection(db, 'products');
     const q = query(productsRef, ...queryConstraints);
 
-    // 예약 수량 맵
-    const reservedMap = await getReservedQuantitiesMap();
+    // 🔍 예약 오버레이가 필요할 때만 무거운 Map 계산
+    let reservedMap: Map<string, number> | null = null;
+    if (withReservedOverlay) {
+      reservedMap = await getReservedQuantitiesMapCached();
+    }
 
     const snapshot = await getDocs(q);
 
     const products: Product[] = [];
-    snapshot.docs.forEach(docSnap => {
+    snapshot.docs.forEach((docSnap) => {
       const productData = docSnap.data() as Product;
-      const productWithOverlay = applyReservedOverlay(
-        { ...productData, id: docSnap.id },
-        reservedMap
-      );
-      products.push(productWithOverlay);
+      const baseProduct: Product = { ...productData, id: docSnap.id };
+
+      const finalProduct =
+        withReservedOverlay && reservedMap
+          ? applyReservedOverlay(baseProduct, reservedMap)
+          : baseProduct;
+
+      products.push(finalProduct);
     });
 
     const lastDoc = snapshot.docs[snapshot.docs.length - 1];
@@ -533,45 +563,14 @@ export const getProductsWithStock = async (
       : null;
 
     return { products, lastVisible: newLastVisible };
-
   } catch (error: any) {
-    console.error("Error fetching products:", error);
-    // ✅ 인덱스 에러 발생 시 콘솔에 링크가 뜹니다. 해당 링크를 클릭해서 인덱스를 생성해주세요.
+    console.error('Error fetching products:', error);
     if (error.code === 'failed-precondition') {
-      throw new Error("DB 인덱스가 필요합니다. 콘솔(F12)의 링크를 클릭하여 생성해주세요.");
+      throw new Error(
+        'DB 인덱스가 필요합니다. 콘솔(F12)의 링크를 클릭하여 생성해주세요.'
+      );
     }
-    throw new Error("상품 로드 실패");
-  }
-};
-
-
-// =================================================================
-// ✅ [신규] 기존 데이터 일괄 복구 (마이그레이션) 스크립트
-// 기존에 등록된 상품들은 'isOnsite' 필드가 없으므로, 이걸 한번 돌려서 생성해줘야 합니다.
-// =================================================================
-export const syncAllProductsOnsiteStatus = async () => {
-  console.log("🔄 현장판매 상태 동기화 시작...");
-  const snapshot = await getDocs(collection(db, 'products'));
-  const batch = writeBatch(db);
-  let count = 0;
-
-  snapshot.docs.forEach(doc => {
-    const data = doc.data() as Product;
-    // salesHistory 중 하나라도 isManuallyOnsite가 true인지 확인
-    const isActuallyOnsite = data.salesHistory?.some(r => r.isManuallyOnsite === true) ?? false;
-
-    // 현재 필드값이 없거나 실제 상태와 다르면 업데이트
-    if (data.isOnsite !== isActuallyOnsite) {
-      batch.update(doc.ref, { isOnsite: isActuallyOnsite });
-      count++;
-    }
-  });
-
-  if (count > 0) {
-    await batch.commit();
-    console.log(`✅ ${count}개의 상품 상태가 동기화되었습니다.`);
-  } else {
-    console.log("✅ 동기화할 상품이 없습니다.");
+    throw new Error('상품 로드 실패');
   }
 };
 
@@ -586,6 +585,7 @@ export const getProducts = () =>
   getProductsWithStock({
     pageSize: 1000,
     lastVisible: null,
+    withReservedOverlay: true,
   });
 
 /**
@@ -595,6 +595,7 @@ export const getAllProducts = () =>
   getProductsWithStock({
     pageSize: 1000,
     lastVisible: null,
+    withReservedOverlay: true,
   });
 
 /**
@@ -606,13 +607,13 @@ export const getAllProducts = () =>
 export const getPaginatedProductsWithStock = (
   pageSize: number,
   lastVisible: number | null,
-  category: string | null, // 얘는 안 씀
-  tab: ProductTabType = 'all' // ✅ tab 추가
+  category: string | null, // 안 씀
+  tab: ProductTabType = 'all'
 ) =>
   getProductsWithStock({
     pageSize,
     lastVisible,
-    tab
+    tab,
+    // 🔥 리스트 페이지는 예약오버레이 없이 빠르게
+    withReservedOverlay: false,
   });
-
-  
