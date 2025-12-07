@@ -6,10 +6,10 @@ import React, {
   useMemo,
   useCallback,
   useRef,
+  Suspense, // ✅ Suspense 추가
 } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getPaginatedProductsWithStock } from '../../firebase/productService';
-// ✅ [Refactor] 주문 내역 조회를 위해 추가
 import { getUserOrders } from '../../firebase/orderService';
 
 import type { Product } from '../../shared/types';
@@ -25,9 +25,16 @@ import {
 import { usePageRefs } from '../../layouts/CustomerLayout';
 import { Outlet, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import Snowfall from 'react-snowfall';
-import { ChevronRight } from 'lucide-react';
 import '../../styles/ModernProduct.css';
+
+// ✅ [Refactor] React.lazy를 사용한 동적 Import (Code Splitting)
+// Snowfall은 무거운 라이브러리이므로 필요할 때 로드
+const LazySnowfall = React.lazy(() => import('react-snowfall'));
+
+// 아이콘도 개별 청크로 분리 (Named Export를 Default Export로 변환하여 lazy 적용)
+const LazyChevronRight = React.lazy(() =>
+  import('lucide-react').then((module) => ({ default: module.ChevronRight }))
+);
 
 // ✅ 탭 구성
 const TABS = [
@@ -86,7 +93,7 @@ const EVENT_BANNERS: EventBanner[] = [
 
 const ModernProductList: React.FC = () => {
   const navigate = useNavigate();
-  const { user, userDocument } = useAuth(); // user 객체 사용하여 uid 접근
+  const { user, userDocument } = useAuth();
 
   const [activeBanner, setActiveBanner] = useState(0);
 
@@ -107,7 +114,7 @@ const ModernProductList: React.FC = () => {
   // ✅ 출처 필터
   const [sourceFilter, setSourceFilter] = useState<SourceFilterType>('all');
 
-  // ✅ [Refactor] 사용자 주문 내역 캐싱 (Key: `${roundId}_${itemId}`, Value: quantity)
+  // ✅ 사용자 주문 내역 캐싱
   const [myOrderMap, setMyOrderMap] = useState<Record<string, number>>({});
 
   // ✅ 무한 스크롤 상태
@@ -135,7 +142,7 @@ const ModernProductList: React.FC = () => {
     lastVisibleRef.current = lastVisible;
   }, [lastVisible]);
 
-  // ✅ 눈 효과
+  // ✅ 눈 효과 (지연 로딩 트리거)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -164,7 +171,7 @@ const ModernProductList: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // ✅ [Refactor] 주문 내역 한 번에 불러오기
+  // ✅ 주문 내역 한 번에 불러오기
   const fetchMyOrders = useCallback(async () => {
     if (!user) return;
     try {
@@ -172,11 +179,8 @@ const ModernProductList: React.FC = () => {
       const counts: Record<string, number> = {};
 
       orders.forEach((order) => {
-        // 취소된 주문 제외
         if (order.status === 'CANCELED' || order.status === 'LATE_CANCELED') return;
-
         order.items.forEach((item) => {
-          // 키 생성 규칙: roundId_itemId
           const key = `${item.roundId}_${item.itemId}`;
           counts[key] = (counts[key] || 0) + item.quantity;
         });
@@ -188,7 +192,6 @@ const ModernProductList: React.FC = () => {
     }
   }, [user]);
 
-  // 페이지 진입 시 주문 내역 로드
   useEffect(() => {
     fetchMyOrders();
   }, [fetchMyOrders]);
@@ -317,7 +320,7 @@ const ModernProductList: React.FC = () => {
     };
   }, [loading, hasMore]);
 
-  // ✅ 데이터 가공: 이벤트 상품
+  // ✅ 데이터 가공 로직들...
   const processedEventProducts = useMemo(() => {
     return heroProducts
       .map((product) => {
@@ -327,7 +330,6 @@ const ModernProductList: React.FC = () => {
       .filter((p) => p.displayRound);
   }, [heroProducts]);
 
-  // ✅ 데이터 가공: 뷰티 상품
   const processedBeautyProducts = useMemo(() => {
     return beautyProducts
       .map((product) => {
@@ -338,7 +340,6 @@ const ModernProductList: React.FC = () => {
       .slice(0, 7);
   }, [beautyProducts]);
 
-  // ✅ 데이터 가공: 일반 상품
   const normalProducts = useMemo(() => {
     const now = dayjs();
     const processed = products
@@ -437,7 +438,7 @@ const ModernProductList: React.FC = () => {
     }
   }, [loading, isLoadingMore, hasMore, activeTab, normalProducts.length, fetchNextPage]);
 
-  // ✅ 섹션 메타
+  // ✅ 섹션 메타 및 배너 콘텐츠
   const eventSectionMeta = useMemo(() => {
     if (processedEventProducts.length === 0) return null;
     return {
@@ -472,11 +473,9 @@ const ModernProductList: React.FC = () => {
     }
   }, [activeTab]);
 
-  // ✅ [Refactor] 헬퍼: 상품 ID로 구매 수량 조회
   const getPurchasedCountForProduct = (product: Product): number => {
     const round = getDisplayRound(product);
     if (!round) return 0;
-    // 단일 옵션 가정 (ModernProductCard 로직과 일치시킴)
     const vg = round.variantGroups?.[0];
     const item = vg?.items?.[0];
     if (!item) return 0;
@@ -494,23 +493,25 @@ const ModernProductList: React.FC = () => {
 
   return (
     <>
+      {/* ✅ [Refactor] Snowfall Lazy Loading 적용 */}
       {showSnow && (
-        <Snowfall
-          snowflakeCount={snowflakeCount}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            pointerEvents: 'none',
-            zIndex: 9999,
-          }}
-        />
+        <Suspense fallback={<div />}>
+          <LazySnowfall
+            snowflakeCount={snowflakeCount}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              pointerEvents: 'none',
+              zIndex: 9999,
+            }}
+          />
+        </Suspense>
       )}
 
       <div className="customer-page-container modern-list-page">
-        {/* 배너 영역 (기존 코드 유지) */}
         {EVENT_BANNERS.length > 0 && !heroLoading && (
           <section className="event-hero-wrapper">
              <div
@@ -574,7 +575,6 @@ const ModernProductList: React.FC = () => {
           </section>
         )}
 
-        {/* 이벤트 섹션 */}
         {processedEventProducts.length > 0 && eventSectionMeta && (
           <section className="songdo-event-section">
             <div className="songdo-event-header">
@@ -603,7 +603,6 @@ const ModernProductList: React.FC = () => {
           </section>
         )}
 
-        {/* 뷰티 상품 섹션 */}
         {processedBeautyProducts.length > 0 && (
           <section className="beauty-curation-section">
             <div className="section-header" onClick={() => navigate('/beauty')}>
@@ -615,7 +614,11 @@ const ModernProductList: React.FC = () => {
                 </p>
               </div>
               <button className="view-all-btn">
-                전체보기 <ChevronRight size={16} />
+                {/* ✅ [Refactor] LazyChevronRight 사용 (Suspense 적용) */}
+                전체보기 
+                <Suspense fallback={null}>
+                  <LazyChevronRight size={16} />
+                </Suspense>
               </button>
             </div>
             <div className="beauty-product-grid">
@@ -629,7 +632,6 @@ const ModernProductList: React.FC = () => {
                   )}
                   phase={'primary'}
                   isPreorder={true}
-                  // ✅ [Refactor] 구매 수량 전달
                   myPurchasedCount={getPurchasedCountForProduct(p)}
                   onPurchaseComplete={fetchMyOrders}
                 />
@@ -638,7 +640,6 @@ const ModernProductList: React.FC = () => {
           </section>
         )}
 
-        {/* 안내 배너 */}
         <section
           className="songdo-notice-banner"
           style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff' }}
@@ -651,7 +652,6 @@ const ModernProductList: React.FC = () => {
           </span>
         </section>
 
-        {/* 탭 및 필터 */}
         <nav className="songdo-tabs-wrapper">
           <div className="songdo-tabs">
             {TABS.map((tab) => (
@@ -695,7 +695,6 @@ const ModernProductList: React.FC = () => {
           </div>
         </nav>
 
-        {/* 상품 리스트 */}
         <div ref={primaryRef} className="songdo-product-list">
           {!isEmptyAll && normalProducts.length > 0 ? (
             normalProducts.map((p) => (
@@ -704,7 +703,6 @@ const ModernProductList: React.FC = () => {
                 product={p}
                 actionState={p.actionState}
                 phase={p.phase}
-                // ✅ [Refactor] 구매 수량 전달
                 myPurchasedCount={getPurchasedCountForProduct(p)}
                 onPurchaseComplete={fetchMyOrders}
               />
@@ -726,7 +724,6 @@ const ModernProductList: React.FC = () => {
           )}
         </div>
 
-        {/* 무한 스크롤 트리거 */}
         <div
           ref={observerRef}
           className="infinite-scroll-trigger"
