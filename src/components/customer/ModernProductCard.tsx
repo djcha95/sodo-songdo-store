@@ -1,8 +1,8 @@
 // src/components/customer/ModernProductCard.tsx
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Check, CheckCircle2, Plus, Minus, Gift } from 'lucide-react'; // Gift 아이콘 추가!
+import { ShoppingCart, Check, CheckCircle2, Plus, Minus, Gift } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -22,7 +22,7 @@ import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import { showToast } from '@/utils/toastUtils';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
-import { getUserOrders } from '@/firebase/orderService';
+// ✅ [Refactor] getUserOrders 제거
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import '@/styles/ModernProduct.css';
@@ -30,14 +30,17 @@ import '@/styles/ModernProduct.css';
 // 타입 확장
 type Product = OriginalProduct & {
   displayRound: OriginalSalesRound;
-  isPreorder?: boolean; // ✅ [NEW] 사전예약 여부 필드 추가
+  isPreorder?: boolean;
 };
 
 interface ModernProductCardProps {
   product: Product;
   actionState: ProductActionState;
   phase: 'primary' | 'secondary' | 'onsite';
-  isPreorder?: boolean; // ✅ [NEW] 부모로부터 전달받을 수 있음
+  isPreorder?: boolean;
+  // ✅ [Refactor] props 추가
+  myPurchasedCount?: number;
+  onPurchaseComplete?: () => void;
 }
 
 const ModernProductCard: React.FC<ModernProductCardProps> = ({
@@ -45,6 +48,8 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
   actionState,
   phase,
   isPreorder: propIsPreorder = false,
+  myPurchasedCount = 0, // ✅ [Refactor] 부모로부터 전달받음 (기본값 0)
+  onPurchaseComplete,
 }) => {
   const navigate = useNavigate();
   const { user, userDocument } = useAuth();
@@ -53,7 +58,8 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
   const [prepaymentPrice, setPrepaymentPrice] = useState(0);
   const [reservationStatus, setReservationStatus] =
     useState<'idle' | 'processing' | 'success'>('idle');
-  const [myPurchasedCount, setMyPurchasedCount] = useState(0);
+
+  // ✅ [Refactor] 내부 상태 myPurchasedCount 및 관련 useEffect 제거됨
 
   const functions = useMemo(
     () => getFunctions(getApp(), 'asia-northeast3'),
@@ -64,7 +70,6 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     [functions]
   );
 
-  // 데이터에 있는 값 혹은 prop으로 전달된 값 사용
   const isPreorder = product.isPreorder || propIsPreorder;
 
   const cardData = useMemo(() => {
@@ -97,7 +102,6 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
   const eventLabel = useMemo(() => {
     const type = (product.displayRound as any)?.eventType as string | undefined;
 
-    // 뷰티 관련 라벨 우선 처리
     if (isPreorder) return '사전예약';
     
     switch (type) {
@@ -109,26 +113,6 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     }
   }, [product.displayRound, isPreorder]);
 
-  // ... (주문 내역 확인 useEffect 기존 동일) ...
-  useEffect(() => {
-    const checkMyHistory = async () => {
-      if (!user || !cardData?.singleOptionItem || !cardData?.displayRound) return;
-      try {
-        const myOrders = await getUserOrders(user.uid);
-        const currentRoundId = cardData.displayRound.roundId;
-        const currentItemId = cardData.singleOptionItem.id;
-        const totalBought = myOrders
-          .filter(o => o.status !== 'CANCELED' && o.status !== 'LATE_CANCELED')
-          .flatMap(o => o.items)
-          .filter(i => i.roundId === currentRoundId && i.itemId === currentItemId)
-          .reduce((sum, i) => sum + i.quantity, 0);
-        setMyPurchasedCount(totalBought);
-      } catch (error) { console.error(error); }
-    };
-    checkMyHistory();
-  }, [user, cardData]);
-
-  // ... (handleImmediateOrder 함수 기존 동일) ...
   const handleImmediateOrder = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (phase === 'onsite') { showToast('info', '매장에서 직접 구매해주세요!'); return; }
@@ -140,7 +124,9 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     if (!finalVariant || !vg) return;
 
     const limitSetting = finalVariant?.limitQuantity ?? Infinity;
+    // ✅ [Refactor] Prop으로 받은 myPurchasedCount 사용
     const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
+    
     if (quantity > myRemainingLimit) { showToast('error', '구매 한도 초과!'); return; }
     const stockMax = getMaxPurchasableQuantity(vg, finalVariant);
     const finalMaxQty = Math.min(stockMax, myRemainingLimit);
@@ -185,6 +171,10 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
         showToast('success', '예약이 완료되었습니다.');
         setReservationStatus('success');
         setQuantity(1);
+        
+        // ✅ [Refactor] 구매 완료 후 부모에게 알림 (목록 갱신)
+        if (onPurchaseComplete) onPurchaseComplete();
+
         setTimeout(() => setReservationStatus('idle'), 1500);
         if (data.orderIds && prepaymentRequired) {
           setPrepaymentPrice(totalPrice);
@@ -199,7 +189,6 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
 
   if (!cardData) return null;
 
-  // ... (마감/픽업 텍스트 로직 기존 동일) ...
   const { primaryEnd, secondaryEnd } = getDeadlines(cardData.displayRound);
   const pickupDate = safeToDate(cardData.displayRound.pickupDate);
   const pickupText = pickupDate ? dayjs(pickupDate).locale('ko').format('M/D(ddd) 픽업') : '';
@@ -219,12 +208,8 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
   const maxStock = 50;
   const progressPercent = Math.min(100, Math.max(0, ((maxStock - currentStock) / maxStock) * 100));
 
-  let priceLabel = '';
-  if (phase === 'primary') priceLabel = '성탄특가'; // 변경
-  else if (phase === 'secondary') priceLabel = '성탄특가'; // 변경
-  else if (phase === 'onsite') priceLabel = '현장특가'; // 변경
-
   const limitSetting = cardData.singleOptionItem?.limitQuantity ?? Infinity;
+  // ✅ [Refactor] Prop 사용
   const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
   const finalMaxQty = Math.min(stockInfo?.remainingUnits ?? Infinity, myRemainingLimit);
   const isControlsDisabled = reservationStatus === 'processing' || finalMaxQty <= 0;
@@ -235,16 +220,10 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
         className={`songdo-card ${phase} ${isPreorder ? 'preorder-card' : ''}`}
         onClick={() => navigate(`/product/${product.id}`)}
       >
-        {/* 🎅 산타 모자 오버레이를 카드 우측 상단 모서리에 배치! */}
         <div className="santa-hat-overlay" /> 
 
-        {/* ========================================= */}
-        {/* 🎅 [SECTION 1: 썸네일 & 기본 정보] */}
-        {/* ========================================= */}
         <div className="songdo-card-header">
           <div className="songdo-card-thumb">
-            {/* 🎅 산타 모자 오버레이 코드는 여기서 제거되었습니다. */}
-            
             <OptimizedImage
               originalUrl={product.imageUrls?.[0]}
               size="200x200"
@@ -273,12 +252,10 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
 
             <h3 className="songdo-title">{product.groupName}</h3>
 
-            {/* 픽업 정보 */}
             {pickupText && phase !== 'onsite' && (
               <div className="pickup-info-text" style={{color: '#165B33'}}>🦌 {pickupText}</div>
             )}
 
-            {/* 재고 바 */}
             {phase !== 'onsite' && (
               <div className="stock-status-area">
                 {!isUnlimited ? (
@@ -298,10 +275,9 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
               </div>
             )}
 
-            {/* 가격 정보 */}
             <div className="price-area">
               <span className={`price-label ${phase}`}>{phase === 'onsite' ? '현장특가' : '성탄특가'}</span>
-              <span className="price" style={{fontWeight: 900}}>{cardData.price.toLocaleString()}</span> {/* 굵게 변경 */}
+              <span className="price" style={{fontWeight: 900}}>{cardData.price.toLocaleString()}</span>
               <span className="unit">원</span>
             </div>
           </div>
@@ -309,9 +285,6 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
         
         <hr style={{border: '0', borderTop: '1px solid #F1F5F9', margin: '0 0 4px 0'}}/>
 
-        {/* ========================================= */}
-        {/* 🛒 [SECTION 2: 수량 조절 및 구매 버튼] */}
-        {/* ========================================= */}
         <div className="songdo-card-bottom-row controls-only" onClick={(e) => e.stopPropagation()}>
           {phase === 'onsite' ? (
             <button className="btn-onsite-simple" disabled>🎄 매장에서 만나요</button>
@@ -335,7 +308,6 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
                 </button>
               </div>
 
-              {/* 🛒 버튼을 선물상자 아이콘으로 교체 */}
               <button
                 className={`btn-cart ${reservationStatus === 'success' ? 'success' : ''}`}
                 onClick={handleImmediateOrder}
@@ -345,14 +317,11 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
                   ? '...'
                   : reservationStatus === 'success'
                   ? <Check size={20} />
-                  : <Gift size={24} strokeWidth={2.5} />} {/* Gift 아이콘! */}
+                  : <Gift size={24} strokeWidth={2.5} />}
               </button>
             </div>
           )}
         </div>
-        {/* ========================================= */}
-        {/* [SECTION 2 END] */}
-        {/* ========================================= */}
       </div>
       <PrepaymentModal
         isOpen={isPrepaymentModalOpen}

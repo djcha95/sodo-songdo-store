@@ -9,6 +9,8 @@ import React, {
 } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getPaginatedProductsWithStock } from '../../firebase/productService';
+// ✅ [Refactor] 주문 내역 조회를 위해 추가
+import { getUserOrders } from '../../firebase/orderService';
 
 import type { Product } from '../../shared/types';
 import SodomallLoader from '../../components/common/SodomallLoader';
@@ -84,11 +86,11 @@ const EVENT_BANNERS: EventBanner[] = [
 
 const ModernProductList: React.FC = () => {
   const navigate = useNavigate();
-  const { userDocument } = useAuth();
+  const { user, userDocument } = useAuth(); // user 객체 사용하여 uid 접근
 
   const [activeBanner, setActiveBanner] = useState(0);
 
-  // ✅ 눈 효과 관련 상태 (초기 로딩 후 약간 지연해서 렌더)
+  // ✅ 눈 효과 관련 상태
   const [showSnow, setShowSnow] = useState(false);
   const [snowflakeCount, setSnowflakeCount] = useState(60);
 
@@ -105,6 +107,9 @@ const ModernProductList: React.FC = () => {
   // ✅ 출처 필터
   const [sourceFilter, setSourceFilter] = useState<SourceFilterType>('all');
 
+  // ✅ [Refactor] 사용자 주문 내역 캐싱 (Key: `${roundId}_${itemId}`, Value: quantity)
+  const [myOrderMap, setMyOrderMap] = useState<Record<string, number>>({});
+
   // ✅ 무한 스크롤 상태
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -118,7 +123,7 @@ const ModernProductList: React.FC = () => {
   const hasMoreRef = useRef(true);
   const lastVisibleRef = useRef<any | null>(null);
 
-  // ✅ PageRefs 컨텍스트가 없어도 안전하게
+  // ✅ PageRefs
   const fallbackRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = usePageRefs();
   const primaryRef = pageRefs?.primaryRef ?? fallbackRef;
@@ -130,7 +135,7 @@ const ModernProductList: React.FC = () => {
     lastVisibleRef.current = lastVisible;
   }, [lastVisible]);
 
-  // ✅ 눈 효과: 모바일/PC별 개수 & 약간의 지연 렌더링
+  // ✅ 눈 효과
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -139,19 +144,18 @@ const ModernProductList: React.FC = () => {
 
     const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (mq && mq.matches) {
-      // 사용자 설정상 애니메이션 줄이기면 아예 안 보이게
       setShowSnow(false);
       return;
     }
 
     const t = setTimeout(() => {
       setShowSnow(true);
-    }, 400); // 페이지가 먼저 뜨고, 0.4초 뒤에 눈 등장
+    }, 400);
 
     return () => clearTimeout(t);
   }, []);
 
-  // ✅ 상단 이벤트 히어로 배너 자동 슬라이드
+  // ✅ 배너 슬라이드
   useEffect(() => {
     if (EVENT_BANNERS.length <= 1) return;
     const timer = setInterval(() => {
@@ -160,7 +164,36 @@ const ModernProductList: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // ✅ 특수(이벤트/뷰티) 상품 먼저 불러오기 (쿼리 수량 100 → 40으로 감소)
+  // ✅ [Refactor] 주문 내역 한 번에 불러오기
+  const fetchMyOrders = useCallback(async () => {
+    if (!user) return;
+    try {
+      const orders = await getUserOrders(user.uid);
+      const counts: Record<string, number> = {};
+
+      orders.forEach((order) => {
+        // 취소된 주문 제외
+        if (order.status === 'CANCELED' || order.status === 'LATE_CANCELED') return;
+
+        order.items.forEach((item) => {
+          // 키 생성 규칙: roundId_itemId
+          const key = `${item.roundId}_${item.itemId}`;
+          counts[key] = (counts[key] || 0) + item.quantity;
+        });
+      });
+
+      setMyOrderMap(counts);
+    } catch (err) {
+      console.error('주문 내역 로드 실패:', err);
+    }
+  }, [user]);
+
+  // 페이지 진입 시 주문 내역 로드
+  useEffect(() => {
+    fetchMyOrders();
+  }, [fetchMyOrders]);
+
+  // ✅ 특수 상품 로드
   useEffect(() => {
     const fetchSpecialProducts = async () => {
       try {
@@ -176,7 +209,7 @@ const ModernProductList: React.FC = () => {
         });
         setHeroProducts(events);
 
-        // 뷰티 상품 (COSMETICS)
+        // 뷰티 상품
         const beauty = fetched.filter((p) => {
           const r = getDisplayRound(p);
           return r && r.eventType === 'COSMETICS';
@@ -192,7 +225,7 @@ const ModernProductList: React.FC = () => {
     fetchSpecialProducts();
   }, []);
 
-  // ✅ 탭 변경 시 일반 상품 로딩
+  // ✅ 탭 변경 시 로드
   useEffect(() => {
     const loadTabProducts = async () => {
       setLoading(true);
@@ -222,7 +255,7 @@ const ModernProductList: React.FC = () => {
     loadTabProducts();
   }, [activeTab]);
 
-  // ✅ 무한 스크롤 - 다음 페이지 로딩
+  // ✅ 무한 스크롤 - 다음 페이지
   const fetchNextPage = useCallback(async () => {
     if (isFetchingRef.current || !hasMoreRef.current) return;
 
@@ -252,7 +285,7 @@ const ModernProductList: React.FC = () => {
     }
   }, [activeTab]);
 
-  // ✅ IntersectionObserver 설정
+  // ✅ IntersectionObserver
   const onIntersect = useCallback(
     (entries: IntersectionObserverEntry[]) => {
       const entry = entries[0];
@@ -369,7 +402,6 @@ const ModernProductList: React.FC = () => {
       normalVisible = [...processed].sort((a, b) => score(b) - score(a));
     }
 
-    // 출처 필터 적용
     if (sourceFilter === 'sodomall') {
       normalVisible = normalVisible.filter((p) => {
         const sourceType = p.displayRound.sourceType ?? 'SODOMALL';
@@ -385,7 +417,7 @@ const ModernProductList: React.FC = () => {
     return normalVisible;
   }, [products, userDocument, activeTab, sourceFilter]);
 
-  // ✅ 자동 페이징: 너무 많이 돌지 않도록 횟수 제한 (50 → 3)
+  // ✅ 자동 페이징
   useEffect(() => {
     if (
       loading ||
@@ -405,7 +437,7 @@ const ModernProductList: React.FC = () => {
     }
   }, [loading, isLoadingMore, hasMore, activeTab, normalProducts.length, fetchNextPage]);
 
-  // ✅ 섹션 메타데이터
+  // ✅ 섹션 메타
   const eventSectionMeta = useMemo(() => {
     if (processedEventProducts.length === 0) return null;
     return {
@@ -440,7 +472,17 @@ const ModernProductList: React.FC = () => {
     }
   }, [activeTab]);
 
-  // ✅ 초기 로딩: "일반 상품" 기준으로만 로더 표시 (heroLoading은 기다리지 않음)
+  // ✅ [Refactor] 헬퍼: 상품 ID로 구매 수량 조회
+  const getPurchasedCountForProduct = (product: Product): number => {
+    const round = getDisplayRound(product);
+    if (!round) return 0;
+    // 단일 옵션 가정 (ModernProductCard 로직과 일치시킴)
+    const vg = round.variantGroups?.[0];
+    const item = vg?.items?.[0];
+    if (!item) return 0;
+    return myOrderMap[`${round.roundId}_${item.id}`] || 0;
+  };
+
   if (loading && products.length === 0) {
     return <SodomallLoader />;
   }
@@ -468,10 +510,10 @@ const ModernProductList: React.FC = () => {
       )}
 
       <div className="customer-page-container modern-list-page">
-        {/* 🧡 상단 이벤트 히어로 배너 */}
+        {/* 배너 영역 (기존 코드 유지) */}
         {EVENT_BANNERS.length > 0 && !heroLoading && (
           <section className="event-hero-wrapper">
-            <div
+             <div
               className="event-hero-slider"
               style={{ transform: `translateX(-${activeBanner * 100}%)` }}
             >
@@ -532,7 +574,7 @@ const ModernProductList: React.FC = () => {
           </section>
         )}
 
-        {/* 🎄 이벤트 섹션 */}
+        {/* 이벤트 섹션 */}
         {processedEventProducts.length > 0 && eventSectionMeta && (
           <section className="songdo-event-section">
             <div className="songdo-event-header">
@@ -561,7 +603,7 @@ const ModernProductList: React.FC = () => {
           </section>
         )}
 
-        {/* 💄 뷰티 상품 섹션 */}
+        {/* 뷰티 상품 섹션 */}
         {processedBeautyProducts.length > 0 && (
           <section className="beauty-curation-section">
             <div className="section-header" onClick={() => navigate('/beauty')}>
@@ -587,13 +629,16 @@ const ModernProductList: React.FC = () => {
                   )}
                   phase={'primary'}
                   isPreorder={true}
+                  // ✅ [Refactor] 구매 수량 전달
+                  myPurchasedCount={getPurchasedCountForProduct(p)}
+                  onPurchaseComplete={fetchMyOrders}
                 />
               ))}
             </div>
           </section>
         )}
 
-        {/* 📢 상단 안내 배너 */}
+        {/* 안내 배너 */}
         <section
           className="songdo-notice-banner"
           style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff' }}
@@ -606,7 +651,7 @@ const ModernProductList: React.FC = () => {
           </span>
         </section>
 
-        {/* 탭 & 출처 필터 */}
+        {/* 탭 및 필터 */}
         <nav className="songdo-tabs-wrapper">
           <div className="songdo-tabs">
             {TABS.map((tab) => (
@@ -659,6 +704,9 @@ const ModernProductList: React.FC = () => {
                 product={p}
                 actionState={p.actionState}
                 phase={p.phase}
+                // ✅ [Refactor] 구매 수량 전달
+                myPurchasedCount={getPurchasedCountForProduct(p)}
+                onPurchaseComplete={fetchMyOrders}
               />
             ))
           ) : (
