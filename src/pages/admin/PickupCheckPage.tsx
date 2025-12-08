@@ -9,11 +9,11 @@ import { safeToDate } from '@/utils/productUtils';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
 import './PickupCheckPage.css';
-import { ChevronLeft, ChevronRight, CalendarCheck, RefreshCcw, Bell, ShoppingBag, Plus, Copy, MapPin } from 'lucide-react'; 
+import { ChevronLeft, ChevronRight, CalendarCheck, RefreshCcw, Bell, ShoppingBag, Plus, Copy, MapPin, Camera, List as ListIcon } from 'lucide-react'; 
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas'; // html2canvas import 필요
 
-// 캘린더 데이터 타입
+// 1. PickupEvent 인터페이스에 imageUrl 추가
 interface PickupEvent {
   uniqueId: string;
   productId: string;
@@ -23,16 +23,17 @@ interface PickupEvent {
   variantCount: number;
   price: number;
   storageType: StorageType;
+  imageUrl?: string; // ★ [추가] 이미지 URL 필드
 }
 
-// 수동 추가 아이템 타입
+// 2. 수동 추가 아이템 타입에도 imageUrl 추가
 interface ManualItem {
   uniqueId: string;
   productName: string;
   storageType: StorageType;
   variantCount?: number;
+  imageUrl?: string; // ★ [추가]
 }
-
 // 상태 타입
 type ItemState = 'NORMAL' | 'SHRUNK' | 'HIDDEN';
 // 모드 타입
@@ -41,6 +42,9 @@ type ViewMode = 'ARRIVAL' | 'NOSHOW' | 'CLOSING';
 
 const PickupCheckPage: React.FC = () => {
   useDocumentTitle('수진이의 픽업체쿠!');
+
+  // ★ [추가] 사진 모드 여부 상태 (이미지 생성기용)
+  const [isPhotoMode, setIsPhotoMode] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<PickupEvent[]>([]);
@@ -77,6 +81,9 @@ const PickupCheckPage: React.FC = () => {
               if (round.pickupDate) {
                 const pDate = safeToDate(round.pickupDate);
                 const firstPrice = round.variantGroups?.[0]?.items?.[0]?.price ?? 0;
+                // ★ [수정] 대표 이미지 가져오기 (첫번째 이미지)
+                const firstImage = product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : undefined;
+                
                 if (pDate) {
                   pickupEvents.push({
                     uniqueId: `${product.id}-${round.roundId}`,
@@ -87,6 +94,7 @@ const PickupCheckPage: React.FC = () => {
                     variantCount: round.variantGroups?.length || 0,
                     price: firstPrice,
                     storageType: product.storageType,
+                    imageUrl: firstImage, // ★ [추가] 여기에 이미지 저장
                   });
                 }
               }
@@ -158,7 +166,8 @@ const PickupCheckPage: React.FC = () => {
       productName: item.productName,
       storageType: item.storageType,
       variantCount: item.variantCount,
-      price: item.price // 👈 [중요] 이 줄을 꼭 추가해주세요! (가격을 챙깁니다)
+      price: item.price,
+      imageUrl: item.imageUrl // ★ [추가] 이미지 전달
     }));
 
     // 2. 수동 리스트 합치기
@@ -355,83 +364,137 @@ const PickupCheckPage: React.FC = () => {
           </button>
         </div>
 
-        <div className="manual-input-area">
-          <input type="text" className="input-product-name" placeholder="상품명 입력" value={inputName} onChange={(e) => setInputName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleAddManualItem()} />
-          <select className="select-storage-type" value={inputType} onChange={(e) => setInputType(e.target.value as StorageType)}>
-            <option value="FRESH">🔴 신선/냉장 (빨강)</option>
-            <option value="FROZEN">🔵 냉동 (파랑)</option>
-            <option value="ROOM">⚫ 실온 (검정)</option>
-          </select>
-          <button className="btn-add-manual" onClick={handleAddManualItem}><Plus size={16} style={{marginRight:'4px'}}/> 추가</button>
+        {/* ★ [새 기능] 텍스트 모드 vs 사진 모드 토글 버튼 */}
+        <div className="view-toggle-area">
+          <button 
+            className={`view-toggle-btn ${!isPhotoMode ? 'active' : ''}`} 
+            onClick={() => setIsPhotoMode(false)}
+          >
+            <ListIcon size={16} style={{marginRight:'3px'}}/> 텍스트 공지
+          </button>
+          <button 
+            className={`view-toggle-btn ${isPhotoMode ? 'active' : ''}`} 
+            onClick={() => setIsPhotoMode(true)}
+          >
+            <Camera size={16} style={{marginRight:'3px'}}/> 사진 모아보기
+          </button>
         </div>
 
+        {/* 수동 입력창 (사진 모드일 때는 숨김) */}
+        {!isPhotoMode && (
+          <div className="manual-input-area">
+            <input type="text" className="input-product-name" placeholder="상품명 입력" value={inputName} onChange={(e) => setInputName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleAddManualItem()} />
+            <select className="select-storage-type" value={inputType} onChange={(e) => setInputType(e.target.value as StorageType)}>
+              <option value="FRESH">🔴 신선/냉장 (빨강)</option>
+              <option value="FROZEN">🔵 냉동 (파랑)</option>
+              <option value="ROOM">⚫ 실온 (검정)</option>
+            </select>
+            <button className="btn-add-manual" onClick={handleAddManualItem}><Plus size={16} style={{marginRight:'4px'}}/> 추가</button>
+          </div>
+        )}
+
         <h2 style={{ marginBottom: '0.5rem', fontWeight: 700 }}>
-          {viewMode === 'ARRIVAL' && '📸 입고 안내문'}
-          {viewMode === 'CLOSING' && '📸 예약 마감 경고장'} {/* 멘트 수정 */}
-          {viewMode === 'NOSHOW' && '📸 현장판매 리스트'}
+          {/* 제목 로직 */}
+          {isPhotoMode ? '📸 사진 앨범 (캡쳐용)' : (
+            viewMode === 'ARRIVAL' ? '📸 입고 안내문' :
+            viewMode === 'CLOSING' ? '📸 예약 마감 경고장' : '📸 현장판매 리스트'
+          )}
         </h2>
         
-        {/* 캡쳐 프레임 스타일 동적 변경 */}
-        <div ref={captureRef} className={`capture-frame ${viewMode === 'NOSHOW' ? 'theme-blue' : viewMode === 'CLOSING' ? 'theme-orange' : ''}`}>
-          <div className="pickup-notice-card">
-            <div className="notice-header">
-              {/* 날짜 뱃지 */}
-              <span className="notice-date-badge">{selectedDate.format('M월 D일 (ddd)')}</span>
-              <h2 className="notice-title">
-                {viewMode === 'ARRIVAL' && '입고완료! 픽업와주세요!'}
-                
-                {/* [수정] 예약 마감 강조 */}
-                {viewMode === 'CLOSING' && '추가공구 곧 마감됩니다!'} 
-                
-                {viewMode === 'NOSHOW' && '노쇼분 현장판매 시작!'}
-              </h2>
+        {/* ★ [캡쳐 영역] 분기 처리: 사진모드 vs 텍스트모드 */}
+        <div ref={captureRef} className={`capture-frame ${viewMode === 'NOSHOW' ? 'theme-blue' : viewMode === 'CLOSING' ? 'theme-orange' : ''} ${isPhotoMode ? 'photo-mode-frame' : ''}`}>
+          {isPhotoMode ? (
+            /* ================= 사진 모드 (Grid) ================= */
+            <div className="pickup-photo-card">
+              <div className="photo-header">
+                  <span className="photo-date">{selectedDate.format('M월 D일')}</span>
+                  <span className="photo-title">
+                    {viewMode === 'CLOSING' ? '🔥 마감임박 라인업' : '✨ 오늘의 라인업'}
+                  </span>
+              </div>
+              
+              <div className="photo-grid">
+  {finalVisibleEvents.filter(item => item.imageUrl).length > 0 ? (
+    finalVisibleEvents.filter(item => item.imageUrl).map((item) => (
+      <div key={item.uniqueId} className="photo-item">
+        <div className="photo-img-wrapper">
+          {/* 오직 이미지만 남깁니다 */}
+          <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" />
+        </div>
+        {/* 여기 있던 상품명 오버레이 div 삭제됨 */}
+      </div>
+    ))
+  ) : (
+                  <div className="no-photo-msg">이미지가 있는 상품이 없습니다. 😢</div>
+                )}
+              </div>
+              
+              <div className="photo-footer">
+                S O D O M A L L &nbsp; P I C K
+              </div>
             </div>
-            
-            {/* 그리드 아이템들 (기존 로직 유지) */}
-            <div className="notice-grid">
-              {finalVisibleEvents.length > 0 ? finalVisibleEvents.map((item) => {
-                let colorClass = 'text-black';
-                if (['FRESH', 'COLD'].includes(item.storageType)) colorClass = 'text-red';
-                else if (item.storageType === 'FROZEN') colorClass = 'text-blue';
-                const isShrunk = itemStates[item.uniqueId] === 'SHRUNK';
+          ) : (
+            /* ================= 기존 텍스트 모드 ================= */
+            <div className="pickup-notice-card">
+              <div className="notice-header">
+                {/* 날짜 뱃지 */}
+                <span className="notice-date-badge">{selectedDate.format('M월 D일 (ddd)')}</span>
+                <h2 className="notice-title">
+                  {viewMode === 'ARRIVAL' && '입고완료! 픽업와주세요!'}
+                  
+                  {/* [수정] 예약 마감 강조 */}
+                  {viewMode === 'CLOSING' && '추가공구 곧 마감됩니다!'} 
+                  
+                  {viewMode === 'NOSHOW' && '노쇼분 현장판매 시작!'}
+                </h2>
+              </div>
+              
+              {/* 그리드 아이템들 (기존 로직 유지) */}
+              <div className="notice-grid">
+                {finalVisibleEvents.length > 0 ? finalVisibleEvents.map((item) => {
+                  let colorClass = 'text-black';
+                  if (['FRESH', 'COLD'].includes(item.storageType)) colorClass = 'text-red';
+                  else if (item.storageType === 'FROZEN') colorClass = 'text-blue';
+                  const isShrunk = itemStates[item.uniqueId] === 'SHRUNK';
 
-                return (
-                  <div key={item.uniqueId} className="notice-item" onClick={() => handleItemClick(item.uniqueId)}>
-                    <span className={`notice-item-text ${colorClass} ${isShrunk ? 'state-shrunk' : ''}`}>
-                      {item.productName}
-                      {(item.variantCount && item.variantCount > 1) && <span style={{fontSize:'0.6em', marginLeft:'4px'}}>({item.variantCount}종)</span>}
-                    </span>
+                  return (
+                    <div key={item.uniqueId} className="notice-item" onClick={() => handleItemClick(item.uniqueId)}>
+                      <span className={`notice-item-text ${colorClass} ${isShrunk ? 'state-shrunk' : ''}`}>
+                        {item.productName}
+                        {(item.variantCount && item.variantCount > 1) && <span style={{fontSize:'0.6em', marginLeft:'4px'}}>({item.variantCount}종)</span>}
+                      </span>
+                    </div>
+                  );
+                }) : (
+                  <div style={{gridColumn:'span 2', padding:'40px', textAlign:'center', color:'#999', fontSize:'1.2rem', fontWeight:700}}>
+                    {viewMode === 'CLOSING' ? '마감 임박 상품이 없습니다.' : '상품이 없습니다. 추가해보세요!'}
                   </div>
-                );
-              }) : (
-                <div style={{gridColumn:'span 2', padding:'40px', textAlign:'center', color:'#999', fontSize:'1.2rem', fontWeight:700}}>
-                  {viewMode === 'CLOSING' ? '마감 임박 상품이 없습니다.' : '상품이 없습니다. 추가해보세요!'}
-                </div>
-              )}
-              {/* 홀수일 때 빈칸 채우기 */}
-              {finalVisibleEvents.length > 0 && finalVisibleEvents.length % 2 !== 0 && <div className="notice-item" style={{ background: '#f5f5f5', cursor: 'default' }}></div>}
-            </div>
+                )}
+                {/* 홀수일 때 빈칸 채우기 */}
+                {finalVisibleEvents.length > 0 && finalVisibleEvents.length % 2 !== 0 && <div className="notice-item" style={{ background: '#f5f5f5', cursor: 'default' }}></div>}
+              </div>
 
-            <div className="notice-footer">
-              <div className="footer-msg">
-                {viewMode === 'ARRIVAL' && <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></>}
-                
-                {/* [수정] 마감 시각 강조 */}
-                {viewMode === 'CLOSING' && <>⏰ 내일 <span className="text-red" style={{fontWeight:900}}>오후 1시</span> 예약 칼마감!</>}
-                
-                {viewMode === 'NOSHOW' && <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>}
+              <div className="notice-footer">
+                <div className="footer-msg">
+                  {viewMode === 'ARRIVAL' && <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></>}
+                  
+                  {/* [수정] 마감 시각 강조 */}
+                  {viewMode === 'CLOSING' && <>⏰ 내일 <span className="text-red" style={{fontWeight:900}}>오후 1시</span> 예약 칼마감!</>}
+                  
+                  {viewMode === 'NOSHOW' && <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>}
+                </div>
+                <div className="footer-highlight">
+                  {viewMode === 'ARRIVAL' && '🚨 신선/냉장(빨강)은 당일 픽업 필수!'}
+                  
+                  {/* [수정] 품절 경고 */}
+                  {viewMode === 'CLOSING' && '지금 주문 안 하시면 재고 없습니다!'}
+                  
+                  {viewMode === 'NOSHOW' && '💸 마감임박! 놓치면 품절입니다!'}
+                </div>
               </div>
-              <div className="footer-highlight">
-                {viewMode === 'ARRIVAL' && '🚨 신선/냉장(빨강)은 당일 픽업 필수!'}
-                
-                {/* [수정] 품절 경고 */}
-                {viewMode === 'CLOSING' && '지금 주문 안 하시면 재고 없습니다!'}
-                
-                {viewMode === 'NOSHOW' && '💸 마감임박! 놓치면 품절입니다!'}
-              </div>
+              <div className="footer-deco">S O D O M A L L &nbsp; S O N G D O</div>
             </div>
-            <div className="footer-deco">S O D O M A L L &nbsp; S O N G D O</div>
-          </div>
+          )}
         </div>
 
         <div className="action-buttons">
