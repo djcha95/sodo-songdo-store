@@ -324,15 +324,26 @@ const PickupCheckPage: React.FC = () => {
                 ) : (
                   /* [모드 2/3] 노쇼 줍줍 & 마감 임박: 그냥 쭉 나열하기 */
                   <ul className="pickup-items-compact">
-                    {finalVisibleEvents.map(item => (
-                      <li key={item.uniqueId} className="pickup-row">
-                        <span className="row-product-name">
-                          {viewMode === 'CLOSING' ? '⏳' : '✔️'} {item.productName}
-                          {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+  {/* 👇 여기에 index(순서)를 추가했습니다 */}
+  {finalVisibleEvents.map((item, index) => (
+    <li key={item.uniqueId} className="pickup-row">
+      <span className="row-product-name">
+        
+        {/* 👇 [수정됨] 마감임박이면 숫자(1. 2.), 아니면 체크(✔️) */}
+        {viewMode === 'CLOSING' ? (
+          <span style={{ fontWeight: 'bold', marginRight: '4px', color: '#e65100' }}>
+            {index + 1}.
+          </span>
+        ) : (
+          '✔️ '
+        )}
+
+        {item.productName}
+        {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
+      </span>
+    </li>
+  ))}
+</ul>
                 )}
               </>
             ) : (
@@ -479,18 +490,18 @@ const PickupCheckPage: React.FC = () => {
                   {viewMode === 'ARRIVAL' && <>📦 보관기간: 입고일 포함 <span className="text-black">2일</span></>}
                   
                   {/* [수정] 마감 시각 강조 */}
-                  {viewMode === 'CLOSING' && <>⏰ 내일 <span className="text-red" style={{fontWeight:900}}>오후 1시</span> 예약 칼마감!</>}
+                  {viewMode === 'CLOSING' && <>⏰ <span className="text-red" style={{fontWeight:900}}>오후 1시</span> 예약 칼마감!</>}
                   
                   {viewMode === 'NOSHOW' && <>🎁 <span className="text-blue" style={{fontWeight:900}}>선착순 현장판매</span> 진행중!</>}
                 </div>
                 <div className="footer-highlight">
-                  {viewMode === 'ARRIVAL' && '🚨 신선/냉장(빨강)은 당일 픽업 필수!'}
-                  
-                  {/* [수정] 품절 경고 */}
-                  {viewMode === 'CLOSING' && '지금 주문 안 하시면 재고 없습니다!'}
-                  
-                  {viewMode === 'NOSHOW' && '💸 마감임박! 놓치면 품절입니다!'}
-                </div>
+  {viewMode === 'ARRIVAL' && '🚨 신선/냉장(빨강)은 당일 픽업 필수!'}
+  
+  {/* 👇 [수정됨] "재고없음" 협박(?) 대신 부드러운 권유로 변경 */}
+  {viewMode === 'CLOSING' && '혹시 예약을 놓치셨나요? 지금 바로 예약 가능합니다! 🤗'}
+  
+  {viewMode === 'NOSHOW' && '💸 마감임박! 놓치면 품절입니다!'}
+</div>
               </div>
               <div className="footer-deco">S O D O M A L L &nbsp; S O N G D O</div>
             </div>
