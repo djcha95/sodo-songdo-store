@@ -137,26 +137,26 @@ const PickupCheckPage: React.FC = () => {
 
   // 2. [이미지 생성기용] 이벤트 가져오기 (마감임박 로직 수정됨)
   const imageGeneratorEvents = useMemo(() => {
-    const targetDateKey = selectedDate.format('YYYY-MM-DD');
+  const targetDateKey = selectedDate.format('YYYY-MM-DD');
+  
+  if (viewMode === 'ARRIVAL') {
+    // ARRIVAL: 입고 알림 (당일)
+    return eventsByDate[targetDateKey] || [];
     
-    if (viewMode === 'ARRIVAL') {
-      // ARRIVAL: 오늘(선택된 날짜) 픽업인 상품
-      return eventsByDate[targetDateKey] || [];
-      
-    } else if (viewMode === 'CLOSING') {
-      // ★ [수정됨] CLOSING: 예약 마감 임박 (D-1) -> 픽업일이 내일인 상품
-      const tomorrow = selectedDate.add(1, 'day').format('YYYY-MM-DD');
-      return eventsByDate[tomorrow] || [];
-      
-    } else {
-      // NOSHOW: 기존 로직 유지 (신선=어제, 일반=그저께)
-      const yesterday = selectedDate.subtract(1, 'day').format('YYYY-MM-DD');
-      const dayBeforeYesterday = selectedDate.subtract(2, 'day').format('YYYY-MM-DD');
-      const freshItems = (eventsByDate[yesterday] || []).filter(item => ['FRESH', 'COLD'].includes(item.storageType));
-      const normalItems = (eventsByDate[dayBeforeYesterday] || []).filter(item => ['FROZEN', 'ROOM'].includes(item.storageType));
-      return [...freshItems, ...normalItems];
-    }
-  }, [selectedDate, eventsByDate, viewMode]);
+  } else if (viewMode === 'CLOSING') {
+    // ★ [수정됨] 내일(+1)이 아니라 '선택한 날짜(당일)' 그대로 사용!
+    // (오전에 올리는 당일 1시 마감 공지용)
+    return eventsByDate[targetDateKey] || [];
+    
+  } else {
+    // NOSHOW: (기존 유지)
+    const yesterday = selectedDate.subtract(1, 'day').format('YYYY-MM-DD');
+    const dayBeforeYesterday = selectedDate.subtract(2, 'day').format('YYYY-MM-DD');
+    const freshItems = (eventsByDate[yesterday] || []).filter(item => ['FRESH', 'COLD'].includes(item.storageType));
+    const normalItems = (eventsByDate[dayBeforeYesterday] || []).filter(item => ['FROZEN', 'ROOM'].includes(item.storageType));
+    return [...freshItems, ...normalItems];
+  }
+}, [selectedDate, eventsByDate, viewMode]);
 
 // ★ 최종 리스트 = [자동 불러온 것] + [수동 추가한 것] 합치기
   const combinedEvents = useMemo(() => {
@@ -324,12 +324,12 @@ const PickupCheckPage: React.FC = () => {
                 ) : (
                   /* [모드 2/3] 노쇼 줍줍 & 마감 임박: 그냥 쭉 나열하기 */
                   <ul className="pickup-items-compact">
-  {/* 👇 여기에 index(순서)를 추가했습니다 */}
+  {/* map 함수에 index(순서) 추가 */}
   {finalVisibleEvents.map((item, index) => (
     <li key={item.uniqueId} className="pickup-row">
       <span className="row-product-name">
         
-        {/* 👇 [수정됨] 마감임박이면 숫자(1. 2.), 아니면 체크(✔️) */}
+        {/* ★ [수정] 마감임박(CLOSING)일 때는 번호 매기기 */}
         {viewMode === 'CLOSING' ? (
           <span style={{ fontWeight: 'bold', marginRight: '4px', color: '#e65100' }}>
             {index + 1}.
@@ -497,7 +497,7 @@ const PickupCheckPage: React.FC = () => {
                 <div className="footer-highlight">
   {viewMode === 'ARRIVAL' && '🚨 신선/냉장(빨강)은 당일 픽업 필수!'}
   
-  {/* 👇 [수정됨] "재고없음" 협박(?) 대신 부드러운 권유로 변경 */}
+  {/* ★ [수정] 협박조(?) 대신 부드러운 권유 멘트로 변경 */}
   {viewMode === 'CLOSING' && '혹시 예약을 놓치셨나요? 지금 바로 예약 가능합니다! 🤗'}
   
   {viewMode === 'NOSHOW' && '💸 마감임박! 놓치면 품절입니다!'}
