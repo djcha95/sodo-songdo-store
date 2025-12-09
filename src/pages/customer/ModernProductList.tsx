@@ -200,7 +200,7 @@ const ModernProductList: React.FC = () => {
   useEffect(() => {
     const fetchSpecialProducts = async () => {
       try {
-        const { products: fetched } = await getPaginatedProductsWithStock(40, null, null, 'all');
+        const { products: fetched } = await getPaginatedProductsWithStock(200, null, null, 'all');
 
         // 이벤트 상품
         const events = fetched.filter((p) => {
