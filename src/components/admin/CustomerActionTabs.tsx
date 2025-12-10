@@ -1,6 +1,8 @@
 // src/components/admin/CustomerActionTabs.tsx
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Timestamp } from 'firebase/firestore';
 import type { 
     UserDocument, 
@@ -9,29 +11,23 @@ import type {
     LoyaltyTier, 
     OrderStatus,
     UniversalTimestamp,
-    AggregatedOrderGroup // ✅ [수정] shared/types에서 직접 import
+    AggregatedOrderGroup 
 } from '@/shared/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import {
     updateMultipleOrderStatuses,
-    revertOrderStatus,
     deleteMultipleOrders,
-    processPartialPickup,
     splitBundledOrder,
     cancelOrder,
     revertFinalizedOrder
 } from '@/firebase/orderService';
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
-// ✅ [신규] 우리가 만든 집계 유틸리티 import
 import { aggregateOrders } from '@/utils/orderAggregation'; 
 import toast from 'react-hot-toast';
-import { GitCommit, CheckCircle, DollarSign, XCircle, RotateCcw, Trash2, Save, Shield, AlertTriangle, Undo2, GitBranch } from 'lucide-react';
+import { CheckCircle, DollarSign, XCircle, RotateCcw, Save, Shield, AlertTriangle, Undo2, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
-
-// ❌ [삭제] 중복 정의된 인터페이스 삭제함
-// export interface AggregatedOrderGroup { ... }
 
 interface CustomerActionTabsProps {
     user: UserDocument;
@@ -43,10 +39,10 @@ interface CustomerActionTabsProps {
 
 const convertToDate = (date: UniversalTimestamp | Date | null | undefined): Date | null => {
     if (!date) return null;
-    if (date instanceof Date) return date; // Date 객체
-    if ('toDate' in date && typeof date.toDate === 'function') return date.toDate(); // ClientTimestamp
-    if ('_seconds' in date && typeof date._seconds === 'number') return date.toDate(); // AdminTimestamp
-    return null; // 알 수 없는 타입
+    if (date instanceof Date) return date; 
+    if ('toDate' in date && typeof date.toDate === 'function') return date.toDate();
+    if ('_seconds' in date && typeof date._seconds === 'number') return date.toDate();
+    return null; 
 };
 
 const performAction = async (
@@ -208,7 +204,6 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
 };
 
 type Tab = 'pickup' | 'history' | 'manage';
-interface SplitInfo { group: AggregatedOrderGroup; newQuantity: number; }
 
 const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ 
     user, 
@@ -219,17 +214,17 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('pickup');
     const [selectedGroupKeys, setSelectedGroupKeys] = useState<string[]>([]);
-    const [splitInfo, setSplitInfo] = useState<SplitInfo | null>(null);
 
-    // ✅ [핵심 수정] aggregateOrders 유틸리티를 사용하여 로직을 단순화하고 표준화합니다.
+    // Cloud Function 초기화
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const updateOrderQuantityCallable = httpsCallable<
+        { orderId: string; newQuantity: number },
+        { success: boolean; message?: string }
+    >(functions, 'updateOrderQuantity');
+
     const aggregatedPickupOrders = useMemo<AggregatedOrderGroup[]>(() => {
-        // 1. 픽업 탭에 표시할 상태 필터링 (RESERVED, PREPAID)
         const pickupOrders = orders.filter(o => o.status === 'RESERVED' || o.status === 'PREPAID');
-        
-        // 2. 유틸리티 함수로 집계 (중복 로직 제거)
         const groups = aggregateOrders(pickupOrders);
-
-        // 3. 날짜순 정렬 (유틸리티는 순서를 보장하지 않으므로 여기서 수행)
         return groups.sort((a, b) => {
             const dateA = convertToDate(a.pickupDate)?.getTime() || 0;
             const dateB = convertToDate(b.pickupDate)?.getTime() || 0;
@@ -243,23 +238,51 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
     );
 
     const handleSelectGroup = useCallback((groupKey: string) => {
-        if(splitInfo) { toast.error('수량 변경 후에는 먼저 부분 픽업 처리를 완료해주세요.'); return; }
         setSelectedGroupKeys(prev => prev.includes(groupKey) ? prev.filter(key => key !== groupKey) : [...prev, groupKey]);
-    }, [splitInfo]);
-
-    const handleQuantityChange = useCallback((group: AggregatedOrderGroup, newQuantity: number) => {
-        if (newQuantity < group.totalQuantity) {
-            if(group.originalOrders.length > 1) { 
-                toast.error("여러 주문이 묶인 그룹의 수량은 변경할 수 없습니다. '전체 주문 내역' 탭에서 주문을 분할한 후 시도해주세요."); 
-                return; 
-            }
-            setSplitInfo({ group, newQuantity });
-            setSelectedGroupKeys([group.groupKey]);
-        } else {
-            setSplitInfo(null);
-            setSelectedGroupKeys(prev => prev.filter(key => key !== group.groupKey));
-        }
     }, []);
+
+    // ✅ [수정] 수량 변경 시 즉시 Cloud Function 호출
+    const handleQuantityChange = useCallback(
+        (group: AggregatedOrderGroup, newQuantity: number) => {
+            if (newQuantity <= 0) {
+                toast.error('수량은 최소 1개 이상이어야 합니다.');
+                return;
+            }
+            if (newQuantity === group.totalQuantity) {
+                return;
+            }
+            // 레거시 중복 주문(문서 여러 개가 묶인 경우)은 여기서 처리 불가
+            if (group.originalOrders.length > 1) {
+                toast.error(
+                    "여러 주문이 묶인 그룹은 여기에서 수량 변경이 어렵습니다.\n'전체 주문 내역' 탭에서 각각 주문을 수정해주세요."
+                );
+                return;
+            }
+
+            const orderId = group.originalOrders[0].orderId;
+            const prevQty = group.totalQuantity;
+
+            const ok = window.confirm(
+                `${group.item.productName} 수량을 ${prevQty}개 → ${newQuantity}개로 변경할까요?\n(수량만 수정되며, 픽업 상태는 유지됩니다.)`
+            );
+            if (!ok) return;
+
+            performAction(
+                () => updateOrderQuantityCallable({ orderId, newQuantity }).then((res) => res.data),
+                () => {}, // 통계 낙관적 업데이트 생략
+                () => {},
+                () => {
+                    onActionSuccess();
+                },
+                {
+                    loading: '수량 변경 중...',
+                    success: '수량이 변경되었습니다.',
+                    error: '수량 변경에 실패했습니다.',
+                }
+            );
+        },
+        [onActionSuccess, updateOrderQuantityCallable]
+    );
 
     const handleStatusUpdate = (status: OrderStatus) => {
         if (selectedGroupKeys.length === 0) return;
@@ -374,49 +397,6 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
         );
     };
 
-    const handlePartialPickup = () => {
-        if (!splitInfo) return;
-
-        const { group, newQuantity } = splitInfo;
-        const orderIdToProcess = group.originalOrders[0].orderId;
-
-        const confirmationPromise = new Promise((resolve, reject) => {
-            toast.custom((t) => (
-                <div className="confirmation-toast">
-                    <AlertTriangle size={44} className="toast-icon" style={{ color: 'var(--accent-color)' }}/>
-                    <h4>부분 픽업 확인</h4>
-                    <p>
-                        <strong>{group.totalQuantity}개</strong> 중 <strong>{newQuantity}개</strong>만 픽업 처리하고, <br/>
-                        차감된 수량에 대해 <strong>0.5 노쇼 페널티</strong>를 적용할까요?
-                    </p>
-                    <div className="toast-buttons">
-                        <button className="common-button button-secondary button-medium" onClick={() => {toast.dismiss(t.id); reject();}}>아니오, 취소</button>
-                        <button className="common-button button-primary button-medium" onClick={() => {toast.dismiss(t.id); resolve(true);}}>네, 적용합니다</button>
-                    </div>
-                </div>
-            ), { id: 'partial-pickup-confirm', duration: Infinity });
-        });
-        
-        confirmationPromise.then(() => {
-            const PENALTY_POINTS = -50; 
-            const pointsForPickedUpItems = Math.round(group.item.unitPrice * newQuantity * 0.01);
-            const totalPointChange = pointsForPickedUpItems + PENALTY_POINTS;
-
-            const optimisticUpdates = { noshow: 0.5, points: totalPointChange };
-            const revertUpdates = { noshow: -0.5, points: -totalPointChange };
-            
-            performAction(
-                () => processPartialPickup(orderIdToProcess, newQuantity),
-                () => onStatUpdate(optimisticUpdates),
-                () => onStatUpdate(revertUpdates),
-                () => { setSplitInfo(null); setSelectedGroupKeys([]); onActionSuccess(); },
-                { loading: '부분 픽업 처리 중...', success: '부분 픽업 및 페널티가 적용되었습니다.', error: '부분 픽업 처리 실패' }
-            );
-        }).catch(() => {
-           console.log("Partial pickup was canceled by the user.");
-        });
-    };
-
     const handleSplitOrder = (orderId: string) => {
         toast.custom((t) => (
             <div className="confirmation-toast-content">
@@ -461,8 +441,8 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
                                     isSelected={selectedGroupKeys.includes(group.groupKey)}
                                     onSelect={handleSelectGroup}
                                     onQuantityChange={handleQuantityChange}
-                                isFuture={isFuture}
-                            />
+                                    isFuture={isFuture}
+                                />
                             );
                         })}
                         {aggregatedPickupOrders.length === 0 && <p className="no-data-message">처리 대기중인 항목이 없습니다.</p>}
@@ -479,27 +459,15 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
 
     const renderFooter = () => {
         if (activeTab !== 'pickup') return null;
-
-        if (splitInfo) {
-            const newPrice = splitInfo.group.item.unitPrice * splitInfo.newQuantity;
-            return (
-                <div className="cat-action-footer">
-                    <span className="cat-footer-summary" title={`원래 ${splitInfo.group.totalQuantity}개`}>
-                        {splitInfo.group.item.productName}: <strong>{splitInfo.newQuantity}개</strong> ({(newPrice).toLocaleString()}원)
-                    </span>
-                    <div className="cat-footer-actions">
-                         <button onClick={handlePartialPickup} className="common-button button-pickup">
-                            <GitCommit size={16} /> 부분 픽업 처리
-                         </button>
-                    </div>
-                </div>
-            )
-        }
         
         if (selectedGroupKeys.length === 0) return null;
         
-        const totalSelectedPrice = selectedGroups.reduce((sum, g) => sum + g.totalPrice, 0);
-        const allSelectedArePrepaid = selectedGroups.length > 0 && selectedGroups.every(g => g.status === 'PREPAID');
+        // 선택된 그룹 정보 계산
+        const selectedGroupsList = aggregatedPickupOrders.filter(g => selectedGroupKeys.includes(g.groupKey));
+        const totalSelectedPrice = selectedGroupsList.reduce((sum, g) => sum + g.totalPrice, 0);
+        
+        // 모든 선택된 항목이 '선입금' 상태인지 체크
+        const allSelectedArePrepaid = selectedGroupsList.length > 0 && selectedGroupsList.every(g => g.originalOrders.every(o => o.status === 'PREPAID'));
 
         const prepaymentButton = allSelectedArePrepaid ? (
             <button onClick={() => handleStatusUpdate('RESERVED')} className="common-button button-prepaid-cancel">

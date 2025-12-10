@@ -15,6 +15,7 @@ import type {
   UserDocument,
   CustomerInfo,
   SalesRoundStatus,
+  OrderStatus,
 } from "@/shared/types";
 
 // ✅ [적용 5] 배포 버전 확인용 로그 태그
@@ -395,6 +396,8 @@ export const updateSalesRound = onCall(
           updatedAt: FieldValue.serverTimestamp(),
         });
       });
+      // ✅ 트랜잭션에서 상품/회차 업데이트 완료 후, 관련 주문 픽업일 동기화 <--- 이 두 줄을 삽입합니다.
+      await syncOrderPickupDates(productId, roundId);
 
       return { success: true, message: "판매 회차 정보가 업데이트되었습니다." };
     } catch (error) {
@@ -991,3 +994,102 @@ export const setAdminClaimForEmulator = onCall(
     }
   }
 );
+
+// } // <--- 기존 파일의 최종 닫는 괄호(Line 1019) 직전에 삽입합니다.
+
+// =================================================================
+// HELPER: Sync Order Pickup Dates (from snippet 5-1)
+// =================================================================
+async function syncOrderPickupDates(productId: string, roundId: string) {
+  try {
+    // 1) 최신 상품/회차 정보 가져오기
+    const productSnap = await db.collection("products").doc(productId).get();
+    if (!productSnap.exists) {
+      logger.warn(`[syncOrderPickupDates] Product not found: ${productId}`);
+      return;
+    }
+
+    const product = productSnap.data() as Product;
+    const salesHistory = Array.isArray(product.salesHistory) ? product.salesHistory : [];
+    const targetRound = salesHistory.find(r => r.roundId === roundId);
+
+    if (!targetRound) {
+      logger.warn(`[syncOrderPickupDates] Round not found. productId=${productId}, roundId=${roundId}`);
+      return;
+    }
+
+    const newPickupDate = targetRound.pickupDate ?? null;
+    const newPickupDeadline = targetRound.pickupDeadlineDate ?? null;
+
+    // 2) 수정 대상 주문 조회 (예약 / 선입금 상태만)
+    const activeStatuses: OrderStatus[] = ["RESERVED", "PREPAID"];
+
+    const ordersSnap = await db
+      .collection("orders")
+      .where("status", "in", activeStatuses)
+      .get();
+
+    if (ordersSnap.empty) {
+      logger.info(`[syncOrderPickupDates] No active orders to update for productId=${productId}, roundId=${roundId}`);
+      return;
+    }
+
+    let batch = db.batch();
+    let batchCount = 0;
+    let updatedCount = 0;
+
+    ordersSnap.forEach(doc => {
+      const order = doc.data() as Order;
+
+      const hasTargetItem = (order.items || []).some(
+        item => item.productId === productId && item.roundId === roundId
+      );
+      if (!hasTargetItem) return;
+
+      const updateData: Partial<Order> = {};
+      let needUpdate = false;
+
+      // pickupDate 동기화
+      if (newPickupDate) {
+        const current = order.pickupDate;
+        const currentMillis = current && (current as any).toMillis ? (current as any).toMillis() : null;
+        const newMillis = (newPickupDate as any).toMillis ? (newPickupDate as any).toMillis() : null;
+
+        if (currentMillis !== newMillis) {
+          (updateData as any).pickupDate = newPickupDate;
+          needUpdate = true;
+        }
+      }
+
+      // pickupDeadlineDate 동기화
+      if (newPickupDeadline !== undefined) {
+        const current = (order as any).pickupDeadlineDate ?? null;
+        const currentMillis = current && current.toMillis ? current.toMillis() : null;
+        const newMillis =
+          newPickupDeadline && (newPickupDeadline as any).toMillis
+            ? (newPickupDeadline as any).toMillis()
+            : null;
+
+        if (currentMillis !== newMillis) {
+          (updateData as any).pickupDeadlineDate = newPickupDeadline;
+          needUpdate = true;
+        }
+      }
+
+ if (!needUpdate) return;
+
+      batch.update(doc.ref, updateData);
+      updatedCount++;
+    });
+
+    if (updatedCount > 0) {
+      await batch.commit();
+    }
+    
+    logger.info(
+      `[syncOrderPickupDates] Updated ${updatedCount} orders for productId=${productId}, roundId=${roundId}`
+    );
+  } catch (error) {
+    logger.error("[syncOrderPickupDates] Failed to sync order dates:", error);
+  }
+}
