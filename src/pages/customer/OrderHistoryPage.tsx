@@ -29,11 +29,17 @@ const db = getFirestore(getApp());
 const updateOrderQuantityCallable = httpsCallable<{ orderId: string; newQuantity: number }, { success: boolean, message: string }>(functions, 'updateOrderQuantity');
 
 // 상수 정의
-const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZHRoPSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
+const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWFmMGY0Ii8+PC9zdmc+';
 
 // 타입 정의
 type OrderCancellationItem = { order: Order; isPenalty: boolean; };
 type CancellationRequest = { type: 'order'; items: OrderCancellationItem[]; };
+
+// ✅ [추가] 숨길 상태 정의 (취소/노쇼)
+const isHiddenStatus = (status: OrderStatus) =>
+  status === 'CANCELED' ||
+  status === 'LATE_CANCELED' ||
+  status === 'NO_SHOW';
 
 // 이미지 안전하게 로드하는 컴포넌트
 const SafeThumb: React.FC<{ src?: string; alt: string; className?: string; }> = ({ src, alt, className }) => {
@@ -309,7 +315,7 @@ const OrderCard: React.FC<{
 
   const { cancellable, reason } = useMemo(() => getCancellationDetails(order), [order]);
   const isQuantityEditable = (order.status === 'RESERVED' || order.status === 'PREPAID');
-  const isInactive = order.status === 'CANCELED' || order.status === 'LATE_CANCELED' || order.status === 'NO_SHOW';
+  const isInactive = isHiddenStatus(order.status); // 이제 isHiddenStatus를 사용
 
   const handleClick = (e: React.MouseEvent) => {
     if (isInactive) return;
@@ -362,18 +368,22 @@ const OrderHistoryPage: React.FC = () => {
   const [selectedOrderKeys, setSelectedOrderKeys] = useState<Set<string>>(new Set());
   const [cancellationRequest, setCancellationRequest] = useState<CancellationRequest | null>(null);
 
-  // ✅ [삭제] 기존 무한 스크롤(scroll listener) 로직 삭제됨
-
+  // ✅ [수정 반영] groupedOrders 만들 때 필터링
   const groupedOrders = useMemo(() => {
     const groups: { [date: string]: Order[] } = {};
+
     orders.forEach(order => {
-      const date = order.pickupDate as unknown as Date; 
+      // ✅ 취소/노쇼는 아예 목록에서 제외
+      if (isHiddenStatus(order.status as OrderStatus)) return;
+
+      const date = order.pickupDate as unknown as Date;
       if (date && date instanceof Date) {
         const dateStr = dayjs(date).format('YYYY-MM-DD');
         if (!groups[dateStr]) groups[dateStr] = [];
         groups[dateStr].push(order);
       }
     });
+
     return groups;
   }, [orders]);
 
@@ -410,7 +420,8 @@ const OrderHistoryPage: React.FC = () => {
         setOrders(prev => prev.map(o => {
           if (canceledIds.has(o.id)) {
             const info = ordersToCancel.find(i => i.order.id === o.id);
-            return { ...o, status: info?.isPenalty ? 'LATE_CANCELED' : 'CANCELED' };
+            // 취소된 항목은 목록에서 제외될 것이므로, 상태 업데이트는 DB와 동기화 정도로만 의미가 있음.
+            return { ...o, status: info?.isPenalty ? 'LATE_CANCELED' : 'CANCELED' }; 
           }
           return o;
         }));
@@ -456,7 +467,8 @@ const OrderHistoryPage: React.FC = () => {
 
   const renderContent = () => {
     if (loading && orders.length === 0) return <div className="loading-spinner-container"><SodomallLoader /></div>;
-    if (!loading && orders.length === 0) return (
+    // Orders에는 취소된 항목도 포함될 수 있으므로, filteredOrders(groupedOrders의 keys)로 확인해야 함
+    if (!loading && Object.keys(groupedOrders).length === 0) return (
       <div className="empty-history-container">
         <Package size={48} className="empty-icon" />
         <h3 className="empty-title">아직 예약 내역이 없어요</h3>
@@ -474,6 +486,9 @@ const OrderHistoryPage: React.FC = () => {
             <motion.div key={dateStr} layout>
               <div className="date-header-container">
                 <h2 className="date-header">{formatPickupDateHeader(new Date(dateStr))}</h2>
+                {/* ✅ [추가 제안] 총 개수 배지 (옵션) 
+                    <span className="order-count-badge">{groupedOrders[dateStr].length}개</span>
+                */}
                 {index === 0 && (
                   <div className="cancel-instruction"><Info size={14} /><span>카드를 클릭하여 취소할 항목을 선택하세요.</span></div>
                 )}
@@ -528,7 +543,7 @@ const OrderHistoryPage: React.FC = () => {
           </motion.div>
         </AnimatePresence>
 
-        {!hasMore && orders.length > 0 && <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>}
+        {!hasMore && Object.keys(groupedOrders).length > 0 && <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>}
         
         <AnimatePresence>
           {selectedOrderKeys.size > 0 && (
