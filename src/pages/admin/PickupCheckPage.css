@@ -672,3 +672,15 @@
   font-weight: 700;
   margin-top: auto;
 }
+
+/* --- 리스트 점(bullet) 제거 --- */
+.pickup-items-compact {
+  list-style: none; /* 앞에 점 없애기 */
+  padding: 0;       /* 들여쓰기 없애기 */
+  margin: 0;
+}
+
+/* 혹시 모를 브라우저 강제 마커 제거 */
+.pickup-items-compact li::marker {
+  content: none;
+}

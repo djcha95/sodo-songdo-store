@@ -7,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
 import { MotionConfig } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import GlobalErrorBoundary from '@/components/common/GlobalErrorBoundary';
 
 import './index.css';
 
@@ -211,7 +212,9 @@ const router = createBrowserRouter([
 // --- AppProviders ---
 const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const providers = [
-    (props: { children: React.ReactNode }) => <QueryClientProvider client={queryClient} {...props} />,
+    (props: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient} {...props} />
+    ),
     HelmetProvider,
     AuthProvider,
   ];
@@ -230,14 +233,18 @@ const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   );
 };
 
+// ✅ 이 줄 다시 추가
 const rootElement = document.getElementById('root');
+
 if (rootElement) {
   createRoot(rootElement).render(
     <React.StrictMode>
       <AppProviders>
-        <Suspense fallback={<SodomallLoader />}>
-          <RouterProvider router={router} />
-        </Suspense>
+        <GlobalErrorBoundary>
+          <Suspense fallback={<SodomallLoader />}>
+            <RouterProvider router={router} />
+          </Suspense>
+        </GlobalErrorBoundary>
       </AppProviders>
     </React.StrictMode>
   );
