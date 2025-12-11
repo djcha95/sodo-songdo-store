@@ -289,17 +289,18 @@ const PickupCheckPage: React.FC = () => {
                         <h4 className="group-title">** 신선제품 당일픽업 **</h4>
                         {/* ★ [수정 1] listStyle: 'none' 추가 */}
                         <ul className="pickup-items-compact" style={{ listStyle: 'none', padding: 0 }}>
-                          {finalVisibleEvents
-                            .filter(item => ['FRESH', 'COLD'].includes(item.storageType))
-                            .map(item => (
-                              <li key={item.uniqueId} className="pickup-row">
-                                <span className="row-product-name">
-                                  ✔️ {item.productName}
-                                  {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
-                                </span>
-                              </li>
-                            ))}
-                        </ul>
+  {finalVisibleEvents
+    .filter(item => ['FRESH', 'COLD'].includes(item.storageType))
+    .map(item => (
+      <li key={item.uniqueId} className="pickup-row">
+        <span className="row-product-name">
+  ✔️ {item.productName}
+  {/* [수정됨] 가격이 0보다 클 때만 괄호 표시 */}
+  {((item as any).price || 0) > 0 && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
+</span>
+      </li>
+    ))}
+</ul>
                       </div>
                     )}
                     
@@ -473,9 +474,10 @@ const PickupCheckPage: React.FC = () => {
                   return (
                     <div key={item.uniqueId} className="notice-item" onClick={() => handleItemClick(item.uniqueId)}>
                       <span className={`notice-item-text ${colorClass} ${isShrunk ? 'state-shrunk' : ''}`}>
-                        {item.productName}
-                        {(item.variantCount && item.variantCount > 1) && <span style={{fontSize:'0.6em', marginLeft:'4px'}}>({item.variantCount}종)</span>}
-                      </span>
+  {item.productName}
+  {/* [수정됨] 0이 출력되지 않도록 조건 변경 */}
+  {(item.variantCount || 0) > 1 && <span style={{fontSize:'0.6em', marginLeft:'4px'}}>({item.variantCount}종)</span>}
+</span>
                     </div>
                   );
                 }) : (
