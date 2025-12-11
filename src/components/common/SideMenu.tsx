@@ -1,5 +1,3 @@
-// src/components/common/SideMenu.tsx
-
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +10,8 @@ import {
   Instagram,
   Info,
   ShieldCheck,
-  MapPin, // ✅ MapPin 아이콘 추가
+  MapPin,
+  User, // ✅ [추가] 유저 아이콘
 } from 'lucide-react';
 import './SideMenu.css';
 
@@ -81,6 +80,41 @@ const SideMenu: React.FC<SideMenuProps> = ({
             </div>
           </NavLink>
 
+          {/* ✅ [신규 추가] 내 정보 (멤버십) */}
+          <NavLink
+            to="/mypage"
+            end
+            className={getNavLinkClass}
+            onClick={onClose}
+          >
+            <div className="side-menu-icon-wrap">
+              <User size={20} />
+            </div>
+            <div className="side-menu-text-wrap">
+              <span className="side-menu-main-text">내 정보 (멤버십)</span>
+              <span className="side-menu-sub-text">
+                디지털 등급 카드 & 회원 인증
+              </span>
+            </div>
+          </NavLink>
+
+          {/* ✅ [복구 완료] 예약 내역 */}
+          <NavLink
+            to="/mypage/history"
+            className={getNavLinkClass}
+            onClick={onClose}
+          >
+            <div className="side-menu-icon-wrap">
+              <ListOrdered size={20} />
+            </div>
+            <div className="side-menu-text-wrap">
+              <span className="side-menu-main-text">예약 내역</span>
+              <span className="side-menu-sub-text">
+                내가 예약한 상품과 픽업 일정 확인
+              </span>
+            </div>
+          </NavLink>
+
           {/* 공구 이용 안내 */}
           <NavLink
             to="/guide"
@@ -94,23 +128,6 @@ const SideMenu: React.FC<SideMenuProps> = ({
               <span className="side-menu-main-text">공구 이용 안내</span>
               <span className="side-menu-sub-text">
                 예약, 결제, 픽업 방법 한눈에 보기
-              </span>
-            </div>
-          </NavLink>
-
-          {/* 예약 내역 */}
-          <NavLink
-            to="/mypage/history"
-            className={getNavLinkClass}
-            onClick={onClose}
-          >
-            <div className="side-menu-icon-wrap">
-              <ListOrdered size={20} />
-            </div>
-            <div className="side-menu-text-wrap">
-              <span className="side-menu-main-text">예약 내역</span>
-              <span className="side-menu-sub-text">
-                내가 예약한 상품과 픽업 일정 확인
               </span>
             </div>
           </NavLink>
@@ -173,33 +190,10 @@ const SideMenu: React.FC<SideMenuProps> = ({
             </div>
           </NavLink>
 
-          {/* 🚧 [임시 숨김] 이벤트/소식 메뉴 (페이지 준비되면 아래 주석 해제) */}
-          {/* {onOpenNotifications && (
-            <button
-              className="side-menu-link"
-              type="button"
-              onClick={() => {
-                onOpenNotifications();
-                onClose();
-              }}
-            >
-              <div className="side-menu-icon-wrap">
-                <HeartHandshake size={20} />
-              </div>
-              <div className="side-menu-text-wrap">
-                <span className="side-menu-main-text">이벤트 / 소식</span>
-                <span className="side-menu-sub-text">
-                  송도픽 제휴 소식과 혜택 모아보기
-                </span>
-              </div>
-            </button>
-          )} 
-          */}
-
           {/* ℹ️ 브랜드 정보 섹션 */}
           <div className="side-menu-section-label">브랜드 정보</div>
 
-          {/* ✅ [NEW] 소도몰 소개 & 오시는 길 */}
+          {/* 소도몰 소개 & 오시는 길 */}
           <NavLink
             to="/sodomall-info"
             className={getNavLinkClass}
@@ -234,7 +228,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
           </NavLink>
         </nav>
 
-        {/* 하단 영역 – 관리자 전용 / 카피라이트 */}
+        {/* 하단 영역 */}
         <div className="side-menu-footer">
           {isAdmin && (
             <NavLink

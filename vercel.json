@@ -29,11 +29,11 @@
       ]
     },
     {
-      "source": "/index.html",
+      "source": "/((?!assets/|fonts/|api/|_next/|favicon.ico|sw.js).*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-cache, no-store, max-age=0, must-revalidate"
+          "value": "no-store, max-age=0, must-revalidate"
         }
       ]
     }

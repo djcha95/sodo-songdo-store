@@ -277,17 +277,18 @@ const PickupCheckPage: React.FC = () => {
             </h3>
           </div>
 
-          <div className="event-list-content compact-list">
+<div className="event-list-content compact-list">
             {finalVisibleEvents.length > 0 ? (
               <>
-                {/* [모드 1] 입고 알림: 그룹 나눠서 보여주기 (예전 스타일 복구) */}
+                {/* [모드 1] 입고 알림: 그룹 나눠서 보여주기 */}
                 {viewMode === 'ARRIVAL' ? (
                   <>
                     {/* 1. 신선제품 그룹 */}
                     {finalVisibleEvents.filter(item => ['FRESH', 'COLD'].includes(item.storageType)).length > 0 && (
                       <div className="pickup-group">
                         <h4 className="group-title">** 신선제품 당일픽업 **</h4>
-                        <ul className="pickup-items-compact">
+                        {/* ★ [수정 1] listStyle: 'none' 추가 */}
+                        <ul className="pickup-items-compact" style={{ listStyle: 'none', padding: 0 }}>
                           {finalVisibleEvents
                             .filter(item => ['FRESH', 'COLD'].includes(item.storageType))
                             .map(item => (
@@ -306,7 +307,8 @@ const PickupCheckPage: React.FC = () => {
                     {finalVisibleEvents.filter(item => ['FROZEN', 'ROOM'].includes(item.storageType)).length > 0 && (
                       <div className="pickup-group">
                         <h4 className="group-title">** 일반제품 2일픽업 **</h4>
-                        <ul className="pickup-items-compact">
+                        {/* ★ [수정 2] listStyle: 'none' 추가 */}
+                        <ul className="pickup-items-compact" style={{ listStyle: 'none', padding: 0 }}>
                           {finalVisibleEvents
                             .filter(item => ['FROZEN', 'ROOM'].includes(item.storageType))
                             .map(item => (
@@ -323,31 +325,31 @@ const PickupCheckPage: React.FC = () => {
                   </>
                 ) : (
                   /* [모드 2/3] 노쇼 줍줍 & 마감 임박: 그냥 쭉 나열하기 */
-                  <ul className="pickup-items-compact">
-  {/* map 함수에 index(순서) 추가 */}
-  {finalVisibleEvents.map((item, index) => (
-    <li key={item.uniqueId} className="pickup-row">
-      <span className="row-product-name">
-        
-        {/* ★ [수정] 마감임박(CLOSING)일 때는 번호 매기기 */}
-        {viewMode === 'CLOSING' ? (
-          <span style={{ fontWeight: 'bold', marginRight: '4px', color: '#e65100' }}>
-            {index + 1}.
-          </span>
-        ) : (
-          '✔️ '
-        )}
+                  /* ★ [수정 3] listStyle: 'none' 추가 */
+                  <ul className="pickup-items-compact" style={{ listStyle: 'none', padding: 0 }}>
+                    {/* map 함수에 index(순서) 추가 */}
+                    {finalVisibleEvents.map((item, index) => (
+                      <li key={item.uniqueId} className="pickup-row">
+                        <span className="row-product-name">
+                          
+                          {/* 마감임박(CLOSING)일 때는 번호 매기기 */}
+                          {viewMode === 'CLOSING' ? (
+                            <span style={{ fontWeight: 'bold', marginRight: '4px', color: '#e65100' }}>
+                              {index + 1}.
+                            </span>
+                          ) : (
+                            '✔️ '
+                          )}
 
-        {item.productName}
-        {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
-      </span>
-    </li>
-  ))}
-</ul>
+                          {item.productName}
+                          {(item as any).price && <span style={{ fontWeight: 400, marginLeft: '2px' }}>({(item as any).price.toLocaleString()}원)</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </>
-            ) : (
-              <div className="empty-state">
+            ) : (              <div className="empty-state">
                 <MapPin size={32} />
                 <p>
                   {viewMode === 'ARRIVAL' && '입고 일정 없음'}

@@ -26,6 +26,7 @@ const SimpleOrderPage = React.lazy(() => import('./pages/customer/SimpleOrderPag
 const SongdoPickAboutPage = React.lazy(() => import('./pages/customer/SongdoPickAboutPage'));
 const SongdoPickGuidePage = React.lazy(() => import('./pages/customer/SongdoPickGuidePage'));
 const SongdoPickPartnerBenefitsPage = React.lazy(() => import('./pages/customer/SongdoPickPartnerBenefitsPage'));
+const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 
 // ✅ 모던 디자인 (이제 메인 페이지!)
 const ModernProductList = React.lazy(() => import('./pages/customer/ModernProductList')); 
@@ -163,6 +164,15 @@ const router = createBrowserRouter([
           {
             path: "mypage/history",
             element: <OrderHistoryPage />,
+          },
+          {
+            path: "mypage",
+            element: <AuthLayout />, // 로그인 체크
+            children: [
+              { index: true, element: <MyPage /> }, // /mypage 접속 시 MyPage 보여줌
+              { path: "history", element: <OrderHistoryPage /> }, // /mypage/history
+              { path: "orders", element: <OrderHistoryPage /> }, // 캘린더 페이지가 별도로 있다면 교체, 일단 히스토리로 연결
+            ]
           },
         ],
       },
