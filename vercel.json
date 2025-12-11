@@ -20,20 +20,28 @@
       ]
     },
     {
-      "source": "/(sodomall-logo\\.png|sodomall_wel\\.png)",
+      "source": "/(sw\\.js|service-worker\\.js)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=86400"
+          "value": "public, max-age=0, must-revalidate"
         }
       ]
     },
     {
-      "source": "/((?!assets/|fonts/|api/|_next/|favicon.ico|sw.js).*)",
+      "source": "/((?!assets/|fonts/|api/|_next/|favicon.ico|sw.js|service-worker.js).*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-store, max-age=0, must-revalidate"
+          "value": "no-cache, no-store, must-revalidate, proxy-revalidate"
+        },
+        {
+          "key": "Pragma",
+          "value": "no-cache"
+        },
+        {
+          "key": "Expires",
+          "value": "0"
         }
       ]
     }
@@ -62,7 +70,7 @@
       "destination": "/api/og?id=:id"
     },
     {
-      "source": "/((?!api/|assets/|fonts/|_next/|favicon.ico|sw.js).*)",
+      "source": "/((?!api/|assets/|fonts/|_next/|favicon.ico|sw.js|service-worker.js).*)",
       "destination": "/index.html"
     }
   ]
