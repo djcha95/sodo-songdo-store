@@ -17,6 +17,20 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import SodomallInfoPage from './pages/customer/SodomallInfoPage'; // import 추가
 
 // --- 페이지 컴포넌트 lazy loading ---
+// 👇 서비스워커 강제 해제 코드 (PWA 안 쓸 거면 이대로 두면 됨)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+        console.log('[ServiceWorker] Unregistered old SW:', registration.scope);
+      }
+    })
+    .catch((err) => {
+      console.warn('[ServiceWorker Cleanup] Failed to unregister SWs:', err);
+    });
+}
 
 // 1. 고객용 페이지
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
