@@ -22,6 +22,8 @@ import type { ProductActionState } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import { showToast } from '@/utils/toastUtils';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
+// ✅ [추가] ConfirmModal import
+import ConfirmModal from '@/components/common/ConfirmModal'; // 경로에 맞게 수정
 // ✅ [Refactor] getUserOrders 제거
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
@@ -58,6 +60,9 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
   const [prepaymentPrice, setPrepaymentPrice] = useState(0);
   const [reservationStatus, setReservationStatus] =
     useState<'idle' | 'processing' | 'success'>('idle');
+  // ✅ [추가] 확인 모달 상태
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
+
 
   // ✅ [Refactor] 내부 상태 myPurchasedCount 및 관련 useEffect 제거됨
 
@@ -113,8 +118,11 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     }
   }, [product.displayRound, isPreorder]);
 
-  const handleImmediateOrder = async (e?: React.MouseEvent) => {
+  // 1️⃣ [수정] 기존 handleImmediateOrder -> 버튼 클릭 시 유효성 검사 후 '모달만 켬'
+  const handlePreCheck = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    
+    // 현장판매, 로그인 체크 등 유효성 검사는 여기서 먼저 수행
     if (phase === 'onsite') { showToast('info', '매장에서 직접 구매해주세요!'); return; }
     if (!user || !userDocument) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
     if (cardData?.isMultiOption) { navigate(`/product/${product.id}`); return; }
@@ -123,6 +131,7 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     const vg = cardData?.singleOptionVg;
     if (!finalVariant || !vg) return;
 
+    // 수량 체크
     const limitSetting = finalVariant?.limitQuantity ?? Infinity;
     // ✅ [Refactor] Prop으로 받은 myPurchasedCount 사용
     const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
@@ -132,7 +141,19 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     const finalMaxQty = Math.min(stockMax, myRemainingLimit);
     if (quantity > finalMaxQty) { showToast('error', '재고 부족!'); return; }
 
+    // ✅ 모든 검사 통과 시 모달 열기
+    setConfirmOpen(true);
+  };
+  
+  // 2️⃣ [추가] 실제 서버 통신 (모달에서 '네' 눌렀을 때 실행)
+  const executeOrder = async () => {
+    // 기존 handleImmediateOrder의 뒷부분 로직을 여기로 가져옴
+    const finalVariant = cardData?.singleOptionItem;
+    const vg = cardData?.singleOptionVg;
+    if (!finalVariant || !vg) return;
+
     setReservationStatus('processing');
+    
     try {
       const prepaymentRequired = cardData.displayRound.isPrepaymentRequired;
       const totalPrice = finalVariant.price * quantity;
@@ -157,18 +178,25 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
         isPrepaymentRequired: cardData.displayRound.isPrepaymentRequired ?? false,
       };
       const orderPayload = {
-        userId: user.uid,
+        userId: user!.uid, // handlePreCheck에서 user 체크를 하므로 non-null assertion 사용
         items: [orderItem],
         totalPrice,
-        customerInfo: { name: user.displayName || '미상', phone: userDocument?.phone || '' },
+        customerInfo: { name: user!.displayName || '미상', phone: userDocument?.phone || '' },
         pickupDate: cardData.displayRound.pickupDate,
         wasPrepaymentRequired: prepaymentRequired,
         notes: '빠른 구매',
       };
+      
       const result = await submitOrderCallable(orderPayload);
       const data = result.data as any;
+
       if (data.updatedOrderIds || data.orderIds) {
-        showToast('success', '예약이 완료되었습니다.');
+        // ✅ 성공 시 모달 닫기 + 성공 메시지
+        setConfirmOpen(false); // 모달 닫기
+        
+        // 안심 문구로 변경
+        showToast('success', '예약 완료! 내역에서 취소 가능해요 🙆‍♀️');
+        
         setReservationStatus('success');
         setQuantity(1);
         
@@ -176,7 +204,9 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
         if (onPurchaseComplete) onPurchaseComplete();
 
         setTimeout(() => setReservationStatus('idle'), 1500);
+        
         if (data.orderIds && prepaymentRequired) {
+           // 선결제 모달 로직 유지
           setPrepaymentPrice(totalPrice);
           setPrepaymentModalOpen(true);
         }
@@ -184,6 +214,7 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
     } catch (error: any) {
       showToast('error', error.message || '오류 발생');
       setReservationStatus('idle');
+      setConfirmOpen(false); // 에러나면 모달 닫기
     }
   };
 
@@ -309,20 +340,37 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
               </div>
 
               <button
-                className={`btn-cart ${reservationStatus === 'success' ? 'success' : ''}`}
-                onClick={handleImmediateOrder}
-                disabled={reservationStatus === 'processing'}
-              >
-                {reservationStatus === 'processing'
-                  ? '...'
-                  : reservationStatus === 'success'
-                  ? <Check size={20} />
-                  : <Gift size={24} strokeWidth={2.5} />}
-              </button>
+  className={`btn-cart ${reservationStatus === 'success' ? 'success' : ''}`}
+  onClick={handlePreCheck}
+  disabled={reservationStatus === 'processing'}
+>
+  {reservationStatus === 'processing' ? (
+    '...'
+  ) : reservationStatus === 'success' ? (
+    <Check size={20} />
+  ) : (
+    <Gift size={24} strokeWidth={2.5} />
+  )}
+</button>
             </div>
           )}
         </div>
       </div>
+      
+      {/* ✅ [추가] 확인 모달 컴포넌트 삽입 */}
+      {cardData?.singleOptionItem && (
+        <ConfirmModal 
+          isOpen={isConfirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={executeOrder}
+          productName={product.groupName}
+          price={cardData.price}
+          quantity={quantity}
+          loading={reservationStatus === 'processing'}
+        />
+      )}
+
+      {/* 기존 선결제 모달 유지 */}
       <PrepaymentModal
         isOpen={isPrepaymentModalOpen}
         totalPrice={prepaymentPrice}

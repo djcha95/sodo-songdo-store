@@ -617,3 +617,157 @@
     border-radius: 20px;
   }
 }
+
+/* ModernProduct.css 맨 아래에 추가 */
+
+/* 모달 배경 (어둡게) */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9999;
+    display: flex;
+    align-items: flex-end; /* 아래 정렬 (모바일 바텀시트 느낌) */
+    justify-content: center;
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease-out;
+}
+
+/* 바텀 시트 본체 */
+.bottom-sheet-modal {
+    background: #fff;
+    width: 100%;
+    max-width: 500px; /* 데스크탑에선 너무 넓지 않게 */
+    border-radius: 20px 20px 0 0;
+    padding: 24px 20px 30px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    color: #1E293B;
+}
+
+/* 데스크탑에서는 중앙 팝업처럼 보이게 조정 (선택사항) */
+@media (min-width: 768px) {
+    .modal-overlay { align-items: center; }
+    .bottom-sheet-modal { border-radius: 20px; }
+}
+
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.modal-header h3 { margin: 0; font-size: 18px; font-weight: 800; color: #0F172A; }
+.close-btn { background: none; border: none; padding: 4px; cursor: pointer; color: #94A3B8; }
+
+.modal-content { text-align: center; }
+.confirm-icon-area { margin-bottom: 12px; }
+.confirm-main-text { font-size: 18px; font-weight: 700; color: #1E293B; margin: 0 0 20px; word-break: keep-all; }
+
+/* 주문 요약 박스 */
+.order-summary-box {
+    background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; margin-bottom: 20px;
+}
+.summary-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 4px; }
+.summary-row.product-name { font-weight: 600; color: #475569; text-align: left; margin-bottom: 8px; font-size: 15px; }
+.summary-row.details { font-weight: 700; color: #0F172A; font-size: 16px; border-top: 1px dashed #cbd5e1; padding-top: 8px; }
+.total-price { color: #D42426; font-size: 18px; }
+
+/* 안심 문구 (핵심) */
+.safe-notice {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: #F0FDF4; color: #15803D; /* 초록색 안심 컬러 */
+    padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 24px;
+}
+.safe-notice b { font-weight: 800; text-decoration: underline; }
+
+/* 버튼 영역 */
+.modal-actions { display: flex; gap: 10px; }
+.btn-cancel {
+    flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #E2E8F0; background: #fff;
+    font-size: 15px; font-weight: 600; color: #64748B; cursor: pointer;
+}
+.btn-confirm {
+    flex: 2; padding: 14px; border-radius: 12px; border: none; background: #1E293B; /* 송도픽 메인 컬러 */
+    font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ModernProduct.css */
+
+/* ========================================= */
+/* ✅ 럭셔리 모달 스타일 (재수정: 완벽 대칭 버전) */
+/* ========================================= */
+
+/* 바텀 시트 본체 */
+.bottom-sheet-modal.luxury-modal {
+    background: #ffffff;
+    position: relative; /* 위치 기준 */
+    
+    /* 1. 화면 중앙 정렬 (좌우 여백 자동) */
+    width: calc(100% - 32px); /* 화면에서 양옆 16px씩 띄움 */
+    max-width: 480px;         /* 너무 넓게 퍼지지 않도록 제한 */
+    margin: 0 auto 20px auto; /* 상0, 좌우중앙, 하20px */
+    left: 0;                  /* ⚠️ 아까 넣은 강제 이동 코드 제거 (중요) */
+    
+    /* 2. 내부 여백 대칭 맞추기 (이게 핵심입니다!) */
+    /* 위 32px, 양옆 똑같이 24px, 아래 32px */
+    padding: 32px 24px 32px; 
+    
+    border-radius: 24px;
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.15);
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    color: #1E293B;
+    box-sizing: border-box; /* 패딩 포함 크기 계산 */
+}
+
+/* 데스크탑(PC) 대응 */
+@media (min-width: 768px) {
+    .bottom-sheet-modal.luxury-modal {
+        width: 100%;
+        margin-bottom: 0;
+        padding: 40px; /* PC에선 여백을 더 시원하게 */
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+    }
+}
+
+/* 헤더 (제목 + X버튼) */
+.modal-header { 
+    display: flex; 
+    justify-content: space-between; /* 양쪽 끝 정렬 */
+    align-items: center; /* 수직 중앙 정렬 */
+    margin-bottom: 24px; /* 아래 내용과 간격 */
+    
+    /* ⚠️ 헤더가 너무 꽉 차 보이지 않게 미세 조정 */
+    /* X버튼이 너무 구석에 박히는 걸 방지하기 위해 마진을 살짝 줍니다 */
+    padding: 0 4px; 
+}
+
+.modal-header h3 { 
+    font-size: 20px; 
+    font-weight: 800; 
+    color: #0F172A; 
+    letter-spacing: -0.5px;
+    margin: 0; 
+}
+
+/* X버튼 스타일 */
+.close-btn { 
+    background: #F1F5F9; /* 연한 회색 배경 추가 (터치 영역 확보 & 시각적 균형) */
+    border: none; 
+    border-radius: 50%; /* 동그랗게 */
+    width: 32px; 
+    height: 32px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer; 
+    color: #64748B; 
+    transition: all 0.2s; 
+    
+    /* 위치 미세 조정: 시각적으로 제목과 높이 균형 맞춤 */
+    margin-right: -4px; 
+}
+.close-btn:hover { background: #E2E8F0; color: #0F172A; }

@@ -1,0 +1,178 @@
+/* 완전 분리: ModernProduct.css와 클래스명 겹치지 않게 함 */
+
+/* 오버레이 */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 25, 0.75);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  animation: confirm-fade-in 0.2s ease-out;
+}
+
+/* 모달 본체 */
+.confirm-modal.luxury-modal {
+  background: #ffffff;
+  position: relative;
+  box-sizing: border-box;
+
+  width: calc(100% - 32px);
+  max-width: 420px;
+  margin: 0 auto;
+
+  padding: 32px 24px 28px;
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  animation: confirm-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #1e293b;
+}
+
+/* 헤더: 제목 왼쪽 + X 오른쪽 (수정 반영) */
+.confirm-modal-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* 중앙 → 왼쪽 정렬로 변경됨 */
+  margin-bottom: 24px;
+}
+
+.confirm-modal-header h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+/* X 버튼: 절대 위치로 우측 정렬 (기존 유지) */
+.confirm-close-btn {
+  position: absolute;
+  top: 50%;
+  right: 0; /* 모달 내부 우측 패딩 라인에 정렬 */
+  transform: translateY(-50%);
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+/* 필요하면 여기 숫자로만 미세 조정 (조금 더 안쪽) */
+/* .confirm-close-btn { right: 4px; } */
+
+.confirm-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* 컨텐츠 영역 */
+.confirm-modal-content {
+  padding: 0;
+}
+
+.confirm-icon-area.luxury {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.confirm-main-text.luxury {
+  font-size: 19px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 24px;
+  text-align: center;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+/* 주문 요약 박스 */
+.order-summary-box.luxury {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.summary-row.product-name span {
+  font-size: 15px;
+  font-weight: 600;
+  color: #475569;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.summary-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 0 0 12px;
+}
+
+.summary-row.details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-qty {
+  font-size: 15px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.total-price.luxury {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* 안심 문구 */
+.safe-notice.luxury {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 28px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* ✅ 하단 버튼 2개 반반 정렬 & 크기 확장 (수정 반영) */
+.confirm-modal-actions.luxury {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.btn-cancel.luxury,
+.btn-confirm.luxury {
+  flex: 1; /* 두 버튼이 동일한 비율로 */
+  padding: 18px 0; /* 높이를 살짝 키움 */
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* 개별 버튼 스타일 */
+.btn-cancel.luxury {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+}
+
+.btn-confirm.luxury {
+  border: none;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+}
