@@ -17,7 +17,7 @@
 }
 
 .product-detail-modal-content {
-  background-color: #ffffff; /* 모달 내부는 흰색 유지 (가독성) */
+  background-color: #fafafa; /* 너무 pure white 대신 부드럽게 */
   width: 100%;
   max-width: 500px;
   height: 95%;
@@ -103,7 +103,7 @@
 }
 
 .product-swiper-container .swiper-pagination-bullet-active {
-  background-color: #D42426; /* 레드 포인트 */
+  background-color: #8E1E20; /* 레드 포인트 */
 }
 
 .product-info-area {
@@ -116,11 +116,15 @@
 
 .product-name {
   text-align: center;
-  font-size: 1.6rem;
-  font-weight: 800;
-  margin-bottom: 0.8rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+
+  margin-bottom: 0.5rem;
+
   line-height: 1.35;
-  color: #1e293b;
+  color: #222;
+  
+
   word-break: keep-all;
 }
 
@@ -152,7 +156,7 @@
 .markdown-content li { margin-bottom: 0.5rem; }
 .markdown-content strong { font-weight: 700; color: #1e293b; }
 .markdown-content em { font-style: italic; }
-.markdown-content a { color: #D42426; text-decoration: underline; }
+.markdown-content a { color: #8E1E20; text-decoration: underline; }
 
 /* 강제 줄바꿈(<br>)이 있을 경우 */
 .markdown-content br {
@@ -321,14 +325,14 @@
 .add-to-cart-btn-fixed,
 .waitlist-btn-fixed,
 .encore-request-btn-fixed,
-.raffle-entry-btn-fixed { /* ✅ raffle-entry-btn-fixed 포함 */
+.raffle-entry-btn-fixed {
   flex-grow: 1;
   border: none;
   border-radius: 12px;
   padding: 0.9rem 1rem;
   font-size: 1.05rem;
   font-weight: 700;
-  color: white;
+  color: #ffffff;         /* ← 흰색 유지 ok */
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -338,9 +342,17 @@
   box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
+/* 교체 */
 .add-to-cart-btn-fixed {
-  background-color: #D42426; /* 크리스마스 레드 */
-  box-shadow: 0 4px 15px rgba(212, 36, 38, 0.3);
+  background-color: #8E1E20;                /* 딥 버건디 */
+  box-shadow: 0 4px 15px rgba(142, 30, 32, 0.3);
+  color: #ffffff;
+}
+
+.add-to-cart-btn-fixed:hover {
+  background-color: #6C1517;                /* 살짝 더 어두운 버전 */
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
 }
 
 .add-to-cart-btn-fixed:hover, .waitlist-btn-fixed:hover, .encore-request-btn-fixed:hover, .raffle-entry-btn-fixed:hover { /* ✅ raffle-entry-btn-fixed 포함 */
@@ -433,7 +445,7 @@
 
 .price-select:focus {
   outline: none;
-  border-color: #D42426; /* 포커스 시 레드 테두리 */
+  border-color: #8E1E20; /* 포커스 시 레드 테두리 */
   box-shadow: 0 0 0 3px rgba(212, 36, 38, 0.2);
   background-color: #fff;
 }
