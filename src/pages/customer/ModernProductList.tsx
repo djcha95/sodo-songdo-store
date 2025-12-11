@@ -1,12 +1,12 @@
 // src/pages/customer/ModernProductList.tsx
-<div>DEBUG-123</div>
+
 import React, {
   useState,
   useEffect,
   useMemo,
   useCallback,
   useRef,
-  Suspense, // ✅ Suspense 추가
+  Suspense, // ✅ Suspense 유지
 } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getPaginatedProductsWithStock } from '../../firebase/productService';
@@ -25,13 +25,12 @@ import {
 import { usePageRefs } from '../../layouts/CustomerLayout';
 import { Outlet, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import '../../styles/ModernProduct.css';
+import './ModernProductList.css';
 
-// ✅ [Refactor] React.lazy를 사용한 동적 Import (Code Splitting)
-// Snowfall은 무거운 라이브러리이므로 필요할 때 로드
-const LazySnowfall = React.lazy(() => import('react-snowfall'));
+// ❌ [삭제] React.lazy를 사용한 Snowfall 동적 Import 제거
+// const LazySnowfall = React.lazy(() => import('react-snowfall'));
 
-// 아이콘도 개별 청크로 분리 (Named Export를 Default Export로 변환하여 lazy 적용)
+// 아이콘은 유지 (Lazy loading)
 const LazyChevronRight = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.ChevronRight }))
 );
@@ -97,9 +96,9 @@ const ModernProductList: React.FC = () => {
 
   const [activeBanner, setActiveBanner] = useState(0);
 
-  // ✅ 눈 효과 관련 상태
-  const [showSnow, setShowSnow] = useState(false);
-  const [snowflakeCount, setSnowflakeCount] = useState(60);
+  // ❌ [삭제] 눈 효과 관련 상태 제거
+  // const [showSnow, setShowSnow] = useState(false);
+  // const [snowflakeCount, setSnowflakeCount] = useState(60);
 
   // ✅ 이벤트(Hero) & 뷰티 상품
   const [heroProducts, setHeroProducts] = useState<Product[]>([]);
@@ -142,7 +141,8 @@ const ModernProductList: React.FC = () => {
     lastVisibleRef.current = lastVisible;
   }, [lastVisible]);
 
-  // ✅ 눈 효과 (지연 로딩 트리거)
+  // ❌ [삭제] 눈 효과 (지연 로딩 트리거) useEffect 제거
+  /*
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -161,6 +161,7 @@ const ModernProductList: React.FC = () => {
 
     return () => clearTimeout(t);
   }, []);
+  */
 
   // ✅ 배너 슬라이드
   useEffect(() => {
@@ -440,13 +441,14 @@ const ModernProductList: React.FC = () => {
 
   // ✅ 섹션 메타 및 배너 콘텐츠
   const eventSectionMeta = useMemo(() => {
-    if (processedEventProducts.length === 0) return null;
-    return {
-      chip: '🎄 연말 & 기획전',
-      title: '지금만 진행되는 한정 특가 모음',
-      sub: '케이크, 계란 같은 특별 기획 상품을 가장 먼저 확인해보세요!',
-    };
-  }, [processedEventProducts]);
+  if (processedEventProducts.length === 0) return null;
+  return {
+    chip: 'SPECIAL 기획전',
+    title: '지금만 진행되는 한정 특가 모음',
+    sub: '케이크, 계란 같은 특별 기획 상품을 가장 먼저 확인해보세요!',
+  };
+}, [processedEventProducts]);
+
 
   const bannerContent = useMemo(() => {
     switch (activeTab) {
@@ -493,7 +495,8 @@ const ModernProductList: React.FC = () => {
 
   return (
     <>
-      {/* ✅ [Refactor] Snowfall Lazy Loading 적용 */}
+      {/* ❌ [삭제] Snowfall Lazy Loading 적용 부분 제거 */}
+      {/*
       {showSnow && (
         <Suspense fallback={<div />}>
           <LazySnowfall
@@ -510,6 +513,7 @@ const ModernProductList: React.FC = () => {
           />
         </Suspense>
       )}
+      */}
 
       <div className="customer-page-container modern-list-page">
         {EVENT_BANNERS.length > 0 && !heroLoading && (
@@ -614,7 +618,7 @@ const ModernProductList: React.FC = () => {
                 </p>
               </div>
               <button className="view-all-btn">
-                {/* ✅ [Refactor] LazyChevronRight 사용 (Suspense 적용) */}
+                {/* ✅ LazyChevronRight 사용 (Suspense 적용) */}
                 전체보기 
                 <Suspense fallback={null}>
                   <LazyChevronRight size={16} />
@@ -640,15 +644,13 @@ const ModernProductList: React.FC = () => {
           </section>
         )}
 
-        <section
-          className="songdo-notice-banner"
-          style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff' }}
-        >
-          <span className="notice-text" style={{ color: '#fff' }}>
-            <span className="notice-highlight" style={{ color: '#FFD700' }}>
-              {bannerContent.title}:{' '}
+        {/* ✅ [수정] 공지사항 배너: 인라인 스타일 제거 (CSS 클래스로 제어) */}
+        <section className="songdo-notice-banner">
+          <span className="notice-text">
+            <span className="notice-highlight">
+              {bannerContent.title}:
             </span>
-            {bannerContent.desc}
+            {' '}{bannerContent.desc}
           </span>
         </section>
 

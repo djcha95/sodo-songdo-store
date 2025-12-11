@@ -27,7 +27,7 @@ import ConfirmModal from '@/components/common/ConfirmModal'; // 경로에 맞게
 // ✅ [Refactor] getUserOrders 제거
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import '@/styles/ModernProduct.css';
+import './ModernProductCard.css';
 
 // 타입 확장
 type Product = OriginalProduct & {
@@ -307,7 +307,9 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
             )}
 
             <div className="price-area">
-              <span className={`price-label ${phase}`}>{phase === 'onsite' ? '현장특가' : '성탄특가'}</span>
+<span className={`price-label ${phase}`}>
+  {phase === 'onsite' ? '현장 특가' : '오늘의 특가'}
+</span>
               <span className="price" style={{fontWeight: 900}}>{cardData.price.toLocaleString()}</span>
               <span className="unit">원</span>
             </div>
@@ -318,8 +320,8 @@ const ModernProductCard: React.FC<ModernProductCardProps> = ({
 
         <div className="songdo-card-bottom-row controls-only" onClick={(e) => e.stopPropagation()}>
           {phase === 'onsite' ? (
-            <button className="btn-onsite-simple" disabled>🎄 매장에서 만나요</button>
-          ) : (
+  <button className="btn-onsite-simple" disabled>매장에서 바로 구매</button>
+) : (
             <div className="qty-control-group">
               <div className="qty-stepper">
                 <button

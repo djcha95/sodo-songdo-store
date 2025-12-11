@@ -1,87 +1,80 @@
-/* src/components/common/SodomallLoader.css */
-
-/* --- 1. 전체 화면 로더 스타일 (기존) --- */
-.loader-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+/* --------------------------
+   인라인 로더 (무한 스크롤용)
+   -------------------------- */
+.loader-inline {
   display: flex;
-  justify-content: center;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(4px);
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #8e1e20;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------
+   전체 화면 산타 로더
+   -------------------------- */
+.santa-loader-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(3px);
   z-index: 9999;
 }
 
-.loader-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.spinner-full {
-  width: 48px;
-  height: 48px;
-  border: 5px solid #f3f3f3; /* Light grey */
-  border-top: 5px solid var(--primary-color, #3b82f6); /* Blue */
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loader-text {
-  font-size: 1rem;
-  font-weight: 500;
-  color: #555;
-}
-
-
-/* --- 2. ✅ [신규] 인라인(페이지 하단용) 로더 스타일 --- */
-.loader-inline {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  padding: 1rem;
-}
-
-/* 귀여운 로딩 모션 애니메이션 */
-.spinner {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+/* 카드 */
+.santa-loader-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 28px 34px 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  text-align: center;
   position: relative;
-  animation: rotate 1s linear infinite;
+  overflow: hidden;
 }
 
-.spinner::before {
-  content: "";
-  box-sizing: border-box;
-  position: absolute;
-  inset: 0px;
-  border-radius: 50%;
-  border: 3px solid #e0e0e0;
+/* 🕴️ 브랜드 라벨 */
+.santa-loader-brand {
+  font-family: 'Pretendard', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 1.5px;
+  color: #111111;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  position: relative;
 }
 
-.spinner::after {
-  content: "";
-  box-sizing: border-box;
-  position: absolute;
-  inset: 0px;
-  border-radius: 50%;
-  border-top: 3px solid var(--primary-color, #3b82f6);
-  border-right: 3px solid transparent; /* 반원처럼 보이게 하는 효과 */
+/* 브랜드 밑줄 포인트 */
+.santa-loader-brand::after {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 2px;
+  margin: 6px auto 10px;
+  background: linear-gradient(90deg, #8E1E20, #B23A3C);
+  border-radius: 2px;
 }
 
-
-/* --- 3. 공용 애니메이션 --- */
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes rotate {
-  100% { transform: rotate(360deg); }
+/* 텍스트 */
+.santa-loader-text {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
 }

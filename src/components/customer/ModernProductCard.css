@@ -1,0 +1,176 @@
+/* src/styles/ModernProductCard.css - 상품 카드 상세 스타일 */
+
+/* ========================================= */
+/* 🎁 상품 카드 스타일 (Modern Clean) */
+/* ========================================= */
+.songdo-card {
+    background: #fff;
+    border-radius: 20px;
+    margin-bottom: 24px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    /* ✅ [수정] 그림자: 더 은은하고 넓게 */
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0,0,0,0.03);
+    position: relative;
+    color: #1F2937;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.songdo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.08);
+}
+.songdo-card.onsite { 
+    background-color: #F9FAFB; 
+    border: 1px solid #E5E7EB;
+}
+
+/* ✅ [수정] 산타 모자 장식: 숨김 */
+.santa-hat-overlay {
+    display: none; 
+    position: absolute;
+    top: -22px; right: -15px; width: 64px; height: 64px;
+    background-image: url('https://cdn-icons-png.flaticon.com/512/744/744546.png'); 
+    background-size: contain; background-repeat: no-repeat;
+    z-index: 10; transform: rotate(15deg); 
+    filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));
+    pointer-events: none; opacity: 0.9;
+}
+
+/* 카드 내부 레이아웃 */
+.songdo-card-header { display: flex; gap: 16px; width: 100%; }
+.songdo-card-thumb { 
+    width: 100px; height: 100px; border-radius: 14px; 
+    overflow: hidden; flex-shrink: 0; background: #F1F5F9; position: relative; 
+    border: 1px solid rgba(0,0,0,0.04);
+}
+
+.songdo-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+.songdo-card:hover .songdo-img { transform: scale(1.05); }
+
+/* 사전예약 뱃지 (이미지 위) */
+.preorder-badge-overlay {
+    position: absolute; top: 0; left: 0; right: 0;
+    /* ✅ [수정] 배경을 블랙 반투명으로 변경 */
+    background: rgba(17, 24, 39, 0.9); /* 블랙 반투명 */
+    color: #fff; font-size: 11px; font-weight: 700;
+    text-align: center; padding: 4px 0; letter-spacing: 1px;
+    backdrop-filter: blur(2px);
+}
+.preorder-card { background: #fff; }
+
+.songdo-onsite-overlay { 
+    position: absolute; inset: 0; 
+    background: rgba(0,0,0,0.6); color: #fff; 
+    display: flex; align-items: center; justify-content: center; 
+    font-weight: 700; font-size: 13px; line-height: 1.2; text-align: center; 
+}
+
+.songdo-card-info { flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+.songdo-card-info-text { flex: 1; display: flex; flex-direction: column; min-width: 0; gap: 3px; }
+
+/* ✅ [수정] 태그 스타일: 모노크롬 (Luxury B&W) */
+.songdo-tags { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; flex-wrap: wrap; }
+.tag { 
+    font-size: 10px; padding: 3px 8px; 
+    border-radius: 4px; /* ✅ [수정] 조금 더 각지게 */
+    font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; 
+    border: 1px solid transparent; /* 기본 테두리 설정 */
+}
+
+.tag.primary { 
+    background: #fff; color: #111; border: 1px solid #111; /* ✅ [수정] 화이트 배경 + 블랙 테두리 */
+} 
+.tag.secondary { 
+    background: #F3F4F6; color: #6B7280; border: 1px solid #E5E7EB; /* ✅ [수정] 그레이 */
+} 
+.tag.onsite { 
+    background: #fff; color: #8E1E20; border: 1px solid #8E1E20; /* ✅ [수정] 화이트 + 버건디 테두리 */
+}
+.tag.event { 
+    background: #111; color: #fff; border: 1px solid #111; /* ✅ [수정] 블랙 배경 + 화이트 텍스트 */
+} /* 골드 -> 블랙 */
+
+.deadline-text { font-size: 11px; color: #64748B; font-weight: 500; white-space: nowrap; }
+.deadline-text.urgent {
+  color: #8E1E20;
+  font-weight: 800;
+}
+.songdo-title { 
+    font-size: 16px; font-weight: 700; color: #111; margin: 0 0 2px 0; line-height: 1.4; word-break: keep-all;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ✅ [수정] 픽업 텍스트: 초록색 -> 차분한 그레이 */
+.pickup-info-text { 
+    font-size: 12px; font-weight: 600; 
+    color: #4B5563; 
+    margin-bottom: 4px; letter-spacing: -0.3px; line-height: 1.4; 
+}
+
+/* 재고 바 */
+.stock-status-area { margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.stock-bar-bg { flex: 1; height: 5px; background: #E5E7EB; border-radius: 99px; max-width: 80px; overflow: hidden; }
+.stock-bar-fill { height: 100%; border-radius: 99px; }
+.stock-bar-fill.primary { background: #111; } /* ✅ [수정] 골드 -> 블랙 */
+.stock-bar-fill.secondary { background: #E5E7EB; }
+
+.stock-text { font-size: 11px; font-weight: 600; }
+.stock-text.primary { color: #111; } /* ✅ [수정] 골드 -> 블랙 */
+.stock-text.secondary { color: #9CA3AF; } /* ✅ [수정] 톤다운 그레이 */
+.stock-unlimited { font-size: 11px; color: #111; font-weight: 600; display: flex; align-items: center; gap: 4px; } /* ✅ [수정] 초록색 -> 블랙 */
+
+/* 가격 영역 */
+.price-area { display: flex; align-items: baseline; white-space: nowrap; margin-top: 4px; }
+.price-label { 
+    font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 4px; 
+    margin-right: 6px; align-self: center; white-space: nowrap; flex-shrink: 0; 
+}
+.price-label.primary { color: #fff; background-color: #111; } /* ✅ [수정] 블랙 라벨 */
+.price-label.secondary { color: #64748B; background-color: #F1F5F9; }
+.price-label.onsite { color: #4B5563; background-color: #F3F4F6; }
+
+.price { color: #111; font-weight: 800; font-size: 18px; letter-spacing: -0.5px; }
+.unit { font-size: 14px; color: #64748B; font-weight: 500; margin-left: 2px; }
+
+/* 하단 컨트롤 */
+.songdo-card-bottom-row { display: flex; align-items: center; justify-content: space-between; width: 100%; padding-top: 8px; border-top: 1px dashed #E2E8F0; margin-top: 4px; }
+.songdo-card-bottom-row.controls-only { display: flex; justify-content: flex-end; align-items: center; width: 100%; margin-top: 8px; border-top: none; padding-top: 0; }
+
+/* 수량 조절기 */
+.qty-control-group { display: flex; align-items: center; gap: 8px; width: 100%; }
+.qty-stepper { display: flex; align-items: center; justify-content: space-between; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 0; height: 44px; flex: 2; }
+.qty-btn { width: 40px; height: 100%; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; color: #64748B; transition: color 0.2s; border-radius: 10px; }
+.qty-btn:hover { color: #111; }
+.qty-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.qty-val { flex: 1; text-align: center; font-size: 15px; font-weight: 700; color: #111; }
+
+/* 카트 담기 버튼 */
+.btn-cart { 
+    height: 44px; border-radius: 10px; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; 
+    background: #8E1E20; /* 버건디 */
+    color: #fff; transition: all 0.2s; 
+    box-shadow: 0 4px 12px rgba(142, 30, 32, 0.25); 
+    flex: 1; min-width: 60px; 
+}
+.btn-cart:hover { background: #6D1416; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(142, 30, 32, 0.35); } /* ✅ [수정] hover 색상 */
+.btn-cart:active { transform: translateY(1px); }
+
+.btn-onsite-simple { background: #F3F4F6; color: #6B7280; padding: 12px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; width: 100%; text-align: center; }
+
+/* 데스크탑 조정 (카드는 내부 레이아웃만 변경) */
+@media (min-width: 1024px) {
+    .songdo-card { margin-bottom: 0; height: 100%; flex-direction: column; }
+    .songdo-card-bottom-row { justify-content: space-between; }
+    .price-area { width: auto; } 
+    .qty-control-group { width: auto; gap: 8px; }
+    .qty-stepper { width: 110px; flex: none; }
+    .btn-cart { width: 52px; flex: none; }
+}
+@media (max-width: 1023px) { 
+    /* 모바일에서는 마지막 카드 하단 경계 제거 */
+    .songdo-card:last-child { border-bottom: none; } 
+}

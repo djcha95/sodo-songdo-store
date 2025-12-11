@@ -101,7 +101,7 @@ const Header: React.FC = () => {
 
                 <NavLink to="/" className="brand-link">
                   {/* 🎄 송도픽 로고 */}
-                  🎄 송도PICK
+                  송도PICK
                 </NavLink>
               </div>
             )}

@@ -1,0 +1,306 @@
+/* src/styles/ModernProductList.css - 페이지 구조 및 레이아웃 스타일 */
+
+/* ========================================= */
+/* 🏠 기본 레이아웃 & 배경 (화이트 & 웜그레이) */
+/* ========================================= */
+.customer-page-container.modern-list-page,
+.customer-page-container.modern-list-page *,
+.desktop-app-wrapper * {
+    box-sizing: border-box;
+}
+
+.customer-page-container.modern-list-page {
+    font-family: "Pretendard", -apple-system, sans-serif;
+    color: #1F2937;
+    background-color: #FFFFFF; /* 배경 화이트 */
+    min-height: 100vh;
+}
+
+/* 데스크탑 앱 뷰 */
+.desktop-app-wrapper {
+    width: 100%; 
+    min-height: 100vh; 
+    background-color: #F3F4F6; /* PC 배경 그레이 */
+    display: flex; 
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.mobile-app-view {
+    width: 100%; 
+    max-width: 500px; 
+    background: #FFFFFF; 
+    min-height: 100vh; 
+    box-shadow: 0 0 40px rgba(0,0,0,0.08); 
+    position: relative; 
+    padding-bottom: 80px; 
+    transition: max-width 0.3s ease;
+    overflow-x: hidden;
+}
+
+@media (min-width: 1024px) {
+    .mobile-app-view { max-width: 900px; }
+    /* 상품 리스트 그리드 (PC: 2열) */
+    .songdo-product-list { 
+        display: grid; 
+        grid-template-columns: repeat(2, minmax(0, 1fr)); 
+        gap: 20px; 
+        width: 100%;
+    }
+    .beauty-list-grid {
+        display: grid; 
+        grid-template-columns: repeat(2, minmax(0, 1fr)); 
+        gap: 16px; 
+    }
+}
+
+/* ========================================= */
+/* 🏷️ 헤더 & 탭 (Glassmorphism Light) */
+/* ========================================= */
+.songdo-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 14px 20px;
+    background: rgba(255, 255, 255, 0.95); 
+    position: sticky; 
+    top: 0; 
+    z-index: 50; 
+    border-bottom: 1px solid rgba(0,0,0,0.05); 
+    backdrop-filter: blur(12px);
+    min-height: 60px;
+    color: #111;
+}
+
+/* ✅ [수정] 로고 폰트: 더 모던하고 깔끔하게 */
+.songdo-logo { 
+    font-family: "Pretendard", -apple-system, sans-serif; /* 폰트 변경 */
+    font-size: 22px; /* 크기 변경 */
+    color: #111; 
+    font-weight: 800; /* 볼드 강조 */
+    cursor: pointer; 
+    letter-spacing: -0.5px; 
+    margin: 0; 
+    text-shadow: none; /* 그림자 제거 */
+}
+.songdo-icon-btn { 
+    background: none; border: none; padding: 8px; cursor: pointer; 
+    color: #333; 
+    display: flex; align-items: center; justify-content: center; 
+    transition: color 0.2s;
+}
+.songdo-icon-btn:hover { color: #8E1E20; }
+
+.songdo-tabs-wrapper { 
+    position: sticky; top: 60px; z-index: 40; 
+    background: rgba(255, 255, 255, 0.98); 
+    padding: 0 20px; 
+    border-bottom: 1px solid #F1F5F9; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+}
+.songdo-tabs { display: flex; gap: 20px; overflow-x: auto; scrollbar-width: none; }
+.songdo-tabs::-webkit-scrollbar { display: none; }
+
+.songdo-tab-item { 
+    padding: 14px 0; 
+    font-size: 15px; 
+    color: #94A3B8; 
+    font-weight: 600; 
+    cursor: pointer; 
+    background: none; border: none; white-space: nowrap; position: relative; 
+    transition: color 0.2s;
+}
+.songdo-tab-item.active { 
+    color: #111; 
+    font-weight: 800;
+}
+.songdo-tab-item.active::after { 
+    content: ''; position: absolute; bottom: -1px; left: 0; 
+    width: 100%; height: 3px; 
+    background: #111; /* ✅ [수정] 탭 언더라인을 레드->블랙으로 변경하여 차분하게 */
+    border-radius: 3px 3px 0 0;
+}
+
+/* 소분류 필터 (Source Filter) */
+.source-filter-row {
+    display: flex; align-items: center; gap: 8px; padding: 10px 0 8px; 
+    overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none;
+}
+.source-filter-row::-webkit-scrollbar { display: none; }
+
+.source-filter-btn {
+    background: #F8FAFC; 
+    border: 1px solid #E2E8F0;
+    color: #64748B; 
+    padding: 7px 14px;
+    border-radius: 20px; 
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+}
+.source-filter-btn.active {
+    background: #111; 
+    color: #fff; 
+    border-color: #111;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2); /* ✅ [수정] 그림자 더 뚜렷하게 */
+}
+.filter-divider { width: 1px; height: 12px; background: #E2E8F0; margin: 0 4px; }
+
+/* ========================================= */
+/* 🎉 이벤트 & 배너 섹션 (Clean & Vivid) */
+/* ========================================= */
+.event-hero-wrapper {
+    margin: 16px 20px 24px;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    background: #fff;
+    transform: translateZ(0);
+}
+.event-hero-slider {
+    display: flex; width: 100%; transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.event-hero-slide {
+    min-width: 100%; padding: 20px 24px; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden; cursor: pointer;
+}
+/* Shimmer 효과 */
+.event-hero-slide::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0) 100%);
+    transform: skewX(-25deg); animation: shimmer 3s infinite; pointer-events: none;
+}
+@keyframes shimmer { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
+
+.event-hero-inner { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; position: relative; z-index: 1; }
+.event-hero-content { flex: 1; min-width: 0; padding-right: 4px; }
+
+.event-hero-chip { display: inline-block; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 12px; background: #fff; color: #111; margin-bottom: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.event-hero-title { margin: 0 0 6px; font-size: 19px; font-weight: 900; letter-spacing: -0.5px; line-height: 1.2; color: #111; }
+.event-hero-desc { margin: 0 0 12px; font-size: 13px; line-height: 1.4; opacity: 0.85; color: #4B5563; font-weight: 500; }
+.event-hero-cta { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 99px; font-size: 12px; font-weight: 800; background: #111; color: #fff; transition: transform 0.2s; }
+.event-hero-cta:active { transform: scale(0.95); }
+
+.event-hero-image-wrap { flex-shrink: 0; width: 88px; height: 88px; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); border: 2px solid rgba(255, 255, 255, 0.8); background: #fff; display: flex; align-items: center; justify-content: center; }
+.event-hero-image-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.event-hero-image-wrap.heyu-bw img { filter: grayscale(1); }
+.event-hero-dots { position: absolute; bottom: 10px; left: 0; width: 100%; display: flex; justify-content: center; gap: 8px; z-index: 10; }
+.event-hero-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(0, 0, 0, 0.2); border: none; padding: 0; cursor: pointer; transition: all 0.3s; }
+.event-hero-dot.active { background: #111; width: 18px; border-radius: 10px; }
+@media (min-width: 1024px) { .event-hero-image-wrap { width: 120px; height: 120px; border-radius: 20px; } }
+
+/* 가로 스크롤 이벤트 섹션 */
+.songdo-event-section { padding: 0 20px 24px; background: transparent; border-bottom: 1px solid #F1F5F9; }
+.songdo-event-chip { 
+    /* ✅ [수정] 칩 색상: 버건디 + 연한 회색 배경 */
+    display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: -0.3px; 
+    color: #8E1E20; background: #F3F4F6; border: 1px solid #E5E7EB; 
+}
+.songdo-event-title { margin: 8px 0 2px; font-size: 18px; font-weight: 800; color: #111; letter-spacing: -0.3px; }
+.songdo-event-sub { margin: 0; font-size: 12px; color: #64748B; }
+
+.songdo-event-track { margin: 14px -20px 0; padding: 0 20px; display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; }
+.songdo-event-track::-webkit-scrollbar { display: none; }
+.songdo-event-banner { 
+    /* ✅ [수정] 배너 테두리: 은은한 회색 */
+    flex: 0 0 auto; width: 40%; max-width: 160px; border: none; padding: 0; background: none; border-radius: 16px; overflow: hidden; position: relative; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08); /* 그림자 약하게 */
+    cursor: pointer; border: 1px solid rgba(0,0,0,0.05);
+}
+.event-banner-img { width: 100%; display: block; }
+.event-banner-tag { 
+    position: absolute; left: 8px; top: 8px; padding: 3px 8px; 
+    border-radius: 4px; /* ✅ [수정] border-radius 변경 */
+    font-size: 10px; font-weight: 700; 
+    background: #111; /* ✅ [수정] 블랙 태그 */
+    color: #fff; 
+}
+
+/* 뷰티 섹션 */
+.beauty-page-header { display: flex; align-items: center; padding: 12px 16px; background: #fff; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #eee; }
+.beauty-curation-section { padding: 24px 20px; background: #FAFAFA; border-bottom: none; }
+.beauty-product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.section-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; cursor: pointer; }
+.small-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8E1E20;  /* 버건디로 통일 */
+}
+.section-title { font-size: 18px; font-weight: 800; color: #111; margin: 0 0 4px; }
+.section-sub { font-size: 12px; color: #666; margin: 0; }
+.view-all-btn { background: none; border: none; font-size: 12px; color: #666; display: flex; align-items: center; gap: 2px; padding: 4px; cursor: pointer; }
+
+/* ✅ [수정] 공지 배너 가독성 확보 */
+.songdo-notice-banner { 
+    background: #F9FAFB; /* 아주 연한 웜그레이 */
+    padding: 16px 20px; /* 패딩 증가 */
+    border-bottom: 1px solid #F3F4F6; /* 테두리색 변경 */
+    border-top: 1px solid #F3F4F6; /* 테두리색 변경 */
+}
+.notice-text { 
+    font-size: 13px; 
+    color: #374151; /* 진한 회색 텍스트 */
+    display: block; 
+    line-height: 1.5; 
+    font-weight: 500; 
+}
+.notice-highlight { 
+    font-weight: 800; /* 굵기 강조 */
+    color: #8E1E20; /* 포인트는 버건디 */
+    margin-right: 6px; /* 마진 증가 */
+}
+
+
+/* ========================================= */
+/* 🧩 모달 (Luxury Bottom Sheet) - 페이지 전역 */
+/* ========================================= */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.4); /* 딤드 */
+    z-index: 9999;
+    display: flex; align-items: flex-end; justify-content: center;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease-out;
+}
+@media (min-width: 768px) { .modal-overlay { align-items: center; } }
+
+.bottom-sheet-modal {
+    background: #ffffff;
+    width: calc(100% - 32px); max-width: 480px; margin: 0 auto 20px;
+    border-radius: 24px;
+    padding: 32px 24px;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    color: #1F2937;
+    position: relative; box-sizing: border-box;
+}
+@media (min-width: 768px) { .bottom-sheet-modal { margin-bottom: 0; padding: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border-radius: 20px; } }
+
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 0 4px; }
+.modal-header h3 { margin: 0; font-size: 20px; font-weight: 800; color: #111; letter-spacing: -0.5px; }
+.close-btn { background: #F3F4F6; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #4B5563; transition: all 0.2s; margin-right: -4px; }
+.close-btn:hover { background: #E5E7EB; color: #111; }
+
+.modal-content { text-align: center; }
+.confirm-icon-area { margin-bottom: 12px; }
+.confirm-main-text { font-size: 18px; font-weight: 700; color: #1E293B; margin: 0 0 20px; word-break: keep-all; }
+
+/* 주문 요약 박스 */
+.order-summary-box { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+.summary-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 4px; }
+.summary-row.product-name { font-weight: 600; color: #374151; text-align: left; margin-bottom: 8px; font-size: 15px; }
+.summary-row.details { font-weight: 700; color: #111; font-size: 16px; border-top: 1px dashed #D1D5DB; padding-top: 8px; }
+.total-price { color: #8E1E20; font-size: 18px; }
+
+.safe-notice { display: flex; align-items: center; justify-content: center; gap: 6px; background: #F0FDF4; color: #166534; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 24px; }
+.safe-notice b { font-weight: 800; text-decoration: underline; }
+
+.modal-actions { display: flex; gap: 10px; }
+.btn-cancel { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #E5E7EB; background: #fff; font-size: 15px; font-weight: 600; color: #4B5563; cursor: pointer; }
+.btn-confirm { flex: 2; padding: 14px; border-radius: 12px; border: none; background: #111; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer; }
+.btn-confirm:hover { background: #000; }
+
+@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

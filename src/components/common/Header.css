@@ -1,17 +1,17 @@
 /* src/components/common/Header.css */
 
 .new-customer-header {
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  /* 🎄 테두리: 연한 크리스마스 레드 */
-  border-bottom: 1px solid #FECACA;
+  background-color: rgba(255, 255, 255, 0.98); /* ✅ [수정] 배경 불투명도 증가 */
+  backdrop-filter: blur(10px); /* ✅ [수정] 블러 증가 */
+  /* ✅ [수정] 빨간 테두리 제거 -> 은은한 회색 테두리 */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   position: sticky;
   top: 0;
   width: 100%;
   z-index: 1010;
   height: 60px;
   transition: top 0.3s ease-in-out;
-  box-shadow: 0 2px 10px rgba(185, 28, 28, 0.05);
+  box-shadow: none; /* ✅ [수정] 그림자 제거 (깔끔하게) */
 }
 
 .new-customer-header.visible { top: 0; }
@@ -52,7 +52,7 @@
   padding: 0 0.25rem;
   font-size: 0.95rem;
   font-weight: 700;
-  color: #888;
+  color: #9CA3AF; /* ✅ [수정] 비활성: 연한 회색 */
   position: relative;
   transition: color 0.2s ease-in-out;
   white-space: nowrap;
@@ -71,24 +71,24 @@
   transform: scaleX(0);
   transition: transform 0.3s ease, background-color 0.3s ease;
 }
-.page-tab.active { color: var(--text-color-dark); }
+.page-tab.active { color: #111; } /* ✅ [수정] 활성: 블랙 */
 .page-tab.active::after { transform: scaleX(1); }
 
-/* 🎄 탭 활성화 색상: 레드 & 그린 */
-.page-tab.primary.active { color: #DC2626; }
-.page-tab.primary.active::after { background-color: #DC2626; }
+/* ✅ [수정] 탭 활성화 색상: 무채색 계열로 변경 */
+.page-tab.primary.active { color: #111; }
+.page-tab.primary.active::after { background-color: #111; }
 
-.page-tab.secondary.active { color: #15803d; }
-.page-tab.secondary.active::after { background-color: #15803d; }
+.page-tab.secondary.active { color: #4B5563; }
+.page-tab.secondary.active::after { background-color: #4B5563; }
 
-/* 🎄 브랜드 로고: 송도픽 스타일 */
+/* 브랜드 로고 */
 .header-brand .brand-link {
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 1.45rem; 
-  font-weight: 800; /* 조금 더 굵게 */
-  color: #B91C1C; /* 🎄 크리스마스 레드 */
+  font-size: 1.35rem; /* ✅ [수정] 크기 조정 */
+  font-weight: 800;
+  color: #111; /* ✅ [수정] 로고: 블랙 */
   text-decoration: none;
-  letter-spacing: -1px; 
+  letter-spacing: -0.5px; /* ✅ [수정] 간격 조정 */
   line-height: 1;
 }
 
@@ -122,7 +122,7 @@
   font-size: 0.9rem;
   font-weight: 700;
   padding: 9px 16px; 
-  border-radius: 10px; /* 약간 더 둥글게 */
+  border-radius: 10px;
   transition: all 0.2s ease;
   box-shadow: 0 2px 4px rgba(0,0,0,0.06); 
   margin-right: 4px; 
@@ -139,29 +139,30 @@
   transform: translateY(1px);
 }
 
-/* 🎄 예약내역 버튼 (Deep Green) */
+/* ✅ [수정] 예약내역 버튼 (블랙) */
 .header-nav .nav-item.modern-text-btn.history-mode {
-  background-color: #15803d !important;
+  background-color: #111 !important;
   color: #ffffff !important; 
-  border: 1px solid #14532d; 
+  border: 1px solid #111; 
 }
 .header-nav .nav-item.modern-text-btn.history-mode:hover {
-  background-color: #166534 !important;
+  background-color: #000 !important; /* 약간 더 진하게 */
 }
 
-/* 🎄 홈/쇼핑하기 버튼 (Bright Red) */
+/* ✅ [수정] 홈/쇼핑하기 버튼 (버건디 포인트) */
 .header-nav .nav-item.modern-text-btn.shop-mode {
-  background-color: #DC2626 !important;
+  background-color: #8E1E20 !important;
   color: #ffffff !important;
-  border: 1px solid #B91C1C;
-  /* 애니메이션 유지 */
-  animation: pulse-soft 2s infinite;
+  border: 1px solid #8E1E20;
+  animation: none; /* ✅ [수정] 펄스 애니메이션 제거 (차분하게) */
+  box-shadow: 0 4px 10px rgba(142, 30, 32, 0.2); /* ✅ [수정] 그림자 유지 */
 }
 
 .header-nav .nav-item.modern-text-btn.shop-mode:hover {
-  background-color: #EF4444 !important; 
+  background-color: #6D1416 !important; /* ✅ [수정] 더 진한 버건디 */
 }
 
+/* 펄스 애니메이션 제거 (사용하지 않음) */
 @keyframes pulse-soft {
   0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); } 
   70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
@@ -197,7 +198,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #B91C1C; /* 로고 레드와 톤 맞춤 */
+  color: #111; /* ✅ [수정] 블랙 */
 }
 
 .hamburger-btn:active {
