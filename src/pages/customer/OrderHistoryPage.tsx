@@ -313,8 +313,11 @@ const OrderCard: React.FC<{
     };
   }, [order.status, order.wasPrepaymentRequired]);
 
-  const { cancellable, reason } = useMemo(() => getCancellationDetails(order), [order]);
-  const isQuantityEditable = (order.status === 'RESERVED' || order.status === 'PREPAID');
+const { cancellable, reason } = useMemo(() => getCancellationDetails(order), [order]);
+
+// ✅ 취소 가능 시간 안이고, 상태가 RESERVED / PREPAID 일 때만 수량 변경 가능
+const isQuantityEditable =
+  (order.status === 'RESERVED' || order.status === 'PREPAID') && cancellable;
   const isInactive = isHiddenStatus(order.status); // 이제 isHiddenStatus를 사용
 
   const handleClick = (e: React.MouseEvent) => {
