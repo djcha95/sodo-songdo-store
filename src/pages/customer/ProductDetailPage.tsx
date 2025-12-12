@@ -223,10 +223,15 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate: Date | null = safeToDate(round.arrivalDate);
     const isMultiGroup = round.variantGroups.length > 1;
+    // 1. 럭셔리 모드인지 확인
+    const isLuxury = round?.eventType === 'PREMIUM'; // 💡 [추가] 럭셔리 모드 확인
 
     return (
         <>
             <div className="product-header-content">
+                {/* 3. 상단 헤더 부분 수정 - 럭셔리 모드일 때 뱃지 노출 */}
+                {isLuxury && <div className="luxury-badge">Premium Collection</div>}
+                
                 <h1 className="product-name">{product.groupName}</h1>
                 {countdown && (
                     <div className="countdown-timer-detail">
@@ -657,6 +662,9 @@ const ProductDetailPage: React.FC = () => {
         return getDisplayRound(product) as SalesRound | null;
     }, [product]);
 
+    // 1. 럭셔리 모드인지 확인
+    const isLuxury = displayRound?.eventType === 'PREMIUM'; // 💡 [추가] 럭셔리 모드 확인 로직
+
     // ✅ [추가] 예약 성공 후 버튼 상태를 되돌리기 위한 useEffect
     useEffect(() => {
         if (reservationStatus === 'success') {
@@ -1012,7 +1020,8 @@ const ProductDetailPage: React.FC = () => {
     const ogImage = originalImageUrls[0] || 'https://www.sodo-songdo.store/sodomall-preview.png';
     const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
-    const modalContentClassName = `product-detail-modal-content`;
+    // 2. 최상위 div 클래스에 조건부 적용
+    const modalContentClassName = `product-detail-modal-content ${isLuxury ? 'luxury-mode' : ''}`;
 
 
     return (
@@ -1040,6 +1049,22 @@ const ProductDetailPage: React.FC = () => {
                     {(actionState === 'PURCHASABLE' || actionState === 'REQUIRE_OPTION' || actionState === 'ON_SITE_SALE' || actionState === 'AWAITING_STOCK' || actionState === 'ENDED') && (
                         <div ref={footerRef} className="product-purchase-footer" data-tutorial-id="detail-purchase-panel">
                             
+                            {/* 4. 푸터(구매패널) 부분에서 가격 표시 로직 추가 */}
+                            {isLuxury && selectedItem && typeof selectedItem.originalPrice === 'number' && selectedItem.originalPrice > selectedItem.price && (
+                                <div className="luxury-price-row" style={{padding: '0 1.25rem'}}>
+                                    <span className="luxury-original-price">
+                                        {selectedItem.originalPrice.toLocaleString()}원
+                                    </span>
+                                    <span className="luxury-final-price">
+                                        {selectedItem.price.toLocaleString()}원
+                                    </span>
+                                    <span className="luxury-discount-rate" style={{fontSize:'0.9rem', color:'#b91c1c', marginLeft:'4px'}}>
+                                        {/* 할인율 계산: Math.round((1 - price/original)*100)% */}
+                                        {Math.round((1 - selectedItem.price / selectedItem.originalPrice) * 100)}% OFF
+                                    </span>
+                                </div>
+                            )}
+
                             {/* 옵션/아이템 선택 컴포넌트는 ENDED 상태일 때 숨김 */}
                             {actionState !== 'ENDED' && (
                                 <>

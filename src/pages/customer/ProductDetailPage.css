@@ -906,3 +906,93 @@
     from { opacity: 0; }
     to { opacity: 1; }
 }
+
+/* =========================================
+   👑 LUXURY (PREMIUM) MODE STYLES
+   ========================================= */
+
+/* 배경을 고급스러운 크림 화이트로 */
+.product-detail-modal-content.luxury-mode {
+  background-color: #FDFBF7; /* 아주 연한 웜톤 아이보리 */
+  font-family: 'Noto Serif KR', serif; /* 명조체 계열 추천 (없으면 기본 명조) */
+}
+
+/* 헤더: 우아하게 */
+.luxury-mode .product-name {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #2C2C2C; /* 완전 블랙보다는 짙은 차콜 */
+  margin-bottom: 0.2rem;
+  letter-spacing: -0.02em;
+}
+
+/* 프리미엄 뱃지 */
+.luxury-badge {
+  display: inline-block;
+  background-color: #2C2C2C;
+  color: #D4AF37; /* 골드 텍스트 */
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 2px; /* 둥글지 않고 각지게 */
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* 설명글: 차분하게 */
+.luxury-mode .markdown-content {
+  font-family: 'Pretendard', sans-serif; /* 본문은 가독성 좋게 고딕 */
+  color: #555;
+  line-height: 1.75;
+  font-size: 0.95rem;
+}
+
+/* 키 인포 박스: 테두리 없이 깔끔하게 */
+.luxury-mode .product-key-info {
+  background-color: #fff;
+  border: 1px solid #EAEAEA;
+  border-radius: 4px; /* 각지게 */
+  box-shadow: none;
+}
+
+/* 가격 표시 영역 (푸터) */
+.luxury-mode .product-purchase-footer {
+  background-color: rgba(253, 251, 247, 0.95);
+  border-top: 1px solid #E0E0E0;
+}
+
+/* 가격 텍스트 */
+.luxury-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.luxury-original-price {
+  font-size: 0.9rem;
+  color: #999;
+  text-decoration: line-through;
+  font-family: 'Pretendard', sans-serif;
+}
+.luxury-final-price {
+  font-size: 1.4rem;
+  color: #8E1E20; /* 버건디 유지 or #2C2C2C */
+  font-weight: 700;
+  font-family: 'Noto Serif KR', serif;
+}
+
+/* 버튼: 럭셔리 버튼 */
+.luxury-mode .add-to-cart-btn-fixed {
+  background-color: #1A1A1A; /* 딥 블랙 */
+  border-radius: 4px; /* 각지게 */
+  font-family: 'Noto Serif KR', serif;
+  letter-spacing: 1px;
+  box-shadow: none;
+}
+.luxury-mode .add-to-cart-btn-fixed:hover {
+  background-color: #333;
+  transform: translateY(-1px);
+}

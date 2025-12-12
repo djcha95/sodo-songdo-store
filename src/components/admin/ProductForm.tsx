@@ -25,7 +25,8 @@ import type {
   SalesRoundStatus,
   VariantGroup,
   ProductItem,
-  LoyaltyTier
+  LoyaltyTier,
+  SourceType // ✅ [추가] SourceType import
 } from '@/shared/types';
 import toast from 'react-hot-toast';
 import {
@@ -61,6 +62,8 @@ interface ProductItemUI {
   id: string; name: string; price: number | '';
   limitQuantity: number | ''; deductionAmount: number | '';
   isBundleOption?: boolean;
+  // ✅ [추가] originalPrice 필드 추가 (선택적)
+  originalPrice?: number | '';
 }
 interface VariantGroupUI {
   id: string; groupName: string; totalPhysicalStock: number | '';
@@ -232,8 +235,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ mode, productId, roundId, ini
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   // ❌ [삭제] const [isParsingWithAI, setIsParsingWithAI] = useState(false); (Request 3 - 수정 1)
-  // ✅ [수정] eventType에 'ANNIVERSARY' 추가
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS'>('NONE');
+  // ✅ [수정] eventType에 'ANNIVERSARY', 'PREMIUM', 'CHRISTMAS' 추가
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM'>('NONE');
 
 
   useEffect(() => {
@@ -360,12 +363,12 @@ if (mode === 'editRound' && roundId && product) {
 
 
         if (roundToLoad && product) {
-          const roundData = roundToLoad as SalesRound & { preOrderTiers?: LoyaltyTier[]; allowedTiers?: LoyaltyTier[] };
+          const roundData = roundToLoad as SalesRound & { preOrderTiers?: LoyaltyTier[]; allowedTiers?: LoyaltyTier[]; eventType?: 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM' };
           if (mode === 'editRound') setRoundName(roundData.roundName);
           setProductType(((roundData.variantGroups?.length || 0) > 1) ||
             (roundData.variantGroups?.[0]?.groupName !== product.groupName) ? 'group' : 'single');
           // ✅ [수정] eventType 타입 변경 반영
-setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS');
+setEventType((roundData.eventType || 'NONE') as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM');
 
 const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: VariantGroup) => {
             const expirationDate = convertToDate(vg.items?.[0]?.expirationDate);
@@ -391,12 +394,14 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
               // ⛑️ 문자열 필드 기본값
               stockUnitType: vg.stockUnitType ?? '개',
               expirationDate,
-              items: (vg.items || []).map((item: ProductItem) => ({
+              items: (vg.items || []).map((item: ProductItem & { originalPrice?: number }) => ({
                 id: item.id,
                 // ⛑️ 문자열 필드 안전값
                 name: item.name ?? '',
                 // ⛑️ (핵심) price가 undefined면 ''로 (formatKRW와 text input 모두 안전)
                 price: (typeof item.price === 'number') ? item.price : '',
+                // ✅ [추가] originalPrice 로딩
+                originalPrice: (typeof item.originalPrice === 'number') ? item.originalPrice : '',
                 // 이미 방어 로직이 적용된 부분
                 limitQuantity: item.limitQuantity ?? '',
                 deductionAmount: item.stockDeductionAmount ?? 1,
@@ -419,7 +424,8 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
                 price: '', 
                 limitQuantity: '', 
                 deductionAmount: 1, 
-                isBundleOption: false 
+                isBundleOption: false,
+                originalPrice: '' // ✅ [추가] originalPrice 초기화
               }]
             });
           }
@@ -456,14 +462,14 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
       setVariantGroups([{
         id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개',
         expirationDate: null,
-        items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }]
+        items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false, originalPrice: '' }] // ✅ [추가] originalPrice 초기화
       }]);
     }
   }, [mode, variantGroups.length]);
 
   useEffect(() => {
     // ✅ [수정] mode === 'editRound' 조건을 삭제합니다. (Request 2 - 수정 1)
-    if (eventType === 'CHUSEOK' || eventType === 'ANNIVERSARY') return; // ✅ [수정] 1주년 이벤트 추가
+    if (eventType === 'CHUSEOK' || eventType === 'ANNIVERSARY' || eventType === 'PREMIUM' || eventType === 'CHRISTMAS') return; // ✅ [수정] 이벤트 타입 추가
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
@@ -539,7 +545,7 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
     setVariantGroups(prev => [...prev, {
       id: generateUniqueId(), groupName: '', totalPhysicalStock: '', stockUnitType: '개',
       expirationDate: null,
-      items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }]
+      items: [{ id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false, originalPrice: '' }] // ✅ [추가] originalPrice 초기화
     }]);
   }, []);
   const removeVariantGroup = useCallback((id: string) => {
@@ -569,10 +575,21 @@ const mappedVGs: VariantGroupUI[] = (roundData.variantGroups || []).map((vg: Var
       items: vg.items.map(item => item.id === itemId ? { ...item, price: numericValue } : item)
     } : vg));
   }, []);
+
+  // ✅ [추가] 정상가 변경 핸들러
+  const handleOriginalPriceChange = useCallback((vgId: string, itemId: string, value: string) => {
+    const numericValue = parseKRW(value);
+    setVariantGroups(prev => prev.map(vg => vg.id === vgId ? {
+      ...vg,
+      items: vg.items.map(item => item.id === itemId ? { ...item, originalPrice: numericValue } : item)
+    } : vg));
+  }, []);
+  // ------------------------------------
+
   const addNewItem = useCallback((vgId: string) => {
     setVariantGroups(prev => prev.map(vg => vg.id === vgId ? {
       ...vg,
-      items: [...vg.items, { id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false }]
+      items: [...vg.items, { id: generateUniqueId(), name: '', price: '', limitQuantity: '', deductionAmount: 1, isBundleOption: false, originalPrice: '' }] // ✅ [추가] originalPrice 초기화
     } : vg));
   }, []);
   const removeItem = useCallback((vgId: string, itemId: string) => {
@@ -705,8 +722,10 @@ const settingsSummary = useMemo(() => {
       const salesRoundData = {
         roundName: roundName.trim(),
         status,
-        // ✅ [수정] eventType에 'ANNIVERSARY' 추가
+        // ✅ [수정] eventType에 'ANNIVERSARY', 'PREMIUM', 'CHRISTMAS' 추가
         eventType: eventType === 'NONE' ? null : eventType,
+        // ✅ [추가] 프리미엄이면 'SONGDOPICK_ONLY'로 강제 설정
+        sourceType: (eventType === 'PREMIUM' ? 'SONGDOPICK_ONLY' : 'SODOMALL') as SourceType,
         variantGroups: variantGroups.map(vg => {
           let finalTotalPhysicalStock: number | null;
           const newStockFromInput = vg.totalPhysicalStock;
@@ -733,6 +752,8 @@ const settingsSummary = useMemo(() => {
               id: item.id || generateUniqueId(),
               name: item.name,
               price: (Number(item.price) || 0),
+              // ✅ [추가] originalPrice 저장
+              originalPrice: (item as ProductItemUI).originalPrice ? Number((item as ProductItemUI).originalPrice) : null,
               stock: -1,
               limitQuantity: (item.limitQuantity === '' ? null : Number(item.limitQuantity)),
               expirationDate: vg.expirationDate ? Timestamp.fromDate(vg.expirationDate) : null,
@@ -1087,15 +1108,31 @@ const settingsSummary = useMemo(() => {
                           <label>선택지 *</label>
                           <input type="text" value={item.name} onChange={e => handleItemChange(vg.id, item.id, 'name', e.target.value)} required />
                         </div>
+                        
+                        {/* ✅ [추가] 정상가 입력 필드 */}
                         <div className="form-group-grid item-price">
-                          <label>가격 *</label>
+                          <label className="tooltip-container"><span>정상가 (선택)</span></label>
+                          <div className="price-input-wrapper" style={{background: '#f9f9f9'}}>
+                            <input
+                              type="text"
+                              placeholder="정가"
+                              // item.originalPrice에 대한 타입 단언 (ProductItemUI에 추가된 필드)
+                              value={formatKRW((item as ProductItemUI).originalPrice || '')}
+                              onChange={e => handleOriginalPriceChange(vg.id, item.id, e.target.value)}
+                            />
+                            <span style={{color:'#aaa'}}>원</span>
+                          </div>
+                        </div>
+
+                        <div className="form-group-grid item-price">
+                          <label>판매가 *</label>
                           <div className="price-input-wrapper">
                             <input
-  type="text"
-  value={formatKRW(typeof item.price === 'number' ? item.price : '')}
-  onChange={e => handlePriceChange(vg.id, item.id, e.target.value)}
-  required
-/>
+                              type="text"
+                              value={formatKRW(typeof item.price === 'number' ? item.price : '')}
+                              onChange={e => handlePriceChange(vg.id, item.id, e.target.value)}
+                              required
+                            />
                             <span>원</span>
                           </div>
                         </div>
@@ -1141,7 +1178,8 @@ const settingsSummary = useMemo(() => {
                   <Gift size={16} className="input-icon" />
                   <select 
                     value={eventType} 
-                    onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS')}
+                    // ✅ [수정] eventType 타입 변경 반영 (PREMIUM 추가)
+                    onChange={e => setEventType(e.target.value as 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM')}
                   >
                     <option value="NONE">일반 상품</option>
                     <option value="CHUSEOK">🌕 추석 특집</option>
@@ -1149,8 +1187,15 @@ const settingsSummary = useMemo(() => {
                     <option value="ANNIVERSARY">🎉 1주년 기념 🎉</option>
                     {/* 🎄 [추가] 크리스마스 이벤트 옵션 추가 */}
                     <option value="CHRISTMAS">🎁 크리스마스 특집 🎁</option>
+                    {/* ✅ [추가] 럭셔리 모드 옵션 */}
+                    <option value="PREMIUM">👑 프리미엄 (베리맘/럭셔리)</option>
                   </select>
                 </div>
+                {eventType === 'PREMIUM' && (
+                  <p className="input-description" style={{color: '#d4af37', fontWeight: 600}}>
+                    * 프리미엄 선택 시 '송도픽 단독'으로 자동 분류되며, 일반 목록에는 노출되지 않습니다.
+                  </p>
+                )}
               </div>
 
               <div className="form-group">

@@ -1,3 +1,5 @@
+// src/components/common/SideMenu.tsx
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -11,7 +13,8 @@ import {
   Info,
   ShieldCheck,
   MapPin,
-  User, // ✅ [추가] 유저 아이콘
+  User,
+  Sparkles // ✨ [추가] 럭셔리 아이콘
 } from 'lucide-react';
 import './SideMenu.css';
 
@@ -80,7 +83,27 @@ const SideMenu: React.FC<SideMenuProps> = ({
             </div>
           </NavLink>
 
-          {/* ✅ [신규 추가] 내 정보 (멤버십) */}
+          {/* 베리맘 · 끌리글램 (강조됨) */}
+          <NavLink
+            to="/beauty"
+            className={getNavLinkClass}
+            onClick={onClose}
+            style={{background: '#FFFBF0'}} // 💡 [추가] 살짝 강조된 배경색
+          >
+            <div className="side-menu-icon-wrap" style={{background: '#111', color: '#D4AF37'}}>
+              <Sparkles size={18} />
+            </div>
+            <div className="side-menu-text-wrap">
+              <span className="side-menu-main-text" style={{color: '#111'}}>
+                베리맘(VERYMOM)
+              </span>
+              <span className="side-menu-sub-text">
+                <span style={{color: '#D4AF37', fontWeight: 700}}>● PRE-ORDER OPEN</span>
+              </span>
+            </div>
+          </NavLink>
+
+          {/* 내 정보 (멤버십) */}
           <NavLink
             to="/mypage"
             end
@@ -98,7 +121,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
             </div>
           </NavLink>
 
-          {/* ✅ [복구 완료] 예약 내역 */}
+          {/* 예약 내역 */}
           <NavLink
             to="/mypage/history"
             className={getNavLinkClass}
@@ -122,31 +145,12 @@ const SideMenu: React.FC<SideMenuProps> = ({
             onClick={onClose}
           >
             <div className="side-menu-icon-wrap">
-              <ListOrdered size={20} />
+              <Info size={20} />
             </div>
             <div className="side-menu-text-wrap">
               <span className="side-menu-main-text">공구 이용 안내</span>
               <span className="side-menu-sub-text">
                 예약, 결제, 픽업 방법 한눈에 보기
-              </span>
-            </div>
-          </NavLink>
-
-          {/* 베리맘 · 끌리글램 */}
-          <NavLink
-            to="/beauty"
-            className={getNavLinkClass}
-            onClick={onClose}
-          >
-            <div className="side-menu-icon-wrap">
-              <Package size={20} />
-            </div>
-            <div className="side-menu-text-wrap">
-              <span className="side-menu-main-text">
-                베리맘(VERYMOM)
-              </span>
-              <span className="side-menu-sub-text">
-                프리미엄 육아·뷰티 라인 (COMING SOON!)
               </span>
             </div>
           </NavLink>

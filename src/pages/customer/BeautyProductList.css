@@ -1,22 +1,23 @@
 /* src/pages/customer/BeautyProductList.css */
 
-/* 페이지 전체 컨테이너 */
+/* 페이지 전체 컨테이너: 고급스러운 크림톤 배경 */
 .customer-page-container.beauty-page {
-  /* 기본적으로 ModernProductList.css의 스타일을 따르지만, 색상 톤을 조정합니다. */
-  padding-bottom: 80px; /* 하단 탭바 공간 확보 */
-  background-color: #fcfcfc; /* 밝고 깨끗한 배경 */
+  padding-bottom: 80px;
+  background-color: #FDFBF7; /* 💡 [수정] 웜톤 아이보리 배경 */
+  min-height: 100vh;
 }
 
 /* 헤더 영역 */
 .beauty-page-header {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 50;
   display: flex;
   align-items: center;
-  padding: 12px 16px;
-  background-color: #ffffff;
-  border-bottom: 1px solid #f0f0f0; /* 깔끔한 구분선 */
+  padding: 14px 20px;
+  background-color: rgba(253, 251, 247, 0.95); /* 배경색 투명도 적용 */
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  backdrop-filter: blur(10px);
 }
 
 .beauty-page-header .back-btn {
@@ -24,116 +25,122 @@
   border: none;
   padding: 4px;
   cursor: pointer;
-  color: #4b5563; /* 부드러운 회색 */
+  color: #111;
   margin-right: 12px;
+  display: flex;
+  align-items: center;
 }
 
 .beauty-page-header .header-title {
+  font-family: 'Noto Serif KR', serif; /* 💡 [수정] 명조체 적용 */
   font-size: 18px;
   font-weight: 700;
-  color: #1f2937;
+  color: #111;
   margin: 0;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.02em;
 }
 
-/* 뷰티 소개 섹션 (인트로) -> 베이비 케어 톤으로 수정 */
+/* 뷰티 소개 섹션 (인트로) */
 .beauty-intro {
-  padding: 24px 16px 20px;
+  padding: 40px 20px 30px; /* 여백을 조금 더 시원하게 */
   margin-bottom: 10px;
-  background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%); /* 따뜻한 톤의 그라데이션 */
-  border-bottom: 1px solid #ffe9cc;
+  background: transparent;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+  text-align: center;
 }
 
-.beauty-intro .intro-badge {
+/* 🗑️ 기존 .intro-badge 스타일은 삭제하거나 무시하셔도 됩니다 */
+
+/* ✨ [수정] 로고 이미지 스타일 */
+.beauty-intro .intro-logo {
+  /* 1. 높이를 키웁니다 (32px -> 120px 정도) */
+  /* 로고 이미지 자체에 여백이 있어서 생각보다 크게 잡아야 글씨가 잘 보입니다. */
+  height: auto; 
+  width: 180px; /* 너비를 기준으로 잡는 게 더 안정적일 수 있습니다 */
+  max-width: 80%; /* 모바일에서 너무 커지지 않게 제한 */
+  
+  margin-bottom: 0px; /* 로고 아래 여백 조정 */
   display: inline-block;
-  padding: 4px 10px;
-  margin-bottom: 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #92400e; /* 짙은 오렌지/브라운 */
-  background-color: #fff7ed; /* 연한 오렌지 배경 */
-  border: 1px solid #fee3b8;
+
+  /* 2. 흰색 배경을 투명하게 만드는 마법 (Multiply 모드) */
+  /* 배경이 크림색(#FDFBF7)이라 흰색 박스가 보이면 안 예쁘니까요! */
+  mix-blend-mode: multiply; 
 }
 
 .beauty-intro .intro-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: #1f2937;
-  margin: 0 0 8px;
-  letter-spacing: -0.7px;
+  font-family: 'Noto Serif KR', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
 }
 
 .beauty-intro .intro-desc {
+  font-family: 'Pretendard', sans-serif;
   font-size: 14px;
-  color: #6b7280;
+  color: #555;
   line-height: 1.6;
-  margin: 0;
+  margin: 0 auto;
+  max-width: 80%; /* 텍스트 너비 제한 */
 }
 
 /* 상품 리스트 그리드 */
 .songdo-product-list.beauty-list-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* 2열 그리드 */
-  gap: 16px; /* 카드 사이 간격 */
-  padding: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px; 
+  padding: 20px;
 }
 
-/* 데스크탑 최적화 (더 넓은 화면에서) */
+/* 데스크탑 최적화 */
 @media (min-width: 768px) {
   .songdo-product-list.beauty-list-grid {
-    grid-template-columns: repeat(3, 1fr); /* 태블릿/데스크탑에서 3열 */
-    max-width: 1200px; /* 최대 너비 제한 */
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 1200px;
     margin: 0 auto;
   }
-  
-  .beauty-page-header {
-      padding: 16px 24px;
-  }
-  
   .beauty-intro {
-      padding: 30px 24px 26px;
-      max-width: 1200px;
-      margin: 0 auto 10px;
+      padding: 60px 24px 40px;
   }
 }
 
-/* ✅ Coming Soon 카드 스타일 수정 (색상 톤 변경) */
+/* ✅ Coming Soon 카드 스타일 (골드 테마) */
 .beauty-coming-soon-card {
-  /* 🔥 핵심 수정: 그리드 컨테이너 안에서 전체 너비를 차지하도록 설정 */
   grid-column: 1 / -1;
-  width: 100%; /* 혹시 모를 상황에 대비해 너비 100% 명시 */
-
+  width: 100%;
   text-align: center;
-  padding: 40px 20px;
-  background-color: #fffbeb; /* soft yellow/cream background for baby */
-  border-radius: 12px;
-  
-  /* 마진 수정: 부모 그리드(beauty-list-grid)에 이미 padding: 16px가 있으므로,
-     카드의 좌우 마진을 0으로 변경하여 이중 여백을 방지하고 상하 마진만 줍니다. */
+  padding: 60px 20px;
+  background: #fff;
+  border-radius: 8px; /* 조금 더 각지게 */
   margin: 20px 0; 
-  
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  border: 1px solid #fde68a; /* soft yellow border */
-  box-sizing: border-box; /* padding이 너비에 포함되도록 안전장치 */
+  box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.05);
 }
 
 .beauty-coming-soon-card .main-text {
-  font-size: 24px;
-  margin-bottom: 10px;
+  font-family: 'Noto Serif KR', serif;
+  font-size: 22px;
+  margin-bottom: 12px;
   font-weight: 700;
-  color: #92400e; /* deep brown/orange */
+  color: #111;
 }
 
 .beauty-coming-soon-card .sub-text {
-  font-size: 16px;
-  color: #4b5563;
-  line-height: 1.5;
+  font-size: 15px;
+  color: #666;
+  line-height: 1.6;
+  margin-bottom: 24px;
 }
 
 .beauty-coming-soon-card .detail-text {
-  font-size: 14px;
-  color: #9ca3af;
-  margin-top: 15px;
+  display: inline-block;
+  font-size: 13px;
+  color: #8E1E20; /* 포인트 컬러 */
+  font-weight: 600;
+  border: 1px solid rgba(142, 30, 32, 0.2);
+  padding: 8px 16px;
+  border-radius: 99px;
+  background: #FFF5F5;
 }

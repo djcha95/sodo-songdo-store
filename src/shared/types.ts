@@ -15,6 +15,7 @@ export type UniversalFieldValue = AdminFieldValue | ClientFieldValue;
 
 export type StorageType = 'ROOM' | 'COLD' | 'FROZEN' | 'FRESH';
 export type SalesRoundStatus = 'draft' | 'scheduled' | 'selling' | 'sold_out' | 'ended';
+export type SourceType = 'SODOMALL' | 'SONGDOPICK_ONLY';
 export type OrderStatus =
   | 'RESERVED'
   | 'PREPAID'
@@ -82,6 +83,7 @@ export interface ProductItem {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   stock: number;
   limitQuantity?: number | null;
   stockDeductionAmount: number;
@@ -127,7 +129,7 @@ export interface SalesRound {
   manualStatus?: SalesRoundStatus | null;
   isManuallyOnsite?: boolean;
   eventType?: string | null;
-  sourceType?: 'SODOMALL' | 'SONGDOPICK_ONLY';
+  sourceType?: SourceType;
   // entryCount 제거
 }
 

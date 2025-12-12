@@ -27,9 +27,6 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import './ModernProductList.css';
 
-// ❌ [삭제] React.lazy를 사용한 Snowfall 동적 Import 제거
-// const LazySnowfall = React.lazy(() => import('react-snowfall'));
-
 // 아이콘은 유지 (Lazy loading)
 const LazyChevronRight = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.ChevronRight }))
@@ -62,8 +59,20 @@ interface EventBanner {
   imageAlt?: string;
 }
 
-// ✅ 상단 배너 데이터
+// ✅ [수정] 베리맘 배너를 'Coming Soon' -> '사전예약 오픈'으로 변경
 const EVENT_BANNERS: EventBanner[] = [
+  {
+    id: 'berrymom-open',
+    chip: 'PRE-ORDER OPEN',
+    title: '베리맘(VERY MOM) 런칭',
+    desc: '단 1% 아기를 위한 프리미엄. 지금 사전예약 하세요.',
+    cta: '사전예약 입장하기',
+    bg: 'linear-gradient(135deg, #FDFBF7 0%, #EFE5D6 100%)', // 럭셔리한 베이지 톤
+    linkType: 'internal',
+    href: '/beauty',
+    image: '/images/verymom/logo.jpg',
+    imageAlt: '베리맘 런칭',
+  },
   {
     id: 'hey-u-beauty',
     chip: '💄 헤이유뷰티룸 제휴',
@@ -76,18 +85,6 @@ const EVENT_BANNERS: EventBanner[] = [
     image: '/images/heyu/asd.jpg',
     imageAlt: '헤이유 뷰티룸 매장 전경',
   },
-  {
-    id: 'berrymom-coming-soon',
-    chip: 'Coming Soon',
-    title: '베리맘(VERY MOM)',
-    desc: '단 1% 나의 아기를 위한 프리미엄 베이비 케어 브랜드',
-    cta: '제품을 준비중입니다',
-    bg: 'linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%)',
-    linkType: 'none',
-    href: '',
-    image: '/images/verymom/logo.jpg',
-    imageAlt: 'Coming Soon',
-  },
 ];
 
 const ModernProductList: React.FC = () => {
@@ -95,10 +92,6 @@ const ModernProductList: React.FC = () => {
   const { user, userDocument } = useAuth();
 
   const [activeBanner, setActiveBanner] = useState(0);
-
-  // ❌ [삭제] 눈 효과 관련 상태 제거
-  // const [showSnow, setShowSnow] = useState(false);
-  // const [snowflakeCount, setSnowflakeCount] = useState(60);
 
   // ✅ 이벤트(Hero) & 뷰티 상품
   const [heroProducts, setHeroProducts] = useState<Product[]>([]);
@@ -141,28 +134,6 @@ const ModernProductList: React.FC = () => {
     lastVisibleRef.current = lastVisible;
   }, [lastVisible]);
 
-  // ❌ [삭제] 눈 효과 (지연 로딩 트리거) useEffect 제거
-  /*
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const isMobile = window.innerWidth < 768;
-    setSnowflakeCount(isMobile ? 30 : 60);
-
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (mq && mq.matches) {
-      setShowSnow(false);
-      return;
-    }
-
-    const t = setTimeout(() => {
-      setShowSnow(true);
-    }, 400);
-
-    return () => clearTimeout(t);
-  }, []);
-  */
-
   // ✅ 배너 슬라이드
   useEffect(() => {
     if (EVENT_BANNERS.length <= 1) return;
@@ -197,7 +168,7 @@ const ModernProductList: React.FC = () => {
     fetchMyOrders();
   }, [fetchMyOrders]);
 
-  // ✅ 특수 상품 로드
+  // ✅ 특수 상품 (이벤트 / 뷰티) 로드
   useEffect(() => {
     const fetchSpecialProducts = async () => {
       try {
@@ -206,7 +177,8 @@ const ModernProductList: React.FC = () => {
         // 이벤트 상품
         const events = fetched.filter((p) => {
           const r = getDisplayRound(p);
-          const hasEventTag = r && r.eventType && r.eventType !== 'NONE';
+          // ✅ [수정] PREMIUM, COSMETICS는 이벤트에서 제외 (뷰티 섹션으로 이동)
+          const hasEventTag = r && r.eventType && r.eventType !== 'NONE' && r.eventType !== 'PREMIUM' && r.eventType !== 'COSMETICS';
           if (!hasEventTag) return false;
           const actionState = determineActionState(r, null);
           return actionState !== 'ENDED';
@@ -216,7 +188,8 @@ const ModernProductList: React.FC = () => {
         // 뷰티 상품
         const beauty = fetched.filter((p) => {
           const r = getDisplayRound(p);
-          return r && r.eventType === 'COSMETICS';
+          // ✅ [수정] 뷰티 섹션: COSMETICS 뿐만 아니라 PREMIUM도 포함
+          return r && (r.eventType === 'COSMETICS' || r.eventType === 'PREMIUM');
         });
         setBeautyProducts(beauty);
       } catch (e) {
@@ -229,7 +202,7 @@ const ModernProductList: React.FC = () => {
     fetchSpecialProducts();
   }, []);
 
-  // ✅ 탭 변경 시 로드
+  // ✅ 탭 변경 시 일반 상품 로드
   useEffect(() => {
     const loadTabProducts = async () => {
       setLoading(true);
@@ -347,6 +320,9 @@ const ModernProductList: React.FC = () => {
       .map((product) => {
         const round = getDisplayRound(product);
         if (!round || round.status === 'draft') return null;
+
+        // ✅ [수정] 럭셔리(PREMIUM) 상품은 일반 리스트에서 숨김
+        if (round.eventType === 'PREMIUM') return null;
 
         const { primaryEnd, secondaryEnd } = getDeadlines(round);
         const actionState = determineActionState(round, userDocument as any);
@@ -495,26 +471,6 @@ const ModernProductList: React.FC = () => {
 
   return (
     <>
-      {/* ❌ [삭제] Snowfall Lazy Loading 적용 부분 제거 */}
-      {/*
-      {showSnow && (
-        <Suspense fallback={<div />}>
-          <LazySnowfall
-            snowflakeCount={snowflakeCount}
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100vw',
-              height: '100vh',
-              pointerEvents: 'none',
-              zIndex: 9999,
-            }}
-          />
-        </Suspense>
-      )}
-      */}
-
       <div className="customer-page-container modern-list-page">
         {EVENT_BANNERS.length > 0 && !heroLoading && (
           <section className="event-hero-wrapper">
@@ -609,12 +565,13 @@ const ModernProductList: React.FC = () => {
 
         {processedBeautyProducts.length > 0 && (
           <section className="beauty-curation-section">
+            {/* ✅ [수정] 뷰티 섹션 문구 수정 */}
             <div className="section-header" onClick={() => navigate('/beauty')}>
               <div>
-                <span className="small-label">💄 Beauty Pick</span>
-                <h3 className="section-title">베리맘 · 끌리글램 뷰티 사전예약</h3>
+                <span className="small-label">👑 PREMIUM COLLECTION</span>
+                <h3 className="section-title">베리맘 · 뷰티 사전예약</h3>
                 <p className="section-sub">
-                  송도픽에서만 먼저 만나는 겨울 뷰티 라인
+                  단 1%를 위한 프리미엄 라인, 한정 기간 오픈
                 </p>
               </div>
               <button className="view-all-btn">

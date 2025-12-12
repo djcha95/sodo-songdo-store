@@ -8,32 +8,24 @@ import { getDisplayRound, determineActionState } from '@/utils/productUtils';
 import ModernProductCard from '@/components/customer/ModernProductCard';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { useAuth } from '@/context/AuthContext';
-import type { 
-  Product as OriginalProduct, 
-  SalesRound 
-} from '@/shared/types';
-// import '@/styles/ModernProduct.css';
-import './BeautyProductList.css'; // 새로 만든 CSS 파일 경로ModernProduct.css
+import type { Product as OriginalProduct, SalesRound } from '@/shared/types';
+import './BeautyProductList.css';
 
-// ✅ 로컬에서 쓸 확장 타입 정의: OriginalProduct에 displayRound와 isPreorder를 추가합니다.
 interface DisplayProduct extends OriginalProduct {
   displayRound: SalesRound;
   isPreorder?: boolean;
 }
 
-// ✅ 베이비 케어 Coming Soon 안내 컴포넌트 추가 (텍스트 수정)
+// ✅ 럭셔리한 안내 문구로 변경
 const BeautyComingSoon: React.FC = () => (
-  <div 
-    className="beauty-coming-soon-card" // ✅ CSS 클래스 유지
-  >
-    <p className="main-text">
-      PRE-ORDER COMING SOON!
-    </p>
+  <div className="beauty-coming-soon-card">
+    <p className="main-text">PRE-ORDER COMING SOON</p>
     <p className="sub-text">
-      단 1% 나의 아기를 위한 프리미엄 베이비 케어 브랜드, 베리맘 사전예약 상품을 꼼꼼하게 준비 중입니다 🙏
+      가장 소중한 우리 아이를 위한<br/>
+      프리미엄 베이비 케어 '베리맘'을 준비 중입니다.
     </p>
     <p className="detail-text">
-      조금만 기다려주시면, 가장 좋은 혜택으로 만나보실 수 있습니다!
+      12/15(월) 오후 1시 오픈 예정
     </p>
   </div>
 );
@@ -41,7 +33,6 @@ const BeautyComingSoon: React.FC = () => (
 const BeautyProductList: React.FC = () => {
   const navigate = useNavigate();
   const { userDocument } = useAuth();
-  // Step 2. State 타입 변경: Product[] -> DisplayProduct[]
   const [products, setProducts] = useState<DisplayProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,33 +40,24 @@ const BeautyProductList: React.FC = () => {
     const fetchBeautyProducts = async () => {
       try {
         setLoading(true);
-        // 전체 상품 중 베리맘/베이비 케어만 필터링
         const { products: fetched } = await getPaginatedProductsWithStock(100, null, null, 'all');
         
-        // Product[] 타입의 beauties
         const beauties = fetched.filter(p => {
-            // 카테고리 또는 태그, 이름으로 필터링 로직 수정
-            const isBabyCareCategory = (p as any).category === 'baby_care'; // 'baby_care' 카테고리 가정
-            // 태그나 이름으로 2차 필터 (끌리글램 제거)
-            const hasTag = p.tags?.some(t => ['베리맘','육아','baby','베이비케어', '아기피부'].includes(t));
-            const hasName = p.groupName.includes('베리맘'); // 끌리글램 제거
-            
-            // displayRound가 유효해야 함
             const round = getDisplayRound(p);
-            // 필터 로직을 '베이비 케어 관련이거나' AND '유효한 라운드'로 수정
-            return (isBabyCareCategory || hasTag || hasName) && round && round.status !== 'draft';
+            return round && 
+                   (round.eventType === 'PREMIUM' || round.eventType === 'COSMETICS') && 
+                   round.status !== 'draft';
         });
 
-        // Step 3. 데이터 가공 부분 수정: DisplayProduct[]로 명시
         const processed: DisplayProduct[] = beauties.map(p => ({
             ...p,
-            displayRound: getDisplayRound(p)!, // OriginalProduct에 없는 속성 추가
-            isPreorder: true // 뷰티 페이지 상품은 모두 사전예약 뱃지 노출
+            displayRound: getDisplayRound(p)!, 
+            isPreorder: true 
         }));
 
         setProducts(processed);
       } catch (e) {
-        console.error("베이비 케어 상품 로드 실패", e);
+        console.error("뷰티 상품 로드 실패", e);
       } finally {
         setLoading(false);
       }
@@ -86,26 +68,31 @@ const BeautyProductList: React.FC = () => {
 
   if (loading) return <SodomallLoader />;
 
-  // 💡 상품이 있을 때도 안내문은 유지하고, 상품이 없을 때만 별도 컴포넌트로 대체하도록 로직 수정
-  // 💡 즉, 상품이 없으면 아래 리스트 대신 Coming Soon 안내만 노출됩니다.
-
   return (
     <div className="customer-page-container beauty-page">
-      {/* 헤더 */}
+      {/* 헤더: 뒤로가기 버튼 + 심플 타이틀 */}
       <header className="beauty-page-header">
         <button className="back-btn" onClick={() => navigate(-1)}>
-            <ArrowLeft size={24} />
+            <ArrowLeft size={22} />
         </button>
-        <h1 className="header-title">프리미엄 베이비 케어</h1>
+        <h1 className="header-title">PREMIUM COLLECTION</h1>
       </header>
 
-      {/* 뷰티 소개 섹션 (인트로) - 텍스트 수정 */}
+      {/* ✅ [수정] 뷰티 소개 섹션: 로고 이미지 적용 */}
       <section className="beauty-intro">
-        <div className="intro-badge">PRE-ORDER</div>
-        <h2 className="intro-title">베리맘 프리미엄 베이비 케어</h2>
+        {/* 기존 intro-badge 텍스트 대신 로고 이미지 사용 */}
+        <img 
+          src="/images/verymom/logo.jpg" 
+          alt="VERY MOM" 
+          className="intro-logo" 
+        />
+        
+        <h2 className="intro-title">
+          단 1%의 아기를 위한<br/>프리미엄 스킨케어
+        </h2>
         <p className="intro-desc">
-          단 1% 나의 아기를 위한 프리미엄 베이비 케어 브랜드.<br/>
-          송도픽에서 가장 좋은 혜택으로 만나보세요.
+          자연에서 얻은 귀한 성분으로 완성된<br/>
+          베리맘의 시그니처 라인을 송도픽 단독 혜택으로 만나보세요.
         </p>
       </section>
 
@@ -118,11 +105,10 @@ const BeautyProductList: React.FC = () => {
               product={p}
               actionState={determineActionState(p.displayRound as any, userDocument as any)}
               phase="primary"
-              isPreorder={true} // 뱃지 활성화
+              isPreorder={true}
             />
           ))
         ) : (
-          /* ✅ 상품이 없을 때 Coming Soon 컴포넌트 노출 */
           <BeautyComingSoon />
         )}
       </div>
