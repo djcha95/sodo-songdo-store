@@ -31,7 +31,7 @@ import type {
 import toast from 'react-hot-toast';
 import {
   Save, PlusCircle, X, Package, Box, SlidersHorizontal, Trash2, Info,
-  FileText, Clock, AlertTriangle, Loader2, CalendarPlus, Bot, Gift
+  FileText, Clock, AlertTriangle, Loader2, CalendarPlus, Gift
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import type { DropResult } from 'react-beautiful-dnd';
@@ -346,12 +346,11 @@ if (mode === 'editRound' && roundId && product) {
     // if (prevRoundData.publishAt) setPublishDate(convertToDate(prevRoundData.publishAt) || new Date());
     
     // ⚠️ 참고: publishDate가 오늘로 유지되면, 하단 useEffect에 의해 마감일(deadlineDate)도 오늘 기준으로 자동 재계산됩니다.
-    if (prevRoundData.deadlineDate) setDeadlineDate(convertToDate(prevRoundData.deadlineDate));
-    if (prevRoundData.pickupDate) setPickupDate(convertToDate(prevRoundData.pickupDate));
-    if (prevRoundData.pickupDeadlineDate) setPickupDeadlineDate(convertToDate(prevRoundData.pickupDeadlineDate));
+    // ✅ [수정] newRound에서는 이전 날짜를 복사하지 않고 기본값(아래 useEffect)을 따름.
+    // if (prevRoundData.deadlineDate) setDeadlineDate(convertToDate(prevRoundData.deadlineDate));
+    // if (prevRoundData.pickupDate) setPickupDate(convertToDate(prevRoundData.pickupDate));
+    // if (prevRoundData.pickupDeadlineDate) setPickupDeadlineDate(convertToDate(prevRoundData.pickupDeadlineDate));
 
-    // 2. 설정 복사
-    setIsPrepaymentRequired(prevRoundData.isPrepaymentRequired ?? false);
     // 2. 설정 복사
     setIsPrepaymentRequired(prevRoundData.isPrepaymentRequired ?? false);
     setIsPreOrderEnabled(!!(prevRoundData.preOrderTiers && prevRoundData.preOrderTiers.length > 0));
@@ -1109,20 +1108,22 @@ const settingsSummary = useMemo(() => {
                           <input type="text" value={item.name} onChange={e => handleItemChange(vg.id, item.id, 'name', e.target.value)} required />
                         </div>
                         
-                        {/* ✅ [추가] 정상가 입력 필드 */}
-                        <div className="form-group-grid item-price">
-                          <label className="tooltip-container"><span>정상가 (선택)</span></label>
-                          <div className="price-input-wrapper" style={{background: '#f9f9f9'}}>
-                            <input
-                              type="text"
-                              placeholder="정가"
-                              // item.originalPrice에 대한 타입 단언 (ProductItemUI에 추가된 필드)
-                              value={formatKRW((item as ProductItemUI).originalPrice || '')}
-                              onChange={e => handleOriginalPriceChange(vg.id, item.id, e.target.value)}
-                            />
-                            <span style={{color:'#aaa'}}>원</span>
-                          </div>
-                        </div>
+                        {/* ✅ [수정] 정상가 입력 필드를 PREMIUM 이벤트일 때만 노출 */}
+                        {eventType === 'PREMIUM' && (
+                            <div className="form-group-grid item-price">
+                            <label className="tooltip-container"><span>정상가 (선택)</span></label>
+                            <div className="price-input-wrapper" style={{background: '#f9f9f9'}}>
+                                <input
+                                type="text"
+                                placeholder="정가"
+                                // item.originalPrice에 대한 타입 단언 (ProductItemUI에 추가된 필드)
+                                value={formatKRW((item as ProductItemUI).originalPrice || '')}
+                                onChange={e => handleOriginalPriceChange(vg.id, item.id, e.target.value)}
+                                />
+                                <span style={{color:'#aaa'}}>원</span>
+                            </div>
+                            </div>
+                        )}
 
                         <div className="form-group-grid item-price">
                           <label>판매가 *</label>

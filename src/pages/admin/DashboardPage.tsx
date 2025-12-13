@@ -62,7 +62,7 @@ const convertToDate = (dateSource: any): Date | null => {
 
 const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     const [copied, setCopied] = useState(false);
-    const productUrl = `https://www.sodo-songdo.store/product/${productId}`;
+    const productUrl = `https://www.songdopick.store/product/${productId}`;
 
     const handleCopy = (e: React.MouseEvent) => {
         e.preventDefault();
