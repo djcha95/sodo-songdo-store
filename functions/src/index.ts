@@ -39,7 +39,7 @@ export * from "./http/maintenance.js";
 export * from "./scheduled/notifications.js";
 export * from "./scheduled/points.js";
 export * from "./scheduled/visibility.js";
-export * from "./scheduled/orders.js"; // ✅ [추가]
+// export * from "./scheduled/orders.js"; // ✅ [추가]
 
 
 

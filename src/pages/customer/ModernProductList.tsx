@@ -440,31 +440,35 @@ const ModernProductList: React.FC = () => {
 }, [processedEventProducts]);
 
 
+// src/pages/customer/ModernProductList.tsx 내부의 bannerContent 수정
+
   const bannerContent = useMemo(() => {
+    // ✅ [수정] 이모지(📢, 🔥 등) 제거하고 텍스트만 남김
     switch (activeTab) {
       case 'today':
         return {
-          title: '🔥 오늘의 공구',
-          desc: '오늘 오후 1시 ~ 내일 오후 1시까지 진행되는 하루 한정 공구입니다.',
+          title: '오늘의 공구',
+          desc: '오후 1시 ~ 내일 오후 1시, 하루 한정 특가',
         };
       case 'additional':
         return {
-          title: '🔁 추가 예약',
-          desc: '1차 공구 후 남은 수량을 픽업일 오후 1시까지 추가로 예약 받습니다.',
+          title: '추가 예약',
+          desc: '1차 종료 후 잔여 수량 줍줍 찬스',
         };
       case 'onsite':
         return {
-          title: '🏢 현장 판매',
-          desc: '온라인 예약 없이 매장에서 바로 구매 가능한 상품입니다.',
+          title: '현장 판매',
+          desc: '예약 없이 매장에서 바로 구매 가능',
         };
       default:
         return {
-          title: '📢 송도PICK',
-          desc: '매일 오후 1시 오픈! 오늘 진행 중인 공구를 한눈에 확인해보세요.',
+          title: '송도PICK', // 📢 제거함
+          desc: '매일 오후 1시 오픈! 오늘의 라인업 확인하기',
         };
     }
   }, [activeTab]);
 
+  
   const getPurchasedCountForProduct = (product: Product): number => {
     const round = getDisplayRound(product);
     if (!round) return 0;

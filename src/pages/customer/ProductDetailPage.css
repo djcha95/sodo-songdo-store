@@ -6,12 +6,16 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(10, 15, 25, 0.85); /* ✅ [수정] 배경을 더 어둡고 푸르게 (미드나잇 느낌) */
+  background-color: rgba(10, 15, 25, 0.85);
   backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  
+  /* 🚨 수정 포인트: 기존 1000 -> 1100으로 변경 */
+  /* 헤더(1010)보다 높아야 가려지지 않습니다 */
+  z-index: 1100; 
+
   animation: fadeIn 0.3s ease-out;
   -webkit-animation: fadeIn 0.3s ease-out;
 }
@@ -77,12 +81,37 @@
   justify-content: center;
   align-items: center;
   background: #fff;
+
+  /* 🔹 애니메이션 추가 */
+  opacity: 0.5;
+  transform: scale(0.96);
+  transition:
+    opacity 0.3s ease-out,
+    transform 0.3s ease-out,
+    box-shadow 0.3s ease-out;
 }
 
 .product-swiper-container .swiper-slide img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* 현재 활성 슬라이드 */
+.product-swiper-container .swiper-slide-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.product-swiper-container .swiper-slide-active img {
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
+}
+
+/* 양 옆 슬라이드 살짝 축소 */
+.product-swiper-container .swiper-slide-next,
+.product-swiper-container .swiper-slide-prev {
+  opacity: 0.7;
+  transform: scale(0.94);
 }
 
 
@@ -107,19 +136,22 @@
 }
 
 .product-info-area {
-  padding: 0 1.25rem 1.5rem 1.25rem;
+  padding: 1rem 1.25rem 1.5rem 1.25rem; /* 상단 패딩 살짝 줄임 */
 }
 
 .product-header-content {
-  padding: 1.5rem 0 0.5rem 0;
+  padding: 0.5rem 0 0.5rem 0; /* 헤더 내부 패딩 축소 */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* 중앙 정렬 */
 }
 
 .product-name {
   text-align: center;
-  font-size: 1.4rem;
+  font-size: 1.35rem; /* 크기 살짝 조정 */
   font-weight: 700;
 
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem; /* 카운트다운과의 간격 */
 
   line-height: 1.35;
   color: #222;
@@ -167,9 +199,9 @@
 /* ✅ [최종 재수정] 마크다운 콘텐츠 스타일 끝 */
 
 .product-key-info {
-  margin-top: 1.5rem;
-  background-color: #f8fafc; /* 아주 연한 블루그레이 */
-  border: 1px solid #e2e8f0;
+  margin-top: 0.5rem; /* 🚨 수정: 기존 1.5rem -> 0.5rem 로 대폭 축소 */
+  background-color: rgba(255, 255, 255, 0.6); /* 배경 살짝 투명하게 (테마색 비치도록) */
+  border: 1px solid rgba(0,0,0,0.05); /* 테두리 연하게 */
   border-radius: 16px;
   padding: 1.2rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -536,6 +568,49 @@
   background-color: #ffffff;
 }
 
+/* ✅ 라이트박스 팝업 애니메이션 */
+.lightbox-overlay {
+  animation: lightbox-fade-in 0.22s ease-out;
+}
+
+.lightbox-content-wrapper {
+  animation: lightbox-pop-in 0.22s ease-out;
+}
+
+@keyframes lightbox-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes lightbox-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ✅ 라이트박스 안 슬라이드 전환 애니메이션 */
+.lightbox-swiper .swiper-slide {
+  opacity: 0.4;
+  transform: scale(0.95);
+  transition:
+    opacity 0.3s ease-out,
+    transform 0.3s ease-out;
+}
+
+.lightbox-swiper .swiper-slide-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
 .product-swiper-container {
   position: relative;
   width: 100%;
@@ -579,23 +654,25 @@
   object-fit: contain;
 }
 
+/* 썸네일 영역 패딩과 위치 조정 */
 .lightbox-thumbs-swiper {
-  height: 60px;
+  height: 80px; /* 터치 영역 확보를 위해 조금 더 키움 */
   width: 100%;
-  max-width: 90vw;
-  padding: 5px 0;
+  padding: 10px 0;
   box-sizing: border-box;
+  margin-top: 10px; /* 메인 이미지와 간격 */
 }
 
+/* 썸네일 개별 아이템 */
 .lightbox-thumbs-swiper .lightbox-thumb-slide {
-  width: 50px;
-  height: 50px;
-  opacity: 0.6;
-  transition: opacity 0.3s ease, border-color 0.3s ease;
+  width: 56px; /* 크기 고정 */
+  height: 56px;
+  opacity: 0.4; /* 선택 안된건 더 흐릿하게 */
+  transition: all 0.3s ease; /* 모든 변화 부드럽게 */
   cursor: pointer;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 2px solid transparent;
+  border-radius: 8px; /* 조금 더 둥글게 */
+  border: 2px solid transparent; /* 테두리 공간 미리 확보 (덜컹거림 방지) */
+  box-sizing: border-box;
 }
 
 .lightbox-thumbs-swiper .lightbox-thumb-slide:hover {
@@ -605,7 +682,24 @@
 .lightbox-thumbs-swiper .swiper-slide-thumb-active,
 .lightbox-thumbs-swiper .lightbox-thumb-slide.is-active {
   opacity: 1;
-  border-color: var(--color-primary, #fff);
+  border-color: #fff; /* 흰색 테두리로 깔끔하게 */
+  transform: scale(1.05); /* 선택된 것 살짝 키움 */
+}
+
+/* 메인 슬라이더 페이지네이션 (숫자 표시) 스타일링 */
+.lightbox-swiper .swiper-pagination-fraction {
+  bottom: 10px;
+  color: #fff;
+  font-family: 'Montserrat', sans-serif; /* 혹은 기본 폰트 */
+  font-weight: 300;
+  letter-spacing: 2px;
+  background: rgba(0,0,0,0.3);
+  width: fit-content;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
 }
 
 .lightbox-thumbs-swiper .lightbox-thumb-slide img {
@@ -741,13 +835,13 @@
   gap: 0.5rem;
   background-color: #fff1f2; /* 연한 핑크 */
   color: #9f1239;
-  padding: 0.6rem 1rem;
-  margin: 0.5rem auto 0;
+  padding: 0.4rem 0.8rem; /* 내부 패딩 축소 */
+  margin: 0 auto; /* 위아래 마진 제거 */
+  margin-bottom: 0.8rem; /* 아래 박스와의 간격 1rem -> 0.8rem 로 축소 */
   border-radius: 999px;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   width: fit-content;
-  margin-bottom: 1rem; 
   border: 1px solid #ffecb3; /* 기존 스타일에서 남은 border 유지 */
 }
 
@@ -768,7 +862,7 @@
     display: flex;
     align-items: center; 
     justify-content: center; 
-    z-index: 1000; 
+    z-index: 1300;
 }
   
 .prepayment-modal-content {
@@ -936,7 +1030,11 @@
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 2px; /* 둥글지 않고 각지게 */
-  margin-bottom: 12px;
+  
+  /* 🚨 수정 포인트: 중앙 정렬을 위해 width: fit-content를 추가 */
+  width: fit-content; 
+  margin: 0 auto 12px auto; 
+  
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -995,4 +1093,149 @@
 .luxury-mode .add-to-cart-btn-fixed:hover {
   background-color: #333;
   transform: translateY(-1px);
+}
+
+/* src/pages/customer/ProductDetailPage.css */
+
+/* ... (기존 z-index 수정 및 기본 스타일 유지) ... */
+
+/* =========================================
+   🎄 THEME: CHRISTMAS (크리스마스)
+   ========================================= */
+.product-detail-modal-content.theme-christmas {
+  /* 눈 내리는 듯한 배경 + 아주 연한 레드 틴트 */
+  background: linear-gradient(to bottom, #fff0f0 0%, #fff 40%, #fdfbf7 100%);
+  border: 1px solid #ffcdd2; /* 연한 붉은 테두리 */
+}
+
+/* 크리스마스 뱃지 */
+.theme-banner-badge.christmas {
+  background-color: #d32f2f;
+  color: #fff;
+}
+/* 크리스마스 테마 키 인포 박스 느낌 */
+.theme-christmas .product-key-info {
+  background-color: rgba(255, 255, 255, 0.7);
+  border-color: #ffcdd2;
+}
+
+
+/* 장식 바 */
+.theme-decoration-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0; /* 내부 패딩 */
+  
+  /* 🚨 수정: 마이너스 마진 제거 (가려짐 원인) */
+  margin-bottom: 0; 
+  
+  position: relative;
+  z-index: 1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-bottom: 1px dashed rgba(0,0,0,0.05); /* 경계선 추가로 구분감 */
+}
+
+.theme-christmas .theme-decoration-bar {
+  background-color: rgba(255, 255, 255, 0.5);
+  color: #2f855a; /* 쑥색(Green) 텍스트 */
+  border-bottom: 1px dashed #feb2b2;
+}
+
+/* 구매 버튼 (크리스마스) -> 딥 그린으로 변경하여 빨간 배경과 대비 */
+.theme-christmas .add-to-cart-btn-fixed {
+  background-color: #166534 !important; /* 크리스마스 트리 색 */
+  box-shadow: 0 4px 15px rgba(22, 101, 52, 0.3);
+  border: 1px solid #14532d;
+}
+.theme-christmas .add-to-cart-btn-fixed:hover {
+  background-color: #14532d !important;
+  transform: translateY(-2px);
+}
+
+/* 가격 및 포인트 텍스트 */
+.theme-christmas .product-name {
+  color: #111;
+  font-family: 'GmarketSansMedium', sans-serif; /* 폰트가 있다면 */
+  text-shadow: 0 2px 10px rgba(2, 0, 0, 0.05); /* 마지막 닫히지 않은 섀도우 값 수정하여 추가 */
+}
+
+/* 푸터 배경 (눈 쌓인 느낌) */
+.theme-christmas .product-purchase-footer {
+  background-color: rgba(255, 250, 250, 0.95);
+  border-top: 2px solid #ef4444; /* 상단에 빨간 포인트 라인 */
+}
+
+
+/* =========================================
+   🎁 THEME: SPECIAL (기획전/이벤트)
+   ModernProductList의 배너 스타일 참고
+   ========================================= */
+.product-detail-modal-content.theme-special {
+  /* 베리맘 배너와 비슷한 웜톤 그라데이션 */
+  background: linear-gradient(135deg, #FDFBF7 0%, #FFF 50%, #fcefe3 100%);
+  border: 1px solid #f3e8ff;
+}
+
+/* 스페셜 뱃지 */
+.theme-banner-badge.special {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.theme-special .theme-decoration-bar {
+  color: #6b21a8; /* 진한 보라 */
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: -0.5px;
+}
+
+/* 구매 버튼 (스페셜) */
+.theme-special .add-to-cart-btn-fixed {
+  background: linear-gradient(to right, #8E2DE2, #4A00E0) !important;
+  box-shadow: 0 4px 15px rgba(74, 0, 224, 0.3);
+  border: none;
+}
+.theme-special .add-to-cart-btn-fixed:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+/* 푸터 */
+.theme-special .product-purchase-footer {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-top: 1px solid #e9d5ff; /* 연보라 테두리 */
+}
+
+/* 공통: 테마 뱃지가 있을 때 제목 간격 조정 */
+.theme-banner-badge + .product-name {
+  margin-top: 4px;
+}
+/* =========================================
+   ✨ 디자인 최적화 & 간격 수정
+   ========================================= */
+
+/* 3. 테마 배지 (메리 크리스마스 등) 스타일 */
+.theme-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem; /* 글자 크기 최적화 */
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 99px;
+  
+  /* 🚨 수정 포인트: 중앙 정렬이 작동하도록 width: fit-content를 추가 */
+  width: fit-content; 
+  margin: 0 auto 8px auto; 
+  
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: popIn 0.3s ease-out;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
 }

@@ -6,23 +6,28 @@
 .songdo-card {
     background: #fff;
     border-radius: 20px;
-    margin-bottom: 24px;
-    padding: 20px;
+    margin-bottom: 16px; /* 간격 조정 */
+    padding: 24px 20px; /* 패딩을 조금 더 여유롭게 */
     display: flex;
     flex-direction: column;
     gap: 14px;
-    /* ✅ [수정] 그림자: 더 은은하고 넓게 */
-    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(0,0,0,0.03);
+    
+    /* ✅ [수정] 그림자는 줄이고, 테두리를 선명하게! */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); /* 은은하게 변경 */
+    border: 1px solid #E5E7EB; /* ✅ [핵심] 눈에 보이는 연한 회색 테두리 */
+    
     position: relative;
     color: #1F2937;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s;
 }
 
+/* 호버 시 테두리를 조금 더 진하게 */
 .songdo-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+    border-color: #D1D5DB; /* 호버 시 테두리 강조 */
 }
+
 .songdo-card.onsite { 
     background-color: #F9FAFB; 
     border: 1px solid #E5E7EB;

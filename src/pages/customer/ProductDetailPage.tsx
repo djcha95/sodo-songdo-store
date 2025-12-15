@@ -19,7 +19,11 @@ import type { ProductActionState, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
 
-import { X, Minus, Plus, ShoppingCart, Hourglass, Box, Calendar, PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, Flame, AlertTriangle, Clock } from 'lucide-react';
+import { 
+  X, Minus, Plus, ShoppingCart, Hourglass, Box, Calendar, 
+  PackageCheck, Tag, Sun, Snowflake, CheckCircle, Search, 
+  Flame, AlertTriangle, Clock, Gift, Sparkles // 💡 [추가] Gift, Sparkles 아이콘 추가
+} from 'lucide-react';
 
 // 💡 [추가/수정] 예약 수량을 가져오기 위한 import
 import { getReservedQuantitiesMap, getUserOrders } from '@/firebase/orderService'; 
@@ -34,7 +38,6 @@ import 'swiper/css/zoom';
 import 'swiper/css/thumbs';
 import 'swiper/css/free-mode';
 
-import ReactMarkdown from 'react-markdown';
 import './ProductDetailPage.css';
 import toast from 'react-hot-toast';
 import { showToast, showConfirmationToast } from '@/utils/toastUtils';
@@ -102,115 +105,82 @@ function applyReservedOverlay(product: Product, reservedMap: Map<string, number>
 // --- Sub Components ---
 
 const Lightbox: React.FC<{
-    images: string[];
-    startIndex: number;
-    isOpen: boolean;
-    onClose: () => void;
+  images: string[];
+  startIndex: number;
+  isOpen: boolean;
+  onClose: () => void;
 }> = React.memo(({ images, startIndex, isOpen, onClose }) => {
-    const [mainSwiper, setMainSwiper] = useState<SwiperCore | null>(null);
-    const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
-    const [activeIndex, setActiveIndex] = useState(startIndex);
+  // 썸네일 Swiper의 인스턴스를 저장할 state
+  const [thumbsSwiper, setThumbsSwiper] = useState<SwiperCore | null>(null);
 
-    useEffect(() => {
-        if (isOpen) {
-            setActiveIndex(startIndex);
-            if (mainSwiper && !mainSwiper.destroyed) {
-                mainSwiper.slideToLoop(startIndex, 0);
-            }
-            if (thumbsSwiper && !thumbsSwiper.destroyed) {
-                thumbsSwiper.slideToLoop(startIndex, 0);
-            }
-        }
-    }, [isOpen, startIndex, mainSwiper, thumbsSwiper]);
+  // 팝업이 열릴 때 초기화 (Swiper가 내부적으로 처리하므로 복잡한 로직 제거)
+  useEffect(() => {
+    if (!isOpen) {
+      setThumbsSwiper(null);
+    }
+  }, [isOpen]);
 
-    useEffect(() => {
-        if (mainSwiper && !mainSwiper.destroyed) {
-            const handleSlideChange = () => {
-                setActiveIndex(mainSwiper.realIndex);
-                if (thumbsSwiper && !thumbsSwiper.destroyed) {
-                    thumbsSwiper.slideToLoop(mainSwiper.realIndex);
-                }
-            };
-            mainSwiper.on('slideChange', handleSlideChange);
-            return () => {
-                mainSwiper.off('slideChange', handleSlideChange);
-            };
-        }
-    }, [mainSwiper, thumbsSwiper]);
+  if (!isOpen) return null;
 
-    useEffect(() => {
-        if (thumbsSwiper && !thumbsSwiper.destroyed && mainSwiper && !mainSwiper.destroyed) {
-            const handleThumbsSlideChange = () => {
-                if (mainSwiper.realIndex !== thumbsSwiper.realIndex) {
-                    mainSwiper.slideToLoop(thumbsSwiper.realIndex);
-                }
-            };
-            thumbsSwiper.on('slideChange', handleThumbsSlideChange);
-            return () => {
-                thumbsSwiper.off('slideChange', handleThumbsSlideChange);
-            };
-        }
-    }, [mainSwiper, thumbsSwiper]);
+  return (
+    <div className="lightbox-overlay" onClick={onClose}>
+      <button className="lightbox-close-btn" onClick={onClose} aria-label="닫기">
+        <X size={32} />
+      </button>
+      
+      <div className="lightbox-content-wrapper" onClick={(e) => e.stopPropagation()}>
+        {/* 메인 큰 슬라이더 */}
+        <Swiper
+          modules={[Pagination, Navigation, Zoom, Thumbs]} // Controller 제거, Thumbs 활용
+          thumbs={{ swiper: thumbsSwiper && !thumbsSwiper.destroyed ? thumbsSwiper : null }} // 💡 핵심 수정: 공식 연동 방식 사용
+          initialSlide={startIndex}
+          spaceBetween={20}
+          slidesPerView={1}
+          navigation
+          pagination={{ clickable: true, type: 'fraction' }} // 💡 럭셔리 포인트: 점 대신 숫자(1 / 5)로 표시하는 게 더 깔끔함
+          zoom={{ maxRatio: 3 }} // 줌 배율 설정
+          loop={true} // 루프 활성화
+          speed={600} // 🔹 전환 속도를 450 -> 600으로 늘려 더 부드럽게
+          grabCursor={true}
+          className="lightbox-swiper"
+        >
+          {images.map((url, index) => (
+            <SwiperSlide key={index}>
+              <div className="swiper-zoom-container">
+                <OptimizedImage
+                  originalUrl={url}
+                  size="1080x1080"
+                  alt={`상세 이미지 ${index + 1}`}
+                />
+              </div>
+            </SwiperSlide>
+          ))}
+        </Swiper>
 
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="lightbox-overlay" onClick={onClose}>
-            <button className="lightbox-close-btn" onClick={onClose} aria-label="닫기">
-                <X size={32} />
-            </button>
-            <div className="lightbox-content-wrapper" onClick={(e) => e.stopPropagation()}>
-                <Swiper
-                    onSwiper={setMainSwiper}
-                    modules={[Pagination, Navigation, Zoom, Thumbs]}
-                    initialSlide={startIndex}
-                    spaceBetween={20}
-                    slidesPerView={1}
-                    navigation
-                    pagination={{ clickable: true }}
-                    zoom
-                    loop={true}
-                    className="lightbox-swiper"
-                >
-                    {images.map((url, index) => (
-                        <SwiperSlide key={index}>
-                            <div className="swiper-zoom-container">
-                                <OptimizedImage originalUrl={url} size="1080x1080" alt={`이미지 ${index + 1}`} />
-                            </div>
-                        </SwiperSlide>
-                    ))}
-                </Swiper>
-
-                <Swiper
-                    onSwiper={setThumbsSwiper}
-                    modules={[Thumbs, FreeMode]}
-                    slidesPerView="auto"
-                    spaceBetween={5}
-                    centeredSlides={true}
-                    watchSlidesProgress={true}
-                    loop={true}
-                    initialSlide={startIndex}
-                    className="lightbox-thumbs-swiper"
-                    freeMode={true}
-                >
-                    {images.map((url, index) => (
-                        <SwiperSlide
-                            key={index}
-                            className={`lightbox-thumb-slide ${activeIndex === index ? 'is-active' : ''}`}
-                            onClick={() => {
-                                if (mainSwiper && !mainSwiper.destroyed) {
-                                    mainSwiper.slideToLoop(index);
-                                }
-                            }}
-                        >
-                            <OptimizedImage originalUrl={url} size="200x200" alt={`썸네일 ${index + 1}`} />
-                        </SwiperSlide>
-                    ))}
-                </Swiper>
-            </div>
-        </div>
-    );
+        {/* 하단 썸네일 */}
+        <Swiper
+          onSwiper={setThumbsSwiper} // 여기서 인스턴스를 받아 메인에 넘겨줌
+          modules={[Thumbs, FreeMode]}
+          watchSlidesProgress={true} // 필수 설정
+          spaceBetween={10}
+          slidesPerView="auto" // 내용물 크기에 맞게
+          freeMode={true} // 썸네일은 자유롭게 스크롤
+          centerInsufficientSlides={true} // 슬라이드가 적을 때 중앙 정렬
+          className="lightbox-thumbs-swiper"
+        >
+          {images.map((url, index) => (
+            <SwiperSlide key={index} className="lightbox-thumb-slide">
+              <OptimizedImage
+                originalUrl={url}
+                size="200x200"
+                alt={`썸네일 ${index + 1}`}
+              />
+            </SwiperSlide>
+          ))}
+        </Swiper>
+      </div>
+    </div>
+  );
 });
 
 
@@ -219,16 +189,27 @@ const ProductImageSlider: React.FC<{ images: string[]; productName: string; onIm
 type ExpirationDateInfo = { type: 'none' } | { type: 'single'; date: string; } | { type: 'multiple'; details: { groupName: string; date: string; }[] };
 type SalesPhase = 'PRIMARY' | 'SECONDARY' | 'ON_SITE' | 'UNKNOWN';
 
-const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: ProductActionState | 'ON_SITE_SALE'; expirationDateInfo: ExpirationDateInfo; salesPhase: SalesPhase; countdown: string | null; }> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown }) => {
+const ProductInfo: React.FC<{ 
+    product: Product; 
+    round: SalesRound, 
+    actionState: ProductActionState | 'ON_SITE_SALE'; 
+    expirationDateInfo: ExpirationDateInfo; 
+    salesPhase: SalesPhase; 
+    countdown: string | null;
+    themeBadge: React.ReactNode;
+}> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown, themeBadge }) => {
+
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate: Date | null = safeToDate(round.arrivalDate);
     const isMultiGroup = round.variantGroups.length > 1;
-    // 1. 럭셔리 모드인지 확인
-    const isLuxury = round?.eventType === 'PREMIUM'; // 💡 [추가] 럭셔리 모드 확인
+    const isLuxury = round?.eventType === 'PREMIUM';
 
     return (
         <>
             <div className="product-header-content">
+                {/* 🎄 여기서 먼저 크리스마스/스페셜 뱃지 출력 */}
+                {themeBadge}
+
                 {/* 3. 상단 헤더 부분 수정 - 럭셔리 모드일 때 뱃지 노출 */}
                 {isLuxury && <div className="luxury-badge">Premium Collection</div>}
                 
@@ -239,10 +220,8 @@ const ProductInfo: React.FC<{ product: Product; round: SalesRound, actionState: 
                         <span>예약 마감까지 <strong>{countdown}</strong></span>
                     </div>
                 )}
-                <div className="markdown-content">
-                    <ReactMarkdown>{product.description || ''}</ReactMarkdown>
-                </div>
             </div>
+
 
             <div className="product-key-info" data-tutorial-id="detail-key-info">
                 <>
@@ -664,6 +643,26 @@ const ProductDetailPage: React.FC = () => {
 
     // 1. 럭셔리 모드인지 확인
     const isLuxury = displayRound?.eventType === 'PREMIUM'; // 💡 [추가] 럭셔리 모드 확인 로직
+    // 💡 [추가] 테마 결정 로직 (eventType에 따라 스타일 클래스 지정)
+    const themeClass = useMemo(() => {
+        if (!displayRound) return '';
+        const type = displayRound.eventType;
+        if (type === 'CHRISTMAS') return 'theme-christmas'; // 크리스마스
+        if (type === 'SPECIAL') return 'theme-special';     // 기획전/스페셜
+        if (type === 'PREMIUM') return 'luxury-mode';       // 기존 럭셔리(유지)
+        return '';
+    }, [displayRound]);
+
+    // 💡 [추가] 테마별 뱃지/아이콘 설정
+    const themeBadge = useMemo(() => {
+        if (themeClass === 'theme-christmas') {
+            return <div className="theme-banner-badge christmas"><Snowflake size={14} /> MERRY CHRISTMAS</div>;
+        }
+        if (themeClass === 'theme-special') {
+            return <div className="theme-banner-badge special"><Gift size={14} /> SPECIAL EVENT</div>;
+        }
+        return null;
+    }, [themeClass]);
 
     // ✅ [추가] 예약 성공 후 버튼 상태를 되돌리기 위한 useEffect
     useEffect(() => {
@@ -1021,7 +1020,7 @@ const ProductDetailPage: React.FC = () => {
     const ogUrl = `https://www.sodo-songdo.store/product/${product.id}`;
 
     // 2. 최상위 div 클래스에 조건부 적용
-    const modalContentClassName = `product-detail-modal-content ${isLuxury ? 'luxury-mode' : ''}`;
+    const modalContentClassName = `product-detail-modal-content ${themeClass}`;
 
 
     return (
@@ -1033,16 +1032,26 @@ const ProductDetailPage: React.FC = () => {
                     <div className="modal-scroll-area">
                         <div ref={contentAreaRef} className="main-content-area">
                             <div className="image-gallery-wrapper" data-tutorial-id="detail-image-gallery"><ProductImageSlider images={originalImageUrls} productName={product.groupName} onImageClick={handleOpenLightbox} /></div>
-                            <div className="product-info-area">
-                                <ProductInfo
-                                    product={product}
-                                    round={displayRound}
-                                    actionState={actionState}
-                                    expirationDateInfo={expirationDateInfo}
-                                    salesPhase={salesPhase}
-                                    countdown={countdown}
-                                />
-                            </div>
+                            {themeClass !== '' && themeClass !== 'luxury-mode' && (
+                                <div className="theme-decoration-bar">
+                                    {themeClass === 'theme-christmas' && <span className="deco-icon"><Sparkles size={16}/></span>}
+                                    <span className="deco-text">
+                                        {themeClass === 'theme-christmas' ? '송도픽 홀리데이 에디션' : '한정수량 특별 기획전'}
+                                    </span>
+                                </div>
+                            )}
+
+<div className="product-info-area">
+  <ProductInfo
+    product={product}
+    round={displayRound}
+    actionState={actionState}
+    expirationDateInfo={expirationDateInfo}
+    salesPhase={salesPhase}
+    countdown={countdown}
+    themeBadge={themeBadge}
+  />
+</div>
                         </div>
                     </div>
                     {/* 👇 [통합] PurchasePanel (모든 상태를 포함) */}

@@ -12,7 +12,7 @@
 .customer-page-container.modern-list-page {
     font-family: "Pretendard", -apple-system, sans-serif;
     color: #1F2937;
-    background-color: #FFFFFF; /* 배경 화이트 */
+    background-color: #F9FAFB; /* ✅ [수정] 완전 화이트 -> 연한 그레이 */
     min-height: 100vh;
 }
 
@@ -46,6 +46,7 @@
         grid-template-columns: repeat(2, minmax(0, 1fr)); 
         gap: 20px; 
         width: 100%;
+        padding-top: 24px;
     }
     .beauty-list-grid {
         display: grid; 
@@ -247,26 +248,36 @@
 .section-sub { font-size: 12px; color: #666; margin: 0; }
 .view-all-btn { background: none; border: none; font-size: 12px; color: #666; display: flex; align-items: center; gap: 2px; padding: 4px; cursor: pointer; }
 
-/* ✅ [수정] 공지 배너 가독성 확보 유지 */
+/* 2️⃣ 공지사항 배너: 글씨 더 진하게, 배경과 대비 */
 .songdo-notice-banner { 
-    background: #F9FAFB; /* 아주 연한 웜그레이 */
-    padding: 16px 20px; /* 패딩 증가 */
-    border-bottom: 1px solid #F3F4F6; /* 테두리색 변경 */
-    border-top: 1px solid #F3F4F6; /* 테두리색 변경 */
+    background: #FFFFFF; /* ✅ [수정] 배경을 화이트로 */
+    padding: 18px 20px; 
+    border-bottom: 1px solid #E5E7EB; /* 테두리 명확하게 */
+    /* border-top 제거 (헤더 바로 아래라 불필요할 수 있음) */
+    margin-bottom: 8px; /* 리스트와 간격 벌리기 */
 }
+
 .notice-text { 
-    font-size: 13px; 
-    color: #374151; /* 진한 회색 텍스트 */
+    font-size: 14px; /* ✅ [수정] 글씨 조금 키움 */
+    color: #111111; /* ✅ [수정] 진한 회색 -> 완전 블랙 (가독성 UP) */
     display: block; 
     line-height: 1.5; 
     font-weight: 500; 
 }
-.notice-highlight { 
-    font-weight: 800; /* 굵기 강조 */
-    color: #8E1E20; /* 포인트는 버건디 */
-    margin-right: 6px; /* 마진 증가 */
-}
 
+.notice-highlight { 
+    font-weight: 800; 
+    color: #111; /* ✅ [수정] 버건디 대신 블랙으로 통일 (모던함 강조) */
+    margin-right: 8px;
+    position: relative;
+    padding-right: 8px;
+}
+/* 구분선 추가 (송도PICK | 내용) */
+.notice-highlight::after {
+    content: '';
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    width: 1px; height: 10px; background: #E5E7EB;
+}
 
 /* ========================================= */
 /* 🧩 모달 (Luxury Bottom Sheet) - 페이지 전역 */
