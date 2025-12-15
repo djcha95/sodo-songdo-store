@@ -25,7 +25,7 @@ const BeautyComingSoon: React.FC = () => (
       프리미엄 베이비 케어 '베리맘'을 준비 중입니다.
     </p>
     <p className="detail-text">
-      12/15(월) 오후 1시 오픈 예정
+      추후 오픈 예정
     </p>
   </div>
 );
