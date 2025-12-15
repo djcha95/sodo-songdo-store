@@ -301,7 +301,21 @@ const ModernProductList: React.FC = () => {
         const round = getDisplayRound(product);
         return { ...product, displayRound: round as any };
       })
-      .filter((p) => p.displayRound);
+      .filter((p) => {
+        // 1. 라운드 정보가 없으면 제외
+        if (!p.displayRound) return false;
+
+        // 2. [추가됨] 재고 확인: 재고 제한이 있고(isLimited), 남은 수량이 0 이하면 목록에서 제외
+        const vg = p.displayRound.variantGroups?.[0];
+        if (vg) {
+          const stockInfo = getStockInfo(vg);
+          if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
+            return false; 
+          }
+        }
+        
+        return true;
+      });
   }, [heroProducts]);
 
   const processedBeautyProducts = useMemo(() => {
