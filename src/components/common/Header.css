@@ -1,206 +1,178 @@
 /* src/components/common/Header.css */
 
+/* 헤더(바깥은 투명, “페이지 한 장”은 header-shell) */
 .new-customer-header {
-  background-color: rgba(255, 255, 255, 0.98); /* ✅ [수정] 배경 불투명도 증가 */
-  backdrop-filter: blur(10px); /* ✅ [수정] 블러 증가 */
-  /* ✅ [수정] 빨간 테두리 제거 -> 은은한 회색 테두리 */
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
   position: sticky;
   top: 0;
   width: 100%;
-  z-index: 1010;
-  height: 60px;
-  transition: top 0.3s ease-in-out;
-  box-shadow: none; /* ✅ [수정] 그림자 제거 (깔끔하게) */
+  z-index: 1000;
+  border-bottom: none;
 }
 
-.new-customer-header.visible { top: 0; }
-.new-customer-header.hidden { top: -65px; }
-
-.header-content {
-  max-width: var(--max-width, 1200px);
-  height: 100%;
+/* ✅ 메인 컨테이너와 동일한 폭의 “한 장” */
+.header-shell {
+  max-width: 900px;
   margin: 0 auto;
-  padding: 0 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+/* 1열 */
+.header-top-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.header-content.modern-layout {
-  max-width: 900px; 
+  height: 56px;
+  padding: 0 16px;
 }
 
 .header-left, .header-right {
   display: flex;
   align-items: center;
-  height: 100%;
+  gap: 10px;
 }
 
-/* --- 페이지 탭 --- */
-.header-page-tabs {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  height: 100%;
-}
-.page-tab {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  height: 100%;
-  padding: 0 0.25rem;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #9CA3AF; /* ✅ [수정] 비활성: 연한 회색 */
-  position: relative;
-  transition: color 0.2s ease-in-out;
-  white-space: nowrap;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.page-tab::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background-color: transparent;
-  transform: scaleX(0);
-  transition: transform 0.3s ease, background-color 0.3s ease;
-}
-.page-tab.active { color: #111; } /* ✅ [수정] 활성: 블랙 */
-.page-tab.active::after { transform: scaleX(1); }
-
-/* ✅ [수정] 탭 활성화 색상: 무채색 계열로 변경 */
-.page-tab.primary.active { color: #111; }
-.page-tab.primary.active::after { background-color: #111; }
-
-.page-tab.secondary.active { color: #4B5563; }
-.page-tab.secondary.active::after { background-color: #4B5563; }
-
-/* 브랜드 로고 */
-.header-brand .brand-link {
-  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 1.35rem; /* ✅ [수정] 크기 조정 */
+.brand-logo {
+  font-family: "Playfair Display", "Pretendard", serif;
+  font-size: 21px;
   font-weight: 800;
-  color: #111; /* ✅ [수정] 로고: 블랙 */
+  color: #111;
   text-decoration: none;
-  letter-spacing: -0.5px; /* ✅ [수정] 간격 조정 */
-  line-height: 1;
+  letter-spacing: -0.5px;
 }
 
-/* --- 오른쪽 네비게이션 --- */
-.header-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.header-nav .nav-item {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #555;
-  text-decoration: none;
-  padding: 8px 10px;
-  border-radius: 8px;
-  transition: background-color 0.2s, color 0.2s;
-  white-space: nowrap;
-}
-.header-nav .nav-item:hover {
-  background-color: #f3f4f6;
-}
-.header-nav .nav-item.active {
-  background-color: #111827;
-  color: #ffffff;
-}
-
-/* 모던 버튼 공통 */
-.header-nav .nav-item.modern-text-btn {
-  font-size: 0.9rem;
-  font-weight: 700;
-  padding: 9px 16px; 
-  border-radius: 10px;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.06); 
-  margin-right: 4px; 
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.header-nav .nav-item.modern-text-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.08);
-}
-.header-nav .nav-item.modern-text-btn:active {
-  transform: translateY(1px);
-}
-
-/* ✅ [수정] 예약내역 버튼 (블랙) */
-.header-nav .nav-item.modern-text-btn.history-mode {
-  background-color: #111 !important;
-  color: #ffffff !important; 
-  border: 1px solid #111; 
-}
-.header-nav .nav-item.modern-text-btn.history-mode:hover {
-  background-color: #000 !important; /* 약간 더 진하게 */
-}
-
-/* ✅ [수정] 홈/쇼핑하기 버튼 (버건디 포인트) */
-.header-nav .nav-item.modern-text-btn.shop-mode {
-  background-color: #8E1E20 !important;
-  color: #ffffff !important;
-  border: 1px solid #8E1E20;
-  animation: none; /* ✅ [수정] 펄스 애니메이션 제거 (차분하게) */
-  box-shadow: 0 4px 10px rgba(142, 30, 32, 0.2); /* ✅ [수정] 그림자 유지 */
-}
-
-.header-nav .nav-item.modern-text-btn.shop-mode:hover {
-  background-color: #6D1416 !important; /* ✅ [수정] 더 진한 버건디 */
-}
-
-/* 펄스 애니메이션 제거 (사용하지 않음) */
-@keyframes pulse-soft {
-  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); } 
-  70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-}
-
-/* 관리자 버튼 */
-.header-nav .nav-item.admin-link {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background-color: #fffbeB;
-  color: #b45309;
-  border: 1px solid #fde68a;
-}
-.header-nav .nav-item.admin-link:hover { background-color: #fef3c7; }
-.header-nav .nav-item.admin-link.active { background-color: #f59e0b; color: #ffffff; border-color: #f59e0b; }
-
-/* 👉 헤더 왼쪽 로고 + 햄버거 정렬용 */
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* 🍔 햄버거 버튼 스타일 */
-.hamburger-btn {
+.icon-btn {
   background: none;
   border: none;
   padding: 4px;
-  margin-right: 2px;
+  cursor: pointer;
+  color: #111;
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #111; /* ✅ [수정] 블랙 */
 }
 
-.hamburger-btn:active {
-  transform: translateY(1px);
+/* 우측 버튼 */
+.header-action-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: -0.3px;
+}
+
+.btn-history {
+  background-color: #111;
+  color: #fff;
+  border: 1px solid #111;
+}
+.btn-history:hover { background-color: #333; }
+
+.btn-home {
+  background-color: #fff;
+  color: #4B5563;
+  border: 1px solid #E5E7EB;
+}
+.btn-home:hover {
+  background-color: #F9FAFB;
+  color: #111;
+  border-color: #D1D5DB;
+}
+
+/* 2열 탭바 */
+.header-category-nav {
+  border-top: none;
+  background: transparent;
+}
+
+/* 2열도 1열과 같은 기준선 */
+.header-inner {
+  padding: 0 16px;
+}
+
+/* ✅ 모바일 스크롤 컨테이너 */
+.category-track {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.category-track::-webkit-scrollbar { display: none; }
+
+.category-list {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 18px;
+  height: 46px;
+  align-items: center;
+
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  /* ✅ 내용이 길면 실제로 “가로로 늘어나서” 스크롤되게 */
+  width: max-content;
+  min-width: 100%;
+}
+
+.category-list > li { flex: 0 0 auto; }
+
+/* ✅ 데스크탑에서도 “일반 정렬(좌측 정렬)” 유지 */
+@media (min-width: 900px) {
+  .category-list {
+    justify-content: flex-start;
+  }
+}
+
+/* 탭: 텍스트형 */
+.category-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+
+  padding: 0 2px;
+  color: #9CA3AF;
+  font-weight: 600;
+  font-size: 15px;
+
+  white-space: nowrap;
+  word-break: keep-all;
+
+  text-decoration: none !important;
+  outline: none !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* hover 최소화 */
+@media (hover: hover) {
+  .category-item:hover {
+    color: #6B7280;
+  }
+}
+
+/* 활성 탭 */
+.category-item.active {
+  color: #111;
+  font-weight: 800;
+}
+
+/* ✅ 이동하는 인디케이터 */
+.tab-indicator {
+  position: absolute;
+  left: 0;
+  bottom: 6px;
+  height: 2px;
+  background: #111;
+  border-radius: 999px;
+
+  transition: transform 0.22s ease, width 0.22s ease;
+  pointer-events: none;
 }

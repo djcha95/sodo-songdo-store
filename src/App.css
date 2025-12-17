@@ -8,7 +8,6 @@ a:hover { text-decoration: underline; }
   max-width: 1280px;
   margin: 0 auto;
   /* ✅ [수정] BottomNav가 사라졌으므로 하단 패딩 제거 */
-  padding: 5px 12px 20px;
   box-sizing: border-box;
 }
 

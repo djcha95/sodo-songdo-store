@@ -176,11 +176,84 @@
 @keyframes shimmer { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
 
 .event-hero-inner { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; position: relative; z-index: 1; }
-.event-hero-content { flex: 1; min-width: 0; padding-right: 4px; }
+/* ... 기존 스타일 유지 ... */
 
-.event-hero-chip { display: inline-block; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 12px; background: #fff; color: #111; margin-bottom: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-.event-hero-title { margin: 0 0 6px; font-size: 19px; font-weight: 900; letter-spacing: -0.5px; line-height: 1.2; color: #111; }
-.event-hero-desc { margin: 0 0 12px; font-size: 13px; line-height: 1.4; opacity: 0.85; color: #4B5563; font-weight: 500; }
+/* ✅ [요청 4] 배너 내용물 스타일 (모바일 비율 축소) */
+.event-hero-content {
+  flex: 1;
+  min-width: 0;
+  padding-right: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 텍스트들이 줄바꿈되지 않고 폰트 크기 자체가 줄어들게 설정 (vw 단위 사용) */
+.event-hero-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: #fff;
+  color: #111;
+  margin-bottom: 6px;
+  white-space: nowrap; /* 줄바꿈 금지 */
+  width: fit-content;
+}
+
+.event-hero-title {
+  margin: 0 0 4px;
+  font-weight: 900;
+  color: #111;
+  line-height: 1.2;
+  white-space: nowrap; /* 줄바꿈 금지 */
+  
+  /* PC 기본 크기 */
+  font-size: 19px; 
+}
+
+.event-hero-desc {
+  margin: 0 0 10px;
+  line-height: 1.4;
+  opacity: 0.85;
+  color: #4B5563;
+  font-weight: 500;
+  
+  /* 설명은 너무 길면 말줄임표 처리 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  
+  font-size: 13px;
+}
+
+/* 모바일 전용: 화면 폭에 맞춰서 글자 크기 강제 축소 (비율 유지 효과) */
+@media (max-width: 480px) {
+  .event-hero-slide {
+    padding: 16px 20px; /* 패딩도 살짝 줄임 */
+  }
+  .event-hero-image-wrap {
+    width: 70px; /* 이미지 크기 축소 */
+    height: 70px;
+  }
+  
+  /* 화면 폭의 약 4.5% 크기로 제목 설정 -> 화면이 줄면 글자도 작아짐 */
+  .event-hero-title {
+    font-size: 4.5vw; 
+  }
+  .event-hero-desc {
+    font-size: 3.2vw;
+  }
+  .event-hero-chip {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+  .event-hero-cta {
+    font-size: 11px;
+    padding: 6px 12px;
+  }
+}
 .event-hero-cta { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 99px; font-size: 12px; font-weight: 800; background: #111; color: #fff; transition: transform 0.2s; }
 .event-hero-cta:active { transform: scale(0.95); }
 
@@ -330,3 +403,148 @@
 
 @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.sp-section {
+  padding: 14px 16px 6px;
+}
+
+.sp-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.sp-section-title {
+  font-size: 16px;
+  font-weight: 900;
+  color: #111;
+  letter-spacing: -0.3px;
+}
+
+.sp-viewall {
+  border: none;
+  background: transparent;
+  color: #6B7280;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sp-hscroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sp-hscroll::-webkit-scrollbar {
+  height: 6px;
+}
+.sp-hscroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+  border-radius: 999px;
+}
+
+.sp-grid {
+  padding: 14px 16px 30px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 1024px) {
+  .sp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 섹션 헤더: 제목 + 설명(우측/옆) */
+.sp-section-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.sp-section-desc {
+  font-size: 12px;
+  color: #6B7280;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+/* ... 기존 스타일 유지 ... */
+
+/* ✅ 탭 배너 스타일 (이미지 지원) */
+.tab-banner {
+  padding: 30px 20px;
+  margin: 0 16px 16px; /* 좌우 여백 추가 */
+  border-radius: 16px;
+  text-align: left; /* 텍스트 좌측 정렬로 변경 */
+  position: relative;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  transition: all 0.3s ease;
+}
+
+/* 이미지가 없을 땐 기본 스타일 */
+.tab-banner:not(.has-image) {
+  text-align: center;
+  padding: 24px 20px;
+  margin: 0 0 8px; /* 이미지가 없으면 꽉 찬 너비 느낌 */
+  border-radius: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.03);
+}
+
+.tab-banner.has-image {
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* 이미지 오버레이 */
+.tab-banner-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(to right, rgba(0,0,0,0.6), rgba(0,0,0,0.2));
+  z-index: 1;
+}
+
+.tab-banner-content {
+  position: relative;
+  z-index: 2;
+}
+
+.tab-banner-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: inherit; /* 부모 컬러 상속 (이미지 있으면 흰색, 없으면 검정) */
+  letter-spacing: -0.5px;
+}
+
+.tab-banner-desc {
+  margin: 0;
+  font-size: 13px;
+  color: inherit;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+/* ✅ 그리드 레이아웃 조정 (카드 키우기) */
+.sp-grid {
+  padding: 10px 12px 40px; /* 좌우 패딩 줄임 -> 카드 공간 확보 */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px; /* 간격 줄임 */
+}
+
+/* PC 화면에서는 3열, 패딩 좀 더 여유 */
+@media (min-width: 1024px) {
+  .sp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 20px 20px 40px;
+    gap: 16px;
+  }
+}

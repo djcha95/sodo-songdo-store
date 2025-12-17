@@ -46,7 +46,7 @@ import isBetween from 'dayjs/plugin/isBetween';
 dayjs.extend(isBetween);
 
 import type { SalesRound } from '@/shared/types';
-
+import ConfirmModal from '@/components/common/ConfirmModal';
 
 // --- Helper Functions ---
 const toTimestamp = (date: any): Timestamp | null => {
@@ -613,7 +613,8 @@ const ProductDetailPage: React.FC = () => {
 
     // ✅ [추가] 예약 상태를 관리하기 위한 새 state
     const [reservationStatus, setReservationStatus] = useState<'idle' | 'processing' | 'success'>('idle');
-    
+    // ✅ [추가] 확인 모달 상태 관리
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
     // 👇 [추가] 내가 이미 구매한 수량을 저장할 변수
     const [myPurchasedCount, setMyPurchasedCount] = useState(0);
 
@@ -898,11 +899,13 @@ const ProductDetailPage: React.FC = () => {
     const handleCloseLightbox = useCallback(() => { setIsLightboxOpen(false); }, []);
 
     // ✅ [수정] handleImmediateOrder 함수 로직 전체 변경 (보안관 역할 추가)
-    const handleImmediateOrder = async () => {
+// 1️⃣ [추가] 유효성 검사 및 모달 열기 (버튼 클릭 시 실행)
+    const handlePreCheck = () => {
+        // 기본 유효성 검사
         if (!userDocument || !user) { showToast('error', '로그인이 필요합니다.'); navigate('/login'); return; }
         if (reservationStatus !== 'idle' || !product || !displayRound || !selectedVariantGroup || !selectedItem) return;
 
-        // 👇 [추가] 보안관 등장! (버튼 누르는 순간 마지막 체크)
+        // 구매 한도(보안관) 체크
         const limitSetting = selectedItem.limitQuantity ?? Infinity;
         const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
 
@@ -911,12 +914,24 @@ const ProductDetailPage: React.FC = () => {
              return;
         }
 
-        setReservationStatus('processing'); // '처리 중...'으로 변경
+        // ✅ 모든 검사 통과 시 모달 열기
+        setConfirmOpen(true);
+    };
+
+    // 2️⃣ [수정] 실제 주문 실행 (모달에서 '네' 눌렀을 때 실행)
+    // 기존 handleImmediateOrder의 이름을 executeOrder로 변경하고 로직을 다듬습니다.
+    const executeOrder = async () => {
+        // 여기서는 user 체크 등을 생략해도 됩니다 (handlePreCheck에서 했으므로)
+        // 하지만 안전을 위해 기본적인 변수 존재 여부만 확인
+        if (!product || !displayRound || !selectedVariantGroup || !selectedItem || !user) return;
+
+        setReservationStatus('processing'); // 로딩 시작
 
         try {
             const prepaymentRequired = displayRound.isPrepaymentRequired;
             const totalPrice = selectedItem.price * quantity;
 
+            // ... 기존 주문 데이터 생성 로직 그대로 유지 ...
             const orderItem: OrderItem = {
                 id: `order-item-${selectedItem.id}-${Date.now()}`,
                 productId: product.id, productName: product.groupName, imageUrl: product.imageUrls?.[0] || '',
@@ -938,78 +953,54 @@ const ProductDetailPage: React.FC = () => {
             };
 
             const result = await submitOrderCallable(orderPayload);
-            
-            // ✅ [수정] 백엔드 응답을 확인하여 분기 처리
-            const data = result.data as { orderIds?: string[], updatedOrderIds?: string[], message?: string };
+            const data = result.data as any;
 
-            if (data.updatedOrderIds && data.updatedOrderIds.length > 0) {
-                // --- (A) 수량 추가 성공 ---
-                showToast('success', '기존 예약에 수량이 추가되었습니다.');
-                setReservationStatus('success'); 
-                fetchProduct(); // 재고 변경 반영
-                // myPurchasedCount를 즉시 업데이트
-                setMyPurchasedCount(prev => prev + quantity); 
+            if (data.updatedOrderIds || data.orderIds) {
+                // ✅ 성공 시 처리
+                setConfirmOpen(false); // 모달 닫기
+                
+                if (data.updatedOrderIds?.length > 0) {
+                     showToast('success', '기존 예약에 수량이 추가되었습니다.');
+                } else {
+                     showToast('success', '예약이 완료되었습니다!');
+                }
 
-            } else if (data.orderIds && data.orderIds.length > 0) {
-                // --- (B) 신규 예약 성공 ---
-                showToast('success', '예약이 완료되었습니다!'); 
-                setReservationStatus('success'); 
-                if (prepaymentRequired) {
+                setReservationStatus('success');
+                
+                // 선결제 필요 시 모달 띄우기 (기존 로직 유지)
+                if (prepaymentRequired && (!data.updatedOrderIds || data.updatedOrderIds.length === 0)) {
                     setPrepaymentPrice(totalPrice);
                     setPrepaymentModalOpen(true);
                 }
-                fetchProduct(); // 재고 변경 반영
-                // myPurchasedCount를 즉시 업데이트
-                setMyPurchasedCount(prev => prev + quantity); 
+                
+                fetchProduct(); 
+                setMyPurchasedCount(prev => prev + quantity);
 
             } else {
-                // --- (C) 실패 (재고 부족 등) ---
-                throw new Error(data.message || '예약 생성에 실패했습니다. (재고 부족 또는 유효성 검사 실패)');
+                throw new Error(data.message || '예약 생성 실패');
             }
 
         } catch (error: any) {
             showToast('error', error.message || '예약 처리 중 오류가 발생했습니다.');
-            setReservationStatus('idle'); // 에러 발생 시 idle로 복귀
-            setQuantity(1);
-            fetchProduct(); // 실패 시에도 최신 재고 반영을 위해 새로고침
+            setReservationStatus('idle'); 
+            setConfirmOpen(false); // 에러 발생 시 모달 닫기
+            fetchProduct();
         }
     };
 
     // ✅ [수정] handlePurchaseAction에서 'WAITLIST' 관련 로직 제거
+// ✅ [수정] 복잡한 분기 없이 handlePreCheck 호출로 통일
     const handlePurchaseAction = useCallback((status: 'RESERVATION') => {
         if (!product || !displayRound || !selectedVariantGroup || !selectedItem) {
             showToast('error', '옵션을 선택해주세요.');
             return;
         }
+        
+        // 2차 예약(페널티 경고) 로직도 모달 내 문구로 대체 가능하므로
+        // 여기서는 깔끔하게 검사 함수만 호출합니다.
+        handlePreCheck();
 
-        // status가 'RESERVATION'일 때의 로직만 남김
-        const { primaryEnd } = getDeadlines(displayRound);
-        const isSecondarySale = primaryEnd ? dayjs().isAfter(primaryEnd) : false;
-
-        if (isSecondarySale) {
-            toast.custom((t) => showConfirmationToast({
-                t,
-                title: '2차 예약 확정',
-                message: (
-                    <>
-                        <p>{`${product.groupName} (${selectedItem.name}) ${quantity}개를 예약하시겠습니까?`}</p>
-                        <div className="toast-warning-box">
-                            <AlertTriangle size={16} />
-                            2차 예약 기간에는 확정 후 취소 시 페널티가 부과될 수 있습니다.
-                        </div>
-                    </>
-                ),
-                onConfirm: handleImmediateOrder
-            }), { duration: Infinity });
-        } else {
-            // 1차 예약은 컨펌 없이 즉시 진행 (요청 사항에 따라)
-            handleImmediateOrder();
-        }
-    }, [
-        product, displayRound, selectedVariantGroup,
-        selectedItem, quantity, handleImmediateOrder, 
-    ]);
-
+    }, [product, displayRound, selectedVariantGroup, selectedItem, quantity]); // 의존성 배열 정리
     
     if (loading || !displayRound) return ( <> <Helmet><title>상품 정보 로딩 중... | 소도몰</title></Helmet><ProductDetailSkeleton /> </>);
     if (error || !product ) return ( <> <Helmet><title>오류 | 소도몰</title><meta property="og:title" content="상품을 찾을 수 없습니다" /></Helmet><div className="product-detail-modal-overlay" onClick={handleClose}><div className="product-detail-modal-content"><div className="error-message-modal"><X className="error-icon"/><p>{error || '상품 정보를 표시할 수 없습니다.'}</p><button onClick={() => navigate('/')} className="error-close-btn">홈으로</button></div></div></div></> );
@@ -1121,7 +1112,19 @@ const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
             <Lightbox isOpen={isLightboxOpen} onClose={handleCloseLightbox} images={originalImageUrls} startIndex={lightboxStartIndex} />
-
+{/* ✅ [추가] 확인 모달 삽입 */}
+            {selectedItem && (
+                <ConfirmModal 
+                    isOpen={isConfirmOpen}
+                    onClose={() => setConfirmOpen(false)}
+                    onConfirm={executeOrder} // '네' 버튼 누르면 실제 주문 실행
+                    productName={product?.groupName || ''}
+                    price={selectedItem.price}
+                    quantity={quantity}
+                    loading={reservationStatus === 'processing'}
+                />
+            )}
+            
             <PrepaymentModal
                 isOpen={isPrepaymentModalOpen}
                 totalPrice={prepaymentPrice}

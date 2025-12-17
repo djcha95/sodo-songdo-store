@@ -1,141 +1,139 @@
-// src/components/common/Header.tsx
-
-import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
-import { useTabs } from '@/layouts/CustomerLayout';
-import { Flame, Clock, ShieldCheck, Menu } from 'lucide-react'; 
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { NavLink, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import SideMenu from './SideMenu';
 import './Header.css';
 
+const CATEGORIES = [
+  { id: 'home', label: '스토어홈' },
+  { id: 'today', label: '🔥 오늘공구' },
+  { id: 'tomorrow', label: '🚀 내일픽업' },
+  { id: 'special', label: '✨ 기획전' },
+  { id: 'additional', label: '🔁 추가공구' },
+  { id: 'onsite', label: '🏢 현장판매' },
+];
+
 const Header: React.FC = () => {
-  const { isAdmin } = useAuth();
-  const [isVisible, setIsVisible] = useState(true);
   const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
 
-  const lastScrollY = useRef(0);
   const location = useLocation();
   const navigate = useNavigate();
-  const tabContext = useTabs();
+  const [searchParams] = useSearchParams();
 
-  // ✅ 경로 확인 로직
-  const isModernPage = 
-    location.pathname === '/' || 
-    location.pathname.startsWith('/modern') || 
-    location.pathname.startsWith('/product'); 
-
+  const currentTab = searchParams.get('tab') || 'home';
+  const isModernPage = location.pathname === '/' || location.pathname.startsWith('/product');
   const isHistoryPage = location.pathname === '/mypage/history';
-  
-  // ✅ 스위칭 버튼 로직 (텍스트 약간 수정)
-  const navButtonConfig = isHistoryPage
-    ? { to: '/', label: '홈으로', styleClass: 'shop-mode' } 
-    : { to: '/mypage/history', label: '예약내역', styleClass: 'history-mode' };
 
-  const shouldShowTabs = location.pathname.startsWith('/simple');
-  const isOnLegacyOrderPage = location.pathname.startsWith('/simple');
+  const categories = useMemo(() => CATEGORIES, []);
 
-  const handleScroll = () => {
-    if (!tabContext || tabContext.isNavigating) return;
-    const currentScrollY = window.scrollY;
-    if (currentScrollY < lastScrollY.current || currentScrollY < 10) {
-      setIsVisible(true);
-    } else {
-      setIsVisible(false);
-    }
-    lastScrollY.current = currentScrollY;
+  // 인디케이터 위치/폭
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
+  // 스크롤 컨테이너/리스트 ref
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
+
+  // 탭별 엘리먼트 ref
+  const tabRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+
+  const updateIndicator = () => {
+    const el = tabRefs.current[currentTab];
+    const listEl = listRef.current;
+    const trackEl = trackRef.current;
+    if (!el || !listEl || !trackEl) return;
+
+    // list 기준 좌표 + 스크롤값으로 계산
+    const elRect = el.getBoundingClientRect();
+    const listRect = listEl.getBoundingClientRect();
+    const left = elRect.left - listRect.left;
+    const width = elRect.width;
+
+    setIndicator({ left, width });
+
+    // ✅ 모바일: 활성 탭이 안 보이면 track 안에서 부드럽게 보이게
+    el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   };
 
   useEffect(() => {
-    window.addEventListener('scroll', handleScroll);
-    return () => { window.removeEventListener('scroll', handleScroll); };
-  }, [tabContext?.isNavigating]);
+    updateIndicator();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTab, location.pathname]);
 
-  const handleTabClick = (section: 'primary' | 'secondary') => {
-    if (isOnLegacyOrderPage) {
-      tabContext?.scrollToSection(section);
-    } else {
-      navigate('/simple', { state: { scrollTo: section } });
-    }
-  };
-
-  const handleOpenSideMenu = () => setIsSideMenuOpen(true);
-  const handleCloseSideMenu = () => setIsSideMenuOpen(false);
-
-  // 🔔 현재는 헤더에서 알림 패널을 직접 열지 않으므로 no-op 전달
-  const handleOpenNotificationsFromSideMenu = () => {
-    // 나중에 알림 패널을 헤더 쪽에서 열고 싶으면 이 부분을 구현하면 됨.
-  };
+  useEffect(() => {
+    const onResize = () => updateIndicator();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTab]);
 
   return (
     <>
-      <header className={`new-customer-header ${isVisible ? 'visible' : 'hidden'}`}>
-        <div className={`header-content ${isModernPage || isHistoryPage ? 'modern-layout' : ''}`}>
-          <div className="header-left">
-            {shouldShowTabs && tabContext ? (
-              <div className="header-page-tabs">
-                <button
-                  className={`page-tab primary ${tabContext.activeSection === 'primary' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('primary')}
-                >
-                  <Flame size={16} />
-                  <span>공동구매</span>
-                </button>
-                <button
-                  className={`page-tab secondary ${tabContext.activeSection === 'secondary' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('secondary')}
-                >
-                  <Clock size={16} />
-                  <span>추가예약</span>
-                </button>
-              </div>
-            ) : (
-              <div className="header-brand">
-                {/* 🍔 햄버거 버튼 추가 */}
-                <button
-                  className="hamburger-btn"
-                  onClick={handleOpenSideMenu}
-                  aria-label="메뉴 열기"
-                >
-                  <Menu size={22} />
-                </button>
-
-                <NavLink to="/" className="brand-link">
-                  {/* 🎄 송도픽 로고 */}
-                  송도PICK
-                </NavLink>
-              </div>
-            )}
-          </div>
-
-          <div className="header-right">
-            <nav className="header-nav">
-              {/* 스위칭 버튼 */}
-              <NavLink
-                to={navButtonConfig.to}
-                className={`nav-item modern-text-btn ${navButtonConfig.styleClass}`}
-              >
-                {navButtonConfig.label}
+      <header className="new-customer-header">
+        <div className="header-shell">
+          <div className="header-top-row">
+            <div className="header-left">
+              <button className="icon-btn" onClick={() => setIsSideMenuOpen(true)}>
+                <Menu size={24} />
+              </button>
+              <NavLink to="/?tab=home" className="brand-logo">
+                송도PICK
               </NavLink>
+            </div>
 
-              {isAdmin && (
-                <NavLink
-                  to="/admin"
-                  className={({ isActive }) => `nav-item admin-link ${isActive ? 'active' : ''}`}
-                >
-                  <ShieldCheck size={16} />
-                  <span>관리</span>
-                </NavLink>
+            <div className="header-right">
+              {isHistoryPage ? (
+                <button className="header-action-btn btn-home" onClick={() => navigate('/')}>
+                  홈으로
+                </button>
+              ) : (
+                <button className="header-action-btn btn-history" onClick={() => navigate('/mypage/history')}>
+                  예약내역
+                </button>
               )}
-            </nav>
+            </div>
           </div>
+
+          {isModernPage && (
+            <nav className="header-category-nav">
+              <div className="header-inner">
+                {/* ✅ 모바일 가로 스크롤 컨테이너 */}
+                <div className="category-track" ref={trackRef}>
+                  <ul className="category-list" ref={listRef}>
+                    {categories.map((cat) => (
+                      <li key={cat.id}>
+                        <NavLink
+                          to={`/?tab=${cat.id}`}
+                          replace
+                          ref={(node) => {
+                            tabRefs.current[cat.id] = node;
+                          }}
+                          className={`category-item ${currentTab === cat.id ? 'active' : ''}`}
+                        >
+                          <span className="tab-label">{cat.label}</span>
+                        </NavLink>
+                      </li>
+                    ))}
+
+                    {/* ✅ 이동하는 인디케이터 */}
+                    <span
+                      className="tab-indicator"
+                      style={{
+                        transform: `translateX(${indicator.left}px)`,
+                        width: `${indicator.width}px`,
+                      }}
+                    />
+                  </ul>
+                </div>
+              </div>
+            </nav>
+          )}
         </div>
       </header>
 
-      {/* 🌟 사이드메뉴 연결 */}
       <SideMenu
         isOpen={isSideMenuOpen}
-        onClose={handleCloseSideMenu}
-        onOpenNotifications={handleOpenNotificationsFromSideMenu}
+        onClose={() => setIsSideMenuOpen(false)}
+        onOpenNotifications={() => {}}
       />
     </>
   );

@@ -6,15 +6,15 @@ import React, {
   useMemo,
   useCallback,
   useRef,
-  Suspense, // ✅ Suspense 유지
+  Suspense,
 } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getPaginatedProductsWithStock } from '../../firebase/productService';
 import { getUserOrders } from '../../firebase/orderService';
-
 import type { Product } from '../../shared/types';
-import SodomallLoader from '../../components/common/SodomallLoader';
 import ModernProductCard from '../../components/customer/ModernProductCard';
+import ModernProductThumbCard from '../../components/customer/ModernProductThumbCard';
+import { useSearchParams, Outlet, useNavigate } from 'react-router-dom';
 import {
   getDisplayRound,
   getDeadlines,
@@ -23,29 +23,18 @@ import {
   safeToDate,
 } from '../../utils/productUtils';
 import { usePageRefs } from '../../layouts/CustomerLayout';
-import { Outlet, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import './ModernProductList.css';
 
-// 아이콘은 유지 (Lazy loading)
 const LazyChevronRight = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.ChevronRight }))
 );
 
-// ✅ 탭 구성
-const TABS = [
-  { id: 'all', label: '전체' },
-  { id: 'today', label: '🔥 오늘의 공구' },
-  { id: 'additional', label: '🔁 추가예약' },
-  { id: 'onsite', label: '🏢 현장판매' },
-];
 
-// ✅ 필터 타입 정의
-type SourceFilterType = 'all' | 'sodomall' | 'songdopick';
+type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite';
+const PAGE_SIZE = 30;
 
-const PAGE_SIZE = 20;
-
-// ✅ 배너 데이터 타입 정의
+// ✅ [복구] 메인 홈 슬라이드 배너 데이터 (베리맘, 헤이유 등)
 interface EventBanner {
   id: string;
   chip: string;
@@ -59,7 +48,6 @@ interface EventBanner {
   imageAlt?: string;
 }
 
-// ✅ [수정] 베리맘 배너를 'Coming Soon' -> '사전예약 오픈'으로 변경
 const EVENT_BANNERS: EventBanner[] = [
   {
     id: 'berrymom-open',
@@ -67,74 +55,92 @@ const EVENT_BANNERS: EventBanner[] = [
     title: '베리맘(VERY MOM) 런칭',
     desc: '단 1% 아기를 위한 프리미엄. 지금 사전예약 하세요.',
     cta: '사전예약 입장하기',
-    bg: 'linear-gradient(135deg, #FDFBF7 0%, #EFE5D6 100%)', // 럭셔리한 베이지 톤
+    bg: 'linear-gradient(135deg, #FDFBF7 0%, #EFE5D6 100%)',
     linkType: 'internal',
     href: '/beauty',
-    image: '/images/verymom/logo.jpg',
+    // 실제 이미지가 없다면 public 폴더나 assets 경로 확인 필요
+    image: '/images/verymom/logo.jpg', 
     imageAlt: '베리맘 런칭',
   },
   {
     id: 'hey-u-beauty',
     chip: '💄 헤이유뷰티룸 제휴',
     title: '멜라즈마 풀페이스 50% 할인',
-    desc: '송도픽 고객 전 시술 10% 추가 혜택! 기미·잡티 케어(60만→30만) 단독 특가.',
+    desc: '송도픽 고객 전 시술 10% 추가 혜택! 기미·잡티 케어 특가.',
     cta: '혜택 자세히 보기',
     bg: 'linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%)',
     linkType: 'internal',
     href: '/partner/hey-u-beauty',
     image: '/images/heyu/asd.jpg',
-    imageAlt: '헤이유 뷰티룸 매장 전경',
+    imageAlt: '헤이유 뷰티룸',
   },
 ];
 
+// ✅ [유지] 탭별 상단 배너 (각 탭 진입 시 보이는 배너)
+const TAB_BANNERS: Record<string, { title: string; desc: string; bg: string; imageUrl?: string }> = {
+  today: {
+    title: "🔥 오늘의 공구",
+    desc: "매일 오후 2~3시 오픈! 미리미리 좋은 물건 예약해요!",
+    bg: "#FFF1F2",
+  },
+  tomorrow: {
+    title: "🚀 내일 바로 픽업가능",
+    desc: "해당기다림 없이 내일 바로 픽업하세요",
+    bg: "#ECFEFF",
+  },
+  special: {
+    title: "✨ 기획전",
+    desc: "특별한 가격과 구성, 한정 수량 이벤트",
+    bg: "#FFFBEB",
+  },
+  additional: {
+    title: "🔁 추가공구",
+    desc: "아쉽게 놓친 상품, 잔여 수량 줍줍 찬스",
+    bg: "#F3F4F6",
+  },
+  onsite: {
+    title: "🏢 현장판매",
+    desc: "예약 없이 매장에서 바로 구매 가능",
+    bg: "#F0FDF4",
+  },
+};
+
 const ModernProductList: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  
+  const rawTab = searchParams.get('tab') || 'home';
+  const activeTab = (rawTab === 'home') ? 'all' : rawTab as TabId;
+  const fetchTab: TabId = activeTab === 'onsite' ? 'onsite' : 'all';
   const { user, userDocument } = useAuth();
 
+  // ✅ [복구] 배너 슬라이드 상태
   const [activeBanner, setActiveBanner] = useState(0);
 
-  // ✅ 이벤트(Hero) & 뷰티 상품
   const [heroProducts, setHeroProducts] = useState<Product[]>([]);
   const [beautyProducts, setBeautyProducts] = useState<Product[]>([]);
-  const [heroLoading, setHeroLoading] = useState(true);
-
-  // ✅ 일반 상품
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'today' | 'additional' | 'onsite'>('all');
-
-  // ✅ 출처 필터
-  const [sourceFilter, setSourceFilter] = useState<SourceFilterType>('all');
-
-  // ✅ 사용자 주문 내역 캐싱
   const [myOrderMap, setMyOrderMap] = useState<Record<string, number>>({});
 
-  // ✅ 무한 스크롤 상태
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] = useState<any | null>(null);
 
-  const autoFetchCount = useRef(0);
   const observerRef = useRef<HTMLDivElement | null>(null);
   const ioRef = useRef<IntersectionObserver | null>(null);
-
   const isFetchingRef = useRef(false);
   const hasMoreRef = useRef(true);
   const lastVisibleRef = useRef<any | null>(null);
 
-  // ✅ PageRefs
   const fallbackRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = usePageRefs();
   const primaryRef = pageRefs?.primaryRef ?? fallbackRef;
 
-  useEffect(() => {
-    hasMoreRef.current = hasMore;
-  }, [hasMore]);
-  useEffect(() => {
-    lastVisibleRef.current = lastVisible;
-  }, [lastVisible]);
+  useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
+  useEffect(() => { lastVisibleRef.current = lastVisible; }, [lastVisible]);
 
-  // ✅ 배너 슬라이드
+  // ✅ [복구] 배너 자동 슬라이드 타이머
   useEffect(() => {
     if (EVENT_BANNERS.length <= 1) return;
     const timer = setInterval(() => {
@@ -143,13 +149,12 @@ const ModernProductList: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // ✅ 주문 내역 한 번에 불러오기
+  // 주문 내역 로드
   const fetchMyOrders = useCallback(async () => {
     if (!user) return;
     try {
       const orders = await getUserOrders(user.uid);
       const counts: Record<string, number> = {};
-
       orders.forEach((order) => {
         if (order.status === 'CANCELED' || order.status === 'LATE_CANCELED') return;
         order.items.forEach((item) => {
@@ -157,561 +162,390 @@ const ModernProductList: React.FC = () => {
           counts[key] = (counts[key] || 0) + item.quantity;
         });
       });
-
       setMyOrderMap(counts);
-    } catch (err) {
-      console.error('주문 내역 로드 실패:', err);
-    }
+    } catch (err) { console.error(err); }
   }, [user]);
+  useEffect(() => { fetchMyOrders(); }, [fetchMyOrders]);
 
-  useEffect(() => {
-    fetchMyOrders();
-  }, [fetchMyOrders]);
-
-  // ✅ 특수 상품 (이벤트 / 뷰티) 로드
+  // 특수 상품(기획전/뷰티) 로드
   useEffect(() => {
     const fetchSpecialProducts = async () => {
       try {
         const { products: fetched } = await getPaginatedProductsWithStock(300, null, null, 'all');
-
-        // 이벤트 상품
         const events = fetched.filter((p) => {
           const r = getDisplayRound(p);
-          // ✅ [수정] PREMIUM, COSMETICS는 이벤트에서 제외 (뷰티 섹션으로 이동)
-          const hasEventTag = r && r.eventType && r.eventType !== 'NONE' && r.eventType !== 'PREMIUM' && r.eventType !== 'COSMETICS';
-          if (!hasEventTag) return false;
-          const actionState = determineActionState(r, null);
-          return actionState !== 'ENDED';
+          const hasEventTag = r && r.eventType && !['NONE', 'PREMIUM', 'COSMETICS'].includes(r.eventType);
+          return hasEventTag && determineActionState(r, null) !== 'ENDED';
         });
         setHeroProducts(events);
-
-        // 뷰티 상품
         const beauty = fetched.filter((p) => {
           const r = getDisplayRound(p);
-          // ✅ [수정] 뷰티 섹션: COSMETICS 뿐만 아니라 PREMIUM도 포함
           return r && (r.eventType === 'COSMETICS' || r.eventType === 'PREMIUM');
         });
         setBeautyProducts(beauty);
-      } catch (e) {
-        console.error('특수 상품 로드 실패', e);
-      } finally {
-        setHeroLoading(false);
-      }
+      } catch (e) { console.error(e); }
     };
-
     fetchSpecialProducts();
   }, []);
 
-  // ✅ 탭 변경 시 일반 상품 로드
-  useEffect(() => {
-    const loadTabProducts = async () => {
-      setLoading(true);
-      setProducts([]);
-      setLastVisible(null);
-      setHasMore(true);
-      autoFetchCount.current = 0;
-      isFetchingRef.current = true;
-
-      try {
-        const {
-          products: initialProducts,
-          lastVisible: initialLastVisible,
-        } = await getPaginatedProductsWithStock(PAGE_SIZE, null, null, activeTab);
-
-        setProducts(initialProducts);
-        setLastVisible(initialLastVisible);
-        setHasMore(!!initialLastVisible && initialProducts.length === PAGE_SIZE);
-      } catch (err) {
-        console.error('상품 로드 실패:', err);
-      } finally {
-        setLoading(false);
-        isFetchingRef.current = false;
-      }
-    };
-
-    loadTabProducts();
-  }, [activeTab]);
-
-  // ✅ 무한 스크롤 - 다음 페이지
-  const fetchNextPage = useCallback(async () => {
-    if (isFetchingRef.current || !hasMoreRef.current) return;
-
+useEffect(() => {
+  const loadTabProducts = async () => {
+    setLoading(true);
+    setProducts([]);
+    setLastVisible(null);
+    setHasMore(true);
     isFetchingRef.current = true;
-    setIsLoadingMore(true);
 
     try {
-      const cursor = lastVisibleRef.current;
-      const {
-        products: newProducts,
-        lastVisible: newLastVisible,
-      } = await getPaginatedProductsWithStock(PAGE_SIZE, cursor, null, activeTab);
+      const { products: initialProducts, lastVisible: initialLastVisible } =
+        await getPaginatedProductsWithStock(PAGE_SIZE, null, null, fetchTab);
 
-      setProducts((prev) => {
-        const existingIds = new Set(prev.map((p) => p.id));
-        const uniqueNewProducts = newProducts.filter((p) => !existingIds.has(p.id));
-        return [...prev, ...uniqueNewProducts];
-      });
-
-      setLastVisible(newLastVisible);
-      setHasMore(!!newLastVisible && newProducts.length === PAGE_SIZE);
+      setProducts(initialProducts);
+      setLastVisible(initialLastVisible);
+      setHasMore(!!initialLastVisible && initialProducts.length === PAGE_SIZE);
     } catch (err) {
       console.error(err);
     } finally {
-      setIsLoadingMore(false);
+      setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [activeTab]);
+  };
 
-  // ✅ IntersectionObserver
-  const onIntersect = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      const entry = entries[0];
-      if (entry?.isIntersecting && !isFetchingRef.current && hasMoreRef.current) {
-        fetchNextPage();
-      }
-    },
-    [fetchNextPage]
-  );
+  loadTabProducts();
+}, [activeTab, fetchTab]);
+
+const fetchNextPage = useCallback(async () => {
+  if (isFetchingRef.current || !hasMoreRef.current) return;
+
+  isFetchingRef.current = true;
+  setIsLoadingMore(true);
+
+  try {
+    const { products: newProducts, lastVisible: newLastVisible } =
+      await getPaginatedProductsWithStock(PAGE_SIZE, lastVisibleRef.current, null, fetchTab);
+
+    setProducts((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id));
+      return [...prev, ...newProducts.filter((p) => !existingIds.has(p.id))];
+    });
+
+    setLastVisible(newLastVisible);
+    setHasMore(!!newLastVisible && newProducts.length === PAGE_SIZE);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setIsLoadingMore(false);
+    isFetchingRef.current = false;
+  }
+}, [fetchTab]);
+
+  const onIntersect = useCallback((entries: IntersectionObserverEntry[]) => {
+    if (entries[0]?.isIntersecting && !isFetchingRef.current && hasMoreRef.current) { fetchNextPage(); }
+  }, [fetchNextPage]);
 
   useEffect(() => {
     if (ioRef.current) ioRef.current.disconnect();
-    ioRef.current = new IntersectionObserver(onIntersect, {
-      root: null,
-      rootMargin: '600px 0px',
-      threshold: 0,
-    });
-    return () => {
-      ioRef.current?.disconnect();
-    };
+    ioRef.current = new IntersectionObserver(onIntersect, { root: null, rootMargin: '600px 0px', threshold: 0 });
+    return () => ioRef.current?.disconnect();
   }, [onIntersect]);
 
   useEffect(() => {
     const node = observerRef.current;
-    if (loading || !hasMore || !node || !ioRef.current) return;
+    if (activeTab === 'all' || loading || !hasMore || !node || !ioRef.current) return;
     ioRef.current.observe(node);
-    return () => {
-      if (node) ioRef.current?.unobserve(node);
-    };
-  }, [loading, hasMore]);
+    return () => { if (node) ioRef.current?.unobserve(node); };
+  }, [loading, hasMore, activeTab]);
 
-  // ✅ 데이터 가공 로직들...
+  // --- 데이터 가공 ---
   const processedEventProducts = useMemo(() => {
-    return heroProducts
-      .map((product) => {
-        const round = getDisplayRound(product);
-        return { ...product, displayRound: round as any };
-      })
-      .filter((p) => {
-        // 1. 라운드 정보가 없으면 제외
+    return heroProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any }))
+      .filter(p => {
         if (!p.displayRound) return false;
-
-        // 2. [추가됨] 재고 확인: 재고 제한이 있고(isLimited), 남은 수량이 0 이하면 목록에서 제외
-        const vg = p.displayRound.variantGroups?.[0];
-        if (vg) {
-          const stockInfo = getStockInfo(vg);
-          if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
-            return false; 
-          }
-        }
-        
-        return true;
+        const stock = getStockInfo(p.displayRound.variantGroups?.[0]);
+        return !(stock.isLimited && stock.remainingUnits <= 0);
       });
   }, [heroProducts]);
 
-  const processedBeautyProducts = useMemo(() => {
-    return beautyProducts
-      .map((product) => {
-        const round = getDisplayRound(product);
-        return { ...product, displayRound: round as any, isPreorder: true };
-      })
-      .filter((p) => p.displayRound)
-      .slice(0, 7);
-  }, [beautyProducts]);
+  const processedBeautyProducts = useMemo(() => 
+    beautyProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any, isPreorder: true }))
+      .filter(p => p.displayRound).slice(0, 7), 
+  [beautyProducts]);
 
-  const normalProducts = useMemo(() => {
+  const processedNormal = useMemo(() => {
     const now = dayjs();
-    const processed = products
-      .map((product) => {
-        const round = getDisplayRound(product);
-        if (!round || round.status === 'draft') return null;
+    return products.map((product) => {
+      const round = getDisplayRound(product);
+      if (!round || round.status === 'draft' || round.eventType === 'PREMIUM') return null;
+      const { primaryEnd, secondaryEnd } = getDeadlines(round);
+      const actionState = determineActionState(round, userDocument as any);
+      let phase: 'primary' | 'secondary' | 'onsite' = 'primary';
+      if ((round as any).isManuallyOnsite) phase = 'onsite';
+      else {
+        if (['ENDED', 'AWAITING_STOCK', 'SCHEDULED'].includes(actionState)) return null;
+        if (primaryEnd && now.isBefore(primaryEnd)) phase = 'primary';
+        else if (secondaryEnd && now.isBefore(secondaryEnd)) phase = 'secondary';
+        else return null;
+      }
+      return { ...product, displayRound: round as any, actionState, phase };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+  }, [products, userDocument]);
 
-        // ✅ [수정] 럭셔리(PREMIUM) 상품은 일반 리스트에서 숨김
-        if (round.eventType === 'PREMIUM') return null;
+  const tomorrowPickupProducts = useMemo(() => {
+    const target = dayjs().add(1, 'day');
+    return processedNormal.filter((p) => {
+      if (p.phase === 'onsite') return false;
+      const d = safeToDate(p.displayRound.arrivalDate) ?? safeToDate(p.displayRound.pickupDate);
+      return d && dayjs(d).isSame(target, 'day');
+    });
+  }, [processedNormal]);
 
-        const { primaryEnd, secondaryEnd } = getDeadlines(round);
-        const actionState = determineActionState(round, userDocument as any);
-        let phase: 'primary' | 'secondary' | 'onsite' = 'primary';
+  const visibleNormalProducts = useMemo(() => {
+    if (activeTab === 'today') return processedNormal.filter(p => p.phase === 'primary');
+    if (activeTab === 'additional') return processedNormal.filter(p => p.phase === 'secondary');
+    if (activeTab === 'onsite') return processedNormal.filter(p => p.phase === 'onsite');
+    if (activeTab === 'tomorrow') return tomorrowPickupProducts;
+    return processedNormal;
+  }, [activeTab, processedNormal, tomorrowPickupProducts]);
 
-        if (round.isManuallyOnsite) {
-          phase = 'onsite';
-        } else {
-          if (
-            actionState === 'ENDED' ||
-            actionState === 'AWAITING_STOCK' ||
-            actionState === 'SCHEDULED'
-          )
-            return null;
+  const todayPrimary = useMemo(() => processedNormal.filter(p => p.phase === 'primary'), [processedNormal]);
+  const additionalSorted = useMemo(() => [...processedNormal].filter(p => p.phase === 'secondary'), [processedNormal]);
+  const onsite = useMemo(() => processedNormal.filter(p => p.phase === 'onsite'), [processedNormal]);
 
-          if (primaryEnd && now.isBefore(primaryEnd)) phase = 'primary';
-          else if (secondaryEnd && now.isBefore(secondaryEnd)) phase = 'secondary';
-          else return null;
-        }
-
-        const vg = round.variantGroups?.[0];
-        const stockInfo = vg ? getStockInfo(vg) : null;
-        const remaining = stockInfo?.remainingUnits ?? 0;
-
-        return {
-          ...product,
-          displayRound: round as any,
-          actionState,
-          phase,
-          isLowStock: remaining > 0 && remaining < 10,
-          isClosingSoon:
-            phase === 'secondary' &&
-            secondaryEnd &&
-            secondaryEnd.diff(now, 'hour') < 6,
-        };
-      })
-      .filter((p): p is NonNullable<typeof p> => p !== null);
-
-    let normalVisible = processed;
-
-    if (activeTab === 'today') {
-      normalVisible = processed.filter((p) => p.phase === 'primary');
-    } else if (activeTab === 'additional') {
-      const filtered = processed.filter((p) => p.phase === 'secondary');
-      normalVisible = filtered.sort((a, b) => {
-        const dateA = safeToDate(a.displayRound.pickupDate)?.getTime() || 0;
-        const dateB = safeToDate(b.displayRound.pickupDate)?.getTime() || 0;
-        return dateA - dateB;
-      });
-    } else if (activeTab === 'onsite') {
-      normalVisible = processed.filter((p) => p.phase === 'onsite');
-    } else {
-      const score = (p: (typeof processed)[number]) =>
-        p.phase === 'primary' ? 3 : p.phase === 'secondary' ? 2 : 1;
-      normalVisible = [...processed].sort((a, b) => score(b) - score(a));
-    }
-
-    if (sourceFilter === 'sodomall') {
-      normalVisible = normalVisible.filter((p) => {
-        const sourceType = p.displayRound.sourceType ?? 'SODOMALL';
-        return sourceType !== 'SONGDOPICK_ONLY';
-      });
-    } else if (sourceFilter === 'songdopick') {
-      normalVisible = normalVisible.filter((p) => {
-        const sourceType = p.displayRound.sourceType ?? 'SODOMALL';
-        return sourceType === 'SONGDOPICK_ONLY';
-      });
-    }
-
-    return normalVisible;
-  }, [products, userDocument, activeTab, sourceFilter]);
-
-  // ✅ 자동 페이징
-  useEffect(() => {
-    if (
-      loading ||
-      isLoadingMore ||
-      !hasMore ||
-      activeTab === 'all' ||
-      activeTab === 'onsite'
-    )
-      return;
-
-    const totalVisible = normalProducts.length;
-    if (totalVisible === 0 && autoFetchCount.current < 3) {
-      autoFetchCount.current += 1;
-      fetchNextPage();
-    } else {
-      autoFetchCount.current = 0;
-    }
-  }, [loading, isLoadingMore, hasMore, activeTab, normalProducts.length, fetchNextPage]);
-
-  // ✅ 섹션 메타 및 배너 콘텐츠
-  const eventSectionMeta = useMemo(() => {
-  if (processedEventProducts.length === 0) return null;
-  return {
-    chip: 'SPECIAL 기획전',
-    title: '지금만 진행되는 한정 특가 모음',
-    sub: '케이크, 계란 같은 특별 기획 상품을 가장 먼저 확인해보세요!',
-  };
-}, [processedEventProducts]);
-
-
-// src/pages/customer/ModernProductList.tsx 내부의 bannerContent 수정
-
-  const bannerContent = useMemo(() => {
-    // ✅ [수정] 이모지(📢, 🔥 등) 제거하고 텍스트만 남김
-    switch (activeTab) {
-      case 'today':
-        return {
-          title: '오늘의 공구',
-          desc: '오후 1시 ~ 내일 오후 1시, 하루 한정 특가',
-        };
-      case 'additional':
-        return {
-          title: '추가 예약',
-          desc: '1차 종료 후 잔여 수량 줍줍 찬스',
-        };
-      case 'onsite':
-        return {
-          title: '현장 판매',
-          desc: '예약 없이 매장에서 바로 구매 가능',
-        };
-      default:
-        return {
-          title: '송도PICK', // 📢 제거함
-          desc: '매일 오후 1시 오픈! 오늘의 라인업 확인하기',
-        };
-    }
-  }, [activeTab]);
-
-  
-  const getPurchasedCountForProduct = (product: Product): number => {
-    const round = getDisplayRound(product);
-    if (!round) return 0;
-    const vg = round.variantGroups?.[0];
-    const item = vg?.items?.[0];
-    if (!item) return 0;
-    return myOrderMap[`${round.roundId}_${item.id}`] || 0;
-  };
-
-  if (loading && products.length === 0) {
-    return <SodomallLoader />;
-  }
-
-  const isEmptyAll =
-    processedEventProducts.length === 0 &&
-    normalProducts.length === 0 &&
-    processedBeautyProducts.length === 0;
+  const currentTabBanner = TAB_BANNERS[activeTab];
 
   return (
-    <>
-      <div className="customer-page-container modern-list-page">
-        {EVENT_BANNERS.length > 0 && !heroLoading && (
-          <section className="event-hero-wrapper">
-             <div
-              className="event-hero-slider"
-              style={{ transform: `translateX(-${activeBanner * 100}%)` }}
-            >
-              {EVENT_BANNERS.map((banner) => (
-                <div
-                  key={banner.id}
-                  className="event-hero-slide"
-                  style={{ background: banner.bg }}
-                  onClick={() => {
-                    if (banner.linkType === 'internal' && banner.href) {
-                      navigate(banner.href);
-                    } else if (banner.linkType === 'external' && banner.href) {
-                      window.open(banner.href, '_blank');
-                    }
-                  }}
-                >
-                  <div className="event-hero-inner">
-                    <div className="event-hero-content">
-                      <span className="event-hero-chip">{banner.chip}</span>
-                      <h2 className="event-hero-title">{banner.title}</h2>
-                      <p className="event-hero-desc">{banner.desc}</p>
-                      <div className="event-hero-cta">{banner.cta}</div>
-                    </div>
+    <div className="customer-page-container modern-list-page">
+      
+      {/* 뷰티 섹션 (홈에서만) - 배너 아래에 위치하길 원하면 순서 조정 가능 */}
+      {/* 일단 요청하신대로 '배너' 복구에 집중 */}
 
-                    {banner.image && (
-                      <div
-                        className={`event-hero-image-wrap ${
-                          banner.id === 'hey-u-beauty' ? 'heyu-bw' : ''
-                        }`}
-                      >
-                        <img
-                          src={banner.image}
-                          alt={banner.imageAlt ?? banner.title}
-                          loading="lazy"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* ✅ [탭별 배너] : 홈이 아닐 때만 노출 (오늘공구, 내일픽업 등) */}
+      {activeTab !== 'all' && currentTabBanner && (
+        <div 
+          className={`tab-banner ${currentTabBanner.imageUrl ? 'has-image' : ''}`}
+          style={{ 
+            backgroundColor: currentTabBanner.bg,
+            backgroundImage: currentTabBanner.imageUrl ? `url(${currentTabBanner.imageUrl})` : 'none',
+          }}
+        >
+          {currentTabBanner.imageUrl && <div className="tab-banner-overlay" />}
+          <div className="tab-banner-content">
+            <h2 className="tab-banner-title">{currentTabBanner.title}</h2>
+            <p className="tab-banner-desc">{currentTabBanner.desc}</p>
+          </div>
+        </div>
+      )}
 
-            <div className="event-hero-dots">
-              {EVENT_BANNERS.map((banner, index) => (
-                <button
-                  key={banner.id}
-                  type="button"
-                  className={`event-hero-dot ${
-                    index === activeBanner ? 'active' : ''
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveBanner(index);
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {processedEventProducts.length > 0 && eventSectionMeta && (
-          <section className="songdo-event-section">
-            <div className="songdo-event-header">
-              <div>
-                <div className="songdo-event-chip">{eventSectionMeta.chip}</div>
-                <h2 className="songdo-event-title">{eventSectionMeta.title}</h2>
-                <p className="songdo-event-sub">{eventSectionMeta.sub}</p>
-              </div>
-            </div>
-            <div className="songdo-event-track">
-              {processedEventProducts.map((p) => (
-                <button
-                  key={`event-${p.id}`}
-                  className="songdo-event-banner"
-                  onClick={() => navigate(`/product/${p.id}`)}
-                >
-                  <img
-                    src={p.imageUrls?.[0]}
-                    alt={p.groupName}
-                    className="event-banner-img"
-                  />
-                  <div className="event-banner-tag">기획전</div>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {processedBeautyProducts.length > 0 && (
-          <section className="beauty-curation-section">
-            {/* ✅ [수정] 뷰티 섹션 문구 수정 */}
-            <div className="section-header" onClick={() => navigate('/beauty')}>
-              <div>
-                <span className="small-label">👑 PREMIUM COLLECTION</span>
-                <h3 className="section-title">베리맘 · 뷰티 사전예약</h3>
-                <p className="section-sub">
-                  단 1%를 위한 프리미엄 라인, 한정 기간 오픈
-                </p>
-              </div>
-              <button className="view-all-btn">
-                {/* ✅ LazyChevronRight 사용 (Suspense 적용) */}
-                전체보기 
-                <Suspense fallback={null}>
-                  <LazyChevronRight size={16} />
-                </Suspense>
-              </button>
-            </div>
-            <div className="beauty-product-grid">
-              {processedBeautyProducts.map((p) => (
-                <ModernProductCard
-                  key={`beauty-${p.id}`}
-                  product={p}
-                  actionState={determineActionState(
-                    p.displayRound as any,
-                    userDocument as any
-                  )}
-                  phase={'primary'}
-                  isPreorder={true}
-                  myPurchasedCount={getPurchasedCountForProduct(p)}
-                  onPurchaseComplete={fetchMyOrders}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ✅ [수정] 공지사항 배너: 인라인 스타일 제거 (CSS 클래스로 제어) */}
-        <section className="songdo-notice-banner">
-          <span className="notice-text">
-            <span className="notice-highlight">
-              {bannerContent.title}:
-            </span>
-            {' '}{bannerContent.desc}
-          </span>
-        </section>
-
-        <nav className="songdo-tabs-wrapper">
-          <div className="songdo-tabs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                className={`songdo-tab-item ${
-                  activeTab === tab.id ? 'active' : ''
-                }`}
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+      {/* ================================================= */}
+      {/* 🏠 스토어 홈 (activeTab === 'all') */}
+      {/* ================================================= */}
+      {activeTab === 'all' && (
+        <>
+          {/* ✅ [복구] 이벤트/기획전 슬라이드 배너 (베리맘, 헤이유 등) */}
+          {EVENT_BANNERS.length > 0 && (
+            <section className="event-hero-wrapper">
+              <div
+                className="event-hero-slider"
+                style={{ transform: `translateX(-${activeBanner * 100}%)` }}
               >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="source-filter-row">
-            <button
-              className={`source-filter-btn ${
-                sourceFilter === 'all' ? 'active' : ''
-              }`}
-              onClick={() => setSourceFilter('all')}
-            >
-              전체
-            </button>
-            <div className="filter-divider"></div>
-            <button
-              className={`source-filter-btn ${
-                sourceFilter === 'sodomall' ? 'active' : ''
-              }`}
-              onClick={() => setSourceFilter('sodomall')}
-            >
-              소도몰 공구
-            </button>
-            <button
-              className={`source-filter-btn ${
-                sourceFilter === 'songdopick' ? 'active' : ''
-              }`}
-              onClick={() => setSourceFilter('songdopick')}
-            >
-              송도픽 단독
-            </button>
-          </div>
-        </nav>
+                {EVENT_BANNERS.map((banner) => (
+                  <div
+                    key={banner.id}
+                    className="event-hero-slide"
+                    style={{ background: banner.bg }}
+                    onClick={() => {
+                      if (banner.linkType === 'internal' && banner.href) navigate(banner.href);
+                      else if (banner.linkType === 'external' && banner.href) window.open(banner.href, '_blank');
+                    }}
+                  >
+                    <div className="event-hero-inner">
+                      <div className="event-hero-content">
+                        <span className="event-hero-chip">{banner.chip}</span>
+                        <h2 className="event-hero-title">{banner.title}</h2>
+                        <p className="event-hero-desc">{banner.desc}</p>
+                        <div className="event-hero-cta">{banner.cta}</div>
+                      </div>
+                      {banner.image && (
+                        <div className="event-hero-image-wrap">
+                           {/* alt 텍스트 안전하게 처리 */}
+                           <img src={banner.image} alt={banner.imageAlt || ''} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-        <div ref={primaryRef} className="songdo-product-list">
-          {!isEmptyAll && normalProducts.length > 0 ? (
-            normalProducts.map((p) => (
-              <ModernProductCard
-                key={`${p.id}-${p.displayRound.roundId}`}
-                product={p}
-                actionState={p.actionState}
-                phase={p.phase}
-                myPurchasedCount={getPurchasedCountForProduct(p)}
-                onPurchaseComplete={fetchMyOrders}
+              {/* 도트 네비게이션 */}
+              {EVENT_BANNERS.length > 1 && (
+                <div className="event-hero-dots">
+                  {EVENT_BANNERS.map((_, idx) => (
+                    <button
+                      key={idx}
+                      className={`event-hero-dot ${idx === activeBanner ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveBanner(idx);
+                      }}
+                      type="button"
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 뷰티 섹션 (배너 밑으로 배치) */}
+          {processedBeautyProducts.length > 0 && (
+             <section className="beauty-section">
+                <div className="beauty-section-header">
+                  <div className="beauty-left">
+                    <span className="beauty-chip">BEAUTY</span>
+                    <h3 className="beauty-title">뷰티 & 프리미엄</h3>
+                  </div>
+                  <button className="beauty-more-btn" onClick={() => navigate('/beauty')} type="button">
+                    <Suspense fallback={<span />}><LazyChevronRight size={18} /></Suspense>
+                  </button>
+                </div>
+                <div className="beauty-product-grid">
+                  {processedBeautyProducts.map((p) => (
+                    <ModernProductCard
+                      key={`beauty-${p.id}`}
+                      product={p}
+                      actionState={determineActionState(p.displayRound as any, userDocument as any)}
+                      phase={'primary'}
+                      isPreorder={true}
+                      myPurchasedCount={0}
+                      onPurchaseComplete={fetchMyOrders}
+                    />
+                  ))}
+                </div>
+             </section>
+          )}
+
+          <section className="sp-section">
+            <div className="sp-section-head">
+              <div className="sp-section-left">
+                <h3 className="sp-section-title">오늘의 공구</h3>
+                <span className="sp-section-desc">오늘의 새로운 공동구매</span>
+              </div>
+              <button className="sp-viewall" onClick={() => navigate('/?tab=today')} type="button">전체보기</button>
+            </div>
+            <div className="sp-hscroll">
+              {todayPrimary.map((p) => (
+                <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+              ))}
+            </div>
+          </section>
+
+          {tomorrowPickupProducts.length > 0 && (
+            <section className="sp-section">
+              <div className="sp-section-head">
+                <div className="sp-section-left">
+                  <h3 className="sp-section-title">내일 픽업 가능</h3>
+                  <span className="sp-section-desc">내일 바로 받을 수 있는 상품</span>
+                </div>
+                <button className="sp-viewall" onClick={() => navigate('/?tab=tomorrow')} type="button">전체보기</button>
+              </div>
+              <div className="sp-hscroll">
+                {tomorrowPickupProducts.map((p) => (
+                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 기획전 상품 리스트 (홈 화면 가로 스크롤) */}
+          {processedEventProducts.length > 0 && (
+             <section className="sp-section">
+               <div className="sp-section-head">
+                 <div className="sp-section-left">
+                   <h3 className="sp-section-title">기획전</h3>
+                   <span className="sp-section-desc"> 시즌 한정 기획 공동구매 </span>
+                 </div>
+                 <button className="sp-viewall" onClick={() => navigate('/?tab=special')} type="button">전체보기</button>
+               </div>
+               <div className="sp-hscroll">
+                 {processedEventProducts.map((p) => (
+                   <ModernProductThumbCard 
+                     key={`special-${p.id}`} 
+                     product={p as any} 
+                     variant="row" 
+                   />
+                 ))}
+               </div>
+             </section>
+          )}
+
+          {additionalSorted.length > 0 && (
+            <section className="sp-section">
+              <div className="sp-section-head">
+                <div className="sp-section-left">
+                  <h3 className="sp-section-title">추가공구</h3>
+                  <span className="sp-section-desc">예약 놓친사람은 여기에서 예약!</span>
+                </div>
+                <button className="sp-viewall" onClick={() => navigate('/?tab=additional')} type="button">전체보기</button>
+              </div>
+              <div className="sp-hscroll">
+                {additionalSorted.map((p) => (
+                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                ))}
+              </div>
+            </section>
+          )}
+          
+          {onsite.length > 0 && (
+             <section className="sp-section">
+               <div className="sp-section-head">
+                 <div className="sp-section-left">
+                   <h3 className="sp-section-title">현장판매</h3>
+                   <span className="sp-section-desc">매장에서 바로 구매</span>
+                 </div>
+                 <button className="sp-viewall" onClick={() => navigate('/?tab=onsite')} type="button">전체보기</button>
+               </div>
+               <div className="sp-hscroll">
+                 {onsite.map((p) => (
+                   <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                 ))}
+               </div>
+             </section>
+          )}
+        </>
+      )}
+
+      {/* ================================================= */}
+      {/* 📑 개별 탭 화면 (그리드 + 번호표 index) */}
+      {/* ================================================= */}
+      {activeTab !== 'all' && (
+        <div ref={primaryRef} className="sp-grid">
+          {activeTab === 'special' ? (
+            processedEventProducts.length > 0 ? (
+              processedEventProducts.map((p, idx) => (
+                <ModernProductThumbCard
+                  key={`special-${p.id}`}
+                  product={p as any}
+                  variant="grid"
+                  index={idx} // 번호표
+                />
+              ))
+            ) : <div className="empty-state"><p>진행 중인 기획전이 없습니다.</p></div>
+          ) : visibleNormalProducts.length > 0 ? (
+            visibleNormalProducts.map((p, idx) => (
+              <ModernProductThumbCard
+                key={p.id}
+                product={p as any}
+                variant="grid"
+                index={idx} // 번호표
               />
             ))
-          ) : (
-            !loading && (
-              <div className="empty-state">
-                <p
-                  style={{
-                    padding: '60px 0',
-                    textAlign: 'center',
-                    color: '#94A3B8',
-                  }}
-                >
-                  진행 중인 일반 공구가 없습니다.
-                </p>
-              </div>
-            )
-          )}
+          ) : !loading && <div className="empty-state"><p>진행 중인 상품이 없습니다.</p></div>}
         </div>
+      )}
 
-        <div
-          ref={observerRef}
-          className="infinite-scroll-trigger"
-          style={{ minHeight: '60px' }}
-        >
-          {isLoadingMore && <SodomallLoader isInline />}
-        </div>
-      </div>
-
+      {activeTab !== 'all' && <div ref={observerRef} style={{ height: 1 }} />}
+      {isLoadingMore && <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>불러오는 중...</div>}
       <Outlet />
-    </>
+    </div>
   );
 };
 
