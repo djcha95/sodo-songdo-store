@@ -204,11 +204,32 @@ const ProductInfo: React.FC<{
     const isMultiGroup = round.variantGroups.length > 1;
     const isLuxury = round?.eventType === 'PREMIUM';
 
+    // ✨ [추가] 관리자 페이지에서 입력한 새 데이터들
+    const categories = (product as any).categories || [];
+    const composition = (product as any).composition || '';
+    const extraInfo = (product as any).extraInfo || '';
+
     return (
         <>
             <div className="product-header-content">
-                {/* 🎄 여기서 먼저 크리스마스/스페셜 뱃지 출력 */}
                 {themeBadge}
+
+                {/* ✨ [추가] 카테고리 태그 (B&W 럭셔리 스타일) */}
+                {categories.length > 0 && (
+                    <div className="category-badge-row" style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                        {categories.map((c: string) => (
+                            <span key={c} style={{
+                                backgroundColor: '#000',
+                                color: '#fff',
+                                padding: '3px 10px',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                borderRadius: '2px',
+                                letterSpacing: '-0.02em'
+                            }}>{c}</span>
+                        ))}
+                    </div>
+                )}
 
                 {/* 3. 상단 헤더 부분 수정 - 럭셔리 모드일 때 뱃지 노출 */}
                 {isLuxury && <div className="luxury-badge">Premium Collection</div>}
@@ -222,6 +243,35 @@ const ProductInfo: React.FC<{
                 )}
             </div>
 
+            {/* ✨ [추가] 상세 사양 섹션 (구성 및 참고사항) */}
+            <div className="product-specs-container" style={{ marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+                <div className="spec-item" style={{ marginBottom: '20px' }}>
+                    <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#000', marginBottom: '8px' }}>상품 구성</h3>
+                    <div style={{ 
+                        fontSize: '0.85rem', 
+                        lineHeight: '1.6', 
+                        color: '#444', 
+                        whiteSpace: 'pre-wrap', // ✨ 줄바꿈 유지 중요
+                        wordBreak: 'break-all'
+                    }}>
+                        {composition || '상품 구성 정보가 등록되지 않았습니다.'}
+                    </div>
+                </div>
+
+                {extraInfo && (
+                    <div className="spec-item">
+                        <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#000', marginBottom: '8px' }}>기타 정보</h3>
+                        <div style={{ 
+                            fontSize: '0.85rem', 
+                            lineHeight: '1.6', 
+                            color: '#666', 
+                            whiteSpace: 'pre-wrap' 
+                        }}>
+                            {extraInfo}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             <div className="product-key-info" data-tutorial-id="detail-key-info">
                 <>
@@ -1124,7 +1174,8 @@ const ProductDetailPage: React.FC = () => {
                     loading={reservationStatus === 'processing'}
                 />
             )}
-            
+            x
+
             <PrepaymentModal
                 isOpen={isPrepaymentModalOpen}
                 totalPrice={prepaymentPrice}

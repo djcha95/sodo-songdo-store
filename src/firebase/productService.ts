@@ -89,7 +89,6 @@ const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock
 export const addProductWithFirstRound = async (
   productData: Omit<Product, 'id' | 'createdAt' | 'salesHistory' | 'imageUrls' | 'isArchived' | 'isOnsite'>,
   salesRoundData: Omit<SalesRound, 'roundId' | 'createdAt'>,
-  imageFiles: File[],
   creationDate: Date
 ): Promise<any> => {
   const result = await addProductWithFirstRoundCallable({
@@ -126,9 +125,7 @@ export const addNewSalesRound = async (
 export const updateProductCoreInfo = async (
   productId: string,
   productData: Partial<Product>,
-  newFiles: File[],
-  finalImageUrls: string[],
-  initialImageUrls: string[]
+  finalImageUrls: string[]
 ): Promise<any> => {
   const result = await updateProductCoreInfoCallable({
     productId,

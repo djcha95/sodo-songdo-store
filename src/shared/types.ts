@@ -154,6 +154,9 @@ export interface Product {
   hashtags?: string[];
   reservedQuantities?: { [key: string]: number };
   isOnsite?: boolean;
+  categories?: string[];     // 예: ["식품"]
+composition?: string;      // 구성(필수급)
+extraInfo?: string | null; // 기타정보(선택)
 }
 
 export interface CartItem {

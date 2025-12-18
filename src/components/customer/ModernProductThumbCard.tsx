@@ -27,6 +27,8 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
     const vg = (r?.variantGroups?.[0] as OriginalVariantGroup | undefined);
     const item = vg?.items?.[0];
     const price = item?.price ?? 0;
+    // ✅ 정상가(originalPrice) 가져오기 추가
+    const originalPrice = (item as any)?.originalPrice ?? 0;
 
     const arrival = safeToDate((r as any)?.arrivalDate);
     const pickup = safeToDate((r as any)?.pickupDate);
@@ -34,13 +36,13 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
     const displayDate = arrival ?? pickup;
     const dateText = displayDate ? dayjs(displayDate).locale('ko').format('M/D(ddd)') : '';
 
-    return { price, dateText };
+    return { price, originalPrice, dateText };
   }, [product]);
 
   return (
     <button
       type="button"
-      className={`sp-thumb-card ${variant}`}
+      className={`sp-thumb-card ${variant} ${product.displayRound?.eventType === 'PREMIUM' ? 'luxury' : ''}`}
       onClick={() => navigate(`/product/${product.id}`)}
       aria-label={`${product.groupName} 상세보기`}
     >
@@ -63,12 +65,19 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
         <div className="sp-thumb-sub">
           {cardData.dateText ? (
             <span className="sp-thumb-date">입고 {cardData.dateText}</span>
-          ) : (
-            <span />
-          )}
-          <span className="sp-thumb-price">
-            {cardData.price.toLocaleString()}<span className="currency-unit">원</span>
-          </span>
+          ) : <span />}
+          
+          <div className="sp-thumb-price-group">
+            {/* ✅ 정상가가 판매가보다 높을 때만 취소선 표시 */}
+            {cardData.originalPrice > cardData.price && (
+              <span className="sp-thumb-original-price">
+                {cardData.originalPrice.toLocaleString()}원
+              </span>
+            )}
+            <span className="sp-thumb-price">
+              {cardData.price.toLocaleString()}<span className="currency-unit">원</span>
+            </span>
+          </div>
         </div>
       </div>
     </button>

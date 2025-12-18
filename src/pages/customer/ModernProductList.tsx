@@ -51,14 +51,14 @@ interface EventBanner {
 const EVENT_BANNERS: EventBanner[] = [
   {
     id: 'berrymom-open',
-    chip: 'PRE-ORDER OPEN',
-    title: '베리맘(VERY MOM) 런칭',
-    desc: '단 1% 아기를 위한 프리미엄. 지금 사전예약 하세요.',
-    cta: '사전예약 입장하기',
+    // ✅ 영문 대신 직관적인 한글 문구로 변경
+    chip: '단독 예약특가 런칭', 
+    title: '베리맘(VERY MOM) 프리미엄',
+    desc: '온 가족이 함께 쓰는 최상급 케어, 오직 송도픽에서만 ✨',
+    cta: '특별 혜택가로 예약하기',
     bg: 'linear-gradient(135deg, #FDFBF7 0%, #EFE5D6 100%)',
     linkType: 'internal',
     href: '/beauty',
-    // 실제 이미지가 없다면 public 폴더나 assets 경로 확인 필요
     image: '/images/verymom/logo.jpg', 
     imageAlt: '베리맘 런칭',
   },
@@ -85,7 +85,7 @@ const TAB_BANNERS: Record<string, { title: string; desc: string; bg: string; ima
   },
   tomorrow: {
     title: "🚀 내일 바로 픽업가능",
-    desc: "해당기다림 없이 내일 바로 픽업하세요",
+    desc: "기다림 없이 내일 바로 픽업하세요!",
     bg: "#ECFEFF",
   },
   special: {
@@ -169,24 +169,26 @@ const ModernProductList: React.FC = () => {
 
   // 특수 상품(기획전/뷰티) 로드
   useEffect(() => {
-    const fetchSpecialProducts = async () => {
-      try {
-        const { products: fetched } = await getPaginatedProductsWithStock(300, null, null, 'all');
-        const events = fetched.filter((p) => {
-          const r = getDisplayRound(p);
-          const hasEventTag = r && r.eventType && !['NONE', 'PREMIUM', 'COSMETICS'].includes(r.eventType);
-          return hasEventTag && determineActionState(r, null) !== 'ENDED';
-        });
-        setHeroProducts(events);
-        const beauty = fetched.filter((p) => {
-          const r = getDisplayRound(p);
-          return r && (r.eventType === 'COSMETICS' || r.eventType === 'PREMIUM');
-        });
-        setBeautyProducts(beauty);
-      } catch (e) { console.error(e); }
-    };
-    fetchSpecialProducts();
-  }, []);
+  const fetchSpecialProducts = async () => {
+    try {
+      const { products: fetched } = await getPaginatedProductsWithStock(300, null, null, 'all');
+      const events = fetched.filter((p) => {
+        const r = getDisplayRound(p);
+        // ✅ [수정] 'PREMIUM'과 'COSMETICS'를 제외 목록에서 삭제하여 기획전 탭에 노출되도록 변경
+        const hasEventTag = r && r.eventType && !['NONE'].includes(r.eventType);
+        return hasEventTag && determineActionState(r, null) !== 'ENDED';
+      });
+      setHeroProducts(events);
+      
+      const beauty = fetched.filter((p) => {
+        const r = getDisplayRound(p);
+        return r && (r.eventType === 'COSMETICS' || r.eventType === 'PREMIUM');
+      });
+      setBeautyProducts(beauty);
+    } catch (e) { console.error(e); }
+  };
+  fetchSpecialProducts();
+}, []);
 
 useEffect(() => {
   const loadTabProducts = async () => {
@@ -395,34 +397,34 @@ const fetchNextPage = useCallback(async () => {
             </section>
           )}
 
-          {/* 뷰티 섹션 (배너 밑으로 배치) */}
-          {processedBeautyProducts.length > 0 && (
-             <section className="beauty-section">
-                <div className="beauty-section-header">
-                  <div className="beauty-left">
-                    <span className="beauty-chip">BEAUTY</span>
-                    <h3 className="beauty-title">뷰티 & 프리미엄</h3>
-                  </div>
-                  <button className="beauty-more-btn" onClick={() => navigate('/beauty')} type="button">
-                    <Suspense fallback={<span />}><LazyChevronRight size={18} /></Suspense>
-                  </button>
-                </div>
-                <div className="beauty-product-grid">
-                  {processedBeautyProducts.map((p) => (
-                    <ModernProductCard
-                      key={`beauty-${p.id}`}
-                      product={p}
-                      actionState={determineActionState(p.displayRound as any, userDocument as any)}
-                      phase={'primary'}
-                      isPreorder={true}
-                      myPurchasedCount={0}
-                      onPurchaseComplete={fetchMyOrders}
-                    />
-                  ))}
-                </div>
-             </section>
-          )}
+{/* 뷰티 & 프리미엄 섹션 (홈에서만) */}
+{processedBeautyProducts.length > 0 && (
+  <section className="beauty-section" style={{ backgroundColor: '#FDFBF7', padding: '16px 0', margin: '8px 0' }}>
+    <div className="beauty-section-header" style={{ padding: '0 20px', marginBottom: '8px' }}>
+      <div className="beauty-left">
+        {/* ✅ PRE-ORDER 대신 직관적인 문구로 변경 */}
+        <span className="beauty-chip" style={{ background: '#D4AF37', color: '#fff', fontSize: '10px', padding: '4px 10px' }}>
+            단독 예약특가
+        </span>
+        <h3 className="beauty-title" style={{ fontSize: '16px', marginTop: '6px' }}>프리미엄 뷰티 컬렉션</h3>
+        <p style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+          정식 판매 전, 예약 구매로 가장 먼저 만나는 최상의 혜택 🌿
+        </p>
+      </div>
+    </div>
 
+    {/* ✅ 가로 스크롤 (카드 너비가 200px로 늘어나서 이름이 더 잘 보임) */}
+    <div className="sp-hscroll" style={{ padding: '0 20px 4px' }}>
+      {processedBeautyProducts.map((p) => (
+        <ModernProductThumbCard 
+          key={`beauty-${p.id}`} 
+          product={p as any} 
+          variant="row" 
+        />
+      ))}
+    </div>
+  </section>
+)}
           <section className="sp-section">
             <div className="sp-section-head">
               <div className="sp-section-left">
