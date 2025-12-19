@@ -51,15 +51,14 @@ interface EventBanner {
 const EVENT_BANNERS: EventBanner[] = [
   {
     id: 'berrymom-open',
-    // ✅ 영문 대신 직관적인 한글 문구로 변경
-    chip: '단독 예약특가 런칭', 
+    chip: '단독 예약특가 런칭',
     title: '베리맘(VERY MOM) 프리미엄',
     desc: '온 가족이 함께 쓰는 최상급 케어, 오직 송도픽에서만 ✨',
     cta: '특별 혜택가로 예약하기',
     bg: 'linear-gradient(135deg, #FDFBF7 0%, #EFE5D6 100%)',
     linkType: 'internal',
     href: '/beauty',
-    image: '/images/verymom/logo.jpg', 
+    image: '/images/verymom/logo.jpg',
     imageAlt: '베리맘 런칭',
   },
   {
@@ -73,6 +72,19 @@ const EVENT_BANNERS: EventBanner[] = [
     href: '/partner/hey-u-beauty',
     image: '/images/heyu/asd.jpg',
     imageAlt: '헤이유 뷰티룸',
+  },
+
+  // ✅ [추가] 크리스마스 리뷰 감사 이벤트 (이동 없음)
+  {
+    id: 'xmas-review-gift-2025-12',
+    chip: '🎄 리뷰 감사 이벤트',
+    title: '사진 + 한줄 후기 남기면 선물🎁',
+    desc: '크리스마스 데코세트 1개 증정 (1인 1개 · 선착순 · 소진 시 종료)',
+    cta: '리뷰 남기고 채널톡으로 알려주세요',
+    bg: 'linear-gradient(135deg, #FFF7F3 0%, #FDE2E2 40%, #E7F8EF 100%)',
+    linkType: 'none',
+    image: '/images/events/xmas-deco-review.png', // ✅ 너가 넣을 이미지 경로
+    imageAlt: '크리스마스 리뷰 이벤트',
   },
 ];
 

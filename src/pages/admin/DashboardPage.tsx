@@ -62,14 +62,18 @@ const convertToDate = (dateSource: any): Date | null => {
 
 const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     const [copied, setCopied] = useState(false);
-    const productUrl = `https://www.songdopick.store/product/${productId}`;
+    
+    // 1. 복사할 텍스트 형식을 변경합니다. (\n은 줄바꿈을 의미합니다)
+    const shareText = `👉 예약은 여기에서!\nhttps://www.songdopick.store/product/${productId}`;
 
     const handleCopy = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        navigator.clipboard.writeText(productUrl).then(() => {
+        
+        // 2. productUrl 대신 shareText를 클립보드에 씁니다.
+        navigator.clipboard.writeText(shareText).then(() => {
             setCopied(true);
-            toast.success('상품 링크가 복사되었습니다!');
+            toast.success('홍보 문구와 링크가 복사되었습니다!');
             setTimeout(() => setCopied(false), 2000);
         }, () => {
             toast.error('링크 복사에 실패했습니다.');
@@ -77,7 +81,8 @@ const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
     };
 
     return (
-        <button onClick={handleCopy} className="admin-action-button" title={`클릭하여 링크 복사:\n${productUrl}`}>
+        // 3. (선택사항) 버튼에 마우스를 올렸을 때 나오는 설명도 수정하면 좋습니다.
+        <button onClick={handleCopy} className="admin-action-button" title={`클릭하여 홍보 문구 복사:\n${shareText}`}>
             {copied ? <Check size={16} color="var(--success-color)" /> : <ClipboardCopy size={16} />}
         </button>
     );
