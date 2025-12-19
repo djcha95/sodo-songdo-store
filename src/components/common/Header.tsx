@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import SideMenu from './SideMenu';
+import { db } from '../../firebase/firebaseConfig'; // Firebase 설정 확인 필요
+import { collection, getDocs, query } from 'firebase/firestore';
+import dayjs from 'dayjs';
 import './Header.css';
 
-const CATEGORIES = [
+const ALL_CATEGORIES = [
   { id: 'home', label: '스토어홈' },
   { id: 'today', label: '🔥 오늘공구' },
   { id: 'tomorrow', label: '🚀 내일픽업' },
@@ -15,6 +18,8 @@ const CATEGORIES = [
 
 const Header: React.FC = () => {
   const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
+  // ✅ 동적으로 변하는 카테고리 상태
+  const [visibleCategories, setVisibleCategories] = useState(ALL_CATEGORIES);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -24,17 +29,50 @@ const Header: React.FC = () => {
   const isModernPage = location.pathname === '/' || location.pathname.startsWith('/product');
   const isHistoryPage = location.pathname === '/mypage/history';
 
-  const categories = useMemo(() => CATEGORIES, []);
-
   // 인디케이터 위치/폭
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
 
   // 스크롤 컨테이너/리스트 ref
   const trackRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
-
-  // 탭별 엘리먼트 ref
   const tabRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+
+  // ✅ [수정] Firebase 데이터를 확인하여 탭 노출 여부 결정
+  useEffect(() => {
+    const checkTabsVisibility = async () => {
+      try {
+        const q = query(collection(db, 'products'));
+        const querySnapshot = await getDocs(q);
+        const allProducts = querySnapshot.docs.map(doc => doc.data());
+
+        const tomorrowDate = dayjs().add(1, 'day').format('YYYY-MM-DD');
+        
+        // 1. 내일 픽업 상품 여부 확인
+        const hasTomorrow = allProducts.some(p => {
+          const rounds = p.salesRounds || [];
+          return rounds.some((r: any) => 
+            (r.arrivalDate === tomorrowDate || r.pickupDate === tomorrowDate) && r.status !== 'draft'
+          );
+        });
+
+        // 2. 추가 공구 상품 여부 확인
+        const hasAdditional = allProducts.some(p => p.sourceType === 'SODOMALL');
+
+        // 필터링 logic
+        const nextCategories = ALL_CATEGORIES.filter(cat => {
+          if (cat.id === 'tomorrow') return hasTomorrow;
+          if (cat.id === 'additional') return hasAdditional;
+          return true; 
+        });
+
+        setVisibleCategories(nextCategories);
+      } catch (err) {
+        console.error("탭 목록 로드 중 에러 발생:", err);
+      }
+    };
+
+    checkTabsVisibility();
+  }, []);
 
   const updateIndicator = () => {
     const el = tabRefs.current[currentTab];
@@ -42,7 +80,6 @@ const Header: React.FC = () => {
     const trackEl = trackRef.current;
     if (!el || !listEl || !trackEl) return;
 
-    // list 기준 좌표 + 스크롤값으로 계산
     const elRect = el.getBoundingClientRect();
     const listRect = listEl.getBoundingClientRect();
     const left = elRect.left - listRect.left;
@@ -50,21 +87,20 @@ const Header: React.FC = () => {
 
     setIndicator({ left, width });
 
-    // ✅ 모바일: 활성 탭이 안 보이면 track 안에서 부드럽게 보이게
+    // 모바일 활성 탭 중앙 정렬 스크롤
     el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   };
 
+  // 탭 변경이나 카테고리 목록 변경 시 인디케이터 업데이트
   useEffect(() => {
     updateIndicator();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTab, location.pathname]);
+  }, [currentTab, location.pathname, visibleCategories]);
 
   useEffect(() => {
     const onResize = () => updateIndicator();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTab]);
+  }, [currentTab, visibleCategories]);
 
   return (
     <>
@@ -96,10 +132,9 @@ const Header: React.FC = () => {
           {isModernPage && (
             <nav className="header-category-nav">
               <div className="header-inner">
-                {/* ✅ 모바일 가로 스크롤 컨테이너 */}
                 <div className="category-track" ref={trackRef}>
                   <ul className="category-list" ref={listRef}>
-                    {categories.map((cat) => (
+                    {visibleCategories.map((cat) => (
                       <li key={cat.id}>
                         <NavLink
                           to={`/?tab=${cat.id}`}
@@ -114,7 +149,6 @@ const Header: React.FC = () => {
                       </li>
                     ))}
 
-                    {/* ✅ 이동하는 인디케이터 */}
                     <span
                       className="tab-indicator"
                       style={{

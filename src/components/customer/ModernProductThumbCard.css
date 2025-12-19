@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 8px; /* 간격 축소 */
   background: #fff;
-  border: 1px solid #E5E7EB;
+  border: 1.5px solid #D1D5DB;
   border-radius: 12px;
   padding: 8px; /* 내부 패딩 줄여서 이미지 키움 */
   text-align: left;
@@ -16,7 +16,7 @@
 
 .sp-thumb-card:hover {
   transform: translateY(-2px);
-  border-color: #D1D5DB;
+  border-color: #9CA3AF;
   box-shadow: 0 10px 22px rgba(0,0,0,0.06);
 }
 

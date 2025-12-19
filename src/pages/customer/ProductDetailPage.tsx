@@ -85,21 +85,20 @@ function overlayKey(productId: string, roundId: string, vgId: string) {
 }
 
 function applyReservedOverlay(product: Product, reservedMap: Map<string, number>): Product {
-  // 💡 [수정] productUtils와 동일하게 Array.isArray 방어 코드 적용
-  if (!Array.isArray(product?.salesHistory)) return product; 
-  
-  product.salesHistory = product.salesHistory.map((round) => {
-    // 💡 [수정] round.variantGroups가 없을 경우 빈 배열로 처리
+  // ✅ 불변성 유지: 원본 product를 절대 mutate 하지 않음
+  if (!Array.isArray(product?.salesHistory)) return product;
+
+  const salesHistory = product.salesHistory.map((round) => {
     const vgs = (round.variantGroups || []).map((vg) => {
-      // 💡 [수정] 타입 호환성을 위해 vg를 OriginalVariantGroup으로 캐스팅
-      const originalVg = vg as OriginalVariantGroup; 
+      const originalVg = vg as OriginalVariantGroup;
       const key = overlayKey(product.id, round.roundId, originalVg.id);
       const reserved = reservedMap.get(key) || 0;
       return { ...vg, reservedCount: reserved };
     });
     return { ...round, variantGroups: vgs };
   });
-  return product;
+
+  return { ...product, salesHistory };
 }
 
 // --- Sub Components ---
@@ -671,6 +670,22 @@ const ProductDetailPage: React.FC = () => {
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
+    // ✅ [추가] 예약 수량 맵 캐시 (상세 진입 시 첫 체감속도 개선)
+const reservedMapCacheRef = useRef<Map<string, number> | null>(null);
+const reservedMapPromiseRef = useRef<Promise<Map<string, number>> | null>(null);
+
+const loadReservedMap = useCallback(async () => {
+  if (reservedMapCacheRef.current) return reservedMapCacheRef.current;
+  if (!reservedMapPromiseRef.current) {
+    reservedMapPromiseRef.current = (async () => {
+      const map = await getReservedQuantitiesMap();
+      reservedMapCacheRef.current = map;
+      return map;
+    })();
+  }
+  return reservedMapPromiseRef.current;
+}, []);
+
 
     // 💡 [추가] Firestore 인스턴스를 가져옵니다.
     const db = useMemo(() => getFirestore(getApp()), []);
@@ -802,38 +817,52 @@ const ProductDetailPage: React.FC = () => {
     }, [displayRound]);
 
     // ✅ [수정] fetchProduct를 useCallback으로 감싸서 useEffect에서 참조할 수 있도록 함
-    const fetchProduct = useCallback(async () => {
-        if (!productId) {
-            setError("잘못된 상품 ID입니다.");
-            setLoading(false);
-            return;
-        }
-        
-        setLoading(true);
-        try {
-            // 💡 [수정] 5초 콜드 스타트 해결을 위해 Cloud Function 대신 DB에서 직접 조회합니다.
-            const productRef = doc(db, 'products', productId);
-            const productSnap = await getDoc(productRef);
+const fetchProduct = useCallback(async () => {
+  if (!productId) {
+    setError("잘못된 상품 ID입니다.");
+    setLoading(false);
+    return;
+  }
 
-            if (!productSnap.exists()) {
-                setError("상품을 찾을 수 없습니다.");
-                return;
-            }
-            const productData = { ...productSnap.data(), id: productSnap.id } as Product;
+  setError(null);
+  setLoading(true);
 
-            // 💡 [추가] 예약 수량 맵을 가져와서 재고 오버레이를 적용합니다.
-            // (SimpleOrderPage와 동일한 로직)
-            const reservedMap = await getReservedQuantitiesMap();
-            const productWithOverlay = applyReservedOverlay(productData, reservedMap);
+  try {
+    // 1) 상품 정보는 먼저 로딩해서 화면을 빠르게 띄움
+    const productRef = doc(db, 'products', productId);
+    const productSnap = await getDoc(productRef);
 
-            setProduct(productWithOverlay);
-        } catch (e: any) {
-            console.error("상품 상세 정보 로딩 실패:", e);
-            showToast('error', e.message || "상품 정보를 불러오는 데 실패했습니다. (DB 직접 조회 오류)");
-        } finally {
-            setLoading(false);
-        }
-    }, [productId, db]); // ✅ [수정] 의존성 배열
+    if (!productSnap.exists()) {
+      setError("상품을 찾을 수 없습니다.");
+      setLoading(false);
+      return;
+    }
+
+    const productData = { ...productSnap.data(), id: productSnap.id } as Product;
+
+    setProduct(productData);
+    setLoading(false);
+
+    // 2) 예약 수량 오버레이는 뒤에서 적용 (느려도 화면은 먼저 뜸)
+    //    - 캐시를 사용해 재방문/뒤로가기에 더 빠름
+    try {
+      const reservedMap = await loadReservedMap();
+      setProduct((prev) => {
+        if (!prev) return prev;
+        if (prev.id !== productData.id) return prev; // 라우팅 변경 안전장치
+        return applyReservedOverlay(prev, reservedMap);
+      });
+    } catch (overlayErr) {
+      // 오버레이 실패는 치명적이지 않으므로 조용히 처리 (원본 상품은 이미 표시됨)
+      console.warn("예약 수량 오버레이 적용 실패:", overlayErr);
+    }
+  } catch (e: any) {
+    console.error("상품 상세 정보 로딩 실패:", e);
+    showToast('error', e?.message || "상품 정보를 불러오는 데 실패했습니다. (DB 직접 조회 오류)");
+    setError(e?.message || "상품 정보를 불러오는 데 실패했습니다.");
+    setLoading(false);
+  }
+}, [productId, db, loadReservedMap]);
 
     useEffect(() => {
         fetchProduct();

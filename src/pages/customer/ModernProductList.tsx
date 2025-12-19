@@ -29,7 +29,9 @@ import './ModernProductList.css';
 const LazyChevronRight = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.ChevronRight }))
 );
-
+const LazyShoppingBag = React.lazy(() =>
+  import('lucide-react').then((module) => ({ default: module.ShoppingBag }))
+);
 
 type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite';
 const PAGE_SIZE = 30;
@@ -80,7 +82,7 @@ const EVENT_BANNERS: EventBanner[] = [
     chip: '🎄 리뷰 감사 이벤트',
     title: '사진 + 한줄 후기 남기면 선물🎁',
     desc: '크리스마스 데코세트 1개 증정 (1인 1개 · 선착순 · 소진 시 종료)',
-    cta: '리뷰 남기고 채널톡으로 알려주세요',
+    cta: '리뷰로 받는 작은 선물',
     bg: 'linear-gradient(135deg, #FFF7F3 0%, #FDE2E2 40%, #E7F8EF 100%)',
     linkType: 'none',
     image: '/images/events/xmas-deco-review.png', // ✅ 너가 넣을 이미지 경로
@@ -528,33 +530,40 @@ const fetchNextPage = useCallback(async () => {
       )}
 
       {/* ================================================= */}
-      {/* 📑 개별 탭 화면 (그리드 + 번호표 index) */}
-      {/* ================================================= */}
-      {activeTab !== 'all' && (
-        <div ref={primaryRef} className="sp-grid">
-          {activeTab === 'special' ? (
-            processedEventProducts.length > 0 ? (
-              processedEventProducts.map((p, idx) => (
-                <ModernProductThumbCard
-                  key={`special-${p.id}`}
-                  product={p as any}
-                  variant="grid"
-                  index={idx} // 번호표
-                />
-              ))
-            ) : <div className="empty-state"><p>진행 중인 기획전이 없습니다.</p></div>
-          ) : visibleNormalProducts.length > 0 ? (
-            visibleNormalProducts.map((p, idx) => (
-              <ModernProductThumbCard
-                key={p.id}
-                product={p as any}
-                variant="grid"
-                index={idx} // 번호표
-              />
-            ))
-          ) : !loading && <div className="empty-state"><p>진행 중인 상품이 없습니다.</p></div>}
+{/* 📑 개별 탭 화면 (그리드 + 번호표 index) */}
+{/* ================================================= */}
+{activeTab !== 'all' && (
+  <div ref={primaryRef} className="sp-grid-container"> {/* 컨테이너 클래스 추가 권장 */}
+    {activeTab === 'special' ? (
+      processedEventProducts.length > 0 ? (
+        <div className="sp-grid">
+          {processedEventProducts.map((p, idx) => (
+            <ModernProductThumbCard key={`special-${p.id}`} product={p as any} variant="grid" index={idx} />
+          ))}
         </div>
-      )}
+      ) : (
+        <div className="sp-empty-view">
+          <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
+          <p>현재 진행 중인 기획전이 없습니다.</p>
+        </div>
+      )
+    ) : visibleNormalProducts.length > 0 ? (
+      <div className="sp-grid">
+        {visibleNormalProducts.map((p, idx) => (
+          <ModernProductThumbCard key={p.id} product={p as any} variant="grid" index={idx} />
+        ))}
+      </div>
+    ) : (
+      !loading && (
+        <div className="sp-empty-view">
+          <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
+          <p>내일 픽업 가능한 상품이 아직 없어요.</p>
+          <span>새로운 상품이 곧 준비될 예정입니다!</span>
+        </div>
+      )
+    )}
+  </div>
+)}
 
       {activeTab !== 'all' && <div ref={observerRef} style={{ height: 1 }} />}
       {isLoadingMore && <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>불러오는 중...</div>}
