@@ -707,7 +707,7 @@
   color: transparent;
 
   /* 4. 하얀색 외곽선 (두께 2px) */
-  -webkit-text-stroke: 0.5px #ffffff;
+  -webkit-text-stroke: 0.1px #ffffff;
   /* 글자 겹침 방지용 paint-order */
   paint-order: stroke fill;
 
