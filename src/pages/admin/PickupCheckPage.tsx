@@ -423,7 +423,10 @@ const PickupCheckPage: React.FC = () => {
               <div className="photo-header">
                   <span className="photo-date">{selectedDate.format('M월 D일')}</span>
                   <span className="photo-title">
-                    {viewMode === 'CLOSING' ? '🔥 마감임박 라인업' : '✨ 오늘의 라인업'}
+                    {/* ▼ [수정됨] 모드별 타이틀 분기 처리 */}
+                    {viewMode === 'CLOSING' ? '🔥 예약 곧 마감임박' : 
+                     viewMode === 'NOSHOW' ? '노쇼분 현장판매' : 
+                     '✨ 오늘의 라인업'}
                   </span>
               </div>
               

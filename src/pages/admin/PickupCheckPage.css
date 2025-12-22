@@ -684,3 +684,38 @@
 .pickup-items-compact li::marker {
   content: none;
 }
+
+/* src/pages/admin/PickupCheckPage.css */
+
+/* ... 기존 코드들 ... */
+
+/* 사진 모아보기 우상단 타이틀 꾸미기 */
+.photo-title {
+  /* 1. 글자 크기 대폭 확대 & 두께 강조 */
+  font-size: 2.5rem;   /* 기존 1.5rem -> 2.5rem (약 1.6배 큼) */
+  font-weight: 900;    /* 가장 두꺼운 폰트 */
+  letter-spacing: -1.5px; /* 자간을 좁혀서 더 단단해 보이게 */
+  line-height: 1.1;
+
+  /* 2. 그라데이션 (좌측 네이비 -> 우측 밝은 파랑) */
+  background: linear-gradient(95deg, #001F5C 0%, #00BFFF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+
+  /* 3. 글자 내부를 투명하게 해서 그라데이션이 보이게 함 */
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+
+  /* 4. 하얀색 외곽선 (두께 2px) */
+  -webkit-text-stroke: 0.5px #ffffff;
+  /* 글자 겹침 방지용 paint-order */
+  paint-order: stroke fill;
+
+  /* 5. 그림자 (그라데이션 텍스트 뒤에 자연스러운 그림자) */
+  filter: drop-shadow(4px 4px 2px rgba(0,0,0,0.25));
+
+  /* 정렬 */
+  margin-left: auto;
+  display: inline-block;
+  padding-right: 5px; /* 글자 잘림 방지 */
+}
