@@ -383,8 +383,9 @@ const ProductListPageAdmin: React.FC = () => {
       let backendPromise: Promise<any>;
 
       if (field === 'storageType') {
-        backendPromise = updateProductCoreInfo(productId, { storageType: newValue as StorageType }, [], [], []);
-      }
+  // 인자를 3개로 줄여서 전달 (productId, 업데이트 내용, 빈 배열 하나)
+  backendPromise = updateProductCoreInfo(productId, { storageType: newValue as StorageType }, []);
+}
       else if (field === 'pickupDate') {
         const newDate = Timestamp.fromDate(new Date(newValue as number));
         backendPromise = updateSalesRound(productId, roundId, { pickupDate: newDate });
