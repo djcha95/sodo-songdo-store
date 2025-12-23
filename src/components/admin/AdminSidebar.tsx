@@ -5,7 +5,7 @@ import React from 'react';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ExternalLink, Menu, Zap, PlusSquare, Wallet,
-  CalendarCheck, ClipboardList // ⬅️ ClipboardList 아이콘 추가
+  CalendarCheck, ClipboardList, Settings // 👈 Settings 추가
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -56,6 +56,10 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
           <MenuItem to="/admin/stock" icon={<ClipboardList size={18} />} text="현장판매 재고" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products" icon={<Package size={18} />} text="상품 목록" isSidebarOpen={isSidebarOpen} end={true} />
           <MenuItem to="/admin/products/add" icon={<PlusSquare size={18} />} text="새 상품 등록" isSidebarOpen={isSidebarOpen} />
+          {/* 👇 [추가] 시스템 관리 메뉴 */}
+<div className="my-2 border-t border-gray-700/50 mx-2"></div> {/* 구분선 (선택사항) */}
+<MenuItem to="/admin/tools" icon={<Settings size={18} />} text="시스템 관리" isSidebarOpen={isSidebarOpen} />
+        
         </ul>
       </nav>
 

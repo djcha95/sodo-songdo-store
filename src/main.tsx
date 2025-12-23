@@ -76,7 +76,7 @@ const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage')
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
 const PickupCheckPage = React.lazy(() => import('@/pages/admin/PickupCheckPage'));
 const AdminStockPage = React.lazy(() => import('@/pages/admin/AdminStockPage'));
-
+const AdminToolsPage = React.lazy(() => import('@/pages/admin/AdminToolsPage')); // 👈 추가
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -225,6 +225,8 @@ const router = createBrowserRouter([
           { path: "create-order", element: <CreateOrderPage /> },
           { path: "users", element: <UserListPage /> },
           { path: "users/:userId", element: <UserDetailPage /> },
+          // 👇 [추가] 시스템 도구 페이지 경로 설정
+    { path: "tools", element: <AdminToolsPage /> },
         ],
       },
     ],

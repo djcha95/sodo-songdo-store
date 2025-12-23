@@ -5,10 +5,98 @@ import * as logger from "firebase-functions/logger";
 import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp as AdminTimestamp, QueryDocumentSnapshot, DocumentData, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-// AdminTimestamp import 제거됨
-import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo, LoyaltyTier } from "@/shared/types"; // AdminTimestamp 제거
+import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, SalesRound, PointLog, CustomerInfo, LoyaltyTier } from "@/shared/types";
 
-// ✅ [복원] 관리자 기능에 필요한 등급 계산, 포인트 정책 로직을 복원합니다.
+// ===============================
+// StockStats v1 helpers (재고 칠판 도구)
+// ===============================
+const STOCK_STATS_COL = "stockStats_v1";
+
+function statDocId(productId: string, roundId: string) {
+  return `${productId}__${roundId}`;
+}
+
+function itemDeduct(it: OrderItem): number {
+  const q = typeof it.quantity === "number" ? it.quantity : 0;
+  const d = typeof it.stockDeductionAmount === "number" && it.stockDeductionAmount > 0 ? it.stockDeductionAmount : 1;
+  return q * d;
+}
+
+function claimedField(vgId: string) {
+  return `claimed.${vgId}`;
+}
+
+function pickedUpField(vgId: string) {
+  return `pickedUp.${vgId}`;
+}
+
+// 칠판에서 현재 판매된 수량 읽기
+async function getClaimedNow(
+  tx: FirebaseFirestore.Transaction,
+  productId: string,
+  roundId: string,
+  variantGroupId: string
+): Promise<number> {
+  const ref = db.collection(STOCK_STATS_COL).doc(statDocId(productId, roundId));
+  const snap = await tx.get(ref);
+  const data = snap.exists ? (snap.data() as any) : {};
+  const n = data?.claimed?.[variantGroupId];
+  return typeof n === "number" ? n : 0;
+}
+
+// ===============================
+// StockStats v1 helpers (재고 칠판 도구)
+// ===============================
+// ✅ 1-write(= tx.set merge)로 최적화된 버전
+
+function applyClaimedDelta(
+  tx: FirebaseFirestore.Transaction,
+  productId: string,
+  roundId: string,
+  variantGroupId: string,
+  delta: number
+) {
+  if (!delta) return;
+
+  const ref = db.collection(STOCK_STATS_COL).doc(statDocId(productId, roundId));
+  tx.set(
+    ref,
+    {
+      productId,
+      roundId,
+      updatedAt: AdminTimestamp.now(),
+      [claimedField(variantGroupId)]: FieldValue.increment(delta),
+    } as any,
+    { merge: true }
+  );
+}
+
+function applyPickedUpDelta(
+  tx: FirebaseFirestore.Transaction,
+  productId: string,
+  roundId: string,
+  variantGroupId: string,
+  delta: number
+) {
+  if (!delta) return;
+
+  const ref = db.collection(STOCK_STATS_COL).doc(statDocId(productId, roundId));
+  tx.set(
+    ref,
+    {
+      productId,
+      roundId,
+      updatedAt: AdminTimestamp.now(),
+      [pickedUpField(variantGroupId)]: FieldValue.increment(delta),
+    } as any,
+    { merge: true }
+  );
+}
+
+// ===============================
+// Logic & Constants
+// ===============================
+
 const POINT_POLICIES = {
   LATE_CANCEL_PENALTY: { points: -50, reason: '마감 임박 취소 (0.5 노쇼)' },
   PARTIAL_PICKUP_PENALTY: { points: -50, reason: '부분 픽업 (0.5 노쇼)' },
@@ -23,7 +111,7 @@ const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier =>
   const totalTransactions = pickupCount + noShowCount;
   const pickupRate = (pickupCount / totalTransactions) * 100;
 
-  // 2. 긍정적 등급 (기존 로직 유지)
+  // 2. 긍정적 등급
   if (pickupRate >= 98 && pickupCount >= 250) {
     return '공구의 신';
   }
@@ -71,7 +159,6 @@ function toEpochMillis(v: any): number | null {
   return null;
 }
 
-
 const productConverter = {
   toFirestore(product: Product): DocumentData { return product; },
   fromFirestore(snapshot: QueryDocumentSnapshot): Product {
@@ -91,7 +178,9 @@ const userConverter = {
   }
 };
 
-
+// ===============================
+// Callable Functions
+// ===============================
 
 export const checkCartStock = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
@@ -106,78 +195,64 @@ export const checkCartStock = onCall(
     }
 
     try {
+      // 1. 상품 정보 가져오기
       const productIds = [...new Set(cartItems.map(item => item.productId))];
       const productSnapshots = await Promise.all(
         productIds.map(id => db.collection("products").withConverter(productConverter).doc(id).get())
       );
       const productsMap = new Map<string, Product>();
-      
       productSnapshots.forEach(snap => {
-        if (snap.exists) {
-            productsMap.set(snap.id, { ...snap.data(), id: snap.id } as Product);
-        }
+        if (snap.exists) productsMap.set(snap.id, { ...snap.data(), id: snap.id } as Product);
+      });
+
+      // 2. 칠판(StockStats) 정보 한꺼번에 가져오기
+      const statsKeys = [...new Set(cartItems.map(item => statDocId(item.productId, item.roundId)))];
+      const statsSnapshots = await Promise.all(
+        statsKeys.map(key => db.collection(STOCK_STATS_COL).doc(key).get())
+      );
+      const statsMap = new Map<string, any>();
+      statsSnapshots.forEach(snap => {
+        if (snap.exists) statsMap.set(snap.id, snap.data());
       });
       
       const updatedItems: { id: string; newQuantity: number }[] = [];
       const removedItemIds: string[] = [];
       let isSufficient = true;
 
-      const reservedQuantitiesMap = new Map<string, number>();
-      const ordersQuery = db.collection('orders').withConverter(orderConverter).where('status', 'in', ['RESERVED', 'PREPAID']);
-      const ordersSnapshot = await ordersQuery.get();
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data();
-        (order.items || []).forEach((item: OrderItem) => {
-          const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-          const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
-          reservedQuantitiesMap.set(key, (reservedQuantitiesMap.get(key) || 0) + actualDeduction);
-        });
-      });
+      for (const item of cartItems) {
+        const product = productsMap.get(item.productId);
+        if (!product) { removedItemIds.push(item.id); isSufficient = false; continue; }
 
-for (const item of cartItems) {
-  const product = productsMap.get(item.productId);
-  if (!product) {
-    removedItemIds.push(item.id);
-    isSufficient = false;
-    continue;
-  }
+        const round = product.salesHistory.find(r => r.roundId === item.roundId);
+        if (!round) { removedItemIds.push(item.id); isSufficient = false; continue; }
 
-  const round = product.salesHistory.find(r => r.roundId === item.roundId);
-  if (!round) {
-    removedItemIds.push(item.id);
-    isSufficient = false;
-    continue;
-  }
+        const group = round.variantGroups.find(vg => vg.id === item.variantGroupId);
+        if (!group) { removedItemIds.push(item.id); isSufficient = false; continue; }
 
-  const group = round.variantGroups.find(vg => vg.id === item.variantGroupId);
-  if (!group) {
-    removedItemIds.push(item.id);
-    isSufficient = false;
-    continue;
-  }
+        // ✅ [변경] 칠판 확인 로직
+        const statData = statsMap.get(statDocId(item.productId, item.roundId));
+        const currentReserved = statData?.claimed?.[item.variantGroupId] || 0;
+        
+        const totalStock = group.totalPhysicalStock;
+        let availableStock = Infinity;
 
-  const totalStock = group.totalPhysicalStock;
-  const key = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-  const reservedQuantity = reservedQuantitiesMap.get(key) || 0;
+        if (totalStock !== null && totalStock !== -1) {
+          availableStock = totalStock - currentReserved;
+        }
 
-  let availableStock = Infinity;
-  if (totalStock !== null && totalStock !== -1) {
-    availableStock = totalStock - reservedQuantity;
-  }
+        const stockDeductionAmount = item.stockDeductionAmount || 1;
+        const requiredStock = item.quantity * stockDeductionAmount;
 
-  const stockDeductionAmount = item.stockDeductionAmount || 1;
-  const requiredStock = item.quantity * stockDeductionAmount;
-
-  if (requiredStock > availableStock) {
-    isSufficient = false;
-    const adjustedQuantity = Math.max(0, Math.floor(availableStock / stockDeductionAmount));
-    if (adjustedQuantity > 0) {
-      updatedItems.push({ id: item.id, newQuantity: adjustedQuantity });
-    } else {
-      removedItemIds.push(item.id);
-    }
-  }
-}
+        if (requiredStock > availableStock) {
+          isSufficient = false;
+          const adjustedQuantity = Math.max(0, Math.floor(availableStock / stockDeductionAmount));
+          if (adjustedQuantity > 0) {
+            updatedItems.push({ id: item.id, newQuantity: adjustedQuantity });
+          } else {
+            removedItemIds.push(item.id);
+          }
+        }
+      }
       return { updatedItems, removedItemIds, isSufficient };
     } catch (error) {
       logger.error("Error checking stock:", error);
@@ -186,21 +261,17 @@ for (const item of cartItems) {
   }
 );
 
-// functions/src/callable/orders.ts 의 submitOrder 함수 전체 교체
-
 export const submitOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "A login is required.");
-    }
+    if (!request.auth) throw new HttpsError("unauthenticated", "A login is required.");
 
     const userId = request.auth.uid;
     const client = request.data as {
       items: OrderItem[];
       totalPrice: number;
       customerInfo: CustomerInfo;
-      pickupDate?: AdminTimestamp | null; // 단일 픽업일 경우 (현재 로직상 아이템 내부 pickupDate 사용 권장)
+      pickupDate?: AdminTimestamp | null;
       wasPrepaymentRequired?: boolean;
       notes?: string;
     };
@@ -211,63 +282,38 @@ export const submitOrder = onCall(
 
     try {
       const result = await db.runTransaction(async (transaction) => {
-        // 1. 사용자 정보 조회 및 등급 확인
+        // 1. 유저 정보
         const userRef = db.collection("users").withConverter(userConverter).doc(userId);
         const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists) {
-          throw new HttpsError('not-found', 'User information not found.');
-        }
-
+        if (!userSnap.exists) throw new HttpsError('not-found', 'User info not found.');
         const userData = userSnap.data() as UserDocument;
-        const effectiveTier = userData.manualTier || userData.loyaltyTier;
-        if (effectiveTier === '공구제한') {
-            throw new HttpsError("permission-denied", "공구제한 등급은 현재 주문하실 수 없습니다. 관리자에게 문의해주세요.");
+        if ((userData.manualTier || userData.loyaltyTier) === '공구제한') {
+            throw new HttpsError("permission-denied", "공구제한 등급입니다.");
         }
 
-        // 2. 상품 정보 조회 (Product & SalesRound)
+        // 2. 상품 정보
         const productIds = [...new Set(client.items.map(i => i.productId))];
         const productSnaps = await Promise.all(
           productIds.map(id => db.collection("products").withConverter(productConverter).doc(id).get())
         );
         const productDataMap = new Map<string, Product>();
         for (const s of productSnaps) {
-          if (!s.exists) throw new HttpsError("not-found", `Product not found (ID: ${s.id}).`);
+          if (!s.exists) throw new HttpsError("not-found", "Product not found.");
           productDataMap.set(s.id, { ...s.data(), id: s.id } as Product);
         }
 
-        // 3. 전체 예약된 재고량 계산 (Global Reserved Stock)
-        // 주의: 여기서 조회하는 ordersSnap에는 '내가 지금 업데이트하려는 주문'도 포함되어 있을 수 있음.
-        const reservedMap = new Map<string, number>();
-        const ordersQuery = db.collection("orders")
-          .withConverter(orderConverter)
-          .where("status", "in", ["RESERVED", "PREPAID"]);
-        
-        const ordersSnap = await transaction.get(ordersQuery);
-        ordersSnap.forEach(doc => {
-          const order = doc.data();
-          for (const it of (order.items || [])) {
-            const key = `${it.productId}-${it.roundId}-${it.variantGroupId}`;
-            const deduct = it.quantity * (it.stockDeductionAmount || 1);
-            reservedMap.set(key, (reservedMap.get(key) || 0) + deduct);
-          }
-        });
-
-        // 4. 사용자의 기존 활성 주문 조회 (병합 대상 찾기용)
+        // 3. 기존 주문 찾기 (병합용)
         const userOrdersQuery = db.collection("orders")
             .withConverter(orderConverter)
             .where("userId", "==", userId)
-            .where("status", "in", ["RESERVED", "PREPAID"]); // 선입금 대기중인 것도 합칠 수 있으면 합침
+            .where("status", "in", ["RESERVED", "PREPAID"]);
         const userOrdersSnap = await transaction.get(userOrdersQuery);
-
-        // ✅ [핵심] 기존 주문 맵핑 (Key: ProductId-RoundId-VariantId-PickupDate)
-        // 같은 상품이라도 픽업 날짜가 다르면 다른 주문으로 처리해야 함.
-        const existingOrderMap = new Map<string, QueryDocumentSnapshot<Order>>();
         
+        const existingOrderMap = new Map<string, QueryDocumentSnapshot<Order>>();
         userOrdersSnap.docs.forEach(doc => {
             const orderData = doc.data();
-            const item = orderData.items[0]; // 시스템상 주문당 1개 아이템
+            const item = orderData.items[0];
             if (item) {
-                // 픽업 날짜 비교를 위해 millis로 변환
                 const pickupMillis = toEpochMillis(orderData.pickupDate) || 0;
                 const key = `${item.productId}-${item.roundId}-${item.variantGroupId}-${pickupMillis}`;
                 existingOrderMap.set(key, doc);
@@ -278,73 +324,48 @@ export const submitOrder = onCall(
         const updatedOrderIds: string[] = [];
         const phoneLast4 = (client.customerInfo?.phone || "").slice(-4);
 
-        // 5. 주문 처리 루프
+        // 4. 주문 처리 루프
         for (const singleItem of client.items) {
-          
           const product = productDataMap.get(singleItem.productId);
           if (!product) throw new HttpsError("not-found", "상품 정보를 찾을 수 없습니다.");
           
           const round = product.salesHistory.find(r => r.roundId === singleItem.roundId);
-          if (!round) throw new HttpsError("not-found", "판매 회차 정보를 찾을 수 없습니다.");
-          
-          const vg = round.variantGroups.find(v => v.id === singleItem.variantGroupId) || (round.variantGroups.length === 1 ? round.variantGroups[0] : undefined);
-          if (!vg) throw new HttpsError("not-found", "옵션 그룹 정보를 찾을 수 없습니다.");
+          const vg = round?.variantGroups.find(v => v.id === singleItem.variantGroupId) || (round?.variantGroups.length === 1 ? round?.variantGroups[0] : undefined);
+          if (!round || !vg) throw new HttpsError("not-found", "옵션 정보를 찾을 수 없습니다.");
 
-          // 재고 체크 (재고는 '옵션 그룹' 단위로 관리된다고 가정)
-          const stockKey = `${singleItem.productId}-${singleItem.roundId}-${vg.id || 'default'}`;
-          const currentReserved = reservedMap.get(stockKey) || 0;
-          const requiredAmount = singleItem.quantity * (singleItem.stockDeductionAmount || 1);
+          // ✅ [변경] 칠판(StockStats) 확인
+          const vgId = vg.id || 'default';
+          const addDeduct = singleItem.quantity * (singleItem.stockDeductionAmount || 1);
 
-          // 재고 부족 여부 확인
           if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
-             // 남은 재고 = 전체 - 현재까지 예약된 양
-             // 참고: 만약 '기존 주문 업데이트'라면, 기존 주문의 수량은 이미 currentReserved에 포함되어 있음.
-             // 따라서 requiredAmount(추가분)만 남은 재고(remaining)보다 작으면 됨.
-             const remaining = vg.totalPhysicalStock - currentReserved;
-             if (requiredAmount > remaining) {
-                throw new HttpsError("failed-precondition", `재고 부족: ${product.groupName} - ${vg.groupName} (주문가능: ${Math.floor(remaining / (singleItem.stockDeductionAmount || 1))}개)`);
+             const claimedNow = await getClaimedNow(transaction, singleItem.productId, singleItem.roundId, vgId);
+             const remaining = vg.totalPhysicalStock - claimedNow;
+             
+             if (addDeduct > remaining) {
+                throw new HttpsError("failed-precondition", `재고 부족: ${vg.groupName} (남은수량: ${Math.floor(remaining / (singleItem.stockDeductionAmount || 1))}개)`);
              }
           }
 
-          // 병합 키 생성
-          // 클라이언트에서 보낸 item의 pickupDate 혹은 round의 pickupDate 사용
-          // (보통 item.pickupDate가 우선순위를 가짐)
+          // 병합 또는 생성 로직
           const targetPickupDate = singleItem.pickupDate ? singleItem.pickupDate : round.pickupDate;
           const targetPickupMillis = toEpochMillis(targetPickupDate) || 0;
-          
           const mergeKey = `${singleItem.productId}-${singleItem.roundId}-${singleItem.variantGroupId}-${targetPickupMillis}`;
           const existingDoc = existingOrderMap.get(mergeKey);
 
           if (existingDoc) {
-              // =================================================
-              // (A) 기존 주문 병합 (UPDATE)
-              // =================================================
               const existingOrder = existingDoc.data();
               const existingItem = existingOrder.items[0];
-              
               const newQuantity = existingItem.quantity + singleItem.quantity;
               const newTotalPrice = existingItem.unitPrice * newQuantity;
 
-              const updatedItem = { 
-                  ...existingItem, 
-                  quantity: newQuantity 
-                  // 주의: stockDeduction 등은 기존 값 유지하거나 최신으로 갱신
-              };
-              
+              const updatedItem = { ...existingItem, quantity: newQuantity };
               transaction.update(existingDoc.ref, {
                   items: [updatedItem],
                   totalPrice: newTotalPrice,
-                  notes: (existingOrder.notes || "") + `\n[추가주문] +${singleItem.quantity}개 (총 ${newQuantity}개)`
+                  notes: (existingOrder.notes || "") + `\n[추가주문] +${singleItem.quantity}개`
               });
               updatedOrderIds.push(existingDoc.id);
-
-              // 한 트랜잭션 내에서 같은 상품을 또 주문할 경우 대비 (재고 맵 업데이트)
-              reservedMap.set(stockKey, currentReserved + requiredAmount);
-
           } else {
-              // =================================================
-              // (B) 신규 주문 생성 (CREATE)
-              // =================================================
               const newOrderRef = db.collection("orders").doc();
               const newOrder: Omit<Order, "id"> = {
                 userId,
@@ -354,29 +375,27 @@ export const submitOrder = onCall(
                 orderNumber: `SODOMALL-${Date.now()}-${createdOrderIds.length}`,
                 status: "RESERVED",
                 createdAt: AdminTimestamp.now(),
-                pickupDate: targetPickupDate, // 정확한 픽업일 저장
+                pickupDate: targetPickupDate,
                 pickupDeadlineDate: round.pickupDeadlineDate ?? null,
                 notes: client.notes ?? "",
                 isBookmarked: false,
                 wasPrepaymentRequired: !!client.wasPrepaymentRequired,
               };
-
               transaction.set(newOrderRef, newOrder);
               createdOrderIds.push(newOrderRef.id);
-
-              // 재고 맵 업데이트
-              reservedMap.set(stockKey, currentReserved + requiredAmount);
           }
+
+          // ✅ [핵심] 칠판 업데이트 (수량 증가)
+          applyClaimedDelta(transaction, singleItem.productId, singleItem.roundId, vgId, addDeduct);
         }
 
         return { success: true, orderIds: createdOrderIds, updatedOrderIds };
       });
-
       return result;
     } catch (err) {
       logger.error("Order submission failed", err);
       if (err instanceof HttpsError) throw err;
-      throw new HttpsError("internal", "주문 처리 중 알 수 없는 오류가 발생했습니다.");
+      throw new HttpsError("internal", "주문 처리 실패");
     }
   }
 );
@@ -391,83 +410,82 @@ export const updateOrderQuantity = onCall(
     const requesterId = request.auth.uid;
     const { orderId, newQuantity } = request.data as { orderId: string; newQuantity: number };
 
-    if (!orderId || typeof newQuantity !== 'number' || newQuantity <= 0) {
+    if (!orderId || typeof newQuantity !== "number" || newQuantity <= 0) {
       throw new HttpsError("invalid-argument", "필수 정보(주문 ID, 새 수량)가 올바르지 않습니다.");
     }
 
     try {
       await db.runTransaction(async (transaction) => {
-        // 1. 주문 정보 조회 및 유효성 검사
-        const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
+        // 1) 주문 조회
+        const orderRef = db.collection("orders").withConverter(orderConverter).doc(orderId);
         const orderDoc = await transaction.get(orderRef);
         if (!orderDoc.exists) throw new HttpsError("not-found", "주문을 찾을 수 없습니다.");
-        
+
         const order = orderDoc.data();
-        if(!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
-        if (order.userId !== requesterId) throw new HttpsError("permission-denied", "자신의 주문만 수정할 수 있습니다.");
-        if (order.status !== 'RESERVED' && order.status !== 'PREPAID') throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 수정 가능합니다.");
-        if (order.items.length !== 1) throw new HttpsError("failed-precondition", "단일 품목 주문만 수량 변경이 가능합니다.");
+        if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+
+        if (order.userId !== requesterId) {
+          throw new HttpsError("permission-denied", "자신의 주문만 수정할 수 있습니다.");
+        }
+        if (order.status !== "RESERVED" && order.status !== "PREPAID") {
+          throw new HttpsError("failed-precondition", "예약/선입금 상태의 주문만 수정 가능합니다.");
+        }
+        if (order.items.length !== 1) {
+          throw new HttpsError("failed-precondition", "단일 품목 주문만 수량 변경이 가능합니다.");
+        }
 
         const originalItem = order.items[0];
         const originalQuantity = originalItem.quantity;
-        if (newQuantity === originalQuantity) return; // 변경사항 없음
+        if (newQuantity === originalQuantity) return;
 
-        // 2. 상품 및 재고 정보 조회
+        // 2) 상품/옵션 조회
         const productRef = db.collection("products").withConverter(productConverter).doc(originalItem.productId);
         const productSnap = await transaction.get(productRef);
         if (!productSnap.exists) throw new HttpsError("not-found", "관련 상품 정보를 찾을 수 없습니다.");
 
-        // ✅ [수정] product가 undefined일 가능성을 명시적으로 확인하여 오류를 해결합니다.
         const product = productSnap.data();
-        if (!product) {
-          throw new HttpsError("internal", `상품 데이터를 읽는 데 실패했습니다 (ID: ${originalItem.productId}).`);
-        }
+        if (!product) throw new HttpsError("internal", "상품 데이터를 읽는 데 실패했습니다.");
 
-        const round = product.salesHistory.find(r => r.roundId === originalItem.roundId);
-        const vg = round?.variantGroups.find(v => v.id === originalItem.variantGroupId);
+        const round = product.salesHistory.find((r) => r.roundId === originalItem.roundId);
+        const vg = round?.variantGroups.find((v) => v.id === originalItem.variantGroupId);
         if (!round || !vg) throw new HttpsError("not-found", "상품 옵션 정보를 찾을 수 없습니다.");
 
-        // 3. 재고 확인 (가장 중요)
-        if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
-            // 현재 예약된 총 재고량을 계산
-            const ordersQuery = db.collection('orders').where('status', 'in', ['RESERVED', 'PREPAID']);
-            const ordersSnapshot = await transaction.get(ordersQuery);
-            let currentReservedStock = 0;
-            ordersSnapshot.forEach(doc => {
-                const o = doc.data() as Order;
-                o.items.forEach(i => {
-                    if (i.productId === originalItem.productId && i.roundId === originalItem.roundId && i.variantGroupId === originalItem.variantGroupId) {
-                        currentReservedStock += i.quantity * (i.stockDeductionAmount || 1);
-                    }
-                });
-            });
-            
-            // 이 주문을 제외한 예약량 계산 (현재 주문은 변경될 것이므로)
-            const reservedStockExcludingThisOrder = currentReservedStock - (originalQuantity * (originalItem.stockDeductionAmount || 1));
-            const requiredStockForNewQuantity = newQuantity * (originalItem.stockDeductionAmount || 1);
+        // 3) ✅ 칠판 기준 재고 체크 (추가분만 검사)
+        const unit = typeof originalItem.stockDeductionAmount === "number" && originalItem.stockDeductionAmount > 0
+          ? originalItem.stockDeductionAmount
+          : 1;
 
-            if (vg.totalPhysicalStock < reservedStockExcludingThisOrder + requiredStockForNewQuantity) {
-                const availableForThisOrder = vg.totalPhysicalStock - reservedStockExcludingThisOrder;
-                const maxPurchasable = Math.floor(availableForThisOrder / (originalItem.stockDeductionAmount || 1));
-                throw new HttpsError('resource-exhausted', `재고가 부족합니다. 최대 ${maxPurchasable}개까지 변경 가능합니다.`);
-            }
+        const oldDeduct = originalQuantity * unit;
+        const newDeduct = newQuantity * unit;
+        const delta = newDeduct - oldDeduct; // +면 추가예약, -면 예약 감소
+        const vgId = vg.id || "default";
+
+        if (delta > 0 && vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
+          const claimedNow = await getClaimedNow(transaction, originalItem.productId, originalItem.roundId, vgId);
+          const remaining = vg.totalPhysicalStock - claimedNow; // claimedNow에는 내 기존 oldDeduct도 이미 포함됨
+          if (delta > remaining) {
+            const maxAdd = Math.max(0, Math.floor(remaining / unit));
+            throw new HttpsError("resource-exhausted", `재고가 부족합니다. 추가 가능 수량: 최대 ${maxAdd}개`);
+          }
         }
-        
-        // 4. 주문 정보 업데이트
-        const updatedItem = { ...originalItem, quantity: newQuantity };
-        const newTotalPrice = originalItem.unitPrice * newQuantity;
-        const note = `[수량 변경] 사용자가 직접 수량을 ${originalQuantity}개에서 ${newQuantity}개로 변경.`;
-        
-        transaction.update(orderRef, {
-            items: [updatedItem],
-            totalPrice: newTotalPrice,
-            notes: order.notes ? `${order.notes}\n${note}` : note,
-        });
-      });
-      
-      logger.info(`Order ${orderId} quantity updated to ${newQuantity} by user ${requesterId}.`);
-      return { success: true, message: "주문 수량이 성공적으로 변경되었습니다." };
 
+        // 4) 주문 업데이트
+        const updatedItem = { ...originalItem, quantity: newQuantity };
+        const note = `[수량 변경] ${originalQuantity} -> ${newQuantity}`;
+
+        transaction.update(orderRef, {
+          items: [updatedItem],
+          totalPrice: originalItem.unitPrice * newQuantity,
+          notes: order.notes ? `${order.notes}\n${note}` : note,
+        });
+
+        // 5) ✅ 칠판(Claimed) 증감 반영
+        if (delta !== 0) {
+          applyClaimedDelta(transaction, originalItem.productId, originalItem.roundId, vgId, delta);
+        }
+      });
+
+      return { success: true, message: "주문 수량이 성공적으로 변경되었습니다." };
     } catch (error) {
       logger.error(`Error updating quantity for order ${orderId} by user ${requesterId}:`, error);
       if (error instanceof HttpsError) throw error;
@@ -476,107 +494,125 @@ export const updateOrderQuantity = onCall(
   }
 );
 
-
 export const cancelOrder = onCall(
-    { region: "asia-northeast3", cors: allowedOrigins },
-    async (request) => {
-        if (!request.auth) {
-            throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
-        }
+  { region: "asia-northeast3", cors: allowedOrigins },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
 
-        const { orderId, penaltyType = 'none' } = request.data as { orderId: string; penaltyType: 'none' | 'late' };
-        if (!orderId || typeof orderId !== 'string') {
-            throw new HttpsError("invalid-argument", "주문 ID가 올바르지 않습니다.");
-        }
-        
-        const requesterId = request.auth.uid;
-        
-        try {
-            const { message } = await db.runTransaction(async (transaction) => {
-                const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
-                const orderDoc = await transaction.get(orderRef);
-                
-                if (!orderDoc.exists) {
-                    throw new HttpsError("not-found", "주문 정보를 찾을 수 없습니다.");
-                }
-                const order = orderDoc.data();
-                if (!order) {
-                     throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
-                }
+    const { orderId, penaltyType = "none" } = request.data as {
+      orderId: string;
+      penaltyType: "none" | "late";
+    };
 
-                const userRef = db.collection('users').doc(order.userId);
-                const userSnap = await transaction.get(userRef);
-                if (!userSnap.exists) {
-                    throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
-                }
-
-                const userClaims = (await getAuth().getUser(requesterId)).customClaims;
-                const isAdmin = userClaims?.role === 'admin' || userClaims?.role === 'master';
-                
-                if (order.userId !== requesterId && !isAdmin) {
-                    throw new HttpsError("permission-denied", "자신의 주문만 취소할 수 있습니다.");
-                }
-                
-                if (order.status !== 'RESERVED' && order.status !== 'PREPAID') {
-                    throw new HttpsError("failed-precondition", "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다.");
-                }
-
-                const userData = userSnap.data() as UserDocument;
-                if(!userData) {
-                    throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
-                }
-
-                let finalMessage = "주문이 성공적으로 취소되었습니다.";
-
-                if (penaltyType === 'late') {
-                    const penalty = POINT_POLICIES.LATE_CANCEL_PENALTY;
-                    const oldTier = userData.loyaltyTier || '공구새싹';
-                    const newNoShowCount = (userData.noShowCount || 0) + 0.5;
-                    const newTier = calculateTier(userData.pickupCount || 0, newNoShowCount);
-
-                    const penaltyLog: Omit<PointLog, "id"> = {
-                        amount: penalty.points,
-                        reason: penalty.reason,
-                        createdAt: AdminTimestamp.now(),
-                        orderId: orderId,
-                        expiresAt: null,
-                    };
-                    
-                    const userUpdateData: any = {
-                        points: FieldValue.increment(penalty.points),
-                        noShowCount: newNoShowCount,
-                        loyaltyTier: newTier,
-                        pointHistory: FieldValue.arrayUnion(penaltyLog),
-                    };
-                    transaction.update(userRef, userUpdateData);
-                    finalMessage = "주문이 취소되고 0.5 노쇼 페널티가 적용되었습니다.";
-                    
-                    if (oldTier !== newTier) {
-                        logger.info(`User ${order.userId} tier changed from ${oldTier} to ${newTier} due to late cancellation penalty.`);
-                    }
-                }
-
-                transaction.update(orderRef, { 
-                    status: penaltyType === 'late' ? 'LATE_CANCELED' : 'CANCELED', 
-                    canceledAt: AdminTimestamp.now(),
-                    notes: order.notes ? `${order.notes}\n[취소] ${finalMessage}` : `[취소] ${finalMessage}`
-                });
-                
-                return { message: finalMessage };
-            });
-            
-            logger.info(`Order ${orderId} canceled. Actor: ${requesterId}. Penalty type: ${penaltyType}`);
-            return { success: true, message };
-
-        } catch (error) {
-            logger.error(`Error canceling order ${orderId} by actor ${requesterId}:`, error);
-            if (error instanceof HttpsError) throw error;
-            throw new HttpsError("internal", "주문 취소 중 오류가 발생했습니다.");
-        }
+    if (!orderId || typeof orderId !== "string") {
+      throw new HttpsError("invalid-argument", "주문 ID가 올바르지 않습니다.");
     }
+
+    const requesterId = request.auth.uid;
+
+    try {
+      const { message } = await db.runTransaction(async (transaction) => {
+        const orderRef = db.collection("orders").withConverter(orderConverter).doc(orderId);
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) throw new HttpsError("not-found", "주문 정보를 찾을 수 없습니다.");
+
+        const order = orderDoc.data();
+        if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+
+        // ✅ 권한 체크 (본인 or 관리자)
+        const userClaims = (await getAuth().getUser(requesterId)).customClaims;
+        const isAdmin = userClaims?.role === "admin" || userClaims?.role === "master";
+        if (order.userId !== requesterId && !isAdmin) {
+          throw new HttpsError("permission-denied", "자신의 주문만 취소할 수 있습니다.");
+        }
+
+        // ✅ 정책: 취소는 RESERVED/PREPAID만 허용
+        if (order.status !== "RESERVED" && order.status !== "PREPAID") {
+          throw new HttpsError(
+            "failed-precondition",
+            "예약 또는 선입금 완료 상태의 주문만 취소할 수 있습니다."
+          );
+        }
+
+        // 사용자 조회(페널티용)
+        const userRef = db.collection("users").doc(order.userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists) throw new HttpsError("not-found", "주문 대상 사용자의 정보를 찾을 수 없습니다.");
+
+        const userData = userSnap.data() as UserDocument | undefined;
+        if (!userData) throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
+
+        let finalMessage = "주문이 성공적으로 취소되었습니다.";
+
+        // ✅ 페널티(선택)
+        if (penaltyType === "late") {
+          const penalty = POINT_POLICIES.LATE_CANCEL_PENALTY;
+          const oldTier = userData.loyaltyTier || "공구새싹";
+          const newNoShowCount = (userData.noShowCount || 0) + 0.5;
+          const newTier = calculateTier(userData.pickupCount || 0, newNoShowCount);
+
+          const penaltyLog: Omit<PointLog, "id"> = {
+            amount: penalty.points,
+            reason: penalty.reason,
+            createdAt: AdminTimestamp.now(),
+            orderId,
+            expiresAt: null,
+          };
+
+          transaction.update(userRef, {
+            points: FieldValue.increment(penalty.points),
+            noShowCount: newNoShowCount,
+            loyaltyTier: newTier,
+            pointHistory: FieldValue.arrayUnion(penaltyLog),
+          });
+
+          finalMessage = "주문이 취소되고 0.5 노쇼 페널티가 적용되었습니다.";
+
+          if (oldTier !== newTier) {
+            logger.info(
+              `User ${order.userId} tier changed from ${oldTier} to ${newTier} due to late cancellation.`
+            );
+          }
+        }
+
+        // ✅ [핵심] claimed 해제(=재고 점유 해제) 중복 방지
+        const alreadyReleased = !!order.stockStats?.claimedReleasedAt;
+        if (!alreadyReleased) {
+          for (const it of order.items || []) {
+            const vgId = it.variantGroupId || "default";
+            const deduct = itemDeduct(it);
+            if (deduct > 0) {
+              applyClaimedDelta(transaction, it.productId, it.roundId, vgId, -deduct);
+            }
+          }
+        }
+
+        // ✅ 주문 업데이트 (취소 + 메타 기록)
+        transaction.update(orderRef, {
+          status: penaltyType === "late" ? "LATE_CANCELED" : "CANCELED",
+          canceledAt: AdminTimestamp.now(),
+          notes: order.notes ? `${order.notes}\n[취소] ${finalMessage}` : `[취소] ${finalMessage}`,
+          stockStats: {
+            ...(order.stockStats || {}),
+            v: 1,
+            // claimed가 해제되지 않았을 때만 기록
+            ...(alreadyReleased ? {} : { claimedReleasedAt: AdminTimestamp.now() }),
+          },
+        });
+
+        return { message: finalMessage };
+      });
+
+      logger.info(`Order ${orderId} canceled. Actor: ${requesterId}. Penalty type: ${penaltyType}`);
+      return { success: true, message };
+    } catch (error) {
+      logger.error(`Error canceling order ${orderId} by actor ${requesterId}:`, error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "주문 취소 중 오류가 발생했습니다.");
+    }
+  }
 );
 
-// ... (파일의 나머지 부분은 변경 없음)
 export const getUserOrders = onCall(
     { region: "asia-northeast3", cors: allowedOrigins },
     async (request) => {
@@ -601,10 +637,9 @@ export const getUserOrders = onCall(
                 .withConverter(orderConverter)
                 .where('userId', '==', targetUserId)
                 .orderBy('pickupDate', 'desc')
-                .orderBy('createdAt', 'desc') // ✅ [수정] 중복 키 방지용 Tie-breaker 추가
+                .orderBy('createdAt', 'desc')
                 .limit(pageSize);
 
-            // ✅ [수정] 2개 필드로 startAfter를 사용
             if (lastVisible && typeof lastVisible.pickupDate === 'number' && typeof lastVisible.createdAt === 'number') {
                 const cursorPickupDate = AdminTimestamp.fromDate(new Date(lastVisible.pickupDate));
                 const cursorCreatedAt = AdminTimestamp.fromDate(new Date(lastVisible.createdAt));
@@ -615,12 +650,8 @@ export const getUserOrders = onCall(
 
             const snapshot = await queryBuilder.get();
 
-            // ✅ [수정] 데이터를 map 할 때 Date 객체 대신 toEpochMillis 헬퍼를 사용
             const orders = snapshot.docs.map(doc => {
                 const data = doc.data();
-                
-                // 🚨 converter가 클래스 인스턴스를 반환할 수 있으므로,
-                // 안전하게 필요한 필드만 plain object로 복사하며 변환합니다.
                 return {
                     id: doc.id,
                     userId: data.userId,
@@ -632,34 +663,29 @@ export const getUserOrders = onCall(
                     wasPrepaymentRequired: data.wasPrepaymentRequired,
                     notes: data.notes,
                     isBookmarked: data.isBookmarked,
-                    
-                    // ✅ [핵심] 모든 날짜 필드를 숫자로 변환
                     createdAt: toEpochMillis(data.createdAt),
                     pickupDate: toEpochMillis(data.pickupDate),
                     pickupDeadlineDate: toEpochMillis(data.pickupDeadlineDate),
                     canceledAt: toEpochMillis(data.canceledAt),
                     pickedUpAt: toEpochMillis(data.pickedUpAt),
                     prepaidAt: toEpochMillis(data.prepaidAt),
-                    // ... (다른 날짜 필드가 있다면 여기서 모두 변환) ...
                 };
             });
 
             const lastDocSnapshot = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
-            // ✅ [수정] lastDoc도 createdAt 숫자를 포함
             let lastDocPayload: { pickupDate: number | null; createdAt: number | null } | null = null;
             if (lastDocSnapshot) {
                 const lastDocData = lastDocSnapshot.data();
                 lastDocPayload = {
                     pickupDate: toEpochMillis(lastDocData.pickupDate),
-                    createdAt: toEpochMillis(lastDocData.createdAt) // ✅ [수정] createdAt 추가
+                    createdAt: toEpochMillis(lastDocData.createdAt)
                 };
             }
 
             return { 
                 data: orders, 
                 lastDoc: lastDocPayload,
-                // ✅ [추가] 배포 확인용 ID
                 buildId: '2025-10-21-EPOCH-FIX' 
             };
 
@@ -720,7 +746,6 @@ export const getUserWaitlist = onCall(
         }
     }
 );
-
 
 export const searchOrdersByCustomer = onCall(
     { region: "asia-northeast3", cors: allowedOrigins, enforceAppCheck: false },
@@ -783,7 +808,6 @@ export const searchOrdersByCustomer = onCall(
     }
 );
 
-
 export const splitBundledOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
@@ -794,75 +818,110 @@ export const splitBundledOrder = onCall(
     const uid = request.auth.uid;
     const user = await getAuth().getUser(uid);
     const userRole = user.customClaims?.role;
-    if (userRole !== 'admin' && userRole !== 'master') {
+    if (userRole !== "admin" && userRole !== "master") {
       throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
     }
-    
-    const { orderId } = request.data;
-    if (!orderId || typeof orderId !== 'string') {
+
+    const { orderId } = request.data as { orderId: string };
+    if (!orderId || typeof orderId !== "string") {
       throw new HttpsError("invalid-argument", "분할할 주문의 ID가 필요합니다.");
     }
 
-    const originalOrderRef = db.collection("orders").doc(orderId);
+    const originalOrderRef = db.collection("orders").withConverter(orderConverter).doc(orderId);
 
     try {
-      await db.runTransaction(async (transaction) => {
+      const result = await db.runTransaction(async (transaction) => {
         const originalOrderSnap = await transaction.get(originalOrderRef);
 
         if (!originalOrderSnap.exists) {
           throw new HttpsError("not-found", "분할할 원본 주문을 찾을 수 없습니다.");
         }
 
-        const originalOrder = originalOrderSnap.data() as Order;
+        const originalOrder = originalOrderSnap.data();
+        if (!originalOrder) {
+          throw new HttpsError("internal", "원본 주문 데이터를 읽는 데 실패했습니다.");
+        }
 
         if (!Array.isArray(originalOrder.items) || originalOrder.items.length <= 1) {
           throw new HttpsError("failed-precondition", "분할할 상품이 2개 이상인 주문만 처리할 수 있습니다.");
         }
 
+        // ✅ 안전을 위해: 분할은 RESERVED/PREPAID 상태에서만 허용
+        if (originalOrder.status !== "RESERVED" && originalOrder.status !== "PREPAID") {
+          throw new HttpsError(
+            "failed-precondition",
+            `현재 상태(${originalOrder.status})에서는 분할할 수 없습니다. (RESERVED/PREPAID만 가능)`
+          );
+        }
+
+        // 1) ✅ 원본 주문이 점유하고 있던 claimed를 먼저 해제
+        for (const it of originalOrder.items) {
+          const vgId = it.variantGroupId || "default";
+          const deduct = itemDeduct(it);
+          if (deduct > 0) {
+            applyClaimedDelta(transaction, it.productId, it.roundId, vgId, -deduct);
+          }
+        }
+
+        // 2) 아이템별로 새 주문 생성 + 각 주문이 claimed를 다시 점유
         const newOrderIds: string[] = [];
+
         for (let i = 0; i < originalOrder.items.length; i++) {
           const item = originalOrder.items[i];
-          const newOrderRef = db.collection("orders").doc();
-          
-          const newOrderData: Omit<Order, 'id'> = {
+          const newOrderRef = db.collection("orders").withConverter(orderConverter).doc();
+
+          const newOrderData: Omit<Order, "id"> = {
             ...originalOrder,
             items: [item],
             totalPrice: item.unitPrice * item.quantity,
             orderNumber: `${originalOrder.orderNumber}-S${i + 1}`,
             createdAt: AdminTimestamp.now(),
             splitFrom: orderId,
+            status: "RESERVED", // ✅ 분할된 개별 주문은 예약 상태로
             notes: `[분할된 주문] 원본: ${originalOrder.orderNumber}`,
           };
-          
+
+          // 원본의 완료/취소 관련 필드는 제거 (새 주문이므로)
           delete (newOrderData as any).pickedUpAt;
           delete (newOrderData as any).prepaidAt;
           delete (newOrderData as any).canceledAt;
 
           transaction.set(newOrderRef, newOrderData);
           newOrderIds.push(newOrderRef.id);
+
+          // ✅ 새 주문의 claimed 점유
+          const vgId = item.variantGroupId || "default";
+          const deduct = itemDeduct(item);
+          if (deduct > 0) {
+            applyClaimedDelta(transaction, item.productId, item.roundId, vgId, deduct);
+          }
         }
 
+        // 3) 원본 주문은 취소 처리 (이미 claimed는 해제했음)
         transaction.update(originalOrderRef, {
-          status: 'CANCELED',
+          status: "CANCELED",
           canceledAt: AdminTimestamp.now(),
-          notes: `[주문 분할 완료] ${newOrderIds.length}개의 개별 주문(${newOrderIds.join(', ')})으로 분할되었습니다.`,
+          notes: originalOrder.notes
+            ? `${originalOrder.notes}\n[주문 분할 완료] ${newOrderIds.length}개의 개별 주문(${newOrderIds.join(", ")})으로 분할되었습니다.`
+            : `[주문 분할 완료] ${newOrderIds.length}개의 개별 주문(${newOrderIds.join(", ")})으로 분할되었습니다.`,
         });
+
+        return {
+          success: true,
+          message: "주문이 성공적으로 분할되었습니다.",
+          newOrderIds,
+        };
       });
 
-      const originalOrderAfterTransaction = (await originalOrderRef.get()).data() as Order | undefined;
-      logger.info(`Order ${orderId} was split into ${originalOrderAfterTransaction?.items.length || 'N/A'} new orders by admin ${uid}.`);
-      return { success: true, message: "주문이 성공적으로 분할되었습니다." };
-      
+      logger.info(`Order ${orderId} was split by admin ${uid}.`, result);
+      return result;
     } catch (error) {
       logger.error(`Failed to split order ${orderId}:`, error);
-      if (error instanceof HttpsError) {
-        throw error;
-      }
+      if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "주문 분할 중 오류가 발생했습니다.");
     }
   }
 );
-
 
 export const createOrderAsAdmin = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
@@ -898,7 +957,6 @@ export const createOrderAsAdmin = onCall(
         const productSnap = await transaction.get(productRef);
         if (!productSnap.exists) throw new HttpsError('not-found', `상품(ID: ${item.productId})을 찾을 수 없습니다.`);
         
-        // ✅ [재수정] .data()의 결과가 undefined일 가능성을 명시적으로 확인하여 오류를 해결합니다.
         const productData = productSnap.data();
         if (!productData) {
           throw new HttpsError('internal', `상품 데이터를 읽는 데 실패했습니다 (ID: ${item.productId}).`);
@@ -908,24 +966,16 @@ export const createOrderAsAdmin = onCall(
         const variantGroup = round?.variantGroups.find(vg => vg.id === item.variantGroupId);
         if (!round || !variantGroup) throw new HttpsError('not-found', '상품 옵션 정보를 찾을 수 없습니다.');
         
+        const vgId = variantGroup.id || 'default';
+
+        // ✅ [변경] 관리자 주문 생성도 칠판(StockStats) 기준 재고 확인
         if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
-            const ordersQuery = db.collection('orders').where('status', 'in', ['RESERVED', 'PREPAID']);
-            const ordersSnapshot = await transaction.get(ordersQuery);
-
-            let currentReservedStock = 0;
-            ordersSnapshot.forEach(doc => {
-                const order = doc.data() as Order;
-                order.items.forEach(orderItem => {
-                    if (orderItem.variantGroupId === item.variantGroupId) {
-                        currentReservedStock += orderItem.quantity * (orderItem.stockDeductionAmount || 1);
-                    }
-                });
-            });
-
+            const claimedNow = await getClaimedNow(transaction, item.productId, item.roundId, vgId);
+            const remaining = variantGroup.totalPhysicalStock - claimedNow;
             const requiredStock = item.quantity * (item.stockDeductionAmount || 1);
-            if (variantGroup.totalPhysicalStock < currentReservedStock + requiredStock) {
-                const availableStock = variantGroup.totalPhysicalStock - currentReservedStock;
-                throw new HttpsError('resource-exhausted', `상품 재고가 부족합니다. (남은 수량: ${Math.max(0, availableStock)})`);
+            
+            if (requiredStock > remaining) {
+                throw new HttpsError('resource-exhausted', `상품 재고가 부족합니다. (남은 수량: ${Math.max(0, Math.floor(remaining / (item.stockDeductionAmount || 1)))})`);
             }
         }
         
@@ -954,6 +1004,10 @@ export const createOrderAsAdmin = onCall(
         };
 
         transaction.set(newOrderRef, newOrderData);
+        
+        // ✅ [추가] 칠판 업데이트 (관리자 주문도 재고 점유)
+        applyClaimedDelta(transaction, item.productId, item.roundId, vgId, item.quantity * (item.stockDeductionAmount || 1));
+
         return { success: true, orderId: newOrderRef.id };
       });
 
@@ -967,7 +1021,7 @@ export const createOrderAsAdmin = onCall(
   }
 );
 
-// ✅ [신규 추가] 부분 픽업 처리 함수 (관리자용)
+// ✅ [변경] 부분 픽업 처리 함수 (StockStats 연동)
 export const processPartialPickup = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
@@ -1028,7 +1082,10 @@ export const processPartialPickup = onCall(
         };
         if (oldTier !== newTier) userUpdateData.loyaltyTier = newTier;
 
+        // 1. 유저 업데이트
         transaction.update(userRef, userUpdateData);
+
+        // 2. 주문 업데이트
         transaction.update(orderRef, {
           status: 'PICKED_UP',
           items: [updatedItem],
@@ -1036,6 +1093,23 @@ export const processPartialPickup = onCall(
           pickedUpAt: AdminTimestamp.now(),
           notes: order.notes ? `${order.notes}\n${note}` : note,
         });
+
+        // 3. ✅ [핵심] 재고 칠판(StockStats) 업데이트
+        const vgId = originalItem.variantGroupId || 'default';
+        const unit = originalItem.stockDeductionAmount || 1;
+        const releasedQty = originalItem.quantity - pickedUpQuantity;
+
+        const releasedDeduct = releasedQty * unit;
+        const pickedDeduct = pickedUpQuantity * unit;
+
+        // (3-1) 미수령분은 'claimed'에서 차감 (재고 해제)
+        if (releasedDeduct > 0) {
+          applyClaimedDelta(transaction, originalItem.productId, originalItem.roundId, vgId, -releasedDeduct);
+        }
+        // (3-2) 픽업분은 'pickedUp' 통계 증가
+        if (pickedDeduct > 0) {
+          applyPickedUpDelta(transaction, originalItem.productId, originalItem.roundId, vgId, pickedDeduct);
+        }
       });
       
       return { success: true, message: "부분 픽업 및 페널티가 적용되었습니다." };
@@ -1048,12 +1122,10 @@ export const processPartialPickup = onCall(
   }
 );
 
-
-// ✅ [신규 추가] 취소된 주문을 포함하여 확정된 주문을 되돌리는 함수
 export const revertFinalizedOrder = onCall(
   { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
-    if (!request.auth?.token.role || !['admin', 'master'].includes(request.auth.token.role)) {
+    if (!request.auth?.token.role || !["admin", "master"].includes(request.auth.token.role)) {
       throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
     }
 
@@ -1062,56 +1134,73 @@ export const revertFinalizedOrder = onCall(
       throw new HttpsError("invalid-argument", "필수 정보(주문 ID, 원래 상태)가 누락되었습니다.");
     }
 
+    // ✅ 추천 타입(엄격 정책): 취소 계열만 복구 허용
+    if (originalStatus !== "CANCELED" && originalStatus !== "LATE_CANCELED") {
+      throw new HttpsError(
+        "failed-precondition",
+        `revertFinalizedOrder는 CANCELED/LATE_CANCELED만 복구 가능합니다. (요청: ${originalStatus})`
+      );
+    }
+
     try {
       await db.runTransaction(async (transaction) => {
-        const orderRef = db.collection('orders').withConverter(orderConverter).doc(orderId);
+        const orderRef = db.collection("orders").withConverter(orderConverter).doc(orderId);
         const orderDoc = await transaction.get(orderRef);
         if (!orderDoc.exists) throw new HttpsError("not-found", "주문을 찾을 수 없습니다.");
-        
+
         const order = orderDoc.data();
-        if(!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+        if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
 
-        const userRef = db.collection('users').withConverter(userConverter).doc(order.userId);
-        const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists) throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
-        
-        const userData = userSnap.data();
-        if(!userData) throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
+        // ✅ 현재 상태도 반드시 취소 계열이어야 함 (콘솔 수동 수정으로 꼬인 것 방지)
+        if (order.status !== "CANCELED" && order.status !== "LATE_CANCELED") {
+          throw new HttpsError(
+            "failed-precondition",
+            `현재 상태(${order.status})에서는 복구할 수 없습니다. (CANCELED/LATE_CANCELED만 가능)`
+          );
+        }
 
-        const userUpdateData: any = {};
-        
-        // 페널티가 있었던 취소('LATE_CANCELED')를 되돌릴 경우, 노쇼와 포인트를 복구
-        if (originalStatus === 'LATE_CANCELED') {
+        // 1) LATE_CANCELED라면 페널티 복구(노쇼 -0.5, 포인트 +50)
+        if (order.status === "LATE_CANCELED") {
+          const userRef = db.collection("users").withConverter(userConverter).doc(order.userId);
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists) throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
+
+          const userData = userSnap.data();
+          if (!userData) throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
+
           const newNoShowCount = Math.max(0, (userData.noShowCount || 0) - 0.5);
           const oldTier = userData.loyaltyTier;
           const newTier = calculateTier(userData.pickupCount || 0, newNoShowCount);
 
-          userUpdateData.noShowCount = newNoShowCount;
-          userUpdateData.points = FieldValue.increment(POINT_POLICIES.LATE_CANCEL_PENALTY.points * -1); // 50점 복구
-          if (oldTier !== newTier) {
-            userUpdateData.loyaltyTier = newTier;
-          }
-        }
-        
-        // PICKED_UP, NO_SHOW 되돌리기는 onUpdate 트리거에서 처리하므로 여기서는 상태만 변경
-        // 일반 CANCELED 되돌리기는 사용자 통계 변경이 없으므로 상태만 변경
-        
-        // 사용자 정보 업데이트가 필요한 경우에만 트랜잭션에 추가
-        if (Object.keys(userUpdateData).length > 0) {
+          const userUpdateData: any = {
+            noShowCount: newNoShowCount,
+            points: FieldValue.increment(POINT_POLICIES.LATE_CANCEL_PENALTY.points * -1), // -50의 반대 => +50
+          };
+          if (oldTier !== newTier) userUpdateData.loyaltyTier = newTier;
+
           transaction.update(userRef, userUpdateData);
         }
 
-        // 주문 상태를 'RESERVED'로 되돌리고 관련 타임스탬프 필드 제거
+        // 2) ✅ 재고 칠판: 취소 상태에서 RESERVED로 돌아가니 claimed를 다시 점유
+        for (const it of order.items || []) {
+          const vgId = it.variantGroupId || "default";
+          const deduct = itemDeduct(it);
+          if (deduct > 0) {
+            applyClaimedDelta(transaction, it.productId, it.roundId, vgId, deduct);
+          }
+        }
+
+        // 3) 주문 상태 복구
         transaction.update(orderRef, {
-          status: 'RESERVED',
+          status: "RESERVED",
           canceledAt: FieldValue.delete(),
-          pickedUpAt: FieldValue.delete(), // [추가] 픽업 시간도 삭제
-          notes: order.notes ? `${order.notes}\n[상태 복구] 관리자에 의해 예약 상태로 되돌려졌습니다.` : '[상태 복구] 관리자에 의해 예약 상태로 되돌려졌습니다.',
+          notes: order.notes
+            ? `${order.notes}\n[상태 복구] 관리자에 의해 예약 상태(RESERVED)로 복구되었습니다.`
+            : "[상태 복구] 관리자에 의해 예약 상태(RESERVED)로 복구되었습니다.",
         });
       });
 
-      return { success: true, message: "주문이 예약 상태로 복구되었습니다." };
-
+      return { success: true, message: "주문이 예약 상태로 복구되었습니다. (CANCELED/LATE_CANCELED 전용)" };
     } catch (error) {
       logger.error(`Error reverting order ${orderId}:`, error);
       if (error instanceof HttpsError) throw error;
@@ -1120,50 +1209,184 @@ export const revertFinalizedOrder = onCall(
   }
 );
 
-/**
- * =================================================================
- * 관리자 수동 노쇼 처리: markOrderAsNoShow (✅ 신규 추가)
- * =================================================================
- */
 export const markOrderAsNoShow = onCall(
-  {
-    region: "asia-northeast3",
-  },
+  { region: "asia-northeast3", cors: allowedOrigins },
   async (request) => {
     const userRole = request.auth?.token.role;
-    if (!userRole || !['admin', 'master'].includes(userRole)) {
+    if (!userRole || !["admin", "master"].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
     }
 
-    const { orderId } = request.data;
-    if (!orderId) {
+    const { orderId } = request.data as { orderId: string };
+    if (!orderId || typeof orderId !== "string") {
       throw new HttpsError("invalid-argument", "주문 ID가 필요합니다.");
     }
 
-    const orderRef = db.collection("orders").doc(orderId);
+    const orderRef = db.collection("orders").withConverter(orderConverter).doc(orderId);
 
     try {
-      const orderSnap = await orderRef.get();
-      if (!orderSnap.exists) {
-        throw new HttpsError("not-found", "해당 주문을 찾을 수 없습니다.");
-      }
+      const result = await db.runTransaction(async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists) throw new HttpsError("not-found", "해당 주문을 찾을 수 없습니다.");
 
-      const order = orderSnap.data() as Order;
-      const unchangeableStatuses: Array<typeof order.status> = ["PICKED_UP", "CANCELED", "LATE_CANCELED", "NO_SHOW"];
+        const order = orderSnap.data();
+        if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
 
-      if (unchangeableStatuses.includes(order.status)) {
-        throw new HttpsError("failed-precondition", `이미 '${order.status}' 상태인 주문은 변경할 수 없습니다.`);
-      }
+        // ✅ 추천 타입(엄격 정책): RESERVED/PREPAID에서만 노쇼 가능
+        if (order.status !== "RESERVED" && order.status !== "PREPAID") {
+          throw new HttpsError(
+            "failed-precondition",
+            `현재 상태(${order.status})에서는 NO_SHOW 처리할 수 없습니다. (RESERVED/PREPAID만 가능)`
+          );
+        }
 
-      await orderRef.update({ status: "NO_SHOW" });
-      
-      logger.info(`Admin ${request.auth?.uid} marked order ${orderId} as NO_SHOW.`);
-      return { success: true, message: "주문이 '노쇼' 처리되었습니다." };
+        // 1) claimed 해제
+        for (const it of order.items || []) {
+          const vgId = it.variantGroupId || "default";
+          const deduct = itemDeduct(it);
+          if (deduct > 0) {
+            applyClaimedDelta(transaction, it.productId, it.roundId, vgId, -deduct);
+          }
+        }
 
+        // 2) 상태 변경 (✅ noShowAt 같은 새 필드 추가하지 않음)
+        transaction.update(orderRef, {
+          status: "NO_SHOW",
+          notes: order.notes
+            ? `${order.notes}\n[노쇼] 관리자에 의해 NO_SHOW 처리되었습니다. (claimed 해제됨)`
+            : `[노쇼] 관리자에 의해 NO_SHOW 처리되었습니다. (claimed 해제됨)`,
+        });
+
+        return { success: true, message: "주문이 '노쇼' 처리되었고, 재고 점유(claimed)가 해제되었습니다." };
+      });
+
+      logger.info(`Admin ${request.auth?.uid} marked order ${orderId} as NO_SHOW (strict policy).`);
+      return result;
     } catch (error) {
       logger.error(`Error marking order ${orderId} as NO_SHOW:`, error);
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "노쇼 처리 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+export const rebuildStockStats_v1 = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "1GiB", timeoutSeconds: 540 },
+  async (request) => {
+    const role = request.auth?.token?.role;
+    if (!role || !["admin", "master"].includes(role)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    // ✅ 어떤 상태를 claimed/pickedUp 집계에 포함할지 “정책”을 고정
+    const CLAIMED_STATUSES: Array<OrderStatus> = ["RESERVED", "PREPAID", "PICKED_UP"];
+    const PICKEDUP_STATUS: OrderStatus = "PICKED_UP";
+
+    type Acc = {
+      productId: string;
+      roundId: string;
+      claimed: Record<string, number>;
+      pickedUp: Record<string, number>;
+    };
+
+    const accMap = new Map<string, Acc>();
+
+    function ensureAcc(productId: string, roundId: string): Acc {
+      const key = statDocId(productId, roundId);
+      const ex = accMap.get(key);
+      if (ex) return ex;
+      const fresh: Acc = { productId, roundId, claimed: {}, pickedUp: {} };
+      accMap.set(key, fresh);
+      return fresh;
+    }
+
+    function inc(obj: Record<string, number>, vgId: string, delta: number) {
+      if (!delta) return;
+      obj[vgId] = (obj[vgId] || 0) + delta;
+    }
+
+    try {
+      // ⚠️ orders가 많으면 한 번에 다 못 읽을 수 있음.
+      // 안전하게 페이지네이션으로 전부 스캔
+      const pageSize = 500;
+      let last: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+      let scanned = 0;
+
+      while (true) {
+        let q = db.collection("orders")
+          .orderBy("createdAt", "asc")
+          .limit(pageSize);
+
+        if (last) q = q.startAfter(last);
+
+        const snap = await q.get();
+        if (snap.empty) break;
+
+        for (const doc of snap.docs) {
+          scanned++;
+          const o = doc.data() as Order;
+
+          if (!o || !o.status) continue;
+          if (!CLAIMED_STATUSES.includes(o.status as OrderStatus)) continue;
+
+          const isPickedUp = (o.status as OrderStatus) === PICKEDUP_STATUS;
+
+          for (const it of (o.items || [])) {
+            const productId = it.productId;
+            const roundId = it.roundId;
+            if (!productId || !roundId) continue;
+
+            const vgId = it.variantGroupId || "default";
+
+            // ✅ “차감 단위” 반영
+            const deduct = itemDeduct(it); // quantity * stockDeductionAmount(기본 1)
+            if (deduct <= 0) continue;
+
+            const acc = ensureAcc(productId, roundId);
+
+            // claimed: RESERVED/PREPAID/PICKED_UP 모두 포함
+            inc(acc.claimed, vgId, deduct);
+
+            // pickedUp: PICKED_UP만
+            if (isPickedUp) {
+              inc(acc.pickedUp, vgId, deduct);
+            }
+          }
+        }
+
+        last = snap.docs[snap.docs.length - 1];
+        if (snap.size < pageSize) break;
+      }
+
+      // ✅ 이제 stats 문서를 “통째로” 덮어쓰기
+      // 많은 문서를 쓰므로 BulkWriter 추천
+      const writer = db.bulkWriter();
+      let written = 0;
+
+      for (const [docId, acc] of accMap.entries()) {
+        const ref = db.collection(STOCK_STATS_COL).doc(docId);
+
+        writer.set(ref, {
+          productId: acc.productId,
+          roundId: acc.roundId,
+          claimed: acc.claimed,
+          pickedUp: acc.pickedUp,
+          updatedAt: AdminTimestamp.now(),
+        }, { merge: false });
+
+        written++;
+      }
+
+      await writer.close();
+
+      return {
+        success: true,
+        scannedOrders: scanned,
+        statDocsWritten: written,
+      };
+    } catch (e) {
+      logger.error("rebuildStockStats_v1 failed", e);
+      throw new HttpsError("internal", "백필(rebuildStockStats_v1) 실행 중 오류가 발생했습니다.");
     }
   }
 );

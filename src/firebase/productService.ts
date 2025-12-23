@@ -604,13 +604,11 @@ export const getAllProducts = () =>
 export const getPaginatedProductsWithStock = (
   pageSize: number,
   lastVisible: number | null,
-  category: string | null, // 안 씀
+  _category: string | null,
   tab: ProductTabType = 'all'
-) =>
-  getProductsWithStock({
-    pageSize,
-    lastVisible,
-    tab,
-    // 🔥 리스트 페이지는 예약오버레이 없이 빠르게
-    withReservedOverlay: false,
-  });
+) => getProductsWithStock({ 
+  pageSize, 
+  lastVisible, 
+  tab, 
+  withReservedOverlay: true
+});

@@ -192,6 +192,19 @@ export interface CustomerInfo {
   phoneLast4?: string;
 }
 
+// ✅ 1단계: Order 인터페이스 바로 위에 이 코드를 추가하세요.
+export type StockStatsMeta = {
+  v: 1; // version
+  // 주문이 RESERVED/PREPAID로 "재고 점유(claimed)"가 반영되었는지
+  claimedApplied?: boolean;
+
+  // 취소/노쇼/부분픽업(미수령분)으로 claimed를 해제한 시각
+  claimedReleasedAt?: any | null;
+
+  // 픽업 완료/부분픽업으로 pickedUp을 반영한 시각
+  pickedUpAppliedAt?: any | null;
+};
+
 export interface Order {
   id: string;
   userId: string;
@@ -211,6 +224,8 @@ export interface Order {
   wasPrepaymentRequired?: boolean;
   splitFrom?: string;
   eventId?: string;
+  noShowAt?: any | null;       // 노쇼 처리 시각
+  stockStats?: StockStatsMeta; // 칠판 적용 중복 방지용 메타
 }
 
 export interface UserTutorialProgress {
@@ -304,3 +319,4 @@ export interface AggregatedOrderGroup {
   // 원래 어떤 주문들이 합쳐졌는지 추적 (기존 데이터 호환성 및 개별 취소 대비)
   originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
 }
+
