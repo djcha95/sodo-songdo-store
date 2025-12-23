@@ -266,18 +266,25 @@ const ProductListPageAdmin: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const productsData = await getProductsWithStock({ pageSize: 1000, lastVisible: null });
-      setPageData(productsData.products);
-    } catch (error: any) {
-      reportError('ProductListPageAdmin.fetchData', error);
-      toast.error("데이터 로딩 실패: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+// 270번째 줄 근처
+const fetchData = useCallback(async () => {
+  setLoading(true);
+  try {
+    const productsData = await getProductsWithStock({
+  pageSize: 500,
+  lastVisible: null,
+  tab: "all",
+  withReservedOverlay: true,
+});
+
+    setPageData(productsData.products);
+  } catch (error: any) {
+    reportError('ProductListPageAdmin.fetchData', error);
+    toast.error("데이터 로딩 실패: " + error.message);
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -382,9 +389,13 @@ const ProductListPageAdmin: React.FC = () => {
     try {
       let backendPromise: Promise<any>;
 
+      // ✅ 2) updateProductCoreInfo 호출 시그니처 수정 (객체 전달 방식)
       if (field === 'storageType') {
-  // 인자를 3개로 줄여서 전달 (productId, 업데이트 내용, 빈 배열 하나)
-  backendPromise = updateProductCoreInfo(productId, { storageType: newValue as StorageType }, []);
+  backendPromise = updateProductCoreInfo(
+    productId,
+    { storageType: newValue as StorageType },
+    undefined as any // ✅ “이미지 변경 없음” 의미로 undefined 권장 (wrapper가 optional이면 any 제거)
+  );
 }
       else if (field === 'pickupDate') {
         const newDate = Timestamp.fromDate(new Date(newValue as number));
@@ -581,7 +592,14 @@ const ProductListPageAdmin: React.FC = () => {
                           </div>
                         </td>
                         <td className="td-align-center td-nowrap"><CopyableId id={item.productId} /></td>
-                        <td className="td-align-center td-nowrap">{formatDateShortMMDD(item.createdAt)}</td>
+<td className="td-align-center td-nowrap">
+  {item.createdAt ? dayjs(item.createdAt).format("MM/DD") : "–"}
+</td>
+
+                      {/* ✅ 5) 등록일 날짜 표시 안전하게 수정 */}
+                        <td className="td-align-center td-nowrap">
+                          {item.createdAt ? dayjs(item.createdAt).format("MM/DD") : "–"}
+                        </td>
                         <td className="td-align-left">
                           <div className="product-name-cell-simple">
                             <img src={item.productImage} alt={item.productName} className="product-thumbnail-small" />
@@ -634,7 +652,8 @@ const ProductListPageAdmin: React.FC = () => {
                         <td className="td-align-right stock-info-cell td-nowrap">
                           {!isExpandable && firstVg ? (
                             <>
-                              <span className='reserved-count-display'>예약: {firstVg.reservedCount} /</span>
+                              {/* ✅ 4) reservedCount 반영 확인 (백엔드 overlay 필드 사용) */}
+                              <span className='reserved-count-display'>예약: {firstVg.reservedCount || 0} /</span>
                               <InlineEditor
                                 initialValue={firstVg.configuredStock}
                                 type="number"
@@ -648,15 +667,13 @@ const ProductListPageAdmin: React.FC = () => {
                         <td className="td-align-center td-nowrap">
                           <div className="action-buttons-wrapper inline-actions">
                             <button onClick={() => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } })} className="admin-action-button add-round" title="새 회차 추가"><Plus size={16} /></button>
-                            
-                            {/* ✅ [수정] 현장판매 전환 버튼 - Inventory 연동 인자 추가 */}
                             <button 
                               onClick={() => handleToggleOnsite(
                                 item.productId, 
                                 item.round.roundId, 
                                 isOnsite,
                                 item.productName,
-                                firstVg ? firstVg.price : 0 // 대표 가격 전달
+                                firstVg ? firstVg.price : 0
                               )}
                               className={`admin-action-button ${isOnsite ? 'active-onsite' : ''}`}
                               title={isOnsite ? "예약 판매로 전환" : "현장 판매로 전환"}
@@ -664,7 +681,6 @@ const ProductListPageAdmin: React.FC = () => {
                             >
                               {isOnsiteLoading ? <Loader2 size={16} className="animate-spin" /> : <Store size={16} />}
                             </button>
-
                             <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="상세 수정"><Edit size={16} /></button>
                             <button onClick={() => handleDelete(item.productId, item.round.roundId, item.productName, item.round.roundName)} className="admin-action-button danger" title="삭제"><Trash2 size={16} /></button>
                           </div>

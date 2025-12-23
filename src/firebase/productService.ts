@@ -466,17 +466,14 @@ export interface GetProductsWithStockResponse {
 // ✅ 탭 타입 정의
 type ProductTabType = 'all' | 'today' | 'additional' | 'onsite';
 
-type GetProductsWithStockPayload = {
-  pageSize?: number;
-  lastVisible?: number | null;
-  tab?: ProductTabType | null;
-  /**
-   * 예약수량 오버레이를 적용할지 여부
-   * - true: getReservedQuantitiesMap 호출 + applyReservedOverlay 적용
-   * - false: 그냥 products 컬렉션 데이터만 사용 (리스트/프리뷰용으로 빠름)
-   */
+export type GetProductsWithStockPayload = {
+  pageSize: number;
+  lastDocId?: string | null;   // ✅ 추가
+  lastVisible?: any;           // (구버전 호환용) 필요없으면 나중에 제거
+  tab?: "all" | "onsite";
   withReservedOverlay?: boolean;
 };
+
 
 // 🔁 예약수량 Map 캐시 (같은 세션에서 여러 번 재사용)
 const RESERVED_CACHE_TTL_MS = 30_000; // 30초 정도 유지
