@@ -478,3 +478,92 @@
   border: 1px solid #ccc;
   background-color: #fff;
 }
+
+/* 날짜 그룹 A */
+.admin-product-table tr.date-band-a td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+/* 날짜 그룹 B – 이전보다 살짝 진하게 */
+.admin-product-table tr.date-band-b td {
+  background: rgba(0, 0, 0, 0.055);
+}
+
+/* hover는 여전히 가장 눈에 띄게 */
+.admin-product-table tr.master-row:hover td,
+.admin-product-table tr.detail-row:hover td {
+  background: rgba(0, 0, 0, 0.075);
+}
+
+/* ============================ */
+/* Pagination (bottom controls) */
+/* ============================ */
+
+.pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pagination-left,
+.pagination-center,
+.pagination-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.items-per-page-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-color-secondary);
+  font-size: 0.95em;
+}
+
+.items-per-page-selector select {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.pagination-center button {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pagination-center button:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-color-light);
+}
+
+.pagination-center button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.page-info {
+  padding: 0 6px;
+  font-weight: 600;
+  color: var(--text-color-primary);
+  white-space: nowrap;
+}
+
+.total-items-display {
+  color: var(--text-color-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}

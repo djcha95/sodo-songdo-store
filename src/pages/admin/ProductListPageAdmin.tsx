@@ -569,170 +569,178 @@ const fetchData = useCallback(async () => {
             </thead>
             <tbody>
               {paginatedRounds.length > 0 ? (
-                paginatedRounds.map((item, index) => {
-                  const isExpandable = item.enrichedVariantGroups.length > 1;
-                  const isExpanded = expandedRoundIds.has(item.uniqueId);
-                  const firstVg = item.enrichedVariantGroups[0];
-                  // ✅ 현장 판매 여부 확인
-                  const isOnsite = !!item.round.isManuallyOnsite;
-                  const loadingOnsiteKey = `${item.productId}-${item.round.roundId}-onsite`;
-                  const isOnsiteLoading = updatingItems[loadingOnsiteKey];
+                (() => {
+                  // ✅ 날짜 그룹(등록일) 바뀔 때마다 연한 배경색 토글을 위한 변수
+                  let lastDateKey: string | null = null;
+                  let dateBand = 0; // 0, 1을 번갈아 가며 사용
 
-                  return (
-                    <React.Fragment key={item.uniqueId}>
-                      <tr className="master-row">
-                        <td className="td-align-center td-nowrap">
-                          <div className="no-and-expander">
-                            <span>{(currentPage - 1) * itemsPerPage + index + 1}</span>
-                            {isExpandable && (
-                              <button className="expand-button" onClick={() => toggleRowExpansion(item.uniqueId)} title={isExpanded ? "접기" : "펼치기"}>
-                                <ChevronDown size={18} className={`chevron-icon ${isExpanded ? 'expanded' : ''}`} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="td-align-center td-nowrap"><CopyableId id={item.productId} /></td>
-<td className="td-align-center td-nowrap">
-  {item.createdAt ? dayjs(item.createdAt).format("MM/DD") : "–"}
-</td>
+                  return paginatedRounds.map((item, index) => {
+                    const isExpandable = item.enrichedVariantGroups.length > 1;
+                    const isExpanded = expandedRoundIds.has(item.uniqueId);
+                    const firstVg = item.enrichedVariantGroups[0];
 
-                      {/* ✅ 5) 등록일 날짜 표시 안전하게 수정 */}
-                        <td className="td-align-center td-nowrap">
-                          {item.createdAt ? dayjs(item.createdAt).format("MM/DD") : "–"}
-                        </td>
-                        <td className="td-align-left">
-                          <div className="product-name-cell-simple">
-                            <img src={item.productImage} alt={item.productName} className="product-thumbnail-small" />
-                            <div className="product-name-text">
-                              <span className="product-group-name">
-                                {isOnsite && <span className="onsite-badge" title="현장판매 전용">🏢</span>}
-                                {item.productName}
-                              </span>
-                              <span className="round-name-separator">/</span>
-                              <span className="round-name-text-inline">{item.round.roundName.replace(' 판매', '')}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="td-align-center td-nowrap">
-                          <InlineStorageEditor
-                            initialValue={item.storageType}
-                            onSave={(newValue) => handleUpdate(item.uniqueId, 'storageType', newValue, { productId: item.productId, roundId: item.round.roundId })}
-                            isLoading={updatingItems[`${item.uniqueId}-storageType-product`]}
-                          />
-                        </td>
-                        <td className="td-align-center td-nowrap">
-                          {!isExpandable && firstVg ? (
-                            <InlineDateEditor
-                              initialValue={firstVg.expirationDate}
-                              onSave={(newValue) => handleUpdate(item.uniqueId, 'expirationDate', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id, itemId: firstVg.itemId ?? undefined })}
-                              isLoading={updatingItems[`${item.uniqueId}-expirationDate-${firstVg.id}`]}
-                            />
-                          ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
-                        </td>
-                        <td className="td-align-center td-nowrap">
-                          <InlineDateEditor
-                            initialValue={item.pickupDate}
-                            onSave={(newValue) => handleUpdate(item.uniqueId, 'pickupDate', newValue, { productId: item.productId, roundId: item.round.roundId })}
-                            isLoading={updatingItems[`${item.uniqueId}-pickupDate-product`]}
-                          />
-                        </td>
-                        <td className="td-align-center td-nowrap status-cell">
-                          <span className={`status-badge status-${item.status.replace(/\s+/g, '-')}`}>{item.status}</span>
-                        </td>
-                        <td className="td-align-right td-nowrap">
-                          {!isExpandable && firstVg ? (
-                            <InlineEditor
-                              initialValue={firstVg.price}
-                              type="price"
-                              onSave={(newValue) => handleUpdate(item.uniqueId, 'price', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id, itemId: firstVg.itemId ?? undefined })}
-                              isLoading={updatingItems[`${item.uniqueId}-price-${firstVg.id}`]}
-                            />
-                          ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
-                        </td>
-                        <td className="td-align-right stock-info-cell td-nowrap">
-                          {!isExpandable && firstVg ? (
-                            <>
-                              {/* ✅ 4) reservedCount 반영 확인 (백엔드 overlay 필드 사용) */}
-                              <span className='reserved-count-display'>예약: {firstVg.reservedCount || 0} /</span>
-                              <InlineEditor
-                                initialValue={firstVg.configuredStock}
-                                type="number"
-                                onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id })}
-                                isLoading={updatingItems[`${item.uniqueId}-stock-${firstVg.id}`]}
-                                disabled={item.status === '데이터 오류' || item.status === '옵션 오류'}
-                              />
-                            </>
-                          ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
-                        </td>
-                        <td className="td-align-center td-nowrap">
-                          <div className="action-buttons-wrapper inline-actions">
-                            <button onClick={() => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } })} className="admin-action-button add-round" title="새 회차 추가"><Plus size={16} /></button>
-                            <button 
-                              onClick={() => handleToggleOnsite(
-                                item.productId, 
-                                item.round.roundId, 
-                                isOnsite,
-                                item.productName,
-                                firstVg ? firstVg.price : 0
+                    // ✅ 등록일 날짜 키 생성 (YYYY-MM-DD)
+                    const dateKey = item.createdAt ? dayjs(item.createdAt).format("YYYY-MM-DD") : "none";
+                    if (dateKey !== lastDateKey) {
+                      dateBand = 1 - dateBand; // 날짜가 바뀌면 0 -> 1 또는 1 -> 0
+                      lastDateKey = dateKey;
+                    }
+                    const bandClass = dateBand === 0 ? "date-band-a" : "date-band-b";
+
+                    // 현장 판매 여부 확인
+                    const isOnsite = !!item.round.isManuallyOnsite;
+                    const loadingOnsiteKey = `${item.productId}-${item.round.roundId}-onsite`;
+                    const isOnsiteLoading = updatingItems[loadingOnsiteKey];
+
+                    return (
+                      <React.Fragment key={item.uniqueId}>
+                        {/* ✅ master-row에 bandClass 추가 */}
+                        <tr className={`master-row ${bandClass}`}>
+                          <td className="td-align-center td-nowrap">
+                            <div className="no-and-expander">
+                              <span>{(currentPage - 1) * itemsPerPage + index + 1}</span>
+                              {isExpandable && (
+                                <button className="expand-button" onClick={() => toggleRowExpansion(item.uniqueId)} title={isExpanded ? "접기" : "펼치기"}>
+                                  <ChevronDown size={18} className={`chevron-icon ${isExpanded ? 'expanded' : ''}`} />
+                                </button>
                               )}
-                              className={`admin-action-button ${isOnsite ? 'active-onsite' : ''}`}
-                              title={isOnsite ? "예약 판매로 전환" : "현장 판매로 전환"}
-                              disabled={isOnsiteLoading}
-                            >
-                              {isOnsiteLoading ? <Loader2 size={16} className="animate-spin" /> : <Store size={16} />}
-                            </button>
-                            <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="상세 수정"><Edit size={16} /></button>
-                            <button onClick={() => handleDelete(item.productId, item.round.roundId, item.productName, item.round.roundName)} className="admin-action-button danger" title="삭제"><Trash2 size={16} /></button>
-                          </div>
-                        </td>
-                      </tr>
+                            </div>
+                          </td>
+                          <td className="td-align-center td-nowrap"><CopyableId id={item.productId} /></td>
+                          
+                          {/* ✅ 등록일 표시 (중복 제거됨) */}
+                          <td className="td-align-center td-nowrap">
+                            {item.createdAt ? dayjs(item.createdAt).format("MM/DD") : "–"}
+                          </td>
 
-                      {isExpanded && item.enrichedVariantGroups.map((vg, vgIndex) => (
-                        <tr key={vg.id} className="detail-row">
-                          <td className="td-align-center td-nowrap"></td>
-                          <td className="td-align-center td-nowrap"><span className="sub-row-no">{(currentPage - 1) * itemsPerPage + index + 1}-{vgIndex + 1}</span></td>
-                          <td className="td-align-center td-nowrap"></td>
-                          <td className="td-align-left td-nowrap" colSpan={1}><span className="sub-row-name">└ {vg.groupName}</span></td>
-                          <td className="td-align-center td-nowrap"><span className="disabled-field">{translateStorageType(item.storageType)}</span></td>
+                          <td className="td-align-left">
+                            <div className="product-name-cell-simple">
+                              <img src={item.productImage} alt={item.productName} className="product-thumbnail-small" />
+                              <div className="product-name-text">
+                                <span className="product-group-name">
+                                  {isOnsite && <span className="onsite-badge" title="현장판매 전용">🏢</span>}
+                                  {item.productName}
+                                </span>
+                                <span className="round-name-separator">/</span>
+                                <span className="round-name-text-inline">{item.round.roundName.replace(' 판매', '')}</span>
+                              </div>
+                            </div>
+                          </td>
                           <td className="td-align-center td-nowrap">
-                            <InlineDateEditor
-                              initialValue={vg.expirationDate}
-                              onSave={(newValue) => handleUpdate(item.uniqueId, 'expirationDate', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id, itemId: vg.itemId ?? undefined })}
-                              isLoading={updatingItems[`${item.uniqueId}-expirationDate-${vg.id}`]}
+                            <InlineStorageEditor
+                              initialValue={item.storageType}
+                              onSave={(newValue) => handleUpdate(item.uniqueId, 'storageType', newValue, { productId: item.productId, roundId: item.round.roundId })}
+                              isLoading={updatingItems[`${item.uniqueId}-storageType-product`]}
                             />
                           </td>
                           <td className="td-align-center td-nowrap">
+                            {!isExpandable && firstVg ? (
+                              <InlineDateEditor
+                                initialValue={firstVg.expirationDate}
+                                onSave={(newValue) => handleUpdate(item.uniqueId, 'expirationDate', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id, itemId: firstVg.itemId ?? undefined })}
+                                isLoading={updatingItems[`${item.uniqueId}-expirationDate-${firstVg.id}`]}
+                              />
+                            ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
+                          </td>
+                          <td className="td-align-center td-nowrap">
                             <InlineDateEditor
-                                initialValue={item.pickupDate}
-                                onSave={(newValue) => handleUpdate(item.uniqueId, 'pickupDate', newValue, { productId: item.productId, roundId: item.round.roundId })}
-                                isLoading={updatingItems[`${item.uniqueId}-pickupDate-product`]}
+                              initialValue={item.pickupDate}
+                              onSave={(newValue) => handleUpdate(item.uniqueId, 'pickupDate', newValue, { productId: item.productId, roundId: item.round.roundId })}
+                              isLoading={updatingItems[`${item.uniqueId}-pickupDate-product`]}
                             />
                           </td>
-                          <td className="td-align-center td-nowrap status-cell"><span className={`status-badge status-${vg.status.replace(/\s+/g, '-')}`}>{vg.status}</span></td>
+                          <td className="td-align-center td-nowrap status-cell">
+                            <span className={`status-badge status-${item.status.replace(/\s+/g, '-')}`}>{item.status}</span>
+                          </td>
                           <td className="td-align-right td-nowrap">
-                            <InlineEditor
-                              initialValue={vg.price}
-                              type="price"
-                              onSave={(newValue) => handleUpdate(item.uniqueId, 'price', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id, itemId: vg.itemId ?? undefined })}
-                              isLoading={updatingItems[`${item.uniqueId}-price-${vg.id}`]}
-                            />
+                            {!isExpandable && firstVg ? (
+                              <InlineEditor
+                                initialValue={firstVg.price}
+                                type="price"
+                                onSave={(newValue) => handleUpdate(item.uniqueId, 'price', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id, itemId: firstVg.itemId ?? undefined })}
+                                isLoading={updatingItems[`${item.uniqueId}-price-${firstVg.id}`]}
+                              />
+                            ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
                           </td>
                           <td className="td-align-right stock-info-cell td-nowrap">
-                            <span className='reserved-count-display'>예약: {vg.reservedCount} /</span>
-                            <InlineEditor
-                              initialValue={vg.configuredStock}
-                              type="number"
-                              onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id })}
-                              isLoading={updatingItems[`${item.uniqueId}-stock-${vg.id}`]}
-                              disabled={vg.status === '데이터 오류' || vg.status === '옵션 오류'}
-                            />
+                            {!isExpandable && firstVg ? (
+                              <>
+                                <span className='reserved-count-display'>예약: {firstVg.reservedCount || 0} /</span>
+                                <InlineEditor
+                                  initialValue={firstVg.configuredStock}
+                                  type="number"
+                                  onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id })}
+                                  isLoading={updatingItems[`${item.uniqueId}-stock-${firstVg.id}`]}
+                                  disabled={item.status === '데이터 오류' || item.status === '옵션 오류'}
+                                />
+                              </>
+                            ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
                           </td>
-                          <td className="td-align-center td-nowrap"></td>
+                          <td className="td-align-center td-nowrap">
+                            <div className="action-buttons-wrapper inline-actions">
+                              <button onClick={() => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } })} className="admin-action-button add-round" title="새 회차 추가"><Plus size={16} /></button>
+                              <button 
+                                onClick={() => handleToggleOnsite(item.productId, item.round.roundId, isOnsite, item.productName, firstVg ? firstVg.price : 0)}
+                                className={`admin-action-button ${isOnsite ? 'active-onsite' : ''}`}
+                                title={isOnsite ? "예약 판매로 전환" : "현장 판매로 전환"}
+                                disabled={isOnsiteLoading}
+                              >
+                                {isOnsiteLoading ? <Loader2 size={16} className="animate-spin" /> : <Store size={16} />}
+                              </button>
+                              <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="상세 수정"><Edit size={16} /></button>
+                              <button onClick={() => handleDelete(item.productId, item.round.roundId, item.productName, item.round.roundName)} className="admin-action-button danger" title="삭제"><Trash2 size={16} /></button>
+                            </div>
+                          </td>
                         </tr>
-                      ))}
-                    </React.Fragment>
-                  );
-                })
+
+                        {/* ✅ detail-row에도 bandClass 동일하게 적용 */}
+                        {isExpanded && item.enrichedVariantGroups.map((vg, vgIndex) => (
+                          <tr key={vg.id} className={`detail-row ${bandClass}`}>
+                            <td className="td-align-center td-nowrap"></td>
+                            <td className="td-align-center td-nowrap"><span className="sub-row-no">{(currentPage - 1) * itemsPerPage + index + 1}-{vgIndex + 1}</span></td>
+                            <td className="td-align-center td-nowrap"></td>
+                            <td className="td-align-left td-nowrap" colSpan={1}><span className="sub-row-name">└ {vg.groupName}</span></td>
+                            <td className="td-align-center td-nowrap"><span className="disabled-field">{translateStorageType(item.storageType)}</span></td>
+                            <td className="td-align-center td-nowrap">
+                              <InlineDateEditor
+                                initialValue={vg.expirationDate}
+                                onSave={(newValue) => handleUpdate(item.uniqueId, 'expirationDate', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id, itemId: vg.itemId ?? undefined })}
+                                isLoading={updatingItems[`${item.uniqueId}-expirationDate-${vg.id}`]}
+                              />
+                            </td>
+                            <td className="td-align-center td-nowrap">
+                              <InlineDateEditor
+                                  initialValue={item.pickupDate}
+                                  onSave={(newValue) => handleUpdate(item.uniqueId, 'pickupDate', newValue, { productId: item.productId, roundId: item.round.roundId })}
+                                  isLoading={updatingItems[`${item.uniqueId}-pickupDate-product`]}
+                              />
+                            </td>
+                            <td className="td-align-center td-nowrap status-cell"><span className={`status-badge status-${vg.status.replace(/\s+/g, '-')}`}>{vg.status}</span></td>
+                            <td className="td-align-right td-nowrap">
+                              <InlineEditor
+                                initialValue={vg.price}
+                                type="price"
+                                onSave={(newValue) => handleUpdate(item.uniqueId, 'price', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id, itemId: vg.itemId ?? undefined })}
+                                isLoading={updatingItems[`${item.uniqueId}-price-${vg.id}`]}
+                              />
+                            </td>
+                            <td className="td-align-right stock-info-cell td-nowrap">
+                              <span className='reserved-count-display'>예약: {vg.reservedCount} /</span>
+                              <InlineEditor
+                                initialValue={vg.configuredStock}
+                                type="number"
+                                onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id })}
+                                isLoading={updatingItems[`${item.uniqueId}-stock-${vg.id}`]}
+                                disabled={vg.status === '데이터 오류' || vg.status === '옵션 오류'}
+                              />
+                            </td>
+                            <td className="td-align-center td-nowrap"></td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  });
+                })()
               ) : (
                 <tr><td colSpan={11} style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-color-light)' }}>표시할 상품 회차가 없습니다.</td></tr>
               )}
