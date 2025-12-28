@@ -1,0 +1,120 @@
+/* src/components/admin/ResponsiveTable.css */
+
+.responsive-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+}
+
+.responsive-table-desktop {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.responsive-table-desktop thead {
+  background-color: #f8f9fa;
+}
+
+.responsive-table-desktop th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.responsive-table-desktop td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #1f2937;
+}
+
+.responsive-table-desktop tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.responsive-table-desktop tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 모바일 카드 뷰 */
+.responsive-table-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-table-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.mobile-card-row:last-child {
+  border-bottom: none;
+}
+
+.mobile-card-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.mobile-card-value {
+  font-size: 0.9rem;
+  color: #1f2937;
+  text-align: right;
+  flex: 1;
+  word-break: break-word;
+}
+
+.responsive-table-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: #6b7280;
+}
+
+/* 모바일 최적화 */
+@media (max-width: 768px) {
+  .responsive-table-desktop {
+    font-size: 0.85rem;
+  }
+
+  .responsive-table-desktop th,
+  .responsive-table-desktop td {
+    padding: 10px 12px;
+  }
+
+  .mobile-table-card {
+    padding: 12px;
+  }
+
+  .mobile-card-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .mobile-card-label {
+    min-width: auto;
+  }
+
+  .mobile-card-value {
+    text-align: left;
+  }
+}
+

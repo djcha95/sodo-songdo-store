@@ -3,19 +3,64 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, Timestamp, doc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase/firebaseConfig';
+import toast from 'react-hot-toast';
 import {
 	Crown, Gem, Sparkles, ShieldAlert, ShieldX, User, // ✅ [추가]
 	Search, ArrowUpDown, Database, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import FilterBar from '@/components/admin/FilterBar';
+import ResponsiveTable from '@/components/admin/ResponsiveTable';
 import PointManagementModal from '@/components/admin/PointManagementModal';
 import { formatPhoneNumber } from '@/utils/formatUtils';
 import type { UserDocument as AppUser, LoyaltyTier } from '@/shared/types';
+import { updateUserRole } from '@/firebase/userService';
+import { useAuth } from '@/context/AuthContext';
 import './UserListPage.css';
 
 type SortKey = 'createdAt' | 'points' | 'displayName' | 'nickname' | 'noShowCount' | 'loyaltyTier' | 'role' | 'isSuspended';
+
+const formatCreatedAtKR = (createdAt: unknown): string => {
+	// Firestore Timestamp / Timestamp-like / plain {seconds,nanoseconds} 방어
+	if (!createdAt) return '-';
+	try {
+		if (createdAt instanceof Date) return createdAt.toLocaleDateString('ko-KR');
+		if (createdAt instanceof Timestamp) return createdAt.toDate().toLocaleDateString('ko-KR');
+		if (typeof (createdAt as any).toDate === 'function') {
+			return (createdAt as any).toDate().toLocaleDateString('ko-KR');
+		}
+		if (typeof createdAt === 'object' && typeof (createdAt as any).seconds === 'number') {
+			const seconds = (createdAt as any).seconds as number;
+			const nanos = typeof (createdAt as any).nanoseconds === 'number' ? (createdAt as any).nanoseconds : 0;
+			return new Timestamp(seconds, nanos).toDate().toLocaleDateString('ko-KR');
+		}
+		return String(createdAt);
+	} catch {
+		return '-';
+	}
+};
+
+const safeText = (value: unknown, fallback = ''): string => {
+	if (value === null || value === undefined) return fallback;
+	if (typeof value === 'string') return value;
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+	// {seconds,nanoseconds} 형태가 문자열로 노출되면 UX가 별로라 날짜로 변환 시도
+	if (typeof value === 'object' && typeof (value as any).seconds === 'number') {
+		return formatCreatedAtKR(value);
+	}
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+};
+
+const safePhoneText = (phone: unknown): string => {
+	return formatPhoneNumber(typeof phone === 'string' ? phone : null);
+};
 
 const tierInfo: Record<LoyaltyTier, { icon: React.ReactNode; color: string }> = {
 	'공구의 신': { icon: <Crown size={16} />, color: 'var(--loyalty-god)' },
@@ -55,12 +100,15 @@ const PaginationControls: React.FC<{
 
 const UserListPage = () => {
 	useDocumentTitle('전체 고객 관리');
+	const { userDocument } = useAuth();
+	const isMaster = userDocument?.role === 'master';
 	const [allUsers, setAllUsers] = useState<AppUser[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [searchTerm, setSearchTerm] = useState('');
 	const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'desc' | 'asc' }>({ key: 'createdAt', direction: 'desc' });
 	const [isModalOpen, setIsModalOpen] = useState(false);
 	const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
+	const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
 	const [currentPage, setCurrentPage] = useState(1);
 	const [itemsPerPage, setItemsPerPage] = useState(20);
 
@@ -81,6 +129,59 @@ const UserListPage = () => {
 	useEffect(() => {
 		setCurrentPage(1);
 	}, [searchTerm, itemsPerPage, sortConfig]);
+	
+	const toggleSelectUser = (uid: string) => {
+		setSelectedUserIds(prev => {
+			const next = new Set(prev);
+			if (next.has(uid)) next.delete(uid);
+			else next.add(uid);
+			return next;
+		});
+	};
+
+	const clearSelection = () => setSelectedUserIds(new Set());
+
+	const bulkSetSuspended = async (isSuspended: boolean) => {
+		if (selectedUserIds.size === 0) return;
+		const ids = Array.from(selectedUserIds);
+		const actionLabel = isSuspended ? '이용 제한' : '제한 해제';
+		const toastId = toast.loading(`${ids.length}명 ${actionLabel} 처리 중...`);
+		try {
+			const batch = writeBatch(db);
+			ids.forEach((uid) => {
+				batch.update(doc(db, 'users', uid), { isSuspended });
+			});
+			await batch.commit();
+			toast.success(`${actionLabel} 완료`, { id: toastId });
+			clearSelection();
+		} catch (e: any) {
+			toast.error(e?.message || `${actionLabel}에 실패했습니다.`, { id: toastId });
+		}
+	};
+
+	const bulkSetRole = async (newRole: AppUser['role']) => {
+		if (!isMaster) {
+			toast.error('마스터만 권한 변경이 가능합니다.');
+			return;
+		}
+		if (selectedUserIds.size === 0) return;
+		const ids = Array.from(selectedUserIds);
+		const roleLabel = newRole === 'admin' ? '관리자' : newRole === 'customer' ? '고객' : '마스터';
+		const toastId = toast.loading(`${ids.length}명 권한을 "${roleLabel}"로 변경 중...`);
+		try {
+			let done = 0;
+			for (const uid of ids) {
+				// 서버 검증(setUserRole) 경유
+				await updateUserRole(uid, newRole);
+				done += 1;
+				toast.loading(`${done}/${ids.length}명 처리 중...`, { id: toastId });
+			}
+			toast.success('권한 변경 완료', { id: toastId });
+			clearSelection();
+		} catch (e: any) {
+			toast.error(e?.message || '권한 변경에 실패했습니다.', { id: toastId });
+		}
+	};
 
 	const handleSort = (key: SortKey) => {
 		let direction: 'asc' | 'desc' = 'desc';
@@ -169,31 +270,133 @@ const UserListPage = () => {
 		<>
 			<PointManagementModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} user={selectedUser} />
 			<div className="admin-page-container full-width-container user-list-page-wrapper">
-				<header className="admin-page-header">
-					<h1 className="admin-page-title">전체 고객 관리</h1>
-				</header>
-				<div className="list-controls-v3">
-					<div className="search-bar-wrapper-v2">
-						<Search size={20} className="search-icon-v2" />
-						<input
-							type="text"
-							placeholder="고객명, 닉네임, 이메일, 전화번호로 검색..."
-							value={searchTerm}
-							onChange={(e) => setSearchTerm(e.target.value)}
-							className="search-input-v2"
-						/>
+				<AdminPageHeader 
+					title="전체 고객 관리"
+					priority="normal"
+				/>
+				<FilterBar
+					searchPlaceholder="고객명, 닉네임, 이메일, 전화번호로 검색..."
+					searchValue={searchTerm}
+					onSearch={setSearchTerm}
+				/>
+
+				{/* ✅ [P0/모바일] 카드뷰(ResponsiveTable) */}
+				<div className="admin-mobile-only">
+					<ResponsiveTable
+						className="user-list-mobile-table"
+						emptyMessage="표시할 고객이 없습니다."
+						data={paginatedUsers}
+						keyExtractor={(user: AppUser) => user.uid}
+						columns={[
+							{
+								key: 'select',
+								label: '선택',
+								mobileLabel: '선택',
+								mobileRender: (user: AppUser) => {
+									const checked = selectedUserIds.has(user.uid);
+									return (
+										<label style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+											<input
+												type="checkbox"
+												checked={checked}
+												onChange={() => toggleSelectUser(user.uid)}
+												aria-label="고객 선택"
+												style={{ width: 18, height: 18 }}
+											/>
+											<span style={{ color: '#64748b' }}>UID: {user.uid.slice(0, 6)}…</span>
+										</label>
+									);
+								}
+							},
+							{
+								key: 'displayName',
+								label: '고객',
+								mobileRender: (user: AppUser) => (
+									<div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+										<strong>{safeText(user.displayName, '이름 없음')}{safeText(user.nickname) ? ` (${safeText(user.nickname)})` : ''}</strong>
+										<span style={{ color: '#64748b' }}>{safePhoneText((user as any).phone)}</span>
+										{safeText((user as any).email) ? <span style={{ color: '#64748b' }}>{safeText((user as any).email)}</span> : null}
+									</div>
+								)
+							},
+							{
+								key: 'role',
+								label: '권한/상태',
+								mobileRender: (user: AppUser) => {
+									const userRole = user.role || 'customer';
+									const currentRoleInfo = roleInfo[userRole];
+									return (
+										<div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+											<span className={`role-badge ${currentRoleInfo.className}`}>{currentRoleInfo.label}</span>
+											{user.isSuspended ? (
+												<span className="status-badge restricted">이용 제한</span>
+											) : (
+												<span className="status-badge active">정상</span>
+											)}
+											<span className={`${user.noShowCount && user.noShowCount > 0 ? 'text-danger' : ''}`}>
+												노쇼 {user.noShowCount || 0}
+											</span>
+										</div>
+									);
+								}
+							},
+							{
+								key: 'createdAt',
+								label: '가입일',
+								mobileRender: (user: AppUser) => formatCreatedAtKR(user.createdAt),
+							},
+							{
+								key: 'actions',
+								label: '관리',
+								mobileRender: (user: AppUser) => (
+									<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+										<Link to={`/admin/users/${user.uid}`} className="action-button-v2">상세</Link>
+									</div>
+								)
+							}
+						]}
+					/>
+				</div>
+
+				{/* ✅ [P0/모바일] 하단 스티키 일괄 작업 바 (정지/해제) */}
+				<div className={`user-bulk-action-bar admin-mobile-only ${selectedUserIds.size > 0 ? 'visible' : ''}`}>
+					<div className="bulk-left">
+						<strong>{selectedUserIds.size}명 선택</strong>
+						<button className="bulk-clear-btn" onClick={clearSelection}>선택 해제</button>
+					</div>
+					<div className="bulk-actions">
+						<button className="bulk-btn danger" onClick={() => bulkSetSuspended(true)}>
+							<ShieldAlert size={16} /> 이용 제한
+						</button>
+						<button className="bulk-btn success" onClick={() => bulkSetSuspended(false)}>
+							<ShieldX size={16} /> 제한 해제
+						</button>
+						{isMaster && (
+							<>
+								<button className="bulk-btn" onClick={() => bulkSetRole('admin')}>
+									관리자 지정
+								</button>
+								<button className="bulk-btn" onClick={() => bulkSetRole('customer')}>
+									고객 지정
+								</button>
+							</>
+						)}
 					</div>
 				</div>
-				<div className="admin-table-container">
+
+				{/* ✅ [데스크톱] 기존 테이블 유지 */}
+				<div className="admin-desktop-only admin-table-container">
 					<table className="admin-table excel-style responsive-table">
 						<thead>
 							<tr>
-								<th className="col-tier" onClick={() => handleSort('loyaltyTier')}><div className="sortable-header">등급 <ArrowUpDown size={12} /></div></th>
+								{/* ❌ [비활성화] 등급 컬럼 제거 */}
+								{/* <th className="col-tier" onClick={() => handleSort('loyaltyTier')}><div className="sortable-header">등급 <ArrowUpDown size={12} /></div></th> */}
 								<th className="col-name-nickname" onClick={() => handleSort('displayName')}><div className="sortable-header">이름(닉네임) <ArrowUpDown size={12} /></div></th>
 								<th className="col-phone">전화번호</th>
 								<th className="col-email">이메일</th>
 								<th className="col-role" onClick={() => handleSort('role')}><div className="sortable-header">권한 <ArrowUpDown size={12} /></div></th>
-								<th className="col-points" onClick={() => handleSort('points')}><div className="sortable-header">신뢰도 P <ArrowUpDown size={12} /></div></th>
+								{/* ❌ [비활성화] 포인트 컬럼 제거 */}
+								{/* <th className="col-points" onClick={() => handleSort('points')}><div className="sortable-header">신뢰도 P <ArrowUpDown size={12} /></div></th> */}
 								<th className="col-noshow" onClick={() => handleSort('noShowCount')}><div className="sortable-header">노쇼 <ArrowUpDown size={12} /></div></th>
 								<th className="col-status" onClick={() => handleSort('isSuspended')}><div className="sortable-header">상태 <ArrowUpDown size={12} /></div></th>
 								<th className="col-created" onClick={() => handleSort('createdAt')}><div className="sortable-header">가입일 <ArrowUpDown size={12} /></div></th>
@@ -209,12 +412,14 @@ const UserListPage = () => {
 
 								return (
 									<tr key={user.uid}>
-										<td><div className="tier-cell" style={{ color: currentTierInfo.color }}>{currentTierInfo.icon} <span>{userTier}</span></div></td>
-										<td title={`${user.displayName}${user.nickname ? ` (${user.nickname})` : ''}`}>{user.displayName || '이름 없음'}{user.nickname ? ` (${user.nickname})` : ''}</td>
-										<td>{formatPhoneNumber(user.phone)}</td>
-										<td title={user.email || ''}>{user.email}</td>
+										{/* ❌ [비활성화] 등급 셀 제거 */}
+										{/* <td><div className="tier-cell" style={{ color: currentTierInfo.color }}>{currentTierInfo.icon} <span>{userTier}</span></div></td> */}
+										<td title={`${safeText(user.displayName, '이름 없음')}${safeText(user.nickname) ? ` (${safeText(user.nickname)})` : ''}`}>{safeText(user.displayName, '이름 없음')}{safeText(user.nickname) ? ` (${safeText(user.nickname)})` : ''}</td>
+										<td>{safePhoneText((user as any).phone)}</td>
+										<td title={safeText((user as any).email)}>{safeText((user as any).email, '-')}</td>
 										<td><span className={`role-badge ${currentRoleInfo.className}`}>{currentRoleInfo.label}</span></td>
-										<td className="cell-right">{(user.points || 0).toLocaleString()} P</td>
+										{/* ❌ [비활성화] 포인트 셀 제거 */}
+										{/* <td className="cell-right">{(user.points || 0).toLocaleString()} P</td> */}
 										<td className={`cell-center ${user.noShowCount && user.noShowCount > 0 ? 'text-danger' : ''}`}>{user.noShowCount || 0}</td>
 										<td className="cell-center">
 											{user.isSuspended ? (
@@ -223,11 +428,12 @@ const UserListPage = () => {
 												<span className="status-badge active">정상</span>
 											)}
 										</td>
-										<td>{(user.createdAt as Timestamp)?.toDate().toLocaleDateString('ko-KR')}</td>
+										<td>{formatCreatedAtKR(user.createdAt)}</td>
 										<td className="cell-center">
 											<div className="action-cell-buttons">
 												<Link to={`/admin/users/${user.uid}`} className="action-button-v2">상세</Link>
-												<button onClick={() => handleOpenModal(user)} className="action-button-v2 primary"><Database size={14} /> 포인트</button>
+												{/* ❌ [비활성화] 포인트 관리 버튼 제거 */}
+												{/* <button onClick={() => handleOpenModal(user)} className="action-button-v2 primary"><Database size={14} /> 포인트</button> */}
 											</div>
 										</td>
 									</tr>

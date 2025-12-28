@@ -261,6 +261,8 @@
   align-items: baseline; /* 기준선 정렬 */
   justify-content: flex-end; 
   gap: 4px; /* 간격 살짝 줄임 */
+  width: 100%; /* ✅ 전체 너비 차지하도록 수정 */
+  min-width: 100%; /* ✅ 최소 너비 보장 */
 }
 /* [신규] 예약 수량 표시 */
 .reserved-count-display {

@@ -21,4 +21,9 @@
     */
     flex-direction: column;
   }
+
+  /* 모바일 하단 네비게이션을 위한 여백 */
+  .admin-main-content {
+    padding-bottom: 80px;
+  }
 }

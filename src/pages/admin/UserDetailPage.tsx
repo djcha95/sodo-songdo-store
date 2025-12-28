@@ -17,6 +17,7 @@ import {
     User, ListOrdered, Hourglass, Activity, BarChart2, AlertTriangle, Shield
 } from 'lucide-react';
 import PointManagementModal from '@/components/admin/PointManagementModal';
+import DangerButton from '@/components/admin/DangerButton';
 import { formatPhoneNumber } from '@/utils/formatUtils';
 import type { UserDocument, PointLog, LoyaltyTier, Order, OrderStatus } from '@/shared/types';
 import type { Timestamp } from 'firebase/firestore';
@@ -160,8 +161,9 @@ const UserDetailPage = () => {
             <div className="tab-navigation">
                 <button className={`tab-button ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}><User size={16}/>프로필</button>
                 <button className={`tab-button ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ListOrdered size={16}/>주문 내역 ({orders.length})</button>
-                <button className={`tab-button ${activeTab === 'waitlist' ? 'active' : ''}`} onClick={() => setActiveTab('waitlist')}><Hourglass size={16}/>대기 목록 ({waitlist.length})</button>
-                <button className={`tab-button ${activeTab === 'points' ? 'active' : ''}`} onClick={() => setActiveTab('points')}><Activity size={16}/>포인트 활동</button>
+                {/* ❌ [비활성화] 대기 목록/포인트 활동 탭 제거 */}
+                {/* <button className={`tab-button ${activeTab === 'waitlist' ? 'active' : ''}`} onClick={() => setActiveTab('waitlist')}><Hourglass size={16}/>대기 목록 ({waitlist.length})</button> */}
+                {/* <button className={`tab-button ${activeTab === 'points' ? 'active' : ''}`} onClick={() => setActiveTab('points')}><Activity size={16}/>포인트 활동</button> */}
             </div>
             <div className="tab-content">
                 {renderTabContent()}
@@ -199,17 +201,19 @@ const UserDetailHeader: React.FC<{ user: UserDocument }> = ({ user }) => {
                     </div>
                 </div>
                 <div className="user-stats-summary">
-                    <div className="stat-item">
+                    {/* ❌ [비활성화] 신뢰도 포인트 표시 제거 */}
+                    {/* <div className="stat-item">
                         <span className="stat-label">신뢰도 포인트</span>
                         <span className="stat-value">{(user.points || 0).toLocaleString()} P</span>
-                    </div>
+                    </div> */}
                     <div className="stat-item">
                         <span className="stat-label">총 주문</span>
                         <span className="stat-value">{user.totalOrders || 0} 건</span>
                     </div>
                 </div>
                 <div className="user-actions">
-                    <button onClick={() => setIsModalOpen(true)} className="common-button button-primary-outline button-small"><Database size={16} />포인트 관리</button>
+                    {/* ❌ [비활성화] 포인트 관리 버튼 제거 */}
+                    {/* <button onClick={() => setIsModalOpen(true)} className="common-button button-primary-outline button-small"><Database size={16} />포인트 관리</button> */}
                     <button onClick={handleToggleSuspension} className={`common-button button-small ${user.isSuspended ? 'button-success-outline' : 'button-danger-outline'}`}>
                         {user.isSuspended ? <><ShieldCheck size={16} />제한 해제</> : <><Ban size={16} />이용 제한</>}
                     </button>
@@ -230,7 +234,8 @@ const ProfileTab: React.FC<{ user: UserDocument; currentAdmin: UserDocument | nu
             </div>
             <div className="profile-right-column">
                 <UserStatsCard user={user} />
-                <TrustManagementCard user={user} />
+                {/* ❌ [비활성화] 신뢰도 관리 카드 제거 */}
+                {/* <TrustManagementCard user={user} /> */}
                 <DangerZoneCard user={user} />
             </div>
         </div>
@@ -447,9 +452,13 @@ const DangerZoneCard: React.FC<{ user: UserDocument }> = ({ user }) => {
                     <h4>회원 영구 삭제</h4>
                     <p>이 작업은 되돌릴 수 없습니다. 신중하게 결정해주세요.</p>
                 </div>
-                <button onClick={handleDeleteUser} className="common-button button-danger-outline">
+                <DangerButton
+                    onClick={handleDeleteUser}
+                    variant="danger"
+                    confirmText="회원을 삭제하시겠습니까?"
+                >
                     <Trash2 size={16} /> 회원 삭제
-                </button>
+                </DangerButton>
             </div>
         </div>
     );

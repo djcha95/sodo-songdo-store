@@ -137,4 +137,74 @@
     .pagination-center button:hover:not(:disabled) { background-color: var(--bg-color-gray-soft); border-color: var(--text-color-secondary); }
     .pagination-center button:disabled { color: var(--text-color-light); background-color: var(--bg-color-gray-soft); cursor: not-allowed; }
     .pagination-center .page-info { padding: 0 8px; font-size: 14px; font-weight: 500; color: #555; }
+
+    /* ✅ [P0/모바일] 하단 스티키 일괄 작업 바 */
+    @media (max-width: 768px) {
+        .admin-page-container.user-list-page-wrapper {
+            padding-bottom: 180px; /* 하단 바 + 모바일 네비 여유 */
+        }
+
+        .user-bulk-action-bar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 80px; /* AdminMobileNav 위 */
+            z-index: 300;
+            background: rgba(255, 255, 255, 0.98);
+            border-top: 1px solid #e5e7eb;
+            box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.08);
+            padding: 10px 12px;
+            display: none;
+            gap: 10px;
+            flex-direction: column;
+        }
+
+        .user-bulk-action-bar.visible { display: flex; }
+
+        .user-bulk-action-bar .bulk-left {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .user-bulk-action-bar .bulk-clear-btn {
+            background: transparent;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .user-bulk-action-bar .bulk-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .user-bulk-action-bar .bulk-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .user-bulk-action-bar .bulk-btn.danger {
+            background: #fff1f2;
+            border-color: #fecdd3;
+            color: #9f1239;
+        }
+
+        .user-bulk-action-bar .bulk-btn.success {
+            background: #ecfdf5;
+            border-color: #a7f3d0;
+            color: #065f46;
+        }
+    }
 }

@@ -13,40 +13,66 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 const CORRECT_BUCKET = "sso-do.firebasestorage.app";
 
 /**
- * 프로덕션에서 환경변수 누락 시 대비한 Fallback
+ * 🔒 보안: 환경변수 필수화
+ * FALLBACK 제거 - 모든 Firebase 설정은 환경변수에서 가져와야 합니다.
+ * 표준화된 키 이름 사용: VITE_FIREBASE_MESSAGING_SENDER_ID (Firebase 공식 문서와 일치)
  */
-const FALLBACK = {
-  apiKey: "AIzaSyBLN5zX4RT8AHIuNQjvPCdz2qXRJpjzWCs",
-  authDomain: "sso-do.firebaseapp.com",
-  projectId: "sso-do",
-  storageBucket: CORRECT_BUCKET,
-  messagingSenderId: "891505365318",
-  appId: "1:891505365318:web:32a1ba57ca360f288c9547",
-  region: "asia-northeast3",
+const requiredEnvVars = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  region: import.meta.env.VITE_FIREBASE_REGION,
 };
 
-/**
- * 1) 환경변수에서 후보값을 읽고, 없으면 FALLBACK 사용
- */
-const candidateBucket =
-  import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? FALLBACK.storageBucket;
+// 필수 환경변수 검증
+const envVarNames: Record<keyof typeof requiredEnvVars, string> = {
+  apiKey: 'VITE_FIREBASE_API_KEY',
+  authDomain: 'VITE_FIREBASE_AUTH_DOMAIN',
+  projectId: 'VITE_FIREBASE_PROJECT_ID',
+  storageBucket: 'VITE_FIREBASE_STORAGE_BUCKET',
+  messagingSenderId: 'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  appId: 'VITE_FIREBASE_APP_ID',
+  region: 'VITE_FIREBASE_REGION',
+};
+
+const missingVars = Object.entries(requiredEnvVars)
+  .filter(([_, value]) => !value)
+  .map(([key]) => envVarNames[key as keyof typeof requiredEnvVars]);
+
+if (missingVars.length > 0) {
+  const envFileHint = import.meta.env.DEV 
+    ? '.env.local 파일 (또는 .env 파일)'
+    : '.env 파일';
+  
+  throw new Error(
+    `❌ 필수 환경변수가 누락되었습니다: ${missingVars.join(', ')}\n\n` +
+    `📝 해결 방법:\n` +
+    `1. 프로젝트 루트에 ${envFileHint}을 생성하세요.\n` +
+    `2. .env.example 파일을 참고하여 필요한 환경변수를 설정하세요.\n` +
+    `3. 자세한 내용은 README.md의 "시크릿 & 환경 변수" 섹션을 참고하세요.\n\n` +
+    `💡 파일 경로: 프로젝트 루트/${envFileHint}`
+  );
+}
 
 /**
- * 2) 후보값이 틀렸으면(예: appspot.com) 무조건 올바른 값으로 교체
+ * Storage Bucket 보정: 환경변수 값이 올바른 형식인지 확인
  */
+const candidateBucket = requiredEnvVars.storageBucket;
 const storageBucket =
   candidateBucket && candidateBucket.endsWith(".firebasestorage.app")
     ? candidateBucket
     : CORRECT_BUCKET;
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? FALLBACK.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? FALLBACK.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? FALLBACK.projectId,
-  storageBucket, // ⬅️ 여기서 항상 CORRECT_BUCKET으로 보정됨
-  messagingSenderId:
-    import.meta.env.VITE_FIREBASE_SENDER_ID ?? FALLBACK.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? FALLBACK.appId,
+  apiKey: requiredEnvVars.apiKey!,
+  authDomain: requiredEnvVars.authDomain!,
+  projectId: requiredEnvVars.projectId!,
+  storageBucket,
+  messagingSenderId: requiredEnvVars.messagingSenderId!,
+  appId: requiredEnvVars.appId!,
 };
 
 export const app = initializeApp(firebaseConfig);
@@ -89,7 +115,7 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(
   app,
-  import.meta.env.VITE_FIREBASE_REGION ?? FALLBACK.region
+  requiredEnvVars.region!
 );
 
 export default app;

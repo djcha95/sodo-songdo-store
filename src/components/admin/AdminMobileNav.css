@@ -1,0 +1,61 @@
+/* src/components/admin/AdminMobileNav.css */
+
+.admin-mobile-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: none; /* 데스크톱에서는 숨김 */
+  justify-content: space-around;
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 1000;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 0.75rem;
+  transition: color 0.2s;
+  min-width: 60px;
+  flex: 1;
+  max-width: 100px;
+}
+
+.mobile-nav-item.active {
+  color: #0ea5e9;
+}
+
+.mobile-nav-item span {
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.mobile-nav-item svg {
+  flex-shrink: 0;
+}
+
+/* 모바일에서만 표시 */
+@media (max-width: 768px) {
+  .admin-mobile-nav {
+    display: flex;
+  }
+}
+
+/* 메인 콘텐츠에 하단 여백 추가 (모바일 네비게이션 공간 확보) */
+@media (max-width: 768px) {
+  .admin-main-content {
+    padding-bottom: 80px;
+  }
+}
+

@@ -81,6 +81,64 @@
 
 ### 🔐 시크릿 & 환경 변수
 
+#### 프론트엔드 환경변수 (필수)
+
+프로젝트 루트에 `.env` 파일을 생성하고 다음 변수들을 설정하세요:
+
+```bash
+# Firebase 설정 (필수)
+VITE_FIREBASE_API_KEY=your-api-key-here
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+VITE_FIREBASE_APP_ID=your-app-id
+VITE_FIREBASE_REGION=asia-northeast3
+
+# 카카오 로그인 (필수)
+VITE_KAKAO_JS_KEY=your-kakao-js-key
+
+# App Check (선택)
+VITE_APP_CHECK_SITE_KEY=your-recaptcha-site-key
+```
+
+**📝 빠른 시작:**
+1. 프로젝트 루트에 `.env.local` 파일을 생성하세요
+2. `.env.example` 파일을 참고하여 필요한 환경변수를 설정하세요
+3. 개발 서버를 재시작하세요 (`npm run dev`)
+
+**⚠️ 중요**: 
+- `.env.local` 또는 `.env` 파일은 절대 Git에 커밋하지 마세요! (`.gitignore`에 포함되어 있습니다)
+- Firebase 설정 값은 [Firebase 콘솔](https://console.firebase.google.com) > 프로젝트 설정 > 일반 탭에서 확인할 수 있습니다.
+- 카카오 JavaScript 키는 [카카오 개발자 콘솔](https://developers.kakao.com)에서 발급받을 수 있습니다.
+
+**📋 환경변수 템플릿:**
+
+프로젝트 루트에 `.env.local` 파일을 생성하고 아래 템플릿을 복사하여 사용하세요:
+
+```bash
+# Firebase 설정 (필수)
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_REGION=asia-northeast3
+
+# 카카오 로그인 (필수)
+VITE_KAKAO_JS_KEY=
+
+# App Check (선택)
+# VITE_APP_CHECK_SITE_KEY=
+```
+
+**🔍 환경변수 누락 시:**
+- 에러 메시지에 누락된 변수 목록과 설정 방법이 표시됩니다.
+- `.env.local` 파일 경로를 확인하세요.
+
+#### Cloud Functions 시크릿 (GCP Secret Manager)
+
 | 키 | 위치 | 설명 |
 |---|---|---|
 | `GEMINI_API_KEY` | GCP Secret Manager | AI 상품정보 추출용 (utils/gemini) |

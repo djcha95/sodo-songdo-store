@@ -11,6 +11,8 @@ import { httpsCallable } from 'firebase/functions';
 import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, ProductItem } from '@/shared/types';
 import { Search, User, Package, X, CheckCircle, PlusCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import DangerButton from '@/components/admin/DangerButton';
 import './CreateOrderPage.css';
 
 // ❌ const functions = getFunctions(); // 이 라인을 삭제하고
@@ -151,9 +153,12 @@ const CreateOrderPage: React.FC = () => {
 
     return (
         <div className="admin-page-container create-order-page">
-            <header className="admin-page-header">
-                <h1 className="admin-page-title">관리자 주문 생성</h1>
-            </header>
+            <AdminPageHeader
+                title="관리자 주문 생성"
+                subtitle="실운영에서는 최소화 권장(오류/중복 생성 위험). 꼭 필요할 때만 사용하세요."
+                icon={<Package size={28} />}
+                priority="low"
+            />
 
             <div className="form-section">
                 <h2><User size={20}/> 1. 고객 선택</h2>
@@ -236,9 +241,16 @@ const CreateOrderPage: React.FC = () => {
             </div>
             
             <div className="form-actions">
-                <button onClick={handleCreateOrder} disabled={!isFormComplete}>
-                    <PlusCircle size={18} /> 주문 생성하기
-                </button>
+                <DangerButton
+                    onClick={handleCreateOrder}
+                    variant="warning"
+                    confirmText="주문을 생성하시겠습니까?"
+                    disabled={!isFormComplete}
+                >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <PlusCircle size={18} /> 주문 생성하기
+                    </span>
+                </DangerButton>
             </div>
         </div>
     );

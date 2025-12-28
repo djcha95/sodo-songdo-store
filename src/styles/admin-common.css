@@ -1,0 +1,81 @@
+/* src/styles/admin-common.css */
+/* 관리자 페이지 공통 스타일 - 모바일 터치 영역 확보 */
+
+/* ✅ 공통: 모바일/데스크톱 분기 유틸 */
+.admin-desktop-only { display: block; }
+.admin-mobile-only { display: none; }
+@media (max-width: 768px) {
+  .admin-desktop-only { display: none; }
+  .admin-mobile-only { display: block; }
+}
+
+/* ✅ 공통: 모바일 상단 스티키 컨트롤 바(검색/필터/토글) */
+@media (max-width: 768px) {
+  .admin-sticky-controls {
+    position: sticky;
+    top: var(--admin-topbar-height, 60px);
+    z-index: 250;
+    background: rgba(248, 249, 250, 0.98);
+    backdrop-filter: blur(8px);
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 10px;
+  }
+}
+
+/* 버튼 최소 터치 영역 확보 */
+@media (max-width: 768px) {
+  /* 모든 관리자 페이지 버튼 */
+  .admin-page-container button,
+  .admin-page-container .admin-action-button,
+  .admin-page-container .common-button,
+  .admin-page-container .btn-primary,
+  .admin-page-container .btn-secondary,
+  .admin-page-container .btn-danger,
+  .admin-page-container .btn-success {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 20px;
+    font-size: 1rem; /* 16px 이상으로 iOS 줌 방지 */
+    font-weight: 500;
+  }
+
+  /* 입력 필드 터치 영역 확보 및 줌 방지 */
+  .admin-page-container input[type="text"],
+  .admin-page-container input[type="number"],
+  .admin-page-container input[type="email"],
+  .admin-page-container input[type="tel"],
+  .admin-page-container select,
+  .admin-page-container textarea {
+    font-size: 16px; /* iOS 자동 줌 방지 */
+    min-height: 44px;
+    padding: 12px;
+  }
+
+  /* 테이블 액션 버튼 */
+  .admin-table-container button,
+  .admin-table-container .action-button-v2 {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 16px;
+    font-size: 1rem;
+  }
+
+  /* 링크 버튼도 터치 영역 확보 */
+  .admin-page-container a.button,
+  .admin-page-container .link-button {
+    min-height: 44px;
+    padding: 12px 20px;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* 데스크톱에서도 최소 크기 보장 */
+.admin-page-container button:not(.icon-only):not(.quantity-btn) {
+  min-height: 36px;
+  padding: 8px 16px;
+}
+

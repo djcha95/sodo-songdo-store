@@ -355,6 +355,80 @@
 .notes-display { cursor: pointer; min-height: 24px; width: 100%; display: block; line-height: 1.5; padding: 2px 0; }
 .notes-placeholder { color: var(--text-color-light, #adb5bd); font-style: italic; }
 
+/* ✅ [P0/모바일] 상태 변경 터치 영역/가독성 확대 + 하단 스티키 액션 바 */
+@media (max-width: 768px) {
+    .order-management-container {
+        padding-bottom: 180px; /* 하단 스티키 바 + 모바일 네비 여유 */
+    }
+
+    .order-bookmark-filter {
+        margin-top: 8px;
+        margin-bottom: 0;
+        padding: 0 2px;
+    }
+
+    .order-management-mobile-table .status-select {
+        width: 100%;
+        min-height: 44px;
+        font-size: 16px; /* iOS 자동 줌 방지 */
+        padding: 10px 12px;
+        border-radius: 10px;
+    }
+
+    .order-bulk-action-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 80px; /* AdminMobileNav 위 */
+        z-index: 300;
+        background: rgba(255, 255, 255, 0.98);
+        border-top: 1px solid #e5e7eb;
+        box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.08);
+        padding: 10px 12px;
+        display: none;
+        gap: 10px;
+        flex-direction: column;
+    }
+
+    .order-bulk-action-bar.visible {
+        display: flex;
+    }
+
+    .order-bulk-action-bar .bulk-left {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .order-bulk-action-bar .bulk-clear-btn {
+        background: transparent;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-weight: 600;
+        color: #334155;
+    }
+
+    .order-bulk-action-bar .bulk-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .order-bulk-action-bar .bulk-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        font-weight: 700;
+        color: #0f172a;
+    }
+}
+
 /* No results cell */
 .no-results-cell {
     text-align: center;

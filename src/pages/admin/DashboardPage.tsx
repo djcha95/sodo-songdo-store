@@ -11,6 +11,8 @@ import {
 } from 'firebase/firestore';
 import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import DangerButton from '@/components/admin/DangerButton';
 import toast from 'react-hot-toast';
 import { 
   TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy, Ticket, 
@@ -405,12 +407,11 @@ const DashboardPage: React.FC = () => {
         />
       )}
 
-      <div className="dashboard-header">
-        <div className="header-title-area">
-          <TrendingUp size={28} />
-          <h1>통합 판매 현황 대시보드</h1>
-        </div>
-      </div>
+      <AdminPageHeader 
+        title="통합 판매 현황 대시보드"
+        icon={<TrendingUp size={28} />}
+        priority="high"
+      />
       
       {activeRaffles.length > 0 && (
           <div className="dashboard-group raffle-summary-group">
@@ -449,7 +450,8 @@ const DashboardPage: React.FC = () => {
                     <th>상품명 / 회차명</th>
                     <th className="wait-col"><Hourglass size={14} /> 선입금 대기</th>
                     <th className="reserve-col"><CheckCircle size={14} /> 확정 수량</th>
-                    <th>대기 수량</th>
+                    {/* ❌ [비활성화] 대기 수량 헤더 제거 */}
+                    {/* <th>대기 수량</th> */}
                     <th>남은 수량</th>
                     <th>설정된 재고</th>
                     <th>링크 복사</th>
@@ -475,7 +477,8 @@ const DashboardPage: React.FC = () => {
                         </td>
                         <td className="quantity-cell wait-col">{item.pendingPrepaymentQuantity > 0 ? item.pendingPrepaymentQuantity : '-'}</td>
                         <td className="quantity-cell reserve-col">{item.confirmedReservedQuantity}</td>
-                        <td className="quantity-cell">{item.waitlistedQuantity > 0 ? item.waitlistedQuantity : '-'}</td>
+                        {/* ❌ [비활성화] 대기자 수량 컬럼 제거 */}
+                        {/* <td className="quantity-cell">{item.waitlistedQuantity > 0 ? item.waitlistedQuantity : '-'}</td> */}
                         <td className="quantity-cell important-cell">
                           {remainingStock === -1
                             ? <span className="unlimited-stock">무제한</span>
@@ -511,14 +514,13 @@ const DashboardPage: React.FC = () => {
                           <CopyLinkButton productId={item.productId} />
                         </td>
                         <td>
-                            <button 
-                                className="admin-action-button danger"
+                            <DangerButton
                                 onClick={() => setFixTarget({ id: item.productId, name: item.productName })}
-                                title="1인당 구매 제한 설정 및 과거 주문 수정"
-                                style={{ color: '#d9534f', borderColor: '#d9534f' }}
+                                variant="danger"
+                                confirmText="수량 제한 설정을 열까요?"
                             >
                                 <ShieldAlert size={16} />
-                            </button>
+                            </DangerButton>
                         </td>
                       </tr>
                     );

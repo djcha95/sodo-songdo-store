@@ -5,11 +5,19 @@ import { dbAdmin as db, allowedOrigins } from "../firebase/admin.js";
 import { Timestamp, Transaction } from "firebase-admin/firestore";
 import type { Product, SalesRound, WaitlistEntry } from "@/shared/types";
 
+// TODO: [비활성화] 대기자 명단 기능이 완전히 비활성화되었습니다.
+// Firestore 데이터는 건드리지 않으며, UI 진입점과 API 호출이 차단되었습니다.
+// 
 // 클라이언트에서 대기 신청을 처리하기 위한 함수
 export const addWaitlistEntry = onCall({
   region: "asia-northeast3",
   cors: allowedOrigins,
 }, async (request) => {
+  // TODO: [비활성화] 대기자 명단 기능 비활성화 - 호출 불가 처리
+  throw new HttpsError("permission-denied", "대기자 명단 기능은 현재 사용할 수 없습니다.");
+  
+  // 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
+  /*
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -50,10 +58,6 @@ export const addWaitlistEntry = onCall({
 
       round.waitlist = [...(round.waitlist || []), newWaitlistEntry];
       
-      // ✅ [수정] 불필요하고 혼란을 야기하는 통합 waitlistCount 업데이트 로직을 제거합니다.
-      // 이제 각 옵션별 대기자 수는 프론트엔드에서 waitlist 배열을 직접 필터링하여 계산합니다.
-      // round.waitlistCount = (round.waitlistCount || 0) + quantity;
-      
       newSalesHistory[roundIndex] = round;
       transaction.update(productRef, { salesHistory: newSalesHistory });
     });
@@ -66,4 +70,5 @@ export const addWaitlistEntry = onCall({
     }
     throw new HttpsError("internal", "대기 신청 처리 중 오류가 발생했습니다.");
   }
+  */
 });

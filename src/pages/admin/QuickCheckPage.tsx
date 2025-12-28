@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import CustomerFocusView from '@/components/admin/CustomerFocusView';
 import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import { AnimatePresence } from 'framer-motion';
 import { Search, X, Users, SearchSlash } from 'lucide-react';
 
@@ -153,10 +154,12 @@ const QuickCheckPage: React.FC = () => {
     hasSearched && !isLoading && !focusedUser && disambiguation.length === 0;
 
   return (
-    <div className="quick-check-page">
-      <header className="qcp-header">
-        <h1>빠른 예약 확인</h1>
-      </header>
+    <div className="admin-page-container quick-check-page">
+      <AdminPageHeader
+        title="빠른 예약 확인"
+        subtitle="고객명/전화번호 뒷자리로 검색 → 픽업/노쇼 처리까지 빠르게"
+        priority="high"
+      />
 
       <div className="qcp-search-container">
         <form onSubmit={handleSearch} className="qcp-search-form">

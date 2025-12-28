@@ -6,10 +6,7 @@ import { dbAdmin as db, admin } from "../firebase/admin.js";
 import type { Product } from "@/shared/types"; // Make sure this path is correct
 import type { QueryDocumentSnapshot, DocumentData } from "firebase-admin/firestore"; // Import QueryDocumentSnapshot
 
-// 🚨 Security Warning: This function can be called by anyone without authentication.
-// Add admin authentication check before running in production!
-/*
-Example Auth Check:
+// ✅ [보안 강화] 관리자 권한 검증 함수 추가
 const checkAdmin = async (request: any): Promise<boolean> => {
     if (!request.headers.authorization || !request.headers.authorization.startsWith('Bearer ')) {
         return false;
@@ -17,13 +14,13 @@ const checkAdmin = async (request: any): Promise<boolean> => {
     const idToken = request.headers.authorization.split('Bearer ')[1];
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        return decodedToken.role === 'admin' || decodedToken.role === 'master';
+        const userRole = decodedToken.role;
+        return userRole === 'admin' || userRole === 'master';
     } catch (error) {
         logger.error("Auth token verification failed:", error);
         return false;
     }
 };
-*/
 
 const runtimeOpts = {
   timeoutSeconds: 540,
@@ -31,15 +28,41 @@ const runtimeOpts = {
 };
 
 export const fixSalesHistoryHttp = onRequest(runtimeOpts, async (request, response) => {
-    // ⛔️ === Security Check (Uncomment and adapt for production) === ⛔️
-    /*
+    // ✅ [보안 강화] 관리자 권한 검증 추가
     const isAdmin = await checkAdmin(request);
     if (!isAdmin) {
         logger.error("Permission denied. Admin role required.");
         response.status(403).send("Permission denied. Admin role required.");
         return;
     }
-    */
+    
+    // ✅ [감사 로깅] 관리자 작업 감사 로그 기록
+    const idToken = request.headers.authorization?.split('Bearer ')[1];
+    let adminId = "unknown";
+    let adminEmail: string | undefined;
+    if (idToken) {
+        try {
+            const decodedToken = await admin.auth().verifyIdToken(idToken);
+            adminId = decodedToken.uid;
+            adminEmail = decodedToken.email;
+        } catch (error) {
+            logger.error("Failed to decode token for audit log:", error);
+        }
+    }
+    
+    const { logAdminAction, extractRequestInfo } = await import("../utils/auditLogger.js");
+    const requestInfo = extractRequestInfo(request);
+    
+    await logAdminAction({
+        adminId,
+        adminEmail,
+        action: "fixSalesHistoryHttp",
+        resourceType: "product",
+        ipAddress: requestInfo.ipAddress,
+        userAgent: requestInfo.userAgent,
+        success: true, // 시작 시점이므로 성공으로 기록
+    });
+    
     logger.warn("🚨 Starting potentially destructive data fix for salesHistory. Ensure backups exist! 🚨");
 
     response.writeHead(200, {

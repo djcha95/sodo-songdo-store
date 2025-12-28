@@ -8,8 +8,14 @@ export const searchUsers = onCall({
   region: "asia-northeast3",
   cors: allowedOrigins,
 }, async (request) => {
+  // ✅ [보안 강화] 관리자 권한 검증 추가
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "관리자 로그인이 필요합니다.");
+  }
+  
+  const userRole = request.auth.token.role;
+  if (!userRole || !['admin', 'master'].includes(userRole)) {
+    throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
   }
 
   const { searchTerm } = request.data;

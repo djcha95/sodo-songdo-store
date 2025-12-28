@@ -2,6 +2,23 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from "firebase-functions/logger";
 import { executePickupReminders } from "../scheduled/notifications.js";
+import { admin } from "../firebase/admin.js";
+
+// ✅ [보안 강화] 관리자 권한 검증 함수
+const checkAdmin = async (request: any): Promise<boolean> => {
+    if (!request.headers.authorization || !request.headers.authorization.startsWith('Bearer ')) {
+        return false;
+    }
+    const idToken = request.headers.authorization.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userRole = decodedToken.role;
+        return userRole === 'admin' || userRole === 'master';
+    } catch (error) {
+        logger.error("Auth token verification failed:", error);
+        return false;
+    }
+};
 
 /**
  * @description [단일 테스트용] 특정 사용자에게 픽업 안내 알림톡을 즉시 발송하는 함수
@@ -19,6 +36,15 @@ export const testSendPickupReminders = onRequest(
       res.status(204).send('');
       return;
     }
+    
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for testSendPickupReminders.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     try {
       const payload = req.method === 'POST' ? req.body : req.query;
       const userPhone = payload.phone as string;
@@ -48,6 +74,14 @@ export const triggerAllPickupReminders = onRequest(
     timeoutSeconds: 120,
   },
   async (req, res) => {
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for triggerAllPickupReminders.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     logger.info("HTTP 트리거를 통해 '모든 사용자 대상' 픽업 안내 알림톡 발송을 시작합니다.");
     try {
       // executePickupReminders 함수를 파라미터 없이 호출하면 전체 대상에게 발송됩니다.

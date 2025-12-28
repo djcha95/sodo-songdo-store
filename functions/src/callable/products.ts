@@ -82,23 +82,46 @@ export const addProductWithFirstRound = onCall(
     if (!userRole || !['admin', 'master'].includes(userRole)) {
       throw new HttpsError("permission-denied", "관리자만 상품을 등록할 수 있습니다.");
     }
+    const adminUid = request.auth?.uid;
+    if (!adminUid) {
+      throw new HttpsError("unauthenticated", "인증 정보가 없습니다.");
+    }
+    
     const { productData, salesRoundData, creationDate } = request.data;
     if (!productData || !salesRoundData || !creationDate) {
       throw new HttpsError("invalid-argument", "상품 생성에 필요한 정보가 누락되었습니다.");
     }
-    try {
-      const newProductRef = db.collection("products").doc();
-      const newProductId = newProductRef.id;
-      const firstRound: SalesRound = { ...salesRoundData, roundId: newProductId, createdAt: admin.firestore.Timestamp.fromDate(new Date(creationDate)), waitlist: [], waitlistCount: 0 };
-      const newProductData: Omit<Product, 'id'> = { ...productData, salesHistory: [firstRound], imageUrls: [], isArchived: false, createdAt: admin.firestore.Timestamp.fromDate(new Date(creationDate)), encoreCount: 0, encoreRequesterIds: [] };
-      await newProductRef.set(newProductData);
-      logger.info(`New product created by ${request.auth?.uid} with ID: ${newProductId}`);
-      return { success: true, productId: newProductId, message: "상품이 성공적으로 등록되었습니다." };
-    } catch (error) {
+    
+    // ✅ [감사 로깅] 관리자 작업 감사 로그 기록
+    const { withAuditLog } = await import("../utils/auditLogger.js");
+    const adminUser = await adminAuth().getUser(adminUid);
+    
+    return await withAuditLog(
+      adminUid,
+      "addProductWithFirstRound",
+      "product",
+      async () => {
+        const newProductRef = db.collection("products").doc();
+        const newProductId = newProductRef.id;
+        const firstRound: SalesRound = { ...salesRoundData, roundId: newProductId, createdAt: admin.firestore.Timestamp.fromDate(new Date(creationDate)), waitlist: [], waitlistCount: 0 };
+        const newProductData: Omit<Product, 'id'> = { ...productData, salesHistory: [firstRound], imageUrls: [], isArchived: false, createdAt: admin.firestore.Timestamp.fromDate(new Date(creationDate)), encoreCount: 0, encoreRequesterIds: [] };
+        await newProductRef.set(newProductData);
+        logger.info(`New product created by ${adminUid} with ID: ${newProductId}`);
+        return { success: true, productId: newProductId, message: "상품이 성공적으로 등록되었습니다." };
+      },
+      {
+        resourceId: productData.groupName,
+        details: {
+          groupName: productData.groupName,
+          creationDate,
+        },
+        adminEmail: adminUser.email,
+      }
+    ).catch((error) => {
       logger.error("Error in addProductWithFirstRound:", error);
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "상품 등록 중 서버 오류가 발생했습니다.");
-    }
+    });
   }
 );
 

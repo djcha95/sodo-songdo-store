@@ -16,6 +16,7 @@ const userConverter = {
   }
 };
 
+// TODO: [비활성화] 포인트 관련 기능 비활성화 - 포인트 만료 스케줄러 비활성화
 export const expirePointsScheduled = onSchedule(
   {
     schedule: "0 0 * * *", // 매일 자정에 실행
@@ -23,6 +24,11 @@ export const expirePointsScheduled = onSchedule(
     region: "asia-northeast3",
   },
   async (event) => {
+    // TODO: [비활성화] 포인트 관련 기능이 비활성화되어 이 스케줄러는 더 이상 실행되지 않습니다.
+    logger.warn("[비활성화] expirePointsScheduled 스케줄러가 호출되었지만 포인트 기능이 비활성화되어 스킵합니다.");
+    return;
+    
+    /* 비활성화된 코드 시작
     logger.log("Starting point expiration process.");
     const now = new Date();
     // ✅ [수정] 타입 변환기를 사용하여 쿼리합니다.
@@ -93,5 +99,6 @@ export const expirePointsScheduled = onSchedule(
     } else {
       logger.log("No points to expire today.");
     }
+    비활성화된 코드 끝 */
   }
 );

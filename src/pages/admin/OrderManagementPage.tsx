@@ -15,6 +15,10 @@ import { httpsCallable } from 'firebase/functions';
 import type { Order, OrderItem, OrderStatus } from '@/shared/types';
 import { Timestamp } from 'firebase/firestore';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import FilterBar from '@/components/admin/FilterBar';
+import ResponsiveTable from '@/components/admin/ResponsiveTable';
+import DangerButton from '@/components/admin/DangerButton';
 import { Filter, Search, Trash2, Star, ArrowUpDown, DollarSign, Clock, PackageCheck, UserX, PackageX, AlertTriangle, BadgeCheck, Zap, ChevronsLeft, ChevronsRight, ClipboardCopy, GitMerge } from 'lucide-react';
 import './OrderManagementPage.css';
 import { formatKRW } from '@/utils/number';
@@ -199,13 +203,13 @@ const OrderTableRow = React.memo(({ row, index, onStatusChange, onSaveNote, onTo
                 )}
             </td>
             <td className="action-cell cell-center">
-                <button
+                <DangerButton
                     onClick={() => onDeleteOrder(row.originalOrder.id, row.customerName)}
-                    className="action-button delete-button"
-                    title="예약 삭제"
+                    variant="danger"
+                    confirmText="예약을 삭제하시겠습니까?"
                 >
                     <Trash2 size={16} />
-                </button>
+                </DangerButton>
             </td>
         </tr>
     );
@@ -329,6 +333,7 @@ const OrderManagementPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({ status: 'all', searchQuery: '', showBookmarkedOnly: false });
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdAt', direction: 'desc' });
+    const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
     
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -352,6 +357,129 @@ const OrderManagementPage: React.FC = () => {
     useEffect(() => {
         setCurrentPage(1);
     }, [filters, itemsPerPage]);
+
+    const toggleSelectOrder = useCallback((orderId: string) => {
+        setSelectedOrderIds(prev => {
+            const next = new Set(prev);
+            if (next.has(orderId)) next.delete(orderId);
+            else next.add(orderId);
+            return next;
+        });
+    }, []);
+
+    // ✅ [중요] 아래 selectCurrentPage/selectAllFiltered에서 dependency로 사용되므로
+    // filteredAndSortedRows/paginatedRows는 반드시 "선언 → 사용" 순서를 지켜야 합니다.
+    const filteredAndSortedRows = useMemo(() => {
+        const filtered = orders.filter(order => {
+            const statusMatch = filters.status === 'all' || order.status === filters.status;
+            const searchMatch = filters.searchQuery === '' ||
+                order.customerInfo.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
+                (order.customerInfo.phone && order.customerInfo.phone.includes(filters.searchQuery)) ||
+                (order.items || []).some(item =>
+                    (item.productName && item.productName.toLowerCase().includes(filters.searchQuery.toLowerCase())) ||
+                    (item.itemName && item.itemName.toLowerCase().includes(filters.searchQuery.toLowerCase())) ||
+                    (item.variantGroupName && item.variantGroupName.toLowerCase().includes(filters.searchQuery.toLowerCase()))
+                );
+            const bookmarkMatch = !filters.showBookmarkedOnly || order.isBookmarked;
+            return statusMatch && searchMatch && bookmarkMatch;
+        });
+
+        const flattened: FlattenedOrderRow[] = [];
+        filtered.forEach(order => {
+            (order.items || []).forEach((item: OrderItem, itemIndex: number) => {
+                let displayName = item.productName || '';
+                if (item.variantGroupName && item.variantGroupName !== item.productName) {
+                    displayName += ` - ${item.variantGroupName}`;
+                }
+                if (item.itemName) {
+                    displayName += ` (${item.itemName})`;
+                }
+
+                let displayQuantity = `${item.quantity}`;
+                const deductionAmount = item.stockDeductionAmount || 1;
+                if (deductionAmount > 1) {
+                    const totalUnits = item.quantity * deductionAmount;
+                    displayQuantity = `${item.quantity}(${totalUnits})`;
+                }
+
+                flattened.push({
+                    orderId: order.id,
+                    isBookmarked: order.isBookmarked || false,
+                    createdAt: order.createdAt instanceof Timestamp ? order.createdAt : null,
+                    customerName: order.customerInfo.name,
+                    customerPhone: order.customerInfo.phone || null,
+                    itemName: displayName.trim(),
+                    quantity: item.quantity,
+                    displayQuantity,
+                    subTotal: item.unitPrice * item.quantity,
+                    pickupDate: order.pickupDate instanceof Timestamp ? order.pickupDate : null,
+                    pickedUpAt: order.pickedUpAt instanceof Timestamp ? order.pickedUpAt : null,
+                    prepaidAt: order.prepaidAt instanceof Timestamp ? order.prepaidAt : null,
+                    status: order.status,
+                    notes: order.notes || '',
+                    originalOrder: order,
+                    uniqueRowKey: `${order.id}-${item.itemId || itemIndex}`
+                });
+            });
+        });
+
+        if (sortConfig !== null) {
+            flattened.sort((a, b) => {
+                let aValue: any, bValue: any;
+                const { key, direction } = sortConfig;
+                if (key === 'orderId') { aValue = a.orderId; bValue = b.orderId; }
+                else if (key === 'status') { aValue = ORDER_STATUS_CONFIG[a.status]?.sortOrder ?? 99; bValue = ORDER_STATUS_CONFIG[b.status]?.sortOrder ?? 99; }
+                else if (key === 'customerName') { aValue = a.customerName; bValue = b.customerName; }
+                else if (['createdAt', 'pickupDate', 'pickedUpAt', 'prepaidAt'].includes(key)) { aValue = (a[key as keyof FlattenedOrderRow] as Timestamp)?.toMillis() || 0; bValue = (b[key as keyof FlattenedOrderRow] as Timestamp)?.toMillis() || 0; }
+                else { aValue = a[key as keyof FlattenedOrderRow]; bValue = b[key as keyof FlattenedOrderRow]; }
+                if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return flattened;
+    }, [orders, filters, sortConfig]);
+
+    const paginatedRows = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredAndSortedRows.slice(startIndex, endIndex);
+    }, [filteredAndSortedRows, currentPage, itemsPerPage]);
+
+    const selectCurrentPage = useCallback(() => {
+        setSelectedOrderIds(prev => {
+            const next = new Set(prev);
+            // paginatedRows는 아이템 기준으로 flatten되어 있어 중복 orderId가 있을 수 있음
+            paginatedRows.forEach(r => next.add(r.orderId));
+            return next;
+        });
+    }, [paginatedRows]);
+
+    const selectAllFiltered = useCallback(() => {
+        setSelectedOrderIds(prev => {
+            const next = new Set(prev);
+            filteredAndSortedRows.forEach(r => next.add(r.orderId));
+            return next;
+        });
+    }, [filteredAndSortedRows]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedOrderIds(new Set());
+    }, []);
+
+    const bulkUpdateStatus = useCallback(async (newStatus: OrderStatus) => {
+        if (selectedOrderIds.size === 0) return;
+        const ids = Array.from(selectedOrderIds);
+        const toastId = toast.loading(`${ids.length}개 주문 상태 변경 중...`);
+        try {
+            await updateMultipleOrderStatuses(ids, newStatus);
+            toast.success('상태 변경 완료', { id: toastId });
+            clearSelection();
+            await fetchOrders();
+        } catch (error: any) {
+            toast.error(error?.message || '상태 변경에 실패했습니다.', { id: toastId });
+        }
+    }, [selectedOrderIds, clearSelection, fetchOrders]);
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -474,115 +602,200 @@ const OrderManagementPage: React.FC = () => {
     }, [fetchOrders]);
 
 
-    const filteredAndSortedRows = useMemo(() => {
-        const filtered = orders.filter(order => {
-            const statusMatch = filters.status === 'all' || order.status === filters.status;
-            const searchMatch = filters.searchQuery === '' ||
-                order.customerInfo.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
-                (order.customerInfo.phone && order.customerInfo.phone.includes(filters.searchQuery)) ||
-                (order.items || []).some(item =>
-                    (item.productName && item.productName.toLowerCase().includes(filters.searchQuery.toLowerCase())) ||
-                    (item.itemName && item.itemName.toLowerCase().includes(filters.searchQuery.toLowerCase())) ||
-                    (item.variantGroupName && item.variantGroupName.toLowerCase().includes(filters.searchQuery.toLowerCase()))
-                );
-            const bookmarkMatch = !filters.showBookmarkedOnly || order.isBookmarked;
-            return statusMatch && searchMatch && bookmarkMatch;
-        });
-
-        const flattened: FlattenedOrderRow[] = [];
-        filtered.forEach(order => {
-            (order.items || []).forEach((item: OrderItem, itemIndex: number) => {
-                let displayName = item.productName || '';
-                if (item.variantGroupName && item.variantGroupName !== item.productName) {
-                    displayName += ` - ${item.variantGroupName}`;
-                }
-                if (item.itemName) {
-                    displayName += ` (${item.itemName})`;
-                }
-
-                let displayQuantity = `${item.quantity}`;
-                const deductionAmount = item.stockDeductionAmount || 1;
-                if (deductionAmount > 1) {
-                    const totalUnits = item.quantity * deductionAmount;
-                    displayQuantity = `${item.quantity}(${totalUnits})`;
-                }
-
-                flattened.push({
-                    orderId: order.id,
-                    isBookmarked: order.isBookmarked || false,
-                    createdAt: order.createdAt instanceof Timestamp ? order.createdAt : null,
-                    customerName: order.customerInfo.name,
-                    customerPhone: order.customerInfo.phone || null,
-                    itemName: displayName.trim(),
-                    quantity: item.quantity,
-                    displayQuantity,
-                    subTotal: item.unitPrice * item.quantity,
-                    pickupDate: order.pickupDate instanceof Timestamp ? order.pickupDate : null,
-                    pickedUpAt: order.pickedUpAt instanceof Timestamp ? order.pickedUpAt : null,
-                    prepaidAt: order.prepaidAt instanceof Timestamp ? order.prepaidAt : null,
-                    status: order.status,
-                    notes: order.notes || '',
-                    originalOrder: order,
-                    uniqueRowKey: `${order.id}-${item.itemId || itemIndex}`
-                });
-            });
-        });
-
-        if (sortConfig !== null) {
-            flattened.sort((a, b) => {
-                let aValue: any, bValue: any;
-                const { key, direction } = sortConfig;
-                if (key === 'orderId') { aValue = a.orderId; bValue = b.orderId; }
-                else if (key === 'status') { aValue = ORDER_STATUS_CONFIG[a.status]?.sortOrder ?? 99; bValue = ORDER_STATUS_CONFIG[b.status]?.sortOrder ?? 99; }
-                else if (key === 'customerName') { aValue = a.customerName; bValue = b.customerName; }
-                else if (['createdAt', 'pickupDate', 'pickedUpAt', 'prepaidAt'].includes(key)) { aValue = (a[key as keyof FlattenedOrderRow] as Timestamp)?.toMillis() || 0; bValue = (b[key as keyof FlattenedOrderRow] as Timestamp)?.toMillis() || 0; }
-                else { aValue = a[key as keyof FlattenedOrderRow]; bValue = b[key as keyof FlattenedOrderRow]; }
-                if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-                if (aValue > bValue) return direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-        }
-        return flattened;
-    }, [orders, filters, sortConfig]);
-
-    const paginatedRows = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        const endIndex = startIndex + itemsPerPage;
-        return filteredAndSortedRows.slice(startIndex, endIndex);
-    }, [filteredAndSortedRows, currentPage, itemsPerPage]);
+    // (moved) filteredAndSortedRows/paginatedRows는 위쪽에 선언되어 있습니다.
 
 
     if (loading) return <SodomallLoader message="예약 목록을 불러오는 중..." />;
 
     return (
         <div className="admin-page-container order-management-container">
-            <header className="admin-page-header">
-                <h1 className="admin-page-title">예약 통합 관리</h1>
-                <button className="quick-check-button">
-                    <Zap size={16} />
-                    빠른 예약확인
-                </button>
-            </header>
-            <div className="list-controls-v3">
-                <div className="search-bar-wrapper-v2">
-                    <Search size={20} className="search-icon-v2" />
-                    <input type="text" name="searchQuery" placeholder="고객명, 전화번호, 품목으로 검색..." value={filters.searchQuery} onChange={handleFilterChange} className="search-input-v2" />
-                </div>
-                <div className="filter-sort-wrapper">
-                    <div className="control-group-v2">
-                        <Filter size={16} />
-                        <select name="status" value={filters.status} onChange={handleFilterChange} className="control-select-v2">
-                            <option value="all">모든 상태</option>
-                            {Object.entries(ORDER_STATUS_CONFIG).map(([status, { label }]) => ( <option key={status} value={status}>{label}</option> ))}
-                        </select>
-                    </div>
+            <AdminPageHeader 
+                title="예약 통합 관리"
+                priority="high"
+                actions={
+                    <button className="quick-check-button">
+                        <Zap size={16} />
+                        빠른 예약확인
+                    </button>
+                }
+            />
+            <div className="admin-sticky-controls order-filters-sticky">
+                <FilterBar
+                    searchPlaceholder="고객명, 전화번호, 품목으로 검색..."
+                    searchValue={filters.searchQuery}
+                    filterValues={{ status: filters.status }}
+                    filters={[
+                        {
+                            key: 'status',
+                            label: '상태 필터',
+                            options: [
+                                { value: 'all', label: '모든 상태' },
+                                ...Object.entries(ORDER_STATUS_CONFIG).map(([status, { label }]) => ({ value: status, label }))
+                            ]
+                        }
+                    ]}
+                    onSearch={(value) => {
+                        setFilters(prev => ({ ...prev, searchQuery: value }));
+                    }}
+                    onFilterChange={(key, value) => {
+                        if (key === 'status') {
+                            setFilters(prev => ({ ...prev, status: value }));
+                        }
+                    }}
+                />
+                <div className="filter-sort-wrapper order-bookmark-filter">
                     <label className="bookmark-filter-label">
                         <input type="checkbox" name="showBookmarkedOnly" checked={filters.showBookmarkedOnly} onChange={handleFilterChange} />
                         <Star size={14} className="bookmark-icon-label" fill={filters.showBookmarkedOnly ? 'currentColor' : 'none'}/>북마크만
                     </label>
                 </div>
             </div>
-            <div className="admin-table-container">
+
+            {/* ✅ [P0/모바일] 카드뷰(ResponsiveTable) */}
+            <div className="admin-mobile-only">
+                <ResponsiveTable
+                    className="order-management-mobile-table"
+                    emptyMessage="표시할 예약이 없습니다."
+                    data={paginatedRows}
+                    keyExtractor={(row: FlattenedOrderRow) => row.uniqueRowKey}
+                    columns={[
+                        {
+                            key: 'select',
+                            label: '선택',
+                            mobileLabel: null,
+                            mobileRender: (row: FlattenedOrderRow) => {
+                                const checked = selectedOrderIds.has(row.orderId);
+                                return (
+                                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => toggleSelectOrder(row.orderId)}
+                                            aria-label="주문 선택"
+                                            style={{ width: 18, height: 18 }}
+                                        />
+                                        <span style={{ color: '#64748b' }}>ID: {row.orderId.slice(0, 6)}…</span>
+                                    </label>
+                                );
+                            }
+                        },
+                        {
+                            key: 'customerName',
+                            label: '고객',
+                            mobileRender: (row: FlattenedOrderRow) => (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <strong>{row.customerName}</strong>
+                                    <span style={{ color: '#64748b' }}>{formatPhoneLast4(row.customerPhone)}</span>
+                                </div>
+                            )
+                        },
+                        {
+                            key: 'itemName',
+                            label: '품목',
+                            mobileRender: (row: FlattenedOrderRow) => (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <span style={{ fontWeight: 600 }}>{row.itemName}</span>
+                                    <span style={{ color: '#64748b' }}>{row.displayQuantity}</span>
+                                </div>
+                            )
+                        },
+                        {
+                            key: 'status',
+                            label: '상태',
+                            mobileRender: (row: FlattenedOrderRow) => {
+                                const statusInfo = getDisplayStatusInfo(row.originalOrder);
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        <select
+                                            value={row.status}
+                                            onChange={(e) => handleStatusChange(row.originalOrder, e.target.value as OrderStatus)}
+                                            className={`status-select ${statusInfo.className}`}
+                                        >
+                                            {Object.entries(ORDER_STATUS_CONFIG).map(([statusKey, { label }]) => (
+                                                <option key={statusKey} value={statusKey}>{label}</option>
+                                            ))}
+                                        </select>
+                                        {statusInfo.badge}
+                                    </div>
+                                );
+                            }
+                        },
+                        {
+                            key: 'pickupDate',
+                            label: '픽업일',
+                            mobileRender: (row: FlattenedOrderRow) => formatDateWithDay(row.pickupDate),
+                        },
+                        {
+                            key: 'subTotal',
+                            label: '합계',
+                            mobileRender: (row: FlattenedOrderRow) => <strong>{formatCurrency(row.subTotal)}</strong>,
+                        },
+                        {
+                            key: 'actions',
+                            label: '작업',
+                            mobileRender: (row: FlattenedOrderRow) => (
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    <button
+                                        onClick={() => handleToggleBookmark(row.originalOrder)}
+                                        className={`action-button bookmark-button ${row.isBookmarked ? 'bookmarked' : ''}`}
+                                        title="북마크"
+                                        style={{ padding: '10px 12px', borderRadius: 8 }}
+                                    >
+                                        <Star size={16} fill={row.isBookmarked ? 'currentColor' : 'none'} />
+                                        북마크
+                                    </button>
+                                    {row.originalOrder.items.length > 1 && (
+                                        <button
+                                            onClick={() => handleSplitOrder(row.originalOrder.id)}
+                                            className="action-button split-button"
+                                            title="묶음 주문 분리"
+                                            style={{ padding: '10px 12px', borderRadius: 8 }}
+                                        >
+                                            <GitMerge size={16} />
+                                            분리
+                                        </button>
+                                    )}
+                                    <DangerButton
+                                        onClick={() => handleDeleteOrder(row.originalOrder.id, row.customerName)}
+                                        variant="danger"
+                                        confirmText="예약을 삭제할까요?"
+                                    >
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            <Trash2 size={16} /> 삭제
+                                        </span>
+                                    </DangerButton>
+                                </div>
+                            ),
+                        },
+                    ]}
+                />
+            </div>
+
+            {/* ✅ [P0/모바일] 하단 스티키 일괄처리 바 */}
+            <div className={`order-bulk-action-bar admin-mobile-only ${selectedOrderIds.size > 0 ? 'visible' : ''}`}>
+                <div className="bulk-left">
+                    <strong>{selectedOrderIds.size}개 선택</strong>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <button className="bulk-clear-btn" onClick={selectCurrentPage}>현재페이지 선택</button>
+                        <button className="bulk-clear-btn" onClick={selectAllFiltered}>전체 선택</button>
+                        <button className="bulk-clear-btn" onClick={clearSelection}>선택 해제</button>
+                    </div>
+                </div>
+                <div className="bulk-actions">
+                    <button className="bulk-btn" onClick={() => bulkUpdateStatus('PICKED_UP')}><PackageCheck size={16} /> 픽업</button>
+                    <button className="bulk-btn" onClick={() => bulkUpdateStatus('PREPAID')}><DollarSign size={16} /> 선입금</button>
+                    <button className="bulk-btn" onClick={() => bulkUpdateStatus('RESERVED')}><Clock size={16} /> 예약</button>
+                    <DangerButton onClick={() => bulkUpdateStatus('NO_SHOW')} variant="warning" confirmText="노쇼 처리할까요?">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={16} /> 노쇼</span>
+                    </DangerButton>
+                    <DangerButton onClick={() => bulkUpdateStatus('CANCELED')} variant="danger" confirmText="취소 처리할까요?">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><PackageX size={16} /> 취소</span>
+                    </DangerButton>
+                </div>
+            </div>
+
+            {/* ✅ [데스크톱] 기존 엑셀형 테이블 유지 */}
+            <div className="admin-desktop-only admin-table-container">
                 <table className="admin-table excel-style">
                     <thead>
                         <tr>

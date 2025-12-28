@@ -9,6 +9,9 @@ import type { Product, SalesRound, VariantGroup, StorageType, ProductItem } from
 import toast from 'react-hot-toast';
 import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2, Store } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import FilterBar from '@/components/admin/FilterBar';
+import DangerButton from '@/components/admin/DangerButton';
 import './ProductListPageAdmin.css';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
@@ -513,31 +516,41 @@ const fetchData = useCallback(async () => {
 
   return (
     <div className="admin-page-container product-list-admin-container simplified inline-edit">
-      <header className="admin-page-header">
-        <h1 className="admin-page-title"><PackageOpen size={28} /> 상품 관리 (간편 편집)</h1>
-      </header>
+      <AdminPageHeader 
+        title="상품 관리 (간편 편집)"
+        icon={<PackageOpen size={28} />}
+        priority="normal"
+        actions={
+          <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="신규 대표 상품 등록">
+            <Plus size={18} /> 신규 대표 상품 추가
+          </button>
+        }
+      />
 
-      <div className="product-list-controls-v2">
-        <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="신규 대표 상품 등록"><Plus size={18} /> 신규 대표 상품 추가</button>
-        <div className="search-bar-wrapper">
-          <Search size={18} className="search-icon" />
-          <input type="text" placeholder="상품명, 회차명 검색" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="search-input" />
-        </div>
-        <div className="filter-sort-wrapper">
-          <div className="control-group">
-            <Filter size={16} />
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="control-select">
-              <option value="all">모든 상태</option>
-              <option value="1차 공구중">1차 공구중</option>
-              <option value="2차 공구중">2차 공구중</option>
-              <option value="매진">매진</option>
-              <option value="판매종료">판매종료</option>
-              <option value="판매예정">판매예정</option>
-              <option value="데이터 오류">오류</option>
-            </select>
-          </div>
-        </div>
-      </div>
+      <FilterBar
+        searchPlaceholder="상품명, 회차명 검색"
+        searchValue={searchQuery}
+        filterValues={{ status: filterStatus }}
+        filters={[
+          {
+            key: 'status',
+            label: '상태 필터',
+            options: [
+              { value: 'all', label: '모든 상태' },
+              { value: '1차 공구중', label: '1차 공구중' },
+              { value: '2차 공구중', label: '2차 공구중' },
+              { value: '매진', label: '매진' },
+              { value: '판매종료', label: '판매종료' },
+              { value: '판매예정', label: '판매예정' },
+              { value: '데이터 오류', label: '오류' },
+            ]
+          }
+        ]}
+        onSearch={setSearchQuery}
+        onFilterChange={(key, value) => {
+          if (key === 'status') setFilterStatus(value);
+        }}
+      />
 
       <div className="admin-tab-content">
         <div className="admin-product-table-container">
@@ -688,7 +701,13 @@ const fetchData = useCallback(async () => {
                                 {isOnsiteLoading ? <Loader2 size={16} className="animate-spin" /> : <Store size={16} />}
                               </button>
                               <button onClick={() => navigate(`/admin/products/edit/${item.productId}/${item.round.roundId}`)} className="admin-action-button" title="상세 수정"><Edit size={16} /></button>
-                              <button onClick={() => handleDelete(item.productId, item.round.roundId, item.productName, item.round.roundName)} className="admin-action-button danger" title="삭제"><Trash2 size={16} /></button>
+                              <DangerButton
+                                onClick={() => handleDelete(item.productId, item.round.roundId, item.productName, item.round.roundName)}
+                                variant="danger"
+                                confirmText="회차를 삭제하시겠습니까?"
+                              >
+                                <Trash2 size={16} />
+                              </DangerButton>
                             </div>
                           </td>
                         </tr>

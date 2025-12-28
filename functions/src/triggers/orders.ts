@@ -45,8 +45,11 @@ const calculateTier = (pickupCount: number, noShowCount: number): LoyaltyTier =>
   return '공구초보';
 };
 
+// TODO: [비활성화] 포인트 관련 기능 비활성화 - calculateUserUpdateFromOrder 함수 비활성화
+// 이 함수는 포인트 계산 로직을 포함하고 있지만, 호출하는 트리거가 비활성화되어 있어 실행되지 않습니다.
 type OrderUpdateType = "PICKUP_CONFIRMED" | "NO_SHOW_CONFIRMED" | "PICKUP_REVERTED" | "NO_SHOW_REVERTED" | "LATE_PICKUP_CONFIRMED";
 
+/* 비활성화된 함수 시작
 function calculateUserUpdateFromOrder(
   currentUserData: UserDocument,
   order: Order,
@@ -145,6 +148,7 @@ function calculateUserUpdateFromOrder(
 
   return { updateData, tierChange };
 }
+비활성화된 함수 끝 */
 
 interface ProductWithHistory {
   salesHistory: {
@@ -391,12 +395,18 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
 // updateUserStatsOnOrderStatusChange, rewardReferrerOnFirstPickup 등
 // 사용자 포인트 및 등급 관련 로직은 변경 사항이 없으므로 생략합니다.
 // ... (기존 코드와 동일) ...
+// TODO: [비활성화] 포인트 관련 기능 비활성화 - 주문 상태 변경 시 사용자 포인트/등급 업데이트 트리거 비활성화
 export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
   {
     document: "orders/{orderId}",
     region: "asia-northeast3",
   },
   async (event: FirestoreEvent<Change<DocumentSnapshot> | undefined, { orderId: string }>) => {
+    // TODO: [비활성화] 포인트 관련 기능이 비활성화되어 이 트리거는 더 이상 실행되지 않습니다.
+    logger.warn(`[비활성화] updateUserStatsOnOrderStatusChange 트리거가 호출되었지만 포인트 기능이 비활성화되어 스킵합니다. Order ID: ${event.params.orderId}`);
+    return;
+    
+    /* 비활성화된 코드 시작
     if (!event.data) return;
 
     const before = event.data.before.data() as Order;
@@ -478,15 +488,22 @@ export const updateUserStatsOnOrderStatusChange = onDocumentUpdated(
     } catch (error) {
        logger.error(`Transaction failed for user stats update on order ${event.params.orderId}:`, error);
     }
+    비활성화된 코드 끝 */
   }
 );
 
+// TODO: [비활성화] 포인트 관련 기능 비활성화 - 친구 초대 보상 트리거 비활성화
 export const rewardReferrerOnFirstPickup = onDocumentUpdated(
   {
     document: "orders/{orderId}",
     region: "asia-northeast3",
   },
   async (event) => {
+    // TODO: [비활성화] 포인트 관련 기능이 비활성화되어 이 트리거는 더 이상 실행되지 않습니다.
+    logger.warn(`[비활성화] rewardReferrerOnFirstPickup 트리거가 호출되었지만 포인트 기능이 비활성화되어 스킵합니다. Order ID: ${event.params.orderId}`);
+    return;
+    
+    /* 비활성화된 코드 시작
     if (!event.data) {
       logger.error("No event data.");
       return;
@@ -559,5 +576,6 @@ export const rewardReferrerOnFirstPickup = onDocumentUpdated(
     } catch (error) {
       logger.error("An error occurred while processing the referrer reward:", error);
     }
+    비활성화된 코드 끝 */
   }
 );

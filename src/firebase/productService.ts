@@ -176,9 +176,16 @@ export const deleteSalesRounds = async (
 };
 
 // --- 8. 대기자 명단 조회 (서버) ---
+// TODO: [비활성화] 대기자 명단 기능이 완전히 비활성화되었습니다.
 export const getWaitlistForRound = async (productId: string, roundId: string): Promise<any[]> => {
+  // TODO: [비활성화] 대기자 명단 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] getWaitlistForRound 함수는 더 이상 사용할 수 없습니다.");
+  return [];
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   const result = await getWaitlistForRoundCallable({ productId, roundId });
   return result.data as any[];
+  */
 }
 
 // --- 9. 재고 수정 (서버) ---
@@ -246,7 +253,13 @@ export const toggleSalesRoundOnsiteStatus = async (
 // ========================================================
 
 // --- 12. 사용자 대기열 조회 ---
+// TODO: [비활성화] 대기자 명단 기능이 완전히 비활성화되었습니다.
 export const getUserWaitlist = async (userId: string): Promise<WaitlistInfo[]> => {
+  // TODO: [비활성화] 대기자 명단 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] getUserWaitlist 함수는 더 이상 사용할 수 없습니다.");
+  return [];
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   if (!userId) return [];
   const allProductsSnapshot = await getDocs(query(collection(db, 'products'), where('isArchived', '==', false)));
   const userWaitlist: WaitlistInfo[] = [];
@@ -386,12 +399,18 @@ export const checkProductAvailability = async (
   return hasSufficientGroupStock;
 };
 
+// TODO: [비활성화] 대기자 명단 기능이 완전히 비활성화되었습니다.
 export const cancelWaitlistEntry = async (
   productId: string,
   roundId: string,
   userId: string,
   itemId: string
 ): Promise<void> => {
+  // TODO: [비활성화] 대기자 명단 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] cancelWaitlistEntry 함수는 더 이상 사용할 수 없습니다.");
+  return;
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   const productRef = doc(db, 'products', productId);
   await runTransaction(db, async (transaction) => {
     const productDoc = await transaction.get(productRef);
@@ -415,6 +434,7 @@ export const cancelWaitlistEntry = async (
     newSalesHistory[roundIndex] = round;
     transaction.update(productRef, { salesHistory: newSalesHistory });
   });
+  */
 };
 
 export const updateItemStock = async (
@@ -466,14 +486,17 @@ export interface GetProductsWithStockResponse {
 // ✅ 탭 타입 정의
 type ProductTabType = 'all' | 'today' | 'additional' | 'onsite';
 
-export type GetProductsWithStockPayload = {
-  pageSize: number;
-  lastDocId?: string | null;   // ✅ 추가
-  lastVisible?: any;           // (구버전 호환용) 필요없으면 나중에 제거
-  tab?: "all" | "onsite";
+type GetProductsWithStockPayload = {
+  pageSize?: number;
+  lastVisible?: number | null;
+  tab?: ProductTabType | null;
+  /**
+   * 예약수량 오버레이를 적용할지 여부
+   * - true: getReservedQuantitiesMap 호출 + applyReservedOverlay 적용
+   * - false: 그냥 products 컬렉션 데이터만 사용 (리스트/프리뷰용으로 빠름)
+   */
   withReservedOverlay?: boolean;
 };
-
 
 // 🔁 예약수량 Map 캐시 (같은 세션에서 여러 번 재사용)
 const RESERVED_CACHE_TTL_MS = 30_000; // 30초 정도 유지

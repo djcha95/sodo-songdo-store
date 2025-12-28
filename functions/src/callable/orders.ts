@@ -941,8 +941,15 @@ export const createOrderAsAdmin = onCall(
       throw new HttpsError("invalid-argument", "필수 정보(대상 사용자 ID, 주문 항목)가 누락되었습니다.");
     }
     
-    try {
-      const result = await db.runTransaction(async (transaction) => {
+    // ✅ [감사 로깅] 관리자 작업 감사 로그 기록
+    const { withAuditLog } = await import("../utils/auditLogger.js");
+    
+    return await withAuditLog(
+      adminUid,
+      "createOrderAsAdmin",
+      "order",
+      async () => {
+        const result = await db.runTransaction(async (transaction) => {
         const targetUserRef = db.collection('users').withConverter(userConverter).doc(targetUserId);
         const targetUserSnap = await transaction.get(targetUserRef);
         if (!targetUserSnap.exists) {
@@ -1012,7 +1019,18 @@ export const createOrderAsAdmin = onCall(
       });
 
       return result;
-
+        },
+        {
+          resourceId: targetUserId,
+          details: {
+            productId: item.productId,
+            roundId: item.roundId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          },
+          adminEmail: adminUser.email,
+        }
+      );
     } catch (error) {
       logger.error(`Admin order creation failed for target user ${targetUserId} by admin ${adminUid}:`, error);
       if (error instanceof HttpsError) throw error;

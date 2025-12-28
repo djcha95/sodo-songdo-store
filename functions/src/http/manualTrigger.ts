@@ -3,11 +3,27 @@
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { getAuth } from "firebase-admin/auth";
-import { dbAdmin as db } from "../firebase/admin.js";
+import { dbAdmin as db, admin } from "../firebase/admin.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { executePickupReminders } from "../scheduled/notifications.js";
 import type { Order, UserDocument, LoyaltyTier, PointLog, Product, SalesRound } from "@/shared/types";
 import dayjs from "dayjs";
+
+// ✅ [보안 강화] 관리자 권한 검증 함수
+const checkAdmin = async (request: any): Promise<boolean> => {
+    if (!request.headers.authorization || !request.headers.authorization.startsWith('Bearer ')) {
+        return false;
+    }
+    const idToken = request.headers.authorization.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userRole = decodedToken.role;
+        return userRole === 'admin' || userRole === 'master';
+    } catch (error) {
+        logger.error("Auth token verification failed:", error);
+        return false;
+    }
+};
 
 
 // =================================================================
@@ -23,6 +39,14 @@ export const manualSendPickupReminders = onRequest(
     secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"], 
   },
   async (req, res) => {
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for manualSendPickupReminders.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     logger.info("수동으로 픽업 리마인더 발송을 시작합니다.");
     try {
       await executePickupReminders();
@@ -363,6 +387,14 @@ export const backfillProductVisibility = onCall(
 export const archiveWelcomeSnackOrders = onRequest(
   { region: "asia-northeast3", timeoutSeconds: 540, memory: "1GiB" },
   async (req, res) => {
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for archiveWelcomeSnackOrders.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     try {
       logger.info("🚀 [일회성 스크립트] 웰컴 스낵 주문 숨김 처리 시작...");
       const ordersRef = db.collection("orders");
@@ -433,6 +465,14 @@ export const archiveWelcomeSnackOrders = onRequest(
 export const deleteUnclaimedWelcomeSnacks = onRequest(
   { region: "asia-northeast3", timeoutSeconds: 540, memory: "1GiB" },
   async (req, res) => {
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for deleteUnclaimedWelcomeSnacks.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     try {
       logger.warn("🚨 [데이터 삭제 스크립트] 픽업 전 웰컴 스낵 주문 삭제 프로세스 시작...");
 

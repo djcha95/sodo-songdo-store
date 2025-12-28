@@ -2,9 +2,25 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import { dbAdmin as db } from "../firebase/admin.js";
+import { dbAdmin as db, admin } from "../firebase/admin.js";
 import { Timestamp } from "firebase-admin/firestore";
 import type { Order, OrderItem, Product } from "@/shared/types";
+
+// ✅ [보안 강화] 관리자 권한 검증 함수
+const checkAdmin = async (request: any): Promise<boolean> => {
+    if (!request.headers.authorization || !request.headers.authorization.startsWith('Bearer ')) {
+        return false;
+    }
+    const idToken = request.headers.authorization.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userRole = decodedToken.role;
+        return userRole === 'admin' || userRole === 'master';
+    } catch (error) {
+        logger.error("Auth token verification failed:", error);
+        return false;
+    }
+};
 
 /**
  * =================================================================
@@ -14,6 +30,14 @@ import type { Order, OrderItem, Product } from "@/shared/types";
 export const bulkApplyDeadlineLogic = onRequest(
   { region: "asia-northeast3", timeoutSeconds: 600, memory: "512MiB" },
   async (req, res) => {
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for bulkApplyDeadlineLogic.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     logger.info("Starting to apply pickup deadline logic to split orders.");
 
     const productCache = new Map<string, Product>();

@@ -96,10 +96,11 @@ const MyPage = () => {
         </div>
 
         <div className="card-body">
-            <div className="user-tier-badge">
+            {/* ❌ [비활성화] 등급/포인트 표시 제거 */}
+            {/* <div className="user-tier-badge">
                 {tierInfo.icon}
                 <span>{tierInfo.label}</span>
-            </div>
+            </div> */}
             <h1 className="user-name">
                 {userDocument.displayName} 
                 <span className="user-suffix">님</span>
@@ -112,10 +113,11 @@ const MyPage = () => {
                 <ShieldCheck size={16} />
                 <span>회원 인증 완료</span>
             </div>
-            <div className="user-points">
+            {/* ❌ [비활성화] 등급/포인트 표시 제거 */}
+            {/* <div className="user-points">
                 <span>보유 포인트</span>
                 <strong>{(userDocument.points || 0).toLocaleString()} P</strong>
-            </div>
+            </div> */}
         </div>
       </motion.div>
 

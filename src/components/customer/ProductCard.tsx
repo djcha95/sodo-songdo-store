@@ -292,14 +292,15 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => {
             {isJustAdded ? <button className="add-to-cart-btn just-added" disabled><Check size={18} /> 담았어요</button>
                          : <button className="add-to-cart-btn" onClick={handleAddToCart}><ShoppingCart size={16} /> 담기</button>}
           </div>);
-      case 'WAITLISTABLE':
-        const maxWaitlistQuantity = cardData.singleOptionItem?.limitQuantity || 99;
-        return (
-          <div className="action-controls" onClick={(e) => e.stopPropagation()}>
-            <QuantityInput quantity={quantity} onUpdate={setQuantity} max={maxWaitlistQuantity} />
-            {isJustAdded ? <button className="waitlist-action-btn just-added" disabled><Check size={18} /> 신청됨</button>
-                         : <button className="waitlist-action-btn" onClick={handleAddToWaitlist}><Hourglass size={16} /> 대기</button>}
-          </div>);
+      // ❌ [비활성화] 대기자 명단 기능 비활성화
+      // case 'WAITLISTABLE':
+      //   const maxWaitlistQuantity = cardData.singleOptionItem?.limitQuantity || 99;
+      //   return (
+      //     <div className="action-controls" onClick={(e) => e.stopPropagation()}>
+      //       <QuantityInput quantity={quantity} onUpdate={setQuantity} max={maxWaitlistQuantity} />
+      //       {isJustAdded ? <button className="waitlist-action-btn just-added" disabled><Check size={18} /> 신청됨</button>
+      //                    : <button className="waitlist-action-btn" onClick={handleAddToWaitlist}><Hourglass size={16} /> 대기</button>}
+      //     </div>);
       case 'REQUIRE_OPTION':
         return <button className="options-btn" onClick={handleCardClick}>옵션 선택하기 <ChevronRight size={16} /></button>;
       case 'ENCORE_REQUESTABLE':
@@ -363,7 +364,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, actionState }) => {
             onError={handleImageError} 
           />
           {actionState === 'AWAITING_STOCK' && <div className="card-overlay-badge">재고 준비중</div>}
-          {actionState === 'WAITLISTABLE' && <div className="card-overlay-badge">대기 가능</div>}
+          {/* ❌ [비활성화] 대기자 명단 기능 비활성화 */}
+          {/* {actionState === 'WAITLISTABLE' && <div className="card-overlay-badge">대기 가능</div>} */}
           {isSuspendedUser && product.phase !== 'past' && (
             <div className="card-overlay-restricted"><ShieldX size={32} /><p>참여 제한</p></div>
           )}

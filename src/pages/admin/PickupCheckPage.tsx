@@ -5,6 +5,7 @@ import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { getProductsWithStock } from '@/firebase';
 import type { Product, SalesRound, StorageType } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import { safeToDate } from '@/utils/productUtils';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
@@ -227,10 +228,13 @@ const PickupCheckPage: React.FC = () => {
 
   // 3. 렌더링 부분 수정 시작
   return (
-    <div className="pickup-check-container">
-      <header className="pickup-header">
-        <h1><CalendarCheck size={28} /> 수진이의 픽업체쿠!</h1>
-      </header>
+    <div className="admin-page-container pickup-check-container">
+      <AdminPageHeader
+        title="수진이의 픽업체쿠!"
+        subtitle="픽업일 캘린더 + 모드별 공지(입고/마감임박/노쇼) 생성"
+        icon={<CalendarCheck size={28} />}
+        priority="high"
+      />
 
       <div className="pickup-layout">
         {/* 캘린더 영역 */}

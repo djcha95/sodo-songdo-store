@@ -15,6 +15,7 @@ import { Timestamp } from "firebase-admin/firestore";
  *
  * 제외 상태: PREPAID (선입금), COMPLETED (픽업 완료), NO_SHOW, CANCELLED
  */
+// TODO: [비활성화] 자동 노쇼 처리 스케줄러 비활성화
 export const markOverdueOrdersAsNoShow = onSchedule(
   {
     schedule: "every day 03:00",
@@ -23,6 +24,11 @@ export const markOverdueOrdersAsNoShow = onSchedule(
     memory: "512MiB",
   },
   async () => {
+    // TODO: [비활성화] 자동 노쇼 처리 기능이 비활성화되어 이 스케줄러는 더 이상 실행되지 않습니다.
+    logger.warn("[비활성화] markOverdueOrdersAsNoShow 스케줄러가 호출되었지만 자동 노쇼 기능이 비활성화되어 스킵합니다.");
+    return;
+    
+    /* 비활성화된 코드 시작
     logger.info("매일 자동 노쇼 처리 작업을 시작합니다.");
 
     const now = Timestamp.now();
@@ -65,5 +71,6 @@ export const markOverdueOrdersAsNoShow = onSchedule(
     } catch (error) {
       logger.error("자동 노쇼 처리 작업 중 오류가 발생했습니다:", error);
     }
+    비활성화된 코드 끝 */
   }
 );

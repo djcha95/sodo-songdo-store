@@ -17,9 +17,10 @@
   flex-direction: column;
   position: sticky;
   top: 0;
-  transition: width var(--transition-speed-normal) ease-in-out;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   color: #fff;
   z-index: 100;
+  will-change: width;
 }
 
 .admin-sidebar.collapsed {
@@ -44,8 +45,8 @@
 }
 
 .sidebar-title {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.35rem; /* ✅ 제목 크기 증가 */
+  font-weight: 700; /* ✅ 제목 두께 증가 */
   white-space: nowrap;
   overflow: hidden;
   color: #fff;
@@ -67,12 +68,14 @@
 .menu-item a {
   display: flex;
   align-items: center;
-  padding: 0.75rem 1.5rem;
+  padding: 0.875rem 1.5rem;
   color: #f8f9fa;
   text-decoration: none;
   transition: background-color 0.2s;
   white-space: nowrap;
   overflow: hidden;
+  font-size: 0.95rem; /* ✅ 글씨체 크기 증가 */
+  font-weight: 500; /* ✅ 글씨체 두께 증가 */
 }
 
 .menu-item a:hover {
@@ -82,7 +85,7 @@
 .menu-item a.active {
   background-color: var(--primary-color, #0d6efd);
   color: #fff;
-  font-weight: 500;
+  font-weight: 600; /* ✅ 활성 상태 글씨체 더 두껍게 */
 }
 
 .menu-item a > svg {
@@ -90,6 +93,8 @@
   flex-shrink: 0;
   fill: #f8f9fa;
   color: #f8f9fa;
+  width: 22px; /* ✅ 아이콘 크기 증가 (18px → 22px) */
+  height: 22px;
 }
 
 .admin-sidebar.collapsed .menu-item a {
@@ -111,6 +116,55 @@
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
+}
+
+/* 위험 기능 그룹 스타일 */
+.menu-group-danger {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 2px solid #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  margin-left: 8px;
+  margin-right: 8px;
+}
+
+.menu-group-header-danger {
+  display: flex;
+  align-items: center;
+  gap: 10px; /* ✅ 간격 증가 */
+  padding: 10px 0; /* ✅ 패딩 증가 */
+  font-size: 0.85rem; /* ✅ 글씨체 크기 증가 */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #ef4444;
+  margin-bottom: 10px; /* ✅ 여백 증가 */
+}
+
+.menu-group-header-danger svg {
+  width: 18px; /* ✅ 위험 아이콘 크기 증가 */
+  height: 18px;
+}
+
+.menu-item-danger a {
+  color: #fca5a5;
+  border-left: 3px solid #ef4444;
+  padding-left: calc(1.5rem - 3px);
+}
+
+.menu-item-danger a:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.menu-item-danger a.active {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #fff;
+}
+
+.admin-sidebar.collapsed .menu-group-danger {
+  display: none; /* 접힘 상태에서는 위험 기능 숨김 */
 }
 
 .sidebar-footer {

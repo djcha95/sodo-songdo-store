@@ -3,6 +3,8 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '@/firebase';
 import toast from 'react-hot-toast';
 import { Settings, RefreshCw, AlertTriangle, Play, Database } from 'lucide-react';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import DangerButton from '@/components/admin/DangerButton';
 import './AdminToolsPage.css';
 
 const AdminToolsPage = () => {
@@ -42,10 +44,11 @@ const AdminToolsPage = () => {
 
   return (
     <div className="admin-tools-container">
-      <div className="page-header">
-        <Settings className="w-8 h-8 text-gray-700" />
-        <h1 className="page-title">시스템 관리 도구</h1>
-      </div>
+      <AdminPageHeader 
+        title="시스템 관리 도구"
+        icon={<Settings size={28} />}
+        priority="low"
+      />
 
       <div className="tools-card">
         <h2 className="card-title">
@@ -71,10 +74,10 @@ const AdminToolsPage = () => {
               <p>기존 통계가 꼬였거나 정확하지 않을 때 실행하세요.</p>
             </div>
             
-            <button 
-              onClick={runRebuild} 
-              disabled={loading} 
-              className={`run-btn ${loading ? 'btn-disabled' : 'btn-primary'}`}
+            <DangerButton
+              onClick={runRebuild}
+              variant="danger"
+              confirmText="재구축을 실행하시겠습니까?"
             >
               {loading ? (
                 <>
@@ -87,7 +90,7 @@ const AdminToolsPage = () => {
                   재구축 실행하기
                 </>
               )}
-            </button>
+            </DangerButton>
           </div>
 
           {/* 결과 표시 창 */}

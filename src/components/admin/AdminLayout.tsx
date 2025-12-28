@@ -2,6 +2,7 @@
 import { useState, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
+import AdminMobileNav from '@/components/admin/AdminMobileNav';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './AdminLayout.css';
 
@@ -27,6 +28,8 @@ const AdminLayout = () => {
           <Outlet />
         </Suspense>
       </main>
+      {/* 모바일 하단 네비게이션 */}
+      <AdminMobileNav />
     </div>
   );
 };

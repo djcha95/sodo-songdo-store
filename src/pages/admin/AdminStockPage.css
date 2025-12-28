@@ -71,6 +71,150 @@
   color: #334155;
 }
 
+/* ✅ [P0/모바일] 카드 리스트 */
+.inventory-mobile-card {
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.inventory-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inventory-card-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.inventory-card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.inventory-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 10px;
+  color: #334155;
+  font-size: 14px;
+}
+
+.inventory-card-memo {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* ✅ [P0/모바일] 편집 모달 */
+.inventory-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 400;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+}
+
+.inventory-edit-modal {
+  width: 100%;
+  max-width: 520px;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+
+.inventory-edit-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.inventory-edit-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.inventory-edit-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.inventory-edit-close {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fff;
+}
+
+.inventory-edit-body {
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.inventory-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inventory-field-inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inventory-field span {
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.inventory-field input[type="text"],
+.inventory-field input[type="number"] {
+  min-height: 44px;
+  font-size: 16px; /* iOS 줌 방지 */
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.inventory-field input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+}
+
+.inventory-edit-footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
 .admin-stock-checkbox {
   display: flex;
   align-items: center;
@@ -100,6 +244,37 @@
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 14px;
+}
+
+/* ✅ [P0/모바일] 가로 스크롤 허용 + 입력 터치 영역 확보 */
+@media (max-width: 768px) {
+  .admin-stock-page {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .admin-stock-table-wrapper {
+    overflow-x: auto; /* 모바일에서 가로 스크롤 허용 */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-stock-table {
+    min-width: 980px; /* 컬럼이 많은 테이블은 최소 폭을 보장 */
+  }
+
+  .admin-stock-table th {
+    padding: 12px 8px;
+  }
+
+  .cell-input {
+    font-size: 16px; /* iOS 자동 줌 방지 + 가독성 */
+    padding: 0 12px;
+  }
+
+  .tax-free-checkbox {
+    width: 22px;
+    height: 22px;
+  }
 }
 
 .admin-stock-table thead {

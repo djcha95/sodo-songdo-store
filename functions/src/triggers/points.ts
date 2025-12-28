@@ -7,12 +7,18 @@ import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue } from "firebase-admin/firestore";
 import type { PointLog } from "@/shared/types";
 
+// TODO: [비활성화] 포인트 관련 기능 비활성화 - 포인트 변경 알림 트리거 비활성화
 export const createNotificationOnPointChange = onDocumentCreated(
   {
     document: "users/{userId}/pointLogs/{logId}",
     region: "asia-northeast3",
   },
   async (event) => {
+    // TODO: [비활성화] 포인트 관련 기능이 비활성화되어 이 트리거는 더 이상 실행되지 않습니다.
+    logger.warn(`[비활성화] createNotificationOnPointChange 트리거가 호출되었지만 포인트 기능이 비활성화되어 스킵합니다. User ID: ${event.params.userId}, Log ID: ${event.params.logId}`);
+    return;
+    
+    /* 비활성화된 코드 시작
     const snapshot = event.data;
     if (!snapshot) {
       logger.error("No data in the event.", {params: event.params});
@@ -64,5 +70,6 @@ export const createNotificationOnPointChange = onDocumentCreated(
         error
       );
     }
+    비활성화된 코드 끝 */
   }
 );

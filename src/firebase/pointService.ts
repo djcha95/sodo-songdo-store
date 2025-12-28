@@ -160,8 +160,14 @@ export const calculateUserUpdateByStatus = (
 
 /**
  * @description 미션 완료 보상을 지급하는 Cloud Function 호출 함수
+ * TODO: [비활성화] 포인트 기능이 완전히 비활성화되었습니다.
  */
 export const claimMissionReward = async (missionId: string, uniquePeriodId: string): Promise<{success: boolean, message: string}> => {
+  // TODO: [비활성화] 포인트 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] claimMissionReward 함수는 더 이상 사용할 수 없습니다.");
+  throw new Error("포인트 기능은 현재 사용할 수 없습니다.");
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   const functions = getFunctions(getApp(), 'asia-northeast3');
   const claimReward = httpsCallable(functions, 'claimMissionReward');
 
@@ -176,17 +182,24 @@ export const claimMissionReward = async (missionId: string, uniquePeriodId: stri
     }
     throw new Error('미션 보상을 요청하는 중 알 수 없는 오류가 발생했습니다.');
   }
+  */
 };
 
 
 /**
  * @description 관리자가 수동으로 사용자의 포인트를 조정합니다.
+ * TODO: [비활성화] 포인트 기능이 완전히 비활성화되었습니다.
  */
 export const adjustUserPoints = async (
   userId: string,
   amount: number,
   reason: string
 ): Promise<void> => {
+  // TODO: [비활성화] 포인트 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] adjustUserPoints 함수는 더 이상 사용할 수 없습니다.");
+  throw new Error("포인트 기능은 현재 사용할 수 없습니다.");
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   if (!userId || !reason) {
     throw new Error('사용자 ID와 조정 사유는 필수입니다.');
   }
@@ -222,6 +235,7 @@ export const adjustUserPoints = async (
       pointHistory: arrayUnion(newPointHistoryEntry),
     });
   });
+  */
 };
 
 /**
@@ -337,8 +351,14 @@ export const deleteMultiplePointLogs = async (userId: string, logIds: string[]):
 
 /**
  * @description 사용자의 포인트 적립/사용 내역을 가져옵니다.
+ * TODO: [비활성화] 포인트 기능이 완전히 비활성화되었습니다.
  */
 export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
+  // TODO: [비활성화] 포인트 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] getPointHistory 함수는 더 이상 사용할 수 없습니다.");
+  return [];
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   if (!userId) {
     console.error("User ID is required to get point history.");
     return [];
@@ -367,13 +387,20 @@ export const getPointHistory = async (userId: string): Promise<PointLog[]> => {
   });
 
   return sorted;
+  */
 };
 
 
 /**
  * @description 사용자의 일일 방문을 기록하고 포인트와 등급을 업데이트합니다.
+ * TODO: [비활성화] 포인트 기능이 완전히 비활성화되었습니다.
  */
 export const recordDailyVisit = async (userId: string): Promise<void> => {
+  // TODO: [비활성화] 포인트 기능 비활성화 - 호출 불가 처리
+  console.warn("[비활성화] recordDailyVisit 함수는 더 이상 사용할 수 없습니다.");
+  return;
+  
+  /* 아래 코드는 비활성화되었지만 참고용으로 유지합니다.
   const todayStr = new Date().toISOString().split('T')[0];
   const userRef = doc(db, 'users', userId);
 
@@ -445,6 +472,7 @@ export const recordDailyVisit = async (userId: string): Promise<void> => {
   } catch (error) {
     console.error("일일 방문 기록 오류:", error);
   }
+  */
 };
 
 

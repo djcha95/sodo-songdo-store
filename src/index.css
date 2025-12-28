@@ -6,6 +6,8 @@
 @import './styles/variables.css';
 /* 공통 스타일 파일 import */
 @import './styles/common.css';
+/* 관리자 페이지 공통 스타일 (터치 영역 확보) */
+@import './styles/admin-common.css';
 
 
 /* 전역 기본 스타일 */

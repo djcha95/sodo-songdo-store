@@ -3,7 +3,24 @@ import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { sendAlimtalk } from "../utils/nhnApi.js";
+import { admin } from "../firebase/admin.js";
 import type { Order, UserDocument } from "@/shared/types";
+
+// ✅ [보안 강화] 관리자 권한 검증 함수
+const checkAdmin = async (request: any): Promise<boolean> => {
+    if (!request.headers.authorization || !request.headers.authorization.startsWith('Bearer ')) {
+        return false;
+    }
+    const idToken = request.headers.authorization.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userRole = decodedToken.role;
+        return userRole === 'admin' || userRole === 'master';
+    } catch (error) {
+        logger.error("Auth token verification failed:", error);
+        return false;
+    }
+};
 
 export const manualSendRecentReminders = onRequest(
   {
@@ -11,6 +28,14 @@ export const manualSendRecentReminders = onRequest(
     secrets: ["NHN_APP_KEY", "NHN_SECRET_KEY", "NHN_SENDER_KEY"],
   },
   async (req, res) => {
+    // ✅ [보안 강화] 관리자 권한 검증
+    const isAdmin = await checkAdmin(req);
+    if (!isAdmin) {
+        logger.error("Permission denied. Admin role required for manualSendRecentReminders.");
+        res.status(403).send("Permission denied. Admin role required.");
+        return;
+    }
+    
     logger.info("특수문자 포함 고객 대상 리마인더 재발송을 시작합니다.");
     try {
       const db = getFirestore();

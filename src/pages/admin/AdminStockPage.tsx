@@ -9,8 +9,9 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { InventoryItem } from '@/firebase/inventory';
 import SodomallLoader from '@/components/common/SodomallLoader';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import toast from 'react-hot-toast';
-import { RefreshCw, Search, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Search, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2, Edit3, X } from 'lucide-react';
 import dayjs from 'dayjs';
 import { safeToDate } from '@/utils/date'; // ✅ 이제 date.ts에 추가했으므로 오류가 사라질 것입니다.
 import './AdminStockPage.css';
@@ -25,6 +26,9 @@ interface SortConfig {
 const AdminStockPage: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]); // EditableStockItem 대신 InventoryItem 사용 (자동저장이므로 dirty 체크 불필요)
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [draft, setDraft] = useState<Partial<InventoryItem>>({});
   
   // 필터 및 정렬 상태
   const [showZeroStock, setShowZeroStock] = useState(false);
@@ -50,6 +54,12 @@ const AdminStockPage: React.FC = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
 // 2. 동기화 기능 (유통기한 포함 - 로직 개선됨)
   const handleSync = async () => {
@@ -171,6 +181,54 @@ const AdminStockPage: React.FC = () => {
     }
   };
 
+  const openEditModal = (item: InventoryItem) => {
+    setEditingItem(item);
+    setDraft({
+      quantity: item.quantity,
+      isTaxFree: item.isTaxFree || false,
+      costPrice: item.costPrice,
+      salePrice: item.salePrice,
+      expiryDate: item.expiryDate,
+      memo: item.memo,
+    });
+  };
+
+  const closeEditModal = () => {
+    setEditingItem(null);
+    setDraft({});
+  };
+
+  const saveDraft = async () => {
+    if (!editingItem) return;
+    const id = editingItem.id;
+    try {
+      // ✅ 저장 순서 중요: isTaxFree → costPrice(부가세 자동계산 로직 반영) → 나머지
+      if (typeof draft.isTaxFree === 'boolean' && (editingItem.isTaxFree || false) !== draft.isTaxFree) {
+        await handleAutoSave(id, 'isTaxFree', draft.isTaxFree);
+      }
+      if (typeof draft.quantity === 'number' && editingItem.quantity !== draft.quantity) {
+        await handleAutoSave(id, 'quantity', draft.quantity);
+      }
+      if (typeof draft.costPrice === 'number' && editingItem.costPrice !== draft.costPrice) {
+        await handleAutoSave(id, 'costPrice', draft.costPrice);
+      }
+      if (typeof draft.salePrice === 'number' && editingItem.salePrice !== draft.salePrice) {
+        await handleAutoSave(id, 'salePrice', draft.salePrice);
+      }
+      if (typeof draft.expiryDate === 'string' && editingItem.expiryDate !== draft.expiryDate) {
+        await handleAutoSave(id, 'expiryDate', draft.expiryDate);
+      }
+      if (typeof draft.memo === 'string' && editingItem.memo !== draft.memo) {
+        await handleAutoSave(id, 'memo', draft.memo);
+      }
+
+      toast.success('저장 완료');
+      closeEditModal();
+    } catch (e) {
+      // handleAutoSave 내부에서 toast 처리
+    }
+  };
+
   // 4. 입력값 변경 (타이핑 시 로컬 상태 반영)
   const handleInputChange = (id: string, field: keyof InventoryItem, value: string) => {
     setItems((prev) => prev.map((item) => {
@@ -254,23 +312,20 @@ const AdminStockPage: React.FC = () => {
   if (loading) return <SodomallLoader />;
 
   return (
-    <div className="admin-stock-page">
+    <div className="admin-page-container admin-stock-page">
       {/* 자동저장 인디케이터 */}
       <div className={`auto-save-indicator ${isSaving ? 'visible' : ''}`}>
         <CheckCircle2 size={16} className="animate-spin" />
         저장 중...
       </div>
 
-      <header className="admin-stock-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 className="admin-stock-title">현장판매 재고 관리</h1>
-            <p className="admin-stock-subtitle">
-              '현장판매' 상품 재고 입력 (입력 후 포커스 이동 시 자동 저장됨)
-            </p>
-          </div>
-          <button 
-            onClick={handleSync} 
+      <AdminPageHeader
+        title="현장판매 재고 관리"
+        subtitle="'현장판매' 상품 재고 입력 (입력 후 포커스 이동 시 자동 저장됨)"
+        priority="high"
+        actions={
+          <button
+            onClick={handleSync}
             disabled={isSyncing}
             className="common-button button-secondary"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '13px' }}
@@ -278,8 +333,8 @@ const AdminStockPage: React.FC = () => {
             <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
             {isSyncing ? "동기화 중..." : "기존 상품 불러오기"}
           </button>
-        </div>
-      </header>
+        }
+      />
 
       <section className="admin-stock-controls-bar">
         <div className="search-wrapper">
@@ -298,7 +353,44 @@ const AdminStockPage: React.FC = () => {
         </div>
       </section>
 
-      <div className="admin-stock-table-wrapper">
+      {/* ✅ [P0/모바일] 카드뷰 + 모달 편집 */}
+      {isMobile && (
+        <div className="admin-mobile-only">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {processedItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openEditModal(item)}
+                className="inventory-mobile-card"
+              >
+                <div className="inventory-card-top">
+                  <div className="inventory-card-title">{item.productName}</div>
+                  <div className="inventory-card-cta">
+                    <Edit3 size={16} /> 편집
+                  </div>
+                </div>
+                <div className="inventory-card-meta">
+                  <span>재고 <strong>{item.quantity}</strong></span>
+                  <span>판매가 <strong>{item.salePrice.toLocaleString()}원</strong></span>
+                  {item.expiryDate ? <span>유통기한 <strong>{item.expiryDate}</strong></span> : <span>유통기한 -</span>}
+                </div>
+                {item.memo ? <div className="inventory-card-memo">{item.memo}</div> : null}
+              </button>
+            ))}
+            {processedItems.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}>
+                {searchQuery ? '검색 결과가 없습니다.' : 
+                 (showZeroStock ? '데이터가 없습니다. 우측 상단 [기존 상품 불러오기]를 눌러보세요.' : '판매 가능한(재고 > 0) 상품이 없습니다.')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ [데스크톱] 기존 테이블 유지 */}
+      {!isMobile && (
+        <div className="admin-desktop-only admin-stock-table-wrapper">
         <table className="admin-stock-table">
           <thead>
             <tr>
@@ -395,6 +487,86 @@ const AdminStockPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* ✅ [P0/모바일] 편집 모달 */}
+      {editingItem && (
+        <div className="inventory-edit-overlay" role="dialog" aria-modal="true">
+          <div className="inventory-edit-modal">
+            <div className="inventory-edit-header">
+              <div>
+                <h3 className="inventory-edit-title">{editingItem.productName}</h3>
+                <p className="inventory-edit-subtitle">모바일에서는 모달에서만 편집합니다.</p>
+              </div>
+              <button type="button" className="inventory-edit-close" onClick={closeEditModal}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="inventory-edit-body">
+              <label className="inventory-field">
+                <span>재고</span>
+                <input
+                  type="number"
+                  value={Number(draft.quantity ?? 0)}
+                  onChange={(e) => setDraft(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                />
+              </label>
+
+              <label className="inventory-field inventory-field-inline">
+                <span>비과세</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.isTaxFree)}
+                  onChange={(e) => setDraft(prev => ({ ...prev, isTaxFree: e.target.checked }))}
+                />
+              </label>
+
+              <label className="inventory-field">
+                <span>납품가</span>
+                <input
+                  type="number"
+                  value={Number(draft.costPrice ?? 0)}
+                  onChange={(e) => setDraft(prev => ({ ...prev, costPrice: Number(e.target.value) }))}
+                />
+              </label>
+
+              <label className="inventory-field">
+                <span>판매가</span>
+                <input
+                  type="number"
+                  value={Number(draft.salePrice ?? 0)}
+                  onChange={(e) => setDraft(prev => ({ ...prev, salePrice: Number(e.target.value) }))}
+                />
+              </label>
+
+              <label className="inventory-field">
+                <span>유통기한</span>
+                <input
+                  type="text"
+                  placeholder="YYYY-MM-DD"
+                  value={String(draft.expiryDate ?? '')}
+                  onChange={(e) => setDraft(prev => ({ ...prev, expiryDate: e.target.value }))}
+                />
+              </label>
+
+              <label className="inventory-field">
+                <span>비고</span>
+                <input
+                  type="text"
+                  value={String(draft.memo ?? '')}
+                  onChange={(e) => setDraft(prev => ({ ...prev, memo: e.target.value }))}
+                />
+              </label>
+            </div>
+
+            <div className="inventory-edit-footer">
+              <button type="button" className="common-button button-secondary" onClick={closeEditModal}>취소</button>
+              <button type="button" className="common-button button-primary" onClick={saveDraft}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

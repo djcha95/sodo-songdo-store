@@ -7,6 +7,8 @@ import { getPrepaidOrders, updateMultipleOrderStatuses, revertOrderStatus } from
 import type { Order, OrderStatus } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import PrepaidListTable from '@/components/admin/PrepaidListTable';
+import AdminPageHeader from '@/components/admin/AdminPageHeader';
+import FilterBar from '@/components/admin/FilterBar';
 import './PrepaidCheckPage.css';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
@@ -206,21 +208,20 @@ const PrepaidCheckPage: React.FC = () => {
   };
 
   return (
-    <div className="prepaid-check-page">
-      <header className="pcp-header">
-        <h1><Wallet className="header-icon" /> 선입금 미픽업 관리</h1>
-        <p>선입금 완료 후 아직 픽업되지 않은 내역을 관리합니다. (아코디언 테이블 뷰)</p>
-      </header>
+    <div className="admin-page-container prepaid-check-page">
+      <AdminPageHeader
+        title="선입금 미픽업 관리"
+        subtitle="선입금 완료 후 아직 픽업되지 않은 내역을 관리합니다. (아코디언 테이블 뷰)"
+        icon={<Wallet size={28} />}
+        priority="high"
+      />
 
       <div className="pcp-filter-container">
         <div className="pcp-filter-group pcp-search-group">
-          <label htmlFor="search-term"><User size={16} /> 고객 검색</label>
-          <input 
-            type="text" 
-            id="search-term" 
-            placeholder="이름 또는 전화번호 뒷자리로 필터링" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+          <FilterBar
+            searchPlaceholder="이름 또는 전화번호 뒷자리로 필터링"
+            searchValue={searchTerm}
+            onSearch={setSearchTerm}
           />
         </div>
         <div className="pcp-view-controls">
