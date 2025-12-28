@@ -1,1 +1,0 @@
-import{r as m,j as E}from"./index-BMz7zIRN.js";import{g as o}from"./imageUtils-BPiZeTFW.js";const u=({originalUrl:t,size:e,alt:a,className:p,loading:c="lazy"})=>{const f=o(t,e),[r,s]=m.useState(f);m.useEffect(()=>{s(o(t,e))},[t,e]);const x=()=>{r!==t&&s(t)};return E.jsx("img",{src:r,alt:a,className:p,loading:c,onError:x})};export{u as O};

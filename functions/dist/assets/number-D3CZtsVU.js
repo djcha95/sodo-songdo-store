@@ -1,1 +1,0 @@
-const n=r=>r===""||r==null?"":Number(r).toLocaleString("ko-KR"),t=r=>{if(r==null)return"";const e=typeof r=="number"?r:parseInt(String(r).replace(/[^\d]/g,""),10);return Number.isNaN(e)?"":e};export{n as f,t as p};
