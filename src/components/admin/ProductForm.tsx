@@ -59,6 +59,10 @@ import type { DropResult } from 'react-beautiful-dnd';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
+import ProductFormWizard from './ProductFormWizard';
+import ProductPreview from './ProductPreview';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import { validateProductForm, getFieldError } from '@/utils/formValidation';
 
 import '@/pages/admin/ProductAddAdminPage.css';
 import { formatKRW, parseKRW } from '@/utils/number';
@@ -296,6 +300,118 @@ const ProductForm: React.FC<ProductFormProps> = ({
   // 이벤트 타입
   const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM'>('NONE');
 
+  // Wizard 단계 관리
+  const [currentStep, setCurrentStep] = useState(0);
+  const wizardSteps = [
+    { id: 'basic', title: '기본 정보', description: '상품명, 이미지, 설명', icon: <Package size={20} /> },
+    { id: 'options', title: '판매 옵션', description: '가격, 재고, 옵션', icon: <Box size={20} /> },
+    { id: 'schedule', title: '발행 설정', description: '날짜, 이벤트, 조건', icon: <Clock size={20} /> },
+    { id: 'review', title: '최종 확인', description: '미리보기 및 검증', icon: <Info size={20} /> },
+  ];
+
+  // 자동 저장
+  const formData = useMemo(() => ({
+    groupName,
+    description,
+    imageUrls: imagePreviews.filter(p => !p.startsWith('blob:')),
+    composition,
+    categories,
+    selectedStorageType,
+    variantGroups,
+    roundName,
+    publishDate,
+    deadlineDate,
+    pickupDate,
+    pickupDeadlineDate,
+    isPrepaymentRequired,
+    eventType,
+  }), [
+    groupName, description, imagePreviews, composition, categories,
+    selectedStorageType, variantGroups, roundName,
+    publishDate, deadlineDate, pickupDate, pickupDeadlineDate,
+    isPrepaymentRequired, eventType,
+  ]);
+
+  const { manualSave, restore, clear: clearAutoSave } = useAutoSave({
+    key: `product_form_${mode}_${productId || 'new'}`,
+    data: formData,
+    enabled: mode === 'newProduct' || mode === 'newRound',
+  });
+
+  // 검증
+  const validation = useMemo(() => {
+    const firstPrice = variantGroups[0]?.items[0]?.price || '';
+    return validateProductForm({
+      groupName,
+      composition,
+      imageUrls: imagePreviews.filter(p => !p.startsWith('blob:')),
+      variantGroups,
+      deadlineDate,
+      pickupDate,
+      pickupDeadlineDate,
+    });
+  }, [groupName, composition, imagePreviews, variantGroups, deadlineDate, pickupDate, pickupDeadlineDate]);
+
+  // 진행률 계산
+  const progress = useMemo(() => {
+    const totalFields = 10;
+    let completedFields = 0;
+
+    if (groupName.trim()) completedFields++;
+    if (composition.trim()) completedFields++;
+    if (imagePreviews.length > 0) completedFields++;
+    if (categories.length > 0) completedFields++;
+    if (variantGroups.length > 0) completedFields++;
+    if (variantGroups.every(vg => vg.items.length > 0 && vg.items.every(i => i.name && i.price))) completedFields++;
+    if (deadlineDate) completedFields++;
+    if (pickupDate) completedFields++;
+    if (pickupDeadlineDate) completedFields++;
+    if (validation.isValid) completedFields++;
+
+    return Math.round((completedFields / totalFields) * 100);
+  }, [groupName, composition, imagePreviews, categories, variantGroups, deadlineDate, pickupDate, pickupDeadlineDate, validation.isValid]);
+
+  // 키보드 단축키
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S: 저장
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!isSubmitting) {
+          handleSubmit(false);
+        }
+      }
+      // Ctrl+Shift+S: 임시저장
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        if (!isSubmitting) {
+          handleSubmit(true);
+        }
+      }
+      // Ctrl+Shift+A: 자동 저장
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        manualSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSubmitting]);
+
+  // 페이지 떠나기 전 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (progress > 0 && progress < 100) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [progress]);
+
   // -------------------- page title --------------------
   useEffect(() => {
     switch (mode) {
@@ -513,6 +629,29 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     if (mode === 'editRound' || mode === 'newRound') fetchData();
   }, [mode, productId, roundId, navigate, initialState]);
+
+  // 자동 저장 복구 (초기 로드 시)
+  useEffect(() => {
+    if (mode === 'newProduct' || mode === 'newRound') {
+      const saved = restore();
+      if (saved && window.confirm('이전에 작성하던 내용이 있습니다. 복구하시겠습니까?')) {
+        if (saved.groupName) setGroupName(saved.groupName);
+        if (saved.description) setDescription(saved.description);
+        if (saved.composition) setComposition(saved.composition);
+        if (saved.categories) setCategories(saved.categories);
+        if (saved.selectedStorageType) setSelectedStorageType(saved.selectedStorageType);
+        if (saved.variantGroups) setVariantGroups(saved.variantGroups);
+        if (saved.roundName) setRoundName(saved.roundName);
+        if (saved.publishDate) setPublishDate(new Date(saved.publishDate));
+        if (saved.deadlineDate) setDeadlineDate(new Date(saved.deadlineDate));
+        if (saved.pickupDate) setPickupDate(new Date(saved.pickupDate));
+        if (saved.pickupDeadlineDate) setPickupDeadlineDate(new Date(saved.pickupDeadlineDate));
+        if (saved.isPrepaymentRequired !== undefined) setIsPrepaymentRequired(saved.isPrepaymentRequired);
+        if (saved.eventType) setEventType(saved.eventType);
+        toast.success('이전 작성 내용이 복구되었습니다.');
+      }
+    }
+  }, [mode, restore]);
 
   // -------------------- init empty for newProduct --------------------
   useEffect(() => {
@@ -1013,6 +1152,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         await updateProductCoreInfo(newProductId, productDataToUpdate as any, finalImageUrls); // ✅ 3 args
 
         toast.success(isDraft ? '상품이 임시저장되었습니다.' : '신규 상품이 성공적으로 등록되었습니다.');
+        clearAutoSave(); // 자동 저장 데이터 삭제
         navigate('/admin/products');
         return;
       }
@@ -1031,6 +1171,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         await addNewSalesRound(productId, salesRoundData as any);
 
         toast.success(isDraft ? '새 회차가 임시저장되었습니다.' : '새로운 판매 회차가 추가되었습니다.');
+        clearAutoSave(); // 자동 저장 데이터 삭제
         navigate('/admin/products');
         return;
       }
@@ -1083,6 +1224,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         await updateSalesRound(productId, roundId, salesRoundData as any);
 
         toast.success(isDraft ? '수정 내용이 임시저장되었습니다.' : '상품 정보가 성공적으로 수정되었습니다.');
+        clearAutoSave(); // 자동 저장 데이터 삭제
         navigate('/admin/products');
         return;
       }
@@ -1121,29 +1263,94 @@ const ProductForm: React.FC<ProductFormProps> = ({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            handleSubmit(false);
+            if (currentStep === wizardSteps.length - 1) {
+              handleSubmit(false);
+            } else {
+              setCurrentStep(prev => Math.min(prev + 1, wizardSteps.length - 1));
+            }
           }}
         >
           <header className="product-add-header">
-            <h1>{pageTitle}</h1>
+            <div className="header-left">
+              <h1>{pageTitle}</h1>
+              <div className="progress-indicator">
+                <span className="progress-text">{progress}%</span>
+                <div className="progress-bar-mini">
+                  <div 
+                    className="progress-bar-fill" 
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* 작은 위자드 인디케이터 */}
+            <div className="header-wizard-mini">
+              <ProductFormWizard
+                steps={wizardSteps}
+                currentStep={currentStep}
+                onStepChange={setCurrentStep}
+                onNext={() => {
+                  if (currentStep < wizardSteps.length - 1) {
+                    setCurrentStep(prev => prev + 1);
+                  }
+                }}
+                onPrevious={() => {
+                  if (currentStep > 0) {
+                    setCurrentStep(prev => prev - 1);
+                  }
+                }}
+                canGoNext={
+                  currentStep < wizardSteps.length - 1 && (
+                    (currentStep === 0 && groupName.trim() && composition.trim() && imagePreviews.length > 0) ||
+                    (currentStep === 1 && variantGroups.length > 0 && variantGroups.every(vg => vg.items.length > 0)) ||
+                    (currentStep === 2 && deadlineDate && pickupDate && pickupDeadlineDate) ||
+                    currentStep === 3
+                  )
+                }
+                canGoPrevious={currentStep > 0}
+                progress={progress}
+                variant="compact"
+              />
+            </div>
+
             <div className="header-actions">
+              <button
+                type="button"
+                onClick={manualSave}
+                className="auto-save-button"
+                title="수동 저장 (Ctrl+Shift+A)"
+              >
+                💾 저장됨
+              </button>
               <button
                 type="button"
                 onClick={() => handleSubmit(true)}
                 disabled={isSubmitting}
                 className="draft-save-button"
+                title="임시저장 (Ctrl+Shift+S)"
               >
-                <FileText size={18} /> 임시저장
+                <FileText size={14} /> 임시저장
               </button>
 
-              <button type="submit" disabled={isSubmitting} className="save-button">
-                {isSubmitting ? <SodomallLoader /> : <Save size={18} />}
-                {submitButtonText}
+              <button 
+                type="submit" 
+                disabled={isSubmitting || (currentStep < wizardSteps.length - 1 && !validation.isValid)} 
+                className="save-button"
+                title="저장 (Ctrl+S)"
+              >
+                {isSubmitting ? <SodomallLoader /> : <Save size={14} />}
+                {currentStep === wizardSteps.length - 1 ? submitButtonText : '다음 단계'}
               </button>
             </div>
           </header>
 
-          <main className="main-content-grid-3-col-final">
+          <main className="main-content-grid-with-preview">
+            {/* 왼쪽: 폼 영역 */}
+            <div className="form-content-area">
+            {/* 단계별 컨텐츠 */}
+            {currentStep === 0 && (
+              <>
             {/* 대표 상품 정보 */}
             <div className="form-section">
               <div className="form-section-title">
@@ -1176,12 +1383,18 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
               <div className="form-group with-validation">
                 <label>대표 상품명 *</label>
+                {getFieldError('groupName', validation) && (
+                  <div className={`field-error ${getFieldError('groupName', validation)?.type}`}>
+                    {getFieldError('groupName', validation)?.message}
+                  </div>
+                )}
                 <div className="input-wrapper">
                   <input
                     type="text"
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
                     required
+                    className={getFieldError('groupName', validation) ? 'has-error' : ''}
                   />
                   {isCheckingDuplicates && (
                     <div className="input-spinner-wrapper">
@@ -1258,11 +1471,17 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
               <div className="form-group">
                 <label>구성 *</label>
+                {getFieldError('composition', validation) && (
+                  <div className={`field-error ${getFieldError('composition', validation)?.type}`}>
+                    {getFieldError('composition', validation)?.message}
+                  </div>
+                )}
                 <textarea
                   value={composition}
                   onChange={(e) => setComposition(e.target.value)}
                   placeholder={`예)\n- 인절미 1kg\n- 콩고물 100g`}
                   rows={4}
+                  className={getFieldError('composition', validation) ? 'has-error' : ''}
                 />
               </div>
 
@@ -1295,6 +1514,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
               <div className="form-group">
                 <label>대표 이미지 *</label>
+                {getFieldError('imageUrls', validation) && (
+                  <div className={`field-error ${getFieldError('imageUrls', validation)?.type}`}>
+                    {getFieldError('imageUrls', validation)?.message}
+                  </div>
+                )}
 
                 <DragDropContext onDragEnd={onDragEnd}>
                   <Droppable droppableId="image-previews" direction="horizontal">
@@ -1367,6 +1591,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
             </div>
 
+              </>
+            )}
+
+            {currentStep === 1 && (
+              <>
             {/* 판매 옵션 */}
             <div className="form-section">
               <div className="form-section-title">
@@ -1542,8 +1771,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
             </div>
 
+              </>
+            )}
+
+            {currentStep === 2 && (
+              <>
             {/* 발행/기간 설정 */}
-            <div className="form-section sticky-section">
+            <div className="form-section">
               <div className="form-section-title">
                 <div className="title-text-group">
                   <SlidersHorizontal size={20} className="icon-color-settings" />
@@ -1663,6 +1897,59 @@ const ProductForm: React.FC<ProductFormProps> = ({
                   </li>
                 </ul>
               </div>
+            </div>
+              </>
+            )}
+
+            {currentStep === 3 && (
+              <div className="form-section review-section">
+                <h3>최종 확인</h3>
+                <div className="validation-summary">
+                  {validation.errors.length > 0 && (
+                    <div className="validation-errors">
+                      <h4>❌ 필수 항목 오류 ({validation.errors.length}개)</h4>
+                      <ul>
+                        {validation.errors.map((error, i) => (
+                          <li key={i}>{error.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {validation.warnings.length > 0 && (
+                    <div className="validation-warnings">
+                      <h4>⚠️ 경고 ({validation.warnings.length}개)</h4>
+                      <ul>
+                        {validation.warnings.map((warning, i) => (
+                          <li key={i}>{warning.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {validation.isValid && validation.warnings.length === 0 && (
+                    <div className="validation-success">
+                      <h4>✅ 모든 항목이 올바르게 입력되었습니다!</h4>
+                      <p>저장 버튼을 눌러 상품을 등록하세요.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            </div>
+
+            {/* 오른쪽: 미리보기 영역 */}
+            <div className="preview-content-area">
+              <ProductPreview
+                groupName={groupName}
+                description={description}
+                imageUrls={imagePreviews.filter(p => !p.startsWith('blob:'))}
+                price={typeof variantGroups[0]?.items[0]?.price === 'number' ? variantGroups[0].items[0].price : ''}
+                roundName={roundName}
+                publishDate={publishDate}
+                pickupDate={pickupDate}
+                storageType={selectedStorageType}
+                composition={composition}
+                categories={categories}
+              />
             </div>
           </main>
         </form>

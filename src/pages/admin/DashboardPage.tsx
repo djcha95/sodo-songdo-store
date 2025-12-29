@@ -1,538 +1,548 @@
-// src/pages/admin/DashboardPage.tsx
+// src/pages/admin/DashboardPage.tsx - 본사 예약 시스템에 맞춘 대시보드
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import useDocumentTitle from '@/hooks/useDocumentTitle';
-import { getProducts, updateMultipleVariantGroupStocks } from '@/firebase/productService'; 
+import { getProducts } from '@/firebase/productService';
 import { db } from '@/firebase/firebaseConfig';
 import { 
   collection, query, where, getDocs, Timestamp, 
-  writeBatch, doc 
+  orderBy, limit
 } from 'firebase/firestore';
-import type { Product, Order, OrderItem, SalesRound, VariantGroup } from '@/shared/types';
+import type { Product, Order, SalesRound, VariantGroup } from '@/shared/types';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
-import DangerButton from '@/components/admin/DangerButton';
 import toast from 'react-hot-toast';
 import { 
-  TrendingUp, Hourglass, CheckCircle, Check, ClipboardCopy, Ticket, 
-  ShieldAlert, Loader2 
+  TrendingUp, ShoppingCart, DollarSign, AlertTriangle, 
+  Calendar, Zap, Wallet, PlusSquare, 
+  ArrowRight, Clock, Bell, Eye
 } from 'lucide-react';
 import './DashboardPage.css';
 import { reportError } from '@/utils/logger';
 import dayjs from 'dayjs';
 
-interface EnrichedGroupItem {
+interface DashboardStats {
+  todayOrders: number;
+  todayRevenue: number;
+  prepaidPending: number;
+  todayPickupCount: number;
+  recentReservations: number; // 최근 1시간 내 예약
+}
+
+interface RecentOrder {
   id: string;
-  productId: string;
+  orderNumber: string;
+  customerName: string;
   productName: string;
-  imageUrl: string;
-  roundId: string;
-  roundName: string;
-  variantGroupId: string;
-  variantGroupName: string;
-  publishDate: string; 
-  confirmedReservedQuantity: number;
-  pendingPrepaymentQuantity: number;
-  waitlistedQuantity: number;
-  configuredStock: number;
+  totalPrice: number;
+  status: string;
+  createdAt: Date;
+  timeAgo: string;
 }
 
-interface ActiveRaffleEvent {
+interface DateGroupedProduct {
+  date: string;
+  dateFormatted: string;
+  products: {
     productId: string;
+    productName: string;
     roundId: string;
-    productName: string;
-    entryCount: number;
-    deadlineDate: any; 
+    roundName: string;
+    imageUrl: string;
+    confirmedReserved: number;
+    pendingPrepayment: number;
+    totalReserved: number;
+  }[];
 }
 
-// ✅ [추가] 강력한 날짜 변환 헬퍼 함수 (ProductForm에서 가져옴)
-const convertToDate = (dateSource: any): Date | null => {
-  if (!dateSource) return null;
-  if (dateSource instanceof Date) return dateSource;
-  // Firebase Timestamp 객체인 경우
-  if (typeof dateSource.toDate === 'function') return dateSource.toDate();
-  // 직렬화된 Timestamp 객체인 경우 ({ seconds, nanoseconds })
-  if (typeof dateSource === 'object' && dateSource.seconds !== undefined && dateSource.nanoseconds !== undefined) {
-    return new Timestamp(dateSource.seconds, dateSource.nanoseconds).toDate();
-  }
-  // 문자열이나 숫자인 경우
-  const d = new Date(dateSource);
-  if (!isNaN(d.getTime())) return d;
-  return null;
-};
-
-const CopyLinkButton: React.FC<{ productId: string }> = ({ productId }) => {
-    const [copied, setCopied] = useState(false);
-    
-    // 1. 복사할 텍스트 형식을 변경합니다. (\n은 줄바꿈을 의미합니다)
-    const shareText = `👉 예약은 여기에서!\nhttps://www.songdopick.store/product/${productId}`;
-
-    const handleCopy = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // 2. productUrl 대신 shareText를 클립보드에 씁니다.
-        navigator.clipboard.writeText(shareText).then(() => {
-            setCopied(true);
-            toast.success('홍보 문구와 링크가 복사되었습니다!');
-            setTimeout(() => setCopied(false), 2000);
-        }, () => {
-            toast.error('링크 복사에 실패했습니다.');
-        });
-    };
-
-    return (
-        // 3. (선택사항) 버튼에 마우스를 올렸을 때 나오는 설명도 수정하면 좋습니다.
-        <button onClick={handleCopy} className="admin-action-button" title={`클릭하여 홍보 문구 복사:\n${shareText}`}>
-            {copied ? <Check size={16} color="var(--success-color)" /> : <ClipboardCopy size={16} />}
-        </button>
-    );
-};
-
-const formatDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const FixLimitModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    productName: string;
-    productId: string;
-}> = ({ isOpen, onClose, productName, productId }) => {
-    const [limitQty, setLimitQty] = useState(1);
-    const [isProcessing, setIsProcessing] = useState(false);
-
-    if (!isOpen) return null;
-
-    const runFix = async () => {
-        if (!window.confirm(`[${productName}] 상품을 구매한 모든 주문을 검사하여,\n${limitQty}개를 초과한 주문을 ${limitQty}개로 강제 하향 조정하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
-
-        setIsProcessing(true);
-        
-        const promise = (async () => {
-            try {
-                const q = query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']));
-                const snapshot = await getDocs(q);
-                
-                let batch = writeBatch(db);
-                let count = 0;
-                let fixedCount = 0;
-                let batchCount = 0;
-
-                for (const orderDoc of snapshot.docs) {
-                    const data = orderDoc.data();
-                    const items = data.items || [];
-                    let isChanged = false;
-                    let newTotalPrice = 0;
-
-                    const newItems = items.map((item: any) => {
-                        if (item.productId === productId) {
-                            let newItem = { ...item };
-                            
-                            if (newItem.limitQuantity !== limitQty) {
-                                newItem.limitQuantity = limitQty;
-                                isChanged = true;
-                            }
-                            if (newItem.quantity > limitQty) {
-                                newItem.quantity = limitQty;
-                                isChanged = true;
-                                fixedCount++;
-                            }
-                            newTotalPrice += (newItem.unitPrice * newItem.quantity);
-                            return newItem;
-                        } else {
-                            newTotalPrice += (item.unitPrice * item.quantity);
-                            return item;
-                        }
-                    });
-
-                    if (isChanged) {
-                        batch.update(doc(db, 'orders', orderDoc.id), { items: newItems, totalPrice: newTotalPrice });
-                        count++;
-                        batchCount++;
-                        
-                        if (batchCount >= 400) {
-                            await batch.commit();
-                            batch = writeBatch(db);
-                            batchCount = 0;
-                        }
-                    }
-                }
-
-                if (batchCount > 0) await batch.commit();
-
-                onClose();
-                return `처리 완료! 총 ${count}건의 데이터에 제한 설정을 적용했습니다. (수량 초과 수정: ${fixedCount}건)`;
-            } catch (e: any) {
-                console.error(e);
-                throw new Error(`오류 발생: ${e.message}`);
-            } finally {
-                setIsProcessing(false);
-            }
-        })();
-
-        toast.promise(promise, {
-            loading: `'${productName}' 수량 제한 조치 실행 중...`,
-            success: (message) => message,
-            error: (err) => err.message,
-        });
-    };
-
-    return (
-        <div className="admin-modal-overlay">
-            <div className="admin-modal-content" style={{ maxWidth: '400px' }}>
-                <div className="admin-modal-header">
-                    <h4 style={{ color: '#d9534f', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <ShieldAlert size={20}/> 긴급 수량 제한 조치
-                    </h4>
-                </div>
-                <div className="admin-modal-body">
-                    <p style={{ marginBottom: '10px', fontSize: '0.95rem' }}>
-                        <strong>대상 상품:</strong> {productName}
-                    </p>
-                    <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '15px' }}>
-                        이 상품을 구매한 과거 주문 내역을 조회하여, 설정한 수량보다 많이 주문한 건을 <strong>강제로 줄이고</strong>, 앞으로 변경하지 못하게 <strong>제한(Lock)</strong>을 겁니다.
-                    </p>
-                    <div className="form-group">
-                        <label>제한할 최대 수량 (1인당)</label>
-                        <input 
-                            type="number" 
-                            value={limitQty} 
-                            onChange={e => setLimitQty(Number(e.target.value) < 1 ? 1 : Number(e.target.value))}
-                            className="admin-input"
-                            min="1"
-                        />
-                    </div>
-                </div>
-                <div className="admin-modal-footer">
-                    <button onClick={onClose} disabled={isProcessing} className="modal-button secondary">취소</button>
-                    <button onClick={runFix} disabled={isProcessing} className="modal-button danger">
-                        {isProcessing ? <Loader2 className="spin" size={16}/> : '조치 실행'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
+interface UrgentItem {
+  type: 'prepaid' | 'pickup';
+  title: string;
+  count: number;
+  link: string;
+  icon: React.ReactNode;
+  color: string;
+}
 
 const DashboardPage: React.FC = () => {
   useDocumentTitle('대시보드');
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [groupedItems, setGroupedItems] = useState<Record<string, EnrichedGroupItem[]>>({});
-  const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
-  const [editingStockId, setEditingStockId] = useState<string | null>(null);
-  const [activeRaffles, setActiveRaffles] = useState<ActiveRaffleEvent[]>([]);
-  
-  const [fixTarget, setFixTarget] = useState<{id: string, name: string} | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    todayOrders: 0,
+    todayRevenue: 0,
+    prepaidPending: 0,
+    todayPickupCount: 0,
+    recentReservations: 0,
+  });
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [dateGroupedProducts, setDateGroupedProducts] = useState<DateGroupedProduct[]>([]);
 
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [productsResponse, allPendingOrders] = await Promise.all([
-        getProducts(), 
-        getDocs(query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))),
-      ]);
-
-      const confirmedReservationMap = new Map<string, number>();
-      const pendingPrepaymentMap = new Map<string, number>();
-
-      allPendingOrders.forEach(doc => {
-        const order = doc.data() as Order;
-        (order.items || []).forEach((item: OrderItem) => {
-          const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
-          
-          if(order.status === 'RESERVED' && order.wasPrepaymentRequired) {
-            const currentQty = pendingPrepaymentMap.get(groupKey) || 0;
-            pendingPrepaymentMap.set(groupKey, currentQty + item.quantity);
-          } else {
-            const currentQty = confirmedReservationMap.get(groupKey) || 0;
-            confirmedReservationMap.set(groupKey, currentQty + item.quantity);
-          }
-        });
-      });
-
-      const allDisplayItems: EnrichedGroupItem[] = [];
-      const currentActiveRaffles: ActiveRaffleEvent[] = [];
-
-      productsResponse.products.forEach((product: Product) => {
-        // 마지막 회차 정보 가져오기
-        const latestRound = product.salesHistory?.[product.salesHistory.length - 1];
-        
-        if (latestRound) {
-          const round = latestRound;
-
-          // ✅ [수정] convertToDate를 사용하여 안전하게 Date 객체로 변환
-          const publishDateObj = convertToDate(round.publishAt) || convertToDate(product.createdAt);
-          const publishDateStr = publishDateObj ? formatDate(publishDateObj) : '날짜 없음';
-
-          // 추첨 이벤트 확인
-          const deadlineObj = convertToDate(round.deadlineDate);
-          if (round.eventType === 'RAFFLE' && deadlineObj && new Date().getTime() < deadlineObj.getTime()) {
-            currentActiveRaffles.push({
-                productId: product.id,
-                roundId: round.roundId,
-                productName: product.groupName,
-                entryCount: (round as any).entryCount || 0, 
-                deadlineDate: round.deadlineDate as any, 
-            });
-          }
-
-          round.variantGroups?.forEach((vg: VariantGroup) => {
-            const groupId = vg.id || `${product.id}-${round.roundId}-${vg.groupName}`;
-            const groupKey = `${product.id}-${round.roundId}-${groupId}`;
-
-            const groupStock = vg.totalPhysicalStock ?? -1;
-            const hasGroupStock = groupStock !== -1;
-            const representativeItemStock = vg.items?.[0]?.stock ?? -1;
-            const finalConfiguredStock = hasGroupStock ? groupStock : representativeItemStock;
-
-            allDisplayItems.push({
-              id: groupKey,
-              productId: product.id,
-              productName: product.groupName,
-              imageUrl: product.imageUrls?.[0] || '/sodomall-logo.png',
-              roundId: round.roundId,
-              roundName: round.roundName,
-              variantGroupId: groupId,
-              variantGroupName: vg.groupName,
-              publishDate: publishDateStr, // ✅ 변환된 날짜 문자열 사용
-              confirmedReservedQuantity: confirmedReservationMap.get(groupKey) || 0,
-              pendingPrepaymentQuantity: pendingPrepaymentMap.get(groupKey) || 0,
-              waitlistedQuantity: round.waitlistCount || 0,
-              configuredStock: finalConfiguredStock,
-            });
-          });
-        } 
-      });
-
-      // 날짜(publishDate)별 그룹화
-      const grouped = allDisplayItems.reduce((acc, item) => {
-        const dateKey = item.publishDate;
-        if (!acc[dateKey]) {
-          acc[dateKey] = [];
-        }
-        acc[dateKey].push(item);
-        return acc;
-      }, {} as Record<string, EnrichedGroupItem[]>);
-
-      setGroupedItems(grouped);
-      setActiveRaffles(currentActiveRaffles);
-
-    } catch (error) {
-      reportError("대시보드 데이터 로딩 실패", error);
-      toast.error("데이터를 불러오는 데 실패했습니다.");
-    } finally {
-      setLoading(false);
+  const convertToDate = (dateSource: any): Date | null => {
+    if (!dateSource) return null;
+    if (dateSource instanceof Date) return dateSource;
+    if (typeof dateSource.toDate === 'function') return dateSource.toDate();
+    if (typeof dateSource === 'object' && dateSource.seconds !== undefined) {
+      return new Timestamp(dateSource.seconds, dateSource.nanoseconds).toDate();
     }
-  }, []);
+    const d = new Date(dateSource);
+    if (!isNaN(d.getTime())) return d;
+    return null;
+  };
+
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getTimeAgo = (date: Date): string => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return '방금 전';
+    if (diffMins < 60) return `${diffMins}분 전`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}시간 전`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}일 전`;
+  };
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const oneHourAgo = new Date();
+        oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
-  // 최신 날짜가 위로 오도록 정렬
-  const sortedDateKeys = useMemo(() => {
-    return Object.keys(groupedItems).sort((a, b) => b.localeCompare(a));
-  }, [groupedItems]);
+        // 1. 오늘의 주문과 매출 계산
+        const todayOrdersQuery = query(
+          collection(db, 'orders'),
+          where('createdAt', '>=', Timestamp.fromDate(today)),
+          where('createdAt', '<', Timestamp.fromDate(tomorrow))
+        );
+        const todayOrdersSnapshot = await getDocs(todayOrdersQuery);
+        
+        let todayOrdersCount = 0;
+        let todayRevenueSum = 0;
+        let recentReservationsCount = 0;
+        const recentOrdersList: RecentOrder[] = [];
+        
+        todayOrdersSnapshot.forEach(doc => {
+          const order = doc.data() as Order;
+          const createdAt = convertToDate(order.createdAt);
+          
+          todayOrdersCount++;
+          
+          // 최근 1시간 내 예약 확인
+          if (createdAt && createdAt >= oneHourAgo) {
+            recentReservationsCount++;
+          }
+          
+          if (order.status === 'PREPAID' || order.status === 'PICKED_UP') {
+            todayRevenueSum += order.totalPrice || 0;
+          }
+          
+          // 최근 주문 목록에 추가 (최근 10건)
+          if (recentOrdersList.length < 10 && createdAt) {
+            const firstItem = order.items?.[0];
+            if (firstItem) {
+              recentOrdersList.push({
+                id: doc.id,
+                orderNumber: order.orderNumber || 'N/A',
+                customerName: order.customerName || '고객',
+                productName: firstItem.productName || '상품',
+                totalPrice: order.totalPrice || 0,
+                status: order.status,
+                createdAt,
+                timeAgo: getTimeAgo(createdAt),
+              });
+            }
+          }
+        });
 
-  const handleStockInputChange = (groupId: string, value: string) => {
-    setStockInputs(prev => ({ ...prev, [groupId]: value }));
-  };
-  
-  const handleStockEditStart = (itemId: string, currentStock: number) => {
-    setEditingStockId(itemId);
-    setStockInputs(prev => ({
-        ...prev,
-        [itemId]: currentStock === -1 ? '' : String(currentStock)
-    }));
-  };
+        // 시간순 정렬
+        recentOrdersList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  const handleStockEditSave = useCallback(async (itemId: string) => {
-    setEditingStockId(null);
-    const newStockValue = stockInputs[itemId];
-    if (newStockValue === undefined) return;
+        // 2. 선입금 대기 주문 수
+        const prepaidPendingQuery = query(
+          collection(db, 'orders'),
+          where('status', '==', 'RESERVED'),
+          where('wasPrepaymentRequired', '==', true)
+        );
+        const prepaidPendingSnapshot = await getDocs(prepaidPendingQuery);
+        const prepaidPendingCount = prepaidPendingSnapshot.size;
 
-    const allItems = Object.values(groupedItems).flat();
-    const itemToUpdate = allItems.find(i => i.id === itemId);
+        // 3. 오늘 픽업 예정 주문 수
+        const todayPickupQuery = query(
+          collection(db, 'orders'),
+          where('pickupDate', '>=', Timestamp.fromDate(today)),
+          where('pickupDate', '<', Timestamp.fromDate(tomorrow)),
+          where('status', 'in', ['RESERVED', 'PREPAID'])
+        );
+        const todayPickupSnapshot = await getDocs(todayPickupQuery);
+        const todayPickupCount = todayPickupSnapshot.size;
 
-    if (!itemToUpdate) {
-        toast.error("업데이트할 상품 정보를 찾지 못했습니다.");
-        return;
+        // 4. 날짜별 상품 예약 현황
+        const productsResponse = await getProducts();
+        const allPendingOrders = await getDocs(
+          query(collection(db, 'orders'), where('status', 'in', ['RESERVED', 'PREPAID']))
+        );
+
+        // 주문 데이터를 그룹별로 집계
+        const reservationMap = new Map<string, { confirmed: number; pending: number }>();
+        
+        allPendingOrders.forEach(doc => {
+          const order = doc.data() as Order;
+          (order.items || []).forEach((item) => {
+            const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
+            const current = reservationMap.get(groupKey) || { confirmed: 0, pending: 0 };
+            
+            if (order.status === 'RESERVED' && order.wasPrepaymentRequired) {
+              current.pending += item.quantity;
+            } else {
+              current.confirmed += item.quantity;
+            }
+            reservationMap.set(groupKey, current);
+          });
+        });
+
+        // 날짜별로 상품 그룹화
+        const dateGroups = new Map<string, DateGroupedProduct['products']>();
+        
+        productsResponse.products.forEach((product: Product) => {
+          const latestRound = product.salesHistory?.[product.salesHistory.length - 1];
+          
+          if (latestRound) {
+            const publishDateObj = convertToDate(latestRound.publishAt) || convertToDate(product.createdAt);
+            const publishDateStr = publishDateObj ? formatDate(publishDateObj) : '날짜 없음';
+            
+            latestRound.variantGroups?.forEach((vg: VariantGroup) => {
+              const groupKey = `${product.id}-${latestRound.roundId}-${vg.id || vg.groupName}`;
+              const reservation = reservationMap.get(groupKey) || { confirmed: 0, pending: 0 };
+              
+              if (!dateGroups.has(publishDateStr)) {
+                dateGroups.set(publishDateStr, []);
+              }
+              
+              dateGroups.get(publishDateStr)!.push({
+                productId: product.id,
+                productName: product.groupName,
+                roundId: latestRound.roundId,
+                roundName: latestRound.roundName,
+                imageUrl: product.imageUrls?.[0] || '/sodomall-logo.png',
+                confirmedReserved: reservation.confirmed,
+                pendingPrepayment: reservation.pending,
+                totalReserved: reservation.confirmed + reservation.pending,
+              });
+            });
+          }
+        });
+
+        // 날짜별 그룹을 배열로 변환하고 정렬
+        const dateGroupedList: DateGroupedProduct[] = Array.from(dateGroups.entries())
+          .map(([date, products]) => ({
+            date,
+            dateFormatted: dayjs(date).format('YYYY년 M월 D일 (ddd)'),
+            products: products.sort((a, b) => b.totalReserved - a.totalReserved), // 예약 수 많은 순
+          }))
+          .sort((a, b) => b.date.localeCompare(a.date)) // 최신 날짜 순
+          .slice(0, 7); // 최근 7일만 표시
+
+        setStats({
+          todayOrders: todayOrdersCount,
+          todayRevenue: todayRevenueSum,
+          prepaidPending: prepaidPendingCount,
+          todayPickupCount: todayPickupCount,
+          recentReservations: recentReservationsCount,
+        });
+        setRecentOrders(recentOrdersList);
+        setDateGroupedProducts(dateGroupedList);
+
+      } catch (error) {
+        reportError("대시보드 데이터 로딩 실패", error);
+        toast.error("데이터를 불러오는 데 실패했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+    
+    // 실시간 업데이트를 위해 30초마다 새로고침
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const urgentItems: UrgentItem[] = useMemo(() => {
+    const items: UrgentItem[] = [];
+    
+    if (stats.prepaidPending > 0) {
+      items.push({
+        type: 'prepaid',
+        title: '선입금 미완료 주문',
+        count: stats.prepaidPending,
+        link: '/admin/prepaid-check',
+        icon: <Wallet size={20} />,
+        color: '#f59e0b',
+      });
     }
     
-    const newStock = newStockValue.trim() === '' ? -1 : parseInt(newStockValue, 10);
-    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
-        toast.error("재고는 0 이상의 숫자 또는 -1(무제한)만 입력 가능합니다.");
-        return;
+    if (stats.todayPickupCount > 0) {
+      items.push({
+        type: 'pickup',
+        title: '오늘 픽업 예정',
+        count: stats.todayPickupCount,
+        link: '/admin/pickup-check',
+        icon: <Calendar size={20} />,
+        color: '#3b82f6',
+      });
     }
+    
+    return items;
+  }, [stats]);
 
-    if (newStock === itemToUpdate.configuredStock) return;
-
-    const updatePayload = [{
-        productId: itemToUpdate.productId,
-        roundId: itemToUpdate.roundId,
-        variantGroupId: itemToUpdate.variantGroupId,
-        newStock: newStock
-    }];
-
-    const promise = updateMultipleVariantGroupStocks(updatePayload);
-
-    toast.promise(promise, {
-        loading: `'${itemToUpdate.productName}' 재고 업데이트 중...`,
-        success: () => {
-            fetchData();
-            return "재고가 성공적으로 업데이트되었습니다.";
-        },
-        error: "재고 업데이트 중 오류가 발생했습니다."
-    });
-  }, [stockInputs, groupedItems, fetchData]);
+  const quickActions = [
+    { title: '픽업 체크', icon: <Calendar size={24} />, link: '/admin/pickup-check', color: '#3b82f6' },
+    { title: '빠른 예약확인', icon: <Zap size={24} />, link: '/admin/quick-check', color: '#10b981' },
+    { title: '선입금 관리', icon: <Wallet size={24} />, link: '/admin/prepaid-check', color: '#f59e0b' },
+    { title: '상품 등록', icon: <PlusSquare size={24} />, link: '/admin/products/add', color: '#8b5cf6' },
+  ];
 
   if (loading) return <SodomallLoader />;
 
   return (
     <div className="dashboard-container">
-        
-      {fixTarget && (
-        <FixLimitModal 
-            isOpen={!!fixTarget}
-            onClose={() => setFixTarget(null)}
-            productId={fixTarget.id}
-            productName={fixTarget.name}
-        />
-      )}
-
       <AdminPageHeader 
-        title="통합 판매 현황 대시보드"
+        title="대시보드"
         icon={<TrendingUp size={28} />}
         priority="high"
       />
-      
-      {activeRaffles.length > 0 && (
-          <div className="dashboard-group raffle-summary-group">
-              <h2 className="group-title"><Ticket size={20} /> 진행중인 추첨 이벤트</h2>
-              <div className="raffle-cards-container">
-                  {activeRaffles.map(raffle => (
-                      <div key={raffle.roundId} className="raffle-summary-card">
-                          <h3 className="raffle-product-name">{raffle.productName}</h3>
-                          <div className="raffle-info">
-                              <span className="raffle-entry-count">
-                                  <strong>{raffle.entryCount}</strong>명 응모 중
-                              </span>
-                              <span className="raffle-deadline">
-                                  마감: {dayjs(raffle.deadlineDate.toDate()).format('M/D(ddd) HH:mm')}
-                              </span>
-                          </div>
-                          <Link to={`/admin/events/${raffle.productId}/${raffle.roundId}`} className="raffle-details-link">
-                              관리하기
-                          </Link>
-                      </div>
-                  ))}
-              </div>
+
+      {/* 핵심 지표 카드 */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }}>
+            <ShoppingCart size={24} />
           </div>
+          <div className="stat-content">
+            <div className="stat-label">오늘의 주문</div>
+            <div className="stat-value">{stats.todayOrders.toLocaleString()}</div>
+            <div className="stat-unit">건</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+            <DollarSign size={24} />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">오늘의 매출</div>
+            <div className="stat-value">{Math.floor(stats.todayRevenue).toLocaleString()}</div>
+            <div className="stat-unit">원</div>
+          </div>
+        </div>
+
+        <div className="stat-card highlight">
+          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}>
+            <Bell size={24} />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">실시간 예약</div>
+            <div className="stat-value">{stats.recentReservations.toLocaleString()}</div>
+            <div className="stat-unit">최근 1시간</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}>
+            <Wallet size={24} />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">선입금 대기</div>
+            <div className="stat-value">{stats.prepaidPending.toLocaleString()}</div>
+            <div className="stat-unit">건</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 긴급 처리 필요 섹션 */}
+      {urgentItems.length > 0 && (
+        <div className="dashboard-section">
+          <div className="section-header">
+            <AlertTriangle size={20} className="section-icon urgent" />
+            <h2 className="section-title">⚠️ 긴급 처리 필요</h2>
+          </div>
+          <div className="urgent-items-grid">
+            {urgentItems.map((item, index) => (
+              <Link 
+                key={index} 
+                to={item.link} 
+                className="urgent-item-card"
+                style={{ borderLeftColor: item.color }}
+              >
+                <div className="urgent-item-icon" style={{ color: item.color }}>
+                  {item.icon}
+                </div>
+                <div className="urgent-item-content">
+                  <div className="urgent-item-title">{item.title}</div>
+                  <div className="urgent-item-count" style={{ color: item.color }}>
+                    {item.count}건
+                  </div>
+                </div>
+                <ArrowRight size={20} className="urgent-item-arrow" />
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
-      {sortedDateKeys.length > 0 ? (
-        sortedDateKeys.map(date => (
-          <div key={date} className="dashboard-group">
-            <h2 className="group-title">{date} 발행 상품</h2>
-            <div className="table-wrapper">
-              <table className="dashboard-table">
-                <thead>
-                  <tr>
-                    <th>No.</th>
-                    <th className="image-col">이미지</th> 
-                    <th>상품명 / 회차명</th>
-                    <th className="wait-col"><Hourglass size={14} /> 선입금 대기</th>
-                    <th className="reserve-col"><CheckCircle size={14} /> 확정 수량</th>
-                    {/* ❌ [비활성화] 대기 수량 헤더 제거 */}
-                    {/* <th>대기 수량</th> */}
-                    <th>남은 수량</th>
-                    <th>설정된 재고</th>
-                    <th>링크 복사</th>
-                    <th style={{ color: '#d9534f' }}>수량 제한</th> 
+      {/* 실시간 예약 현황 */}
+      <div className="dashboard-section">
+        <div className="section-header">
+          <Eye size={20} className="section-icon" />
+          <h2 className="section-title">👁️ 실시간 예약 현황</h2>
+          <Link to="/admin/orders" className="section-link">
+            전체 보기 <ArrowRight size={16} />
+          </Link>
+        </div>
+        <div className="recent-orders-table">
+          {recentOrders.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>시간</th>
+                  <th>주문번호</th>
+                  <th>고객명</th>
+                  <th>상품명</th>
+                  <th>금액</th>
+                  <th>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order) => (
+                  <tr 
+                    key={order.id} 
+                    onClick={() => navigate(`/admin/orders?orderId=${order.id}`)}
+                    className="recent-order-row"
+                  >
+                    <td className="time-ago">
+                      <Clock size={14} />
+                      {order.timeAgo}
+                    </td>
+                    <td className="order-number">{order.orderNumber}</td>
+                    <td>{order.customerName}</td>
+                    <td className="product-name">{order.productName}</td>
+                    <td className="price">{order.totalPrice.toLocaleString()}원</td>
+                    <td>
+                      <span className={`status-badge status-${order.status.toLowerCase()}`}>
+                        {order.status}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {groupedItems[date].map((item, index) => {
-                    const remainingStock = item.configuredStock === -1 ? item.configuredStock : item.configuredStock - item.confirmedReservedQuantity;
-                    
-                    return (
-                      <tr key={item.id}>
-                        <td>{index + 1}</td>
-                        <td><img src={item.imageUrl} alt={item.productName} className="dashboard-product-thumbnail" /></td>
-                        <td className="dashboard-product-name-cell">
-                          <Link to={`/admin/products/edit/${item.productId}/${item.roundId}`} className="product-link">
-                            {item.productName === item.variantGroupName 
-                              ? item.productName
-                              : `${item.productName} - ${item.variantGroupName}`
-                            }
-                          </Link>
-                          <span className="round-name-subtext">{item.roundName}</span>
-                        </td>
-                        <td className="quantity-cell wait-col">{item.pendingPrepaymentQuantity > 0 ? item.pendingPrepaymentQuantity : '-'}</td>
-                        <td className="quantity-cell reserve-col">{item.confirmedReservedQuantity}</td>
-                        {/* ❌ [비활성화] 대기자 수량 컬럼 제거 */}
-                        {/* <td className="quantity-cell">{item.waitlistedQuantity > 0 ? item.waitlistedQuantity : '-'}</td> */}
-                        <td className="quantity-cell important-cell">
-                          {remainingStock === -1
-                            ? <span className="unlimited-stock">무제한</span>
-                            : `${remainingStock}`}
-                        </td>
-                        <td className="stock-cell">
-                          {editingStockId === item.id ? (
-                            <input
-                              type="number"
-                              className="stock-input"
-                              value={stockInputs[item.id] || ''}
-                              onChange={(e) => handleStockInputChange(item.id, e.target.value)}
-                              onBlur={() => handleStockEditSave(item.id)}
-                              onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleStockEditSave(item.id);
-                                  if (e.key === 'Escape') setEditingStockId(null);
-                              }}
-                              autoFocus
-                            />
-                          ) : (
-                            <button
-                              className="stock-display-button"
-                              onClick={() => handleStockEditStart(item.id, item.configuredStock)}
-                              title="재고 수량을 클릭하여 수정"
-                            >
-                              {item.configuredStock === -1
-                                ? <span className="unlimited-stock">무제한</span>
-                                : `${item.configuredStock}`}
-                            </button>
-                          )}
-                        </td>
-                        <td>
-                          <CopyLinkButton productId={item.productId} />
-                        </td>
-                        <td>
-                            <DangerButton
-                                onClick={() => setFixTarget({ id: item.productId, name: item.productName })}
-                                variant="danger"
-                                confirmText="수량 제한 설정을 열까요?"
-                            >
-                                <ShieldAlert size={16} />
-                            </DangerButton>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state">
+              <ShoppingCart size={48} />
+              <p>최근 예약 내역이 없습니다.</p>
             </div>
-          </div>
-        ))
-      ) : (
-        !loading && <p className="no-data-message">표시할 상품 데이터가 없습니다.</p>
-      )}
+          )}
+        </div>
+      </div>
+
+      {/* 날짜별 상품 예약 현황 */}
+      <div className="dashboard-section">
+        <div className="section-header">
+          <Calendar size={20} className="section-icon" />
+          <h2 className="section-title">📅 날짜별 상품 예약 현황</h2>
+          <Link to="/admin/products" className="section-link">
+            전체 보기 <ArrowRight size={16} />
+          </Link>
+        </div>
+        <div className="date-grouped-products">
+          {dateGroupedProducts.length > 0 ? (
+            dateGroupedProducts.map((group) => (
+              <div key={group.date} className="date-group">
+                <div className="date-group-header">
+                  <h3 className="date-title">{group.dateFormatted}</h3>
+                  <span className="date-product-count">{group.products.length}개 상품</span>
+                </div>
+                <div className="products-grid">
+                  {group.products.map((product) => (
+                    <Link
+                      key={`${product.productId}-${product.roundId}`}
+                      to={`/admin/products/edit/${product.productId}/${product.roundId}`}
+                      className="product-card"
+                    >
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.productName}
+                        className="product-thumbnail"
+                      />
+                      <div className="product-info">
+                        <div className="product-name">{product.productName}</div>
+                        <div className="product-round">{product.roundName}</div>
+                        <div className="product-stats">
+                          <div className="stat-item">
+                            <span className="stat-label">확정</span>
+                            <span className="stat-value confirmed">{product.confirmedReserved}</span>
+                          </div>
+                          <div className="stat-item">
+                            <span className="stat-label">대기</span>
+                            <span className="stat-value pending">{product.pendingPrepayment}</span>
+                          </div>
+                          <div className="stat-item total">
+                            <span className="stat-label">총</span>
+                            <span className="stat-value total">{product.totalReserved}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="empty-state">
+              <Calendar size={48} />
+              <p>등록된 상품이 없습니다.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 빠른 액세스 */}
+      <div className="dashboard-section">
+        <div className="section-header">
+          <Zap size={20} className="section-icon" />
+          <h2 className="section-title">🚀 빠른 액세스</h2>
+        </div>
+        <div className="quick-actions-grid">
+          {quickActions.map((action, index) => (
+            <Link 
+              key={index} 
+              to={action.link} 
+              className="quick-action-card"
+              style={{ '--action-color': action.color } as React.CSSProperties}
+            >
+              <div className="quick-action-icon" style={{ color: action.color }}>
+                {action.icon}
+              </div>
+              <div className="quick-action-title">{action.title}</div>
+            </Link>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

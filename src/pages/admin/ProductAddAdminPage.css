@@ -44,23 +44,90 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 32px;
+  padding: 10px 24px;
   background-color: var(--color-background-primary);
   border-bottom: 1px solid var(--color-border-main);
   position: sticky;
   top: 0;
   z-index: 10;
+  gap: 1rem;
+}
+
+.header-left {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-wizard-mini {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 1rem;
+}
+
+.progress-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.progress-bar-mini {
+  width: 120px;
+  height: 4px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+  border-radius: 999px;
+  transition: width 0.3s ease;
 }
 
 .product-add-header h1 {
-  font-size: 1.8rem;
-  font-weight: 800;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--color-text-primary);
+  margin: 0;
 }
 
 .header-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
+  align-items: center;
+}
+
+.auto-save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-medium);
+  font-weight: 500;
+  font-size: 0.75rem;
+  border: 1px solid var(--color-border-main);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.auto-save-button:hover {
+  background: var(--color-background-tertiary);
 }
 
 .save-button,
@@ -68,11 +135,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 12px 24px;
+  gap: 6px;
+  padding: 8px 16px;
   border-radius: var(--border-radius-medium);
-  font-weight: bold;
-  font-size: 1.05rem;
+  font-weight: 600;
+  font-size: 0.875rem;
   border: none;
   cursor: pointer;
   transition: all 0.2s;
@@ -107,6 +174,13 @@
   box-shadow: none;
 }
 
+.save-button svg,
+.draft-save-button svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 /* --- 최종 3단 그리드 레이아웃 --- */
 .main-content-grid-3-col-final {
   display: grid;
@@ -118,9 +192,40 @@
   margin: 0 auto;
 }
 
+/* --- 새로운 레이아웃 (폼 + 미리보기) --- */
+.main-content-grid-with-preview {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 28px;
+  padding: 28px 32px;
+  align-items: flex-start;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+.form-content-area {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.preview-content-area {
+  position: sticky;
+  top: 100px;
+}
+
 @media (max-width: 1400px) {
   .main-content-grid-3-col-final {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .main-content-grid-with-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-content-area {
+    position: relative;
+    top: 0;
   }
 }
 
@@ -128,6 +233,150 @@
   .main-content-grid-3-col-final {
     grid-template-columns: 1fr;
   }
+
+  .main-content-grid-with-preview {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- 필드 검증 스타일 --- */
+.form-group.with-validation {
+  position: relative;
+}
+
+.field-error {
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.field-error.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.field-error.warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.form-group input.has-error,
+.form-group textarea.has-error,
+.form-group select.has-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.form-group input.has-error:focus,
+.form-group textarea.has-error:focus,
+.form-group select.has-error:focus {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* --- 검증 요약 스타일 --- */
+.review-section {
+  padding: 2rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+}
+
+.review-section h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 1.5rem 0;
+}
+
+.validation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.validation-errors,
+.validation-warnings,
+.validation-success {
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 2px solid;
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.validation-errors {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+.validation-warnings {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.validation-success {
+  background: #d1fae5;
+  border-color: #10b981;
+  color: #065f46;
+}
+
+.validation-errors h4,
+.validation-warnings h4,
+.validation-success h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.validation-errors ul,
+.validation-warnings ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.validation-errors li,
+.validation-warnings li {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.validation-success p {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .form-section {

@@ -1,0 +1,301 @@
+/* src/components/admin/ProductFormWizard.css */
+
+.wizard-container {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+}
+
+/* 진행률 바 */
+.wizard-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.wizard-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 단계 표시 */
+.wizard-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.wizard-steps::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e5e7eb;
+  z-index: 0;
+}
+
+.wizard-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+  padding: 0 0.25rem;
+}
+
+.wizard-step.clickable {
+  cursor: pointer;
+}
+
+.wizard-step-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 2px solid #e5e7eb;
+  color: #9ca3af;
+  transition: all 0.3s ease;
+  z-index: 2;
+}
+
+.wizard-step-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wizard-step.active .wizard-step-icon {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border-color: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+  transform: scale(1.05);
+}
+
+.wizard-step.completed .wizard-step-icon {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.wizard-step.clickable:hover .wizard-step-icon {
+  transform: scale(1.02);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.wizard-step-content {
+  text-align: center;
+  min-width: 0;
+}
+
+.wizard-step-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.125rem;
+  white-space: nowrap;
+}
+
+.wizard-step.active .wizard-step-title {
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.wizard-step.completed .wizard-step-title {
+  color: #10b981;
+}
+
+.wizard-step-description {
+  font-size: 0.65rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.wizard-step.active .wizard-step-description {
+  color: #3b82f6;
+}
+
+/* 네비게이션 버튼 */
+.wizard-navigation {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.wizard-nav-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.wizard-nav-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wizard-nav-button.prev {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.wizard-nav-button.prev:hover:not(:disabled) {
+  background: #e5e7eb;
+  transform: translateX(-2px);
+}
+
+.wizard-nav-button.next {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: #ffffff;
+  margin-left: auto;
+}
+
+.wizard-nav-button.next:hover:not(:disabled) {
+  transform: translateX(2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.wizard-nav-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Compact 모드 (헤더 안에 작게 배치) */
+.wizard-container.wizard-compact {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.wizard-steps-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.wizard-step-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.wizard-step-compact:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.wizard-step-icon-compact {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  color: #9ca3af;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.wizard-step-icon-compact svg {
+  width: 10px;
+  height: 10px;
+}
+
+.wizard-step-compact.active .wizard-step-icon-compact {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.wizard-step-compact.completed .wizard-step-icon-compact {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.wizard-step-title-compact {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.wizard-step-compact.active .wizard-step-title-compact {
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.wizard-step-compact.completed .wizard-step-title-compact {
+  color: #10b981;
+}
+
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .wizard-container {
+    padding: 1.5rem;
+  }
+
+  .wizard-steps {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .wizard-steps::before {
+    display: none;
+  }
+
+  .wizard-step {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    padding: 0;
+  }
+
+  .wizard-step-content {
+    text-align: left;
+    flex: 1;
+  }
+
+  .wizard-navigation {
+    flex-direction: column;
+  }
+
+  .wizard-nav-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
