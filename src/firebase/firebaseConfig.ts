@@ -24,7 +24,10 @@ const requiredEnvVars = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  region: import.meta.env.VITE_FIREBASE_REGION,
+  // ✅ region은 시크릿이 아니고 프로젝트 고정값인 경우가 대부분이라
+  // 배포 환경(Vercel 등)에서 누락돼도 앱이 크래시하지 않도록 기본값을 둡니다.
+  // (Cloud Functions region: asia-northeast3)
+  region: import.meta.env.VITE_FIREBASE_REGION || "asia-northeast3",
 };
 
 // 필수 환경변수 검증
@@ -35,11 +38,13 @@ const envVarNames: Record<keyof typeof requiredEnvVars, string> = {
   storageBucket: 'VITE_FIREBASE_STORAGE_BUCKET',
   messagingSenderId: 'VITE_FIREBASE_MESSAGING_SENDER_ID',
   appId: 'VITE_FIREBASE_APP_ID',
+  // region은 기본값이 있으므로 "필수" 누락 체크에서 제외됩니다.
   region: 'VITE_FIREBASE_REGION',
 };
 
 const missingVars = Object.entries(requiredEnvVars)
-  .filter(([_, value]) => !value)
+  // ✅ region은 기본값이 있으니 필수 누락 검사에서 제외
+  .filter(([key, value]) => key !== "region" && !value)
   .map(([key]) => envVarNames[key as keyof typeof requiredEnvVars]);
 
 if (missingVars.length > 0) {
