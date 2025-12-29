@@ -453,3 +453,4 @@ if (!firebaseConfig.apiKey) {
 **작성자**: AI Assistant (Cursor)  
 **최종 업데이트**: 2025년 1월
 
+

@@ -152,3 +152,4 @@ if (missingVars.length > 0) {
 **작성자**: AI Assistant (Cursor)  
 **최종 업데이트**: 2025년 1월
 
+

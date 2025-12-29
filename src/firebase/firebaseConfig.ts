@@ -51,7 +51,7 @@ if (missingVars.length > 0) {
     `❌ 필수 환경변수가 누락되었습니다: ${missingVars.join(', ')}\n\n` +
     `📝 해결 방법:\n` +
     `1. 프로젝트 루트에 ${envFileHint}을 생성하세요.\n` +
-    `2. .env.example 파일을 참고하여 필요한 환경변수를 설정하세요.\n` +
+    `2. ENV_SETUP_GUIDE.md를 참고하여 필요한 환경변수를 설정하세요.\n` +
     `3. 자세한 내용은 README.md의 "시크릿 & 환경 변수" 섹션을 참고하세요.\n\n` +
     `💡 파일 경로: 프로젝트 루트/${envFileHint}`
   );
