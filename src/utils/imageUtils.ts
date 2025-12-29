@@ -6,10 +6,15 @@
  * 이 함수는 이중, 삼중으로 인코딩된 URL도 안전하게 처리합니다.
  */
 export const getOptimizedImageUrl = (
-  originalUrl: string,
+  originalUrl: string | null | undefined,
   // ✅ [수정] '150x150' 사이즈를 허용 타입에 추가합니다.
   size: '150x150' | '200x200' | '1080x1080'
 ): string => {
+  // ✅ 안전장치: originalUrl이 없으면 최적화하지 않고 빈 문자열 반환 (렌더 크래시 방지)
+  if (!originalUrl || typeof originalUrl !== 'string') {
+    return '';
+  }
+
   // 이중 안전장치: 이미 리사이즈된 URL이면, 더 이상 처리하지 않고 즉시 반환합니다.
   if (originalUrl.includes(`_${size}.webp`)) {
     return originalUrl;

@@ -1,36 +1,51 @@
-/* src/components/admin/MenuGroup.css */
+/* src/components/admin/MenuGroup.css - 모던한 메뉴 그룹 스타일 */
 
 .menu-group {
-  margin-bottom: 24px;
+  margin-bottom: 1.5rem;
+  padding: 0 0.75rem;
 }
 
 .menu-group-header {
   display: flex;
   align-items: center;
-  gap: 10px; /* ✅ 간격 증가 */
-  padding: 12px 16px; /* ✅ 패딩 증가 */
-  font-size: 1.1rem; /* ✅ 글씨체 크기 2배 이상 증가 (0.8rem → 1.1rem) */
-  font-weight: 700; /* ✅ 글씨체 두께 증가 */
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.8px; /* ✅ 자간 약간 증가 */
-  margin-bottom: 12px; /* ✅ 여백 증가 */
-  color: rgba(255, 255, 255, 0.85); /* ✅ 색상 더 밝게 */
+  letter-spacing: 1px;
+  margin-bottom: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  position: relative;
+}
+
+.menu-group-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 1rem;
+  right: 1rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 .menu-group-icon {
   display: flex;
   align-items: center;
-  opacity: 0.9; /* ✅ 아이콘 더 선명하게 */
+  opacity: 0.9;
+  transition: transform 0.3s ease;
 }
 
 .menu-group-icon svg {
-  width: 20px; /* ✅ 그룹 헤더 아이콘 크기 증가 (16px → 20px) */
+  width: 20px;
   height: 20px;
+  stroke-width: 2.5;
 }
 
 .menu-group-title {
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .menu-group-list {
@@ -41,25 +56,48 @@
 
 /* 우선순위별 색상 */
 .menu-group.priority-high .menu-group-header {
-  color: #0ea5e9;
+  color: #60a5fa;
 }
 
 .menu-group.priority-high .menu-group-icon {
-  color: #0ea5e9;
+  color: #60a5fa;
+}
+
+.menu-group.priority-high .menu-group-header::after {
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent);
 }
 
 .menu-group.priority-normal .menu-group-header {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.menu-group.priority-normal .menu-group-icon {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .menu-group.priority-low .menu-group-header {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.menu-group.priority-low .menu-group-icon {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* 접힘 상태 */
+.admin-sidebar.collapsed .menu-group {
+  margin-bottom: 0.5rem;
+  padding: 0;
+}
+
+.admin-sidebar.collapsed .menu-group-header {
+  display: none;
 }
 
 /* 모바일 대응 */
 @media (max-width: 768px) {
   .menu-group {
     margin-bottom: 0;
+    padding: 0;
   }
 
   .menu-group-header {
@@ -69,6 +107,6 @@
   .menu-group-list {
     display: flex;
     flex-direction: row;
+    gap: 0.5rem;
   }
 }
-

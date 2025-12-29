@@ -12,7 +12,7 @@ import type { UserDocument, Product, OrderItem, SalesRound, VariantGroup, Produc
 import { Search, User, Package, X, CheckCircle, PlusCircle } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
-import DangerButton from '@/components/admin/DangerButton';
+import ConfirmModal from '@/components/admin/ConfirmModal';
 import './CreateOrderPage.css';
 
 // ❌ const functions = getFunctions(); // 이 라인을 삭제하고
@@ -37,6 +37,8 @@ const CreateOrderPage: React.FC = () => {
     const [selectedVg, setSelectedVg] = useState<VariantGroup | null>(null);
     const [selectedItem, setSelectedItem] = useState<ProductItem | null>(null);
     const [quantity, setQuantity] = useState(1);
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Data fetching
     useEffect(() => {
@@ -132,6 +134,7 @@ const CreateOrderPage: React.FC = () => {
         };
 
         const toastId = toast.loading(`${selectedUser.displayName}님의 주문을 생성하는 중...`);
+        setIsSubmitting(true);
         try {
             const result = await createOrderAsAdminCallable({ targetUserId: selectedUser.uid, item: orderItem });
             if ((result.data as any).success) {
@@ -144,6 +147,8 @@ const CreateOrderPage: React.FC = () => {
         } catch (error: any) {
             console.error("Admin order creation failed:", error);
             toast.error(`주문 생성 실패: ${error.message}`, { id: toastId });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -241,17 +246,49 @@ const CreateOrderPage: React.FC = () => {
             </div>
             
             <div className="form-actions">
-                <DangerButton
-                    onClick={handleCreateOrder}
-                    variant="warning"
-                    confirmText="주문을 생성하시겠습니까?"
-                    disabled={!isFormComplete}
+                <button
+                    type="button"
+                    className="danger-button warning"
+                    disabled={!isFormComplete || isSubmitting}
+                    onClick={() => setIsConfirmOpen(true)}
                 >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                         <PlusCircle size={18} /> 주문 생성하기
                     </span>
-                </DangerButton>
+                </button>
             </div>
+
+            <ConfirmModal
+                isOpen={isConfirmOpen}
+                onClose={() => setIsConfirmOpen(false)}
+                onConfirm={async () => {
+                    setIsConfirmOpen(false);
+                    await handleCreateOrder();
+                }}
+                title="관리자 주문을 생성할까요?"
+                variant="warning"
+                requirePhrase="생성"
+                confirmLabel="주문 생성"
+                cancelLabel="취소"
+                isLoading={isSubmitting}
+                description={
+                    <>
+                        <p style={{ margin: 0 }}>
+                            아래 내용으로 주문을 생성합니다. <strong>중복 생성/재고 영향</strong>이 있을 수 있으니 마지막으로 확인하세요.
+                        </p>
+                        <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "rgba(245, 158, 11, 0.12)", color: "#7c2d12" }}>
+                            <div><strong>고객</strong>: {selectedUser?.displayName} ({selectedUser?.phoneLast4})</div>
+                            <div><strong>상품</strong>: {selectedProduct?.groupName}</div>
+                            <div><strong>회차</strong>: {selectedRound?.roundName}</div>
+                            <div><strong>옵션</strong>: {selectedVg?.groupName} / {selectedItem?.name}</div>
+                            <div><strong>수량</strong>: {quantity}</div>
+                        </div>
+                        <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(220,38,38,0.08)", color: "#7f1d1d" }}>
+                            <strong>주의:</strong> 이 작업은 고객에게 “예약/주문”으로 기록됩니다. 실운영에서는 꼭 필요한 경우에만 사용하세요.
+                        </div>
+                    </>
+                }
+            />
         </div>
     );
 };

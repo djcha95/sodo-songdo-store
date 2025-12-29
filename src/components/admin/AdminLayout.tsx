@@ -3,6 +3,7 @@ import { useState, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminMobileNav from '@/components/admin/AdminMobileNav';
+import AdminQuickActionsBar from '@/components/admin/AdminQuickActionsBar';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import './AdminLayout.css';
 
@@ -24,6 +25,7 @@ const AdminLayout = () => {
         toggleSidebar={toggleSidebar}
       />
       <main className="admin-main-content">
+        <AdminQuickActionsBar />
         <Suspense fallback={<SodomallLoader />}>
           <Outlet />
         </Suspense>

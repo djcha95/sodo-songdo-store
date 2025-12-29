@@ -328,7 +328,7 @@ const fetchData = useCallback(async () => {
           uniqueId: `${p.id}-${r.roundId}`,
           productId: p.id,
           productName: p.groupName,
-          productImage: p.imageUrls?.[0] || '/placeholder.svg',
+          productImage: p.imageUrls?.[0] || '/sodomall-logo.png',
           round: r,
           createdAt: safeToDate(r.createdAt)?.getTime() || 0,
           pickupDate: (r.pickupDate ? safeToDate(r.pickupDate) : null)?.getTime() || 0,

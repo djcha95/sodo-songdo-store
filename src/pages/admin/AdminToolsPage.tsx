@@ -1,26 +1,21 @@
-import React, { useState } from 'react';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '@/firebase';
+import React, { useMemo, useState } from 'react';
+import { httpsCallable } from 'firebase/functions';
 import toast from 'react-hot-toast';
-import { Settings, RefreshCw, AlertTriangle, Play, Database } from 'lucide-react';
+import { Settings, RefreshCw, AlertTriangle, Database } from 'lucide-react';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
-import DangerButton from '@/components/admin/DangerButton';
+import ConfirmModal from '@/components/admin/ConfirmModal';
 import './AdminToolsPage.css';
+import { functions } from '@/firebase/firebaseConfig';
 
 const AdminToolsPage = () => {
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-  // 👇 새로 바뀐 함수 이름 연결
-  const functions = getFunctions(app, 'asia-northeast3');
-  const rebuildFunction = httpsCallable(functions, 'rebuildStockStats_v1');
+  // ✅ getFunctions(region 하드코딩) 대신 프로젝트 공용 functions 인스턴스 사용
+  const rebuildFunction = useMemo(() => httpsCallable(functions, 'rebuildStockStats_v1'), []);
 
   const runRebuild = async () => {
-    // 1. 안전장치: 실행 전 확인
-    if (!confirm('⚠️ 주의: 모든 주문 내역을 처음부터 다시 훑어서 통계를 덮어씁니다.\n\n정말 실행하시겠습니까? (시간이 조금 걸릴 수 있습니다)')) {
-      return;
-    }
-
     setLoading(true);
     setLastResult(null);
     const toastId = toast.loading('재고 통계 재구축 중... (잠시만 기다려주세요)');
@@ -74,10 +69,11 @@ const AdminToolsPage = () => {
               <p>기존 통계가 꼬였거나 정확하지 않을 때 실행하세요.</p>
             </div>
             
-            <DangerButton
-              onClick={runRebuild}
-              variant="danger"
-              confirmText="재구축을 실행하시겠습니까?"
+            <button
+              type="button"
+              className={`danger-button danger`}
+              onClick={() => setIsConfirmOpen(true)}
+              disabled={loading}
             >
               {loading ? (
                 <>
@@ -90,7 +86,7 @@ const AdminToolsPage = () => {
                   재구축 실행하기
                 </>
               )}
-            </DangerButton>
+            </button>
           </div>
 
           {/* 결과 표시 창 */}
@@ -110,6 +106,32 @@ const AdminToolsPage = () => {
 
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={async () => {
+          setIsConfirmOpen(false);
+          await runRebuild();
+        }}
+        title="재고 통계 재구축을 실행할까요?"
+        variant="danger"
+        requirePhrase="재구축"
+        confirmLabel="재구축 실행"
+        cancelLabel="취소"
+        description={
+          <>
+            <p style={{ margin: 0 }}>
+              이 작업은 <strong>`orders` 전체를 스캔</strong>하여 <strong>`stockStats_v1`을 다시 계산하고 덮어씁니다.</strong>
+              <br />
+              주문이 많을수록 시간이 오래 걸릴 수 있습니다.
+            </p>
+            <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(220,38,38,0.08)", color: "#7f1d1d" }}>
+              <strong>되돌리기 어려운 작업</strong>입니다. 실행 전 대상/상황을 다시 확인하세요.
+            </div>
+          </>
+        }
+      />
     </div>
   );
 };

@@ -296,7 +296,7 @@ const DashboardPage: React.FC = () => {
               id: groupKey,
               productId: product.id,
               productName: product.groupName,
-              imageUrl: product.imageUrls?.[0] || '/placeholder.svg',
+              imageUrl: product.imageUrls?.[0] || '/sodomall-logo.png',
               roundId: round.roundId,
               roundName: round.roundName,
               variantGroupId: groupId,

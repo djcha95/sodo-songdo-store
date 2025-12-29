@@ -8,6 +8,8 @@ import { HelmetProvider } from 'react-helmet-async';
 import { MotionConfig } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import GlobalErrorBoundary from '@/components/common/GlobalErrorBoundary';
+import AdminBlockedPage from '@/components/admin/AdminBlockedPage';
+import { ADMIN_HIDDEN_ROUTES } from "@/admin/adminHiddenRoutes";
 
 import './index.css';
 
@@ -107,6 +109,16 @@ const AdminRoute = () => {
   return <AdminLayout />;
 };
 
+// ✅ Master 전용 라우트 (위험 기능 보호)
+const MasterOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAdmin, isMaster, loading } = useAuth();
+  if (loading) return <SodomallLoader />;
+  if (!user || !isAdmin) return <Navigate to="/" replace />;
+  if (!isMaster) return <Navigate to="/admin/dashboard" replace />;
+  return <>{children}</>;
+};
+
+// ✅ 숨김/차단 대상 라우트는 단일 소스(adminHiddenRoutes.ts)에서 관리합니다.
 
 // --- ✅ [수정] 최종 라우터 설정 ---
 const router = createBrowserRouter([
@@ -226,7 +238,13 @@ const router = createBrowserRouter([
           { path: "users", element: <UserListPage /> },
           { path: "users/:userId", element: <UserDetailPage /> },
           // 👇 [추가] 시스템 도구 페이지 경로 설정
-    { path: "tools", element: <AdminToolsPage /> },
+          { path: "tools", element: <MasterOnlyRoute><AdminToolsPage /></MasterOnlyRoute> },
+
+          // ✅ 숨김/차단 대상 라우트는 여기서 자동으로 잡아서 안내 페이지로 연결
+          ...ADMIN_HIDDEN_ROUTES.map((r) => ({
+            path: r.path,
+            element: <AdminBlockedPage title={r.title} message={r.message} reason="hidden" />,
+          })),
         ],
       },
     ],

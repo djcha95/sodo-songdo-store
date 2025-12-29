@@ -9,6 +9,7 @@ import {
   CalendarCheck, ClipboardList, Settings, AlertTriangle
 } from 'lucide-react';
 import MenuGroup from './MenuGroup';
+import { ADMIN_HIDDEN_ROUTES } from "@/admin/adminHiddenRoutes";
 
 interface AdminSidebarProps {
   isSidebarOpen: boolean;
@@ -24,7 +25,12 @@ const MenuItem = ({ to, icon, text, isSidebarOpen, end = false, variant = 'norma
   variant?: 'normal' | 'danger';
 }) => (
   <li className={`menu-item ${variant === 'danger' ? 'menu-item-danger' : ''}`}>
-    <NavLink to={to} title={!isSidebarOpen ? text : undefined} end={end}>
+    <NavLink 
+      to={to} 
+      title={!isSidebarOpen ? text : undefined} 
+      end={end}
+      className={({ isActive }) => isActive ? 'active' : ''}
+    >
       {icon}
       {isSidebarOpen && <span>{text}</span>}
     </NavLink>
@@ -34,6 +40,7 @@ const MenuItem = ({ to, icon, text, isSidebarOpen, end = false, variant = 'norma
 const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   const { userDocument } = useAuth();
   const isMaster = userDocument?.role === 'master';
+  const showHiddenDebugList = isMaster && import.meta.env.DEV;
 
   return (
     <aside className={`admin-sidebar ${!isSidebarOpen ? 'collapsed' : ''}`}>
@@ -50,6 +57,13 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
       </div>
 
       <nav className="sidebar-nav">
+        {isSidebarOpen && (
+          <div className="sidebar-section-title required">
+            <span className="badge">필수</span>
+            <span className="desc">실운영 핵심 업무</span>
+          </div>
+        )}
+
         {/* 1. 일일 업무 그룹 */}
         <MenuGroup 
           title="일일 업무" 
@@ -94,6 +108,10 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
         {/* 5. 위험 기능 그룹 (시각적으로 분리) */}
         {isSidebarOpen && (
           <div className="menu-group-danger">
+            <div className="sidebar-section-title danger">
+              <span className="badge">위험</span>
+              <span className="desc">실수 방지 2단계 확인</span>
+            </div>
             <div className="menu-group-header-danger">
               <AlertTriangle size={18} />
               <span>위험 기능</span>
@@ -116,6 +134,30 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
                 />
               )}
             </ul>
+
+            {isMaster && (
+              <div className="sidebar-section-title hidden">
+                <span className="badge">숨김</span>
+                <span className="desc">운영 정책상 메뉴/라우트 차단</span>
+              </div>
+            )}
+
+            {/* ✅ DEV/마스터 전용: 숨김(차단) 라우트 목록 디버그 표시 */}
+            {showHiddenDebugList && (
+              <div className="hidden-route-debug">
+                <div className="hidden-route-debug-title">
+                  숨김됨 목록 ({ADMIN_HIDDEN_ROUTES.length})
+                </div>
+                <ul className="hidden-route-debug-list">
+                  {ADMIN_HIDDEN_ROUTES.map((r) => (
+                    <li key={r.path}>
+                      <span className="hidden-route-chip">숨김됨</span>
+                      <span className="hidden-route-path">/admin/{r.path}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </nav>
