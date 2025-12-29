@@ -454,3 +454,4 @@ if (!firebaseConfig.apiKey) {
 **최종 업데이트**: 2025년 1월
 
 
+

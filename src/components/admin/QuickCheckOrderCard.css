@@ -1,24 +1,23 @@
 /* src/components/admin/QuickCheckOrderCard.css */
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .qc-order-card {
     background-color: #fff; 
     border: 1px solid var(--border-color-light);
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-sm);
-    padding: 12px;
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    padding: 16px;
     cursor: pointer;
-    transition: all 0.2s ease-in-out;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    animation: fadeIn 0.4s ease-out;
-    /* ✅ [개선] 너비는 부모 컨테이너에 맞추고, 높이는 내용에 따라 유연하게 변하도록 수정 */
+    gap: 10px;
+    animation: fadeIn 0.35s ease-out;
     width: 100%;
     min-height: 160px;
     height: auto; 
@@ -32,55 +31,74 @@
 
 .qco-checkmark {
     position: absolute;
-    top: -1px;
-    right: -1px;
-    width: 32px;
-    height: 32px;
-    background-color: var(--primary-color);
+    top: -2px;
+    right: -2px;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-dark) 100%);
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-top-right-radius: var(--border-radius-md);
-    border-bottom-left-radius: var(--border-radius-lg);
-    box-shadow: -2px 2px 5px rgba(0,0,0,0.1);
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border-top-right-radius: var(--border-radius-lg);
+    border-bottom-left-radius: var(--border-radius-full);
+    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+    animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 1;
 }
 
 @keyframes popIn {
-    from { transform: scale(0.5); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
+    from { transform: scale(0) rotate(-180deg); opacity: 0; }
+    to { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 
 .qc-order-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    border-color: var(--primary-color);
 }
 
 .qc-order-card.selected {
     border: 2px solid var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15), 0 4px 16px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
 }
 
-.qc-order-card.bg-picked-up-strong { background-color: #cfe2ff; border-color: #9ec5fe; }
-.qc-order-card.bg-prepaid-strong { background-color: #fff3cd; border-color: #ffeeba; }
-.qc-order-card.bg-noshow-strong { background-color: #f8d7da; border-color: #f5c2c7; }
-.qc-order-card.bg-canceled { background-color: #e9ecef; border-color: #dee2e6; }
+.qc-order-card.bg-picked-up-strong { 
+    background: linear-gradient(135deg, #e7f3ff 0%, #cfe2ff 100%); 
+    border-color: #9ec5fe; 
+}
+.qc-order-card.bg-prepaid-strong { 
+    background: linear-gradient(135deg, #fffbf0 0%, #fff3cd 100%); 
+    border-color: #ffeeba; 
+}
+.qc-order-card.bg-noshow-strong { 
+    background: linear-gradient(135deg, #fef2f2 0%, #f8d7da 100%); 
+    border-color: #f5c2c7; 
+}
+.qc-order-card.bg-canceled { 
+    background: linear-gradient(135deg, #f5f5f5 0%, #e9ecef 100%); 
+    border-color: #dee2e6; 
+}
 .qc-order-card.bg-default { background-color: #ffffff; }
 
 .qco-top-row {
     display: flex;
     justify-content: space-between;
-    font-size: 0.8rem;
+    align-items: center;
+    font-size: 0.85rem;
     color: var(--text-color-regular);
-    padding-bottom: 6px;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--border-color-extralight);
+    font-weight: var(--font-weight-medium);
 }
 .qco-top-row .today {
     font-weight: var(--font-weight-bold);
     color: #fd7e14;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .qco-body {
@@ -115,12 +133,15 @@
     flex-shrink: 0;
     font-weight: var(--font-weight-semibold);
     color: var(--primary-color-dark);
-    padding: 2px 8px;
-    border-radius: var(--border-radius-sm);
-    transition: background-color 0.2s;
+    padding: 4px 10px;
+    border-radius: var(--border-radius-md);
+    transition: all 0.2s ease;
+    background-color: rgba(13, 110, 253, 0.08);
+    cursor: pointer;
 }
 .qco-item-qty:hover {
-    background-color: var(--primary-color-light);
+    background-color: rgba(13, 110, 253, 0.15);
+    transform: scale(1.05);
 }
 
 .qco-qty-editor { display: flex; align-items: center; gap: 6px; }

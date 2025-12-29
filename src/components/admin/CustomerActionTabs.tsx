@@ -228,7 +228,8 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
         return groups.sort((a, b) => {
             const dateA = convertToDate(a.pickupDate)?.getTime() || 0;
             const dateB = convertToDate(b.pickupDate)?.getTime() || 0;
-            return dateA - dateB;
+            // 최신순 정렬 (내림차순)
+            return dateB - dateA;
         });
     }, [orders]);
 

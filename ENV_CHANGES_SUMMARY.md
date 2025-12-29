@@ -153,3 +153,4 @@ if (missingVars.length > 0) {
 **최종 업데이트**: 2025년 1월
 
 
+

@@ -944,58 +944,59 @@ export const createOrderAsAdmin = onCall(
     // ✅ [감사 로깅] 관리자 작업 감사 로그 기록
     const { withAuditLog } = await import("../utils/auditLogger.js");
     
-    return await withAuditLog(
+    try {
+      return await withAuditLog(
       adminUid,
       "createOrderAsAdmin",
       "order",
       async () => {
         const result = await db.runTransaction(async (transaction) => {
-        const targetUserRef = db.collection('users').withConverter(userConverter).doc(targetUserId);
-        const targetUserSnap = await transaction.get(targetUserRef);
-        if (!targetUserSnap.exists) {
-          throw new HttpsError('not-found', '주문을 생성할 대상 사용자를 찾을 수 없습니다.');
-        }
-        const targetUserData = targetUserSnap.data();
-        if (!targetUserData) {
-          throw new HttpsError('internal', '대상 사용자의 정보를 읽는 데 실패했습니다.');
-        }
+          const targetUserRef = db.collection('users').withConverter(userConverter).doc(targetUserId);
+          const targetUserSnap = await transaction.get(targetUserRef);
+          if (!targetUserSnap.exists) {
+            throw new HttpsError('not-found', '주문을 생성할 대상 사용자를 찾을 수 없습니다.');
+          }
+          const targetUserData = targetUserSnap.data();
+          if (!targetUserData) {
+            throw new HttpsError('internal', '대상 사용자의 정보를 읽는 데 실패했습니다.');
+          }
 
-        const productRef = db.collection("products").withConverter(productConverter).doc(item.productId);
-        const productSnap = await transaction.get(productRef);
-        if (!productSnap.exists) throw new HttpsError('not-found', `상품(ID: ${item.productId})을 찾을 수 없습니다.`);
-        
-        const productData = productSnap.data();
-        if (!productData) {
-          throw new HttpsError('internal', `상품 데이터를 읽는 데 실패했습니다 (ID: ${item.productId}).`);
-        }
-        
-        const round = (productData.salesHistory || []).find(r => r.roundId === item.roundId);
-        const variantGroup = round?.variantGroups.find(vg => vg.id === item.variantGroupId);
-        if (!round || !variantGroup) throw new HttpsError('not-found', '상품 옵션 정보를 찾을 수 없습니다.');
-        
-        const vgId = variantGroup.id || 'default';
+          const productRef = db.collection("products").withConverter(productConverter).doc(item.productId);
+          const productSnap = await transaction.get(productRef);
+          if (!productSnap.exists) throw new HttpsError('not-found', `상품(ID: ${item.productId})을 찾을 수 없습니다.`);
+          
+          const productData = productSnap.data();
+          if (!productData) {
+            throw new HttpsError('internal', `상품 데이터를 읽는 데 실패했습니다 (ID: ${item.productId}).`);
+          }
+          
+          const round = (productData.salesHistory || []).find(r => r.roundId === item.roundId);
+          const variantGroup = round?.variantGroups.find(vg => vg.id === item.variantGroupId);
+          if (!round || !variantGroup) throw new HttpsError('not-found', '상품 옵션 정보를 찾을 수 없습니다.');
+          
+          const vgId = variantGroup.id || 'default';
 
-        // ✅ [변경] 관리자 주문 생성도 칠판(StockStats) 기준 재고 확인
-        if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
+          // ✅ [변경] 관리자 주문 생성도 칠판(StockStats) 기준 재고 확인
+          if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
             const claimedNow = await getClaimedNow(transaction, item.productId, item.roundId, vgId);
             const remaining = variantGroup.totalPhysicalStock - claimedNow;
             const requiredStock = item.quantity * (item.stockDeductionAmount || 1);
             
             if (requiredStock > remaining) {
-                throw new HttpsError('resource-exhausted', `상품 재고가 부족합니다. (남은 수량: ${Math.max(0, Math.floor(remaining / (item.stockDeductionAmount || 1)))})`);
+              throw new HttpsError('resource-exhausted', `상품 재고가 부족합니다. (남은 수량: ${Math.max(0, Math.floor(remaining / (item.stockDeductionAmount || 1)))})`);
             }
-        }
-        
-        const newOrderRef = db.collection('orders').doc();
-        const phoneLast4 = targetUserData.phone?.slice(-4) || '';
+          }
+          
+          const newOrderRef = db.collection('orders').doc();
+          const phoneLast4 = targetUserData.phone?.slice(-4) || '';
 
-        const customerInfo: CustomerInfo = {
+          const customerInfo: CustomerInfo = {
             name: targetUserData.displayName || '',
             phone: targetUserData.phone || '',
             phoneLast4
-        };
+          };
 
-        const newOrderData: Omit<Order, 'id'> = {
+          const newOrderData: Omit<Order, 'id'> = {
             userId: targetUserId,
             customerInfo: customerInfo,
             items: [item],
@@ -1008,29 +1009,29 @@ export const createOrderAsAdmin = onCall(
             notes: `관리자가 생성한 주문입니다.`,
             isBookmarked: false,
             wasPrepaymentRequired: round.isPrepaymentRequired ?? false,
-        };
+          };
 
-        transaction.set(newOrderRef, newOrderData);
-        
-        // ✅ [추가] 칠판 업데이트 (관리자 주문도 재고 점유)
-        applyClaimedDelta(transaction, item.productId, item.roundId, vgId, item.quantity * (item.stockDeductionAmount || 1));
+          transaction.set(newOrderRef, newOrderData);
+          
+          // ✅ [추가] 칠판 업데이트 (관리자 주문도 재고 점유)
+          applyClaimedDelta(transaction, item.productId, item.roundId, vgId, item.quantity * (item.stockDeductionAmount || 1));
 
-        return { success: true, orderId: newOrderRef.id };
-      });
+          return { success: true, orderId: newOrderRef.id };
+        });
 
       return result;
+      },
+      {
+        resourceId: targetUserId,
+        details: {
+          productId: item.productId,
+          roundId: item.roundId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
         },
-        {
-          resourceId: targetUserId,
-          details: {
-            productId: item.productId,
-            roundId: item.roundId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          },
-          adminEmail: adminUser.email,
-        }
-      );
+        adminEmail: adminUser.email,
+      }
+    );
     } catch (error) {
       logger.error(`Admin order creation failed for target user ${targetUserId} by admin ${adminUid}:`, error);
       if (error instanceof HttpsError) throw error;
@@ -1152,11 +1153,12 @@ export const revertFinalizedOrder = onCall(
       throw new HttpsError("invalid-argument", "필수 정보(주문 ID, 원래 상태)가 누락되었습니다.");
     }
 
-    // ✅ 추천 타입(엄격 정책): 취소 계열만 복구 허용
-    if (originalStatus !== "CANCELED" && originalStatus !== "LATE_CANCELED") {
+    // ✅ 허용된 상태: CANCELED, LATE_CANCELED, PICKED_UP, NO_SHOW
+    const allowedStatuses = ["CANCELED", "LATE_CANCELED", "PICKED_UP", "NO_SHOW"];
+    if (!allowedStatuses.includes(originalStatus)) {
       throw new HttpsError(
         "failed-precondition",
-        `revertFinalizedOrder는 CANCELED/LATE_CANCELED만 복구 가능합니다. (요청: ${originalStatus})`
+        `revertFinalizedOrder는 ${allowedStatuses.join(", ")}만 복구 가능합니다. (요청: ${originalStatus})`
       );
     }
 
@@ -1169,56 +1171,129 @@ export const revertFinalizedOrder = onCall(
         const order = orderDoc.data();
         if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
 
-        // ✅ 현재 상태도 반드시 취소 계열이어야 함 (콘솔 수동 수정으로 꼬인 것 방지)
-        if (order.status !== "CANCELED" && order.status !== "LATE_CANCELED") {
+        // ✅ 현재 상태가 원래 상태와 일치하는지 확인
+        if (order.status !== originalStatus) {
           throw new HttpsError(
             "failed-precondition",
-            `현재 상태(${order.status})에서는 복구할 수 없습니다. (CANCELED/LATE_CANCELED만 가능)`
+            `주문 상태가 일치하지 않습니다. (현재: ${order.status}, 요청: ${originalStatus})`
           );
         }
 
-        // 1) LATE_CANCELED라면 페널티 복구(노쇼 -0.5, 포인트 +50)
-        if (order.status === "LATE_CANCELED") {
-          const userRef = db.collection("users").withConverter(userConverter).doc(order.userId);
-          const userSnap = await transaction.get(userRef);
-          if (!userSnap.exists) throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
+        // 사용자 정보 가져오기 (통계 업데이트용)
+        const userRef = db.collection("users").withConverter(userConverter).doc(order.userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists) throw new HttpsError("not-found", "사용자 정보를 찾을 수 없습니다.");
 
-          const userData = userSnap.data();
-          if (!userData) throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
+        const userData = userSnap.data();
+        if (!userData) throw new HttpsError("internal", "사용자 데이터를 읽는 데 실패했습니다.");
 
-          const newNoShowCount = Math.max(0, (userData.noShowCount || 0) - 0.5);
-          const oldTier = userData.loyaltyTier;
-          const newTier = calculateTier(userData.pickupCount || 0, newNoShowCount);
+        // 상태별 복구 로직
+        const userUpdateData: any = {};
+        let pointDelta = 0;
+        let pickupCountDelta = 0;
+        let noShowCountDelta = 0;
 
-          const userUpdateData: any = {
-            noShowCount: newNoShowCount,
-            points: FieldValue.increment(POINT_POLICIES.LATE_CANCEL_PENALTY.points * -1), // -50의 반대 => +50
-          };
-          if (oldTier !== newTier) userUpdateData.loyaltyTier = newTier;
-
-          transaction.update(userRef, userUpdateData);
-        }
-
-        // 2) ✅ 재고 칠판: 취소 상태에서 RESERVED로 돌아가니 claimed를 다시 점유
-        for (const it of order.items || []) {
-          const vgId = it.variantGroupId || "default";
-          const deduct = itemDeduct(it);
-          if (deduct > 0) {
-            applyClaimedDelta(transaction, it.productId, it.roundId, vgId, deduct);
+        if (originalStatus === "LATE_CANCELED") {
+          // LATE_CANCELED: 페널티 복구(노쇼 -0.5, 포인트 +50)
+          noShowCountDelta = -0.5;
+          pointDelta = 50; // LATE_CANCEL_PENALTY의 반대
+        } else if (originalStatus === "PICKED_UP") {
+          // PICKED_UP: 픽업 통계 및 포인트 복구
+          pickupCountDelta = -1;
+          // 포인트 복구: 구매 금액의 1% (또는 0.5% + 선입금 보너스 5점)
+          const purchasePoints = Math.floor((order.totalPrice || 0) * 0.01);
+          pointDelta = -purchasePoints;
+          
+          // 재고 칠판: pickedUp에서 차감, claimed로 복구
+          for (const it of order.items || []) {
+            const vgId = it.variantGroupId || "default";
+            const deduct = itemDeduct(it);
+            if (deduct > 0) {
+              applyPickedUpDelta(transaction, it.productId, it.roundId, vgId, -deduct);
+              applyClaimedDelta(transaction, it.productId, it.roundId, vgId, deduct);
+            }
+          }
+        } else if (originalStatus === "NO_SHOW") {
+          // NO_SHOW: 노쇼 통계 및 포인트 복구
+          noShowCountDelta = -1;
+          pointDelta = 100; // NO_SHOW 페널티의 반대
+          
+          // 재고 칠판: NO_SHOW는 재고가 이미 해제되어 있을 수 있으므로 claimed로 복구
+          for (const it of order.items || []) {
+            const vgId = it.variantGroupId || "default";
+            const deduct = itemDeduct(it);
+            if (deduct > 0) {
+              applyClaimedDelta(transaction, it.productId, it.roundId, vgId, deduct);
+            }
+          }
+        } else if (originalStatus === "CANCELED") {
+          // CANCELED: 재고만 복구 (통계 변경 없음)
+          for (const it of order.items || []) {
+            const vgId = it.variantGroupId || "default";
+            const deduct = itemDeduct(it);
+            if (deduct > 0) {
+              applyClaimedDelta(transaction, it.productId, it.roundId, vgId, deduct);
+            }
           }
         }
 
-        // 3) 주문 상태 복구
-        transaction.update(orderRef, {
+        // 사용자 통계 업데이트
+        if (pickupCountDelta !== 0 || noShowCountDelta !== 0 || pointDelta !== 0) {
+          const newPickupCount = Math.max(0, (userData.pickupCount || 0) + pickupCountDelta);
+          const newNoShowCount = Math.max(0, (userData.noShowCount || 0) + noShowCountDelta);
+          const oldTier = userData.loyaltyTier;
+          const newTier = calculateTier(newPickupCount, newNoShowCount);
+
+          if (pickupCountDelta !== 0) userUpdateData.pickupCount = newPickupCount;
+          if (noShowCountDelta !== 0) userUpdateData.noShowCount = newNoShowCount;
+          if (pointDelta !== 0) userUpdateData.points = FieldValue.increment(pointDelta);
+          if (oldTier !== newTier) userUpdateData.loyaltyTier = newTier;
+
+          if (Object.keys(userUpdateData).length > 0) {
+            transaction.update(userRef, userUpdateData);
+          }
+        }
+
+        // 주문 상태 복구
+        const orderUpdateData: any = {
           status: "RESERVED",
-          canceledAt: FieldValue.delete(),
-          notes: order.notes
-            ? `${order.notes}\n[상태 복구] 관리자에 의해 예약 상태(RESERVED)로 복구되었습니다.`
-            : "[상태 복구] 관리자에 의해 예약 상태(RESERVED)로 복구되었습니다.",
-        });
+        };
+
+        // 상태별 타임스탬프 필드 삭제
+        if (originalStatus === "PICKED_UP") {
+          orderUpdateData.pickedUpAt = FieldValue.delete();
+        } else if (originalStatus === "CANCELED" || originalStatus === "LATE_CANCELED") {
+          orderUpdateData.canceledAt = FieldValue.delete();
+        } else if (originalStatus === "NO_SHOW") {
+          orderUpdateData.noShowAt = FieldValue.delete();
+        }
+
+        // 노트 추가
+        const statusLabels: Record<OrderStatus, string> = {
+          PICKED_UP: "픽업 완료",
+          NO_SHOW: "노쇼",
+          CANCELED: "취소",
+          LATE_CANCELED: "마감임박 취소",
+          RESERVED: "예약",
+          PREPAID: "선입금",
+          COMPLETED: "처리완료",
+        };
+        const statusLabel = statusLabels[originalStatus] || originalStatus;
+        orderUpdateData.notes = order.notes
+          ? `${order.notes}\n[상태 복구] 관리자에 의해 '${statusLabel}' 상태에서 예약 상태(RESERVED)로 복구되었습니다.`
+          : `[상태 복구] 관리자에 의해 '${statusLabel}' 상태에서 예약 상태(RESERVED)로 복구되었습니다.`;
+
+        transaction.update(orderRef, orderUpdateData);
       });
 
-      return { success: true, message: "주문이 예약 상태로 복구되었습니다. (CANCELED/LATE_CANCELED 전용)" };
+      const statusLabels: Record<string, string> = {
+        PICKED_UP: "픽업 완료",
+        NO_SHOW: "노쇼",
+        CANCELED: "취소",
+        LATE_CANCELED: "마감임박 취소",
+      };
+      const statusLabel = statusLabels[originalStatus] || originalStatus;
+      return { success: true, message: `'${statusLabel}' 상태가 예약 상태로 복구되었습니다.` };
     } catch (error) {
       logger.error(`Error reverting order ${orderId}:`, error);
       if (error instanceof HttpsError) throw error;

@@ -49,17 +49,19 @@
 
 .qcp-input {
   width: 100%;
-  padding: 10px 40px 10px 40px; /* ✅ [UI 개선] 좌우 아이콘 공간 확보 */
+  padding: 12px 40px 12px 40px;
   border-radius: var(--border-radius-md);
-  border: 1px solid var(--border-color-light);
-  font-size: 1rem; /* ✅ [UI 개선] 폰트 크기 살짝 키움 */
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border: 2px solid var(--border-color-light);
+  font-size: 1rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: #fff;
 }
 
 .qcp-input:focus {
   outline: none;
-  border-color: var(--primary-color-light);
-  box-shadow: 0 0 0 3px var(--primary-color-softer);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
+  transform: translateY(-1px);
 }
 
 .qcp-clear-icon {
@@ -77,24 +79,32 @@
 }
 
 .qcp-search-button {
-  padding: 10px var(--spacing-md);
-  background-color: var(--primary-color);
+  padding: 10px var(--spacing-lg);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-dark) 100%);
   color: white;
   border: none;
   border-radius: var(--border-radius-md);
   cursor: pointer;
-  font-size: 1rem; /* ✅ [UI 개선] 폰트 크기 살짝 키움 */
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  transition: background-color 0.2s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-grow: 1;
   max-width: 120px;
   justify-content: center;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
 }
 
 .qcp-search-button:hover {
-    background-color: var(--primary-color-dark);
+    background: linear-gradient(135deg, var(--primary-color-dark) 0%, var(--primary-color) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4);
+}
+.qcp-search-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(13, 110, 253, 0.3);
 }
 
 .qcp-search-button:disabled {
@@ -103,16 +113,17 @@
 }
 
 .disambiguation-box {
-  background-color: var(--primary-color-softer);
-  border: 1px solid var(--primary-color-light);
+  background: linear-gradient(135deg, rgba(13, 110, 253, 0.05) 0%, rgba(13, 110, 253, 0.1) 100%);
+  border: 2px solid var(--primary-color-light);
   border-radius: var(--border-radius-lg);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-xl);
   margin: 0 auto var(--spacing-lg) auto;
   text-align: center;
   max-width: 600px;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-md);
+  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.1);
 }
 
 .disambiguation-box h3 {

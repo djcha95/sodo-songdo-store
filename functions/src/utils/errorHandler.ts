@@ -142,7 +142,20 @@ export const handleError = (
     userMessage = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
   }
 
-  return new HttpsError(normalized.code, userMessage, normalized.details);
+  // FunctionsErrorCode 타입으로 변환 (유효한 에러 코드인지 확인)
+  const validErrorCodes = [
+    "ok", "cancelled", "unknown", "invalid-argument", "deadline-exceeded",
+    "not-found", "already-exists", "permission-denied", "resource-exhausted",
+    "failed-precondition", "aborted", "out-of-range", "unimplemented",
+    "internal", "unavailable", "data-loss", "unauthenticated"
+  ] as const;
+  
+  type FunctionsErrorCode = typeof validErrorCodes[number];
+  const errorCode: FunctionsErrorCode = validErrorCodes.includes(normalized.code as FunctionsErrorCode) 
+    ? (normalized.code as FunctionsErrorCode)
+    : "internal";
+
+  return new HttpsError(errorCode, userMessage, normalized.details);
 };
 
 /**

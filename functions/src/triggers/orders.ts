@@ -76,11 +76,9 @@ function calculateUserUpdateFromOrder(
       pickupCountIncrement = 1;
       break;
     }
-    /**
-     * ✅ [신규] 지연 픽업 로직
-     * - 기존 노쇼를 만회했으므로 noShowCount를 1 감소시킴
-     * - 정상 픽업이 아니므로 pickupCount는 0.5만 증가시킴
-     */
+    // ✅ [신규] 지연 픽업 로직
+    // - 기존 노쇼를 만회했으므로 noShowCount를 1 감소시킴
+    // - 정상 픽업이 아니므로 pickupCount는 0.5만 증가시킴
     case "LATE_PICKUP_CONFIRMED": {
         const purchasePoints = Math.floor((order.totalPrice || 0) * 0.005);
         const prepaidBonus = order.wasPrepaymentRequired ? 5 : 0;
@@ -148,7 +146,7 @@ function calculateUserUpdateFromOrder(
 
   return { updateData, tierChange };
 }
-비활성화된 함수 끝 */
+/* 비활성화된 함수 끝 */
 
 interface ProductWithHistory {
   salesHistory: {
