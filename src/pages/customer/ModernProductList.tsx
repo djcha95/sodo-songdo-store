@@ -12,7 +12,6 @@ import { useAuth } from '../../context/AuthContext';
 import { getPaginatedProductsWithStock } from '../../firebase/productService';
 import { getUserOrders } from '../../firebase/orderService';
 import type { Product } from '../../shared/types';
-import ModernProductCard from '../../components/customer/ModernProductCard';
 import ModernProductThumbCard from '../../components/customer/ModernProductThumbCard';
 import { useSearchParams, Outlet, useNavigate } from 'react-router-dom';
 import {
@@ -33,7 +32,7 @@ const LazyShoppingBag = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.ShoppingBag }))
 );
 
-type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite';
+type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite' | 'lastchance';
 const PAGE_SIZE = 30;
 
 // ✅ [복구] 메인 홈 슬라이드 배너 데이터 (베리맘, 헤이유 등)
@@ -115,6 +114,11 @@ const TAB_BANNERS: Record<string, { title: string; desc: string; bg: string; ima
     title: "🏢 현장판매",
     desc: "예약 없이 매장에서 바로 구매 가능",
     bg: "#F0FDF4",
+  },
+  lastchance: {
+    title: "⚡ 마지막 찬스",
+    desc: "재고 3개 이하! 놓치면 후회하는 특가 상품",
+    bg: "#FEF2F2",
   },
 };
 
@@ -303,13 +307,26 @@ const fetchNextPage = useCallback(async () => {
     });
   }, [processedNormal]);
 
+  // ✅ 마지막 찬스: 재고 3개 이하인 상품 필터링 (visibleNormalProducts보다 먼저 정의)
+  const lastChanceProducts = useMemo(() => {
+    return processedNormal.filter((p) => {
+      if (p.phase === 'onsite') return false;
+      const vg = p.displayRound.variantGroups?.[0];
+      if (!vg) return false;
+      const stockInfo = getStockInfo(vg);
+      // 재고가 제한적이고 남은 수량이 3개 이하인 경우
+      return stockInfo.isLimited && stockInfo.remainingUnits > 0 && stockInfo.remainingUnits <= 3;
+    });
+  }, [processedNormal]);
+
   const visibleNormalProducts = useMemo(() => {
     if (activeTab === 'today') return processedNormal.filter(p => p.phase === 'primary');
     if (activeTab === 'additional') return processedNormal.filter(p => p.phase === 'secondary');
     if (activeTab === 'onsite') return processedNormal.filter(p => p.phase === 'onsite');
     if (activeTab === 'tomorrow') return tomorrowPickupProducts;
+    if (activeTab === 'lastchance') return lastChanceProducts;
     return processedNormal;
-  }, [activeTab, processedNormal, tomorrowPickupProducts]);
+  }, [activeTab, processedNormal, tomorrowPickupProducts, lastChanceProducts]);
 
   const todayPrimary = useMemo(() => processedNormal.filter(p => p.phase === 'primary'), [processedNormal]);
   const additionalSorted = useMemo(() => [...processedNormal].filter(p => p.phase === 'secondary'), [processedNormal]);
@@ -486,6 +503,24 @@ const fetchNextPage = useCallback(async () => {
                  ))}
                </div>
              </section>
+          )}
+
+          {/* 마지막 찬스 섹션 */}
+          {lastChanceProducts.length > 0 && (
+            <section className="sp-section">
+              <div className="sp-section-head">
+                <div className="sp-section-left">
+                  <h3 className="sp-section-title">⚡ 마지막 찬스</h3>
+                  <span className="sp-section-desc">재고 3개 이하! 놓치면 후회</span>
+                </div>
+                <button className="sp-viewall" onClick={() => navigate('/?tab=lastchance')} type="button">전체보기</button>
+              </div>
+              <div className="sp-hscroll">
+                {lastChanceProducts.map((p) => (
+                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                ))}
+              </div>
+            </section>
           )}
         </>
       )}

@@ -5,7 +5,7 @@ import SideMenu from './SideMenu';
 import { db } from '../../firebase/firebaseConfig'; // Firebase 설정 확인 필요
 import { collection, getDocs, query } from 'firebase/firestore';
 import dayjs from 'dayjs';
-import { getDisplayRound, safeToDate, determineActionState } from '../../utils/productUtils';
+import { getDisplayRound, safeToDate, determineActionState, getStockInfo } from '../../utils/productUtils';
 import './Header.css';
 
 const ALL_CATEGORIES = [
@@ -15,6 +15,7 @@ const ALL_CATEGORIES = [
   { id: 'special', label: '✨ 기획전' },
   { id: 'additional', label: '🔁 추가공구' },
   { id: 'onsite', label: '🏢 현장판매' },
+  { id: 'lastchance', label: '⚡ 마지막찬스' },
 ];
 
 const Header: React.FC = () => {
@@ -71,10 +72,30 @@ const Header: React.FC = () => {
         // 2. 추가 공구 상품 여부 확인
         const hasAdditional = allProducts.some((p: any) => p.sourceType === 'SODOMALL');
 
+        // 3. 마지막 찬스 상품 여부 확인 (재고 3개 이하)
+        const hasLastChance = allProducts.some((p: any) => {
+          const round = getDisplayRound(p as any);
+          if (!round || round.status === 'draft') return false;
+          
+          // 현장판매는 제외
+          if ((round as any).isManuallyOnsite) return false;
+          
+          // actionState가 ENDED이면 제외
+          const actionState = determineActionState(round, null as any);
+          if (['ENDED', 'AWAITING_STOCK', 'SCHEDULED'].includes(actionState)) return false;
+          
+          // 재고 3개 이하 확인
+          const vg = round.variantGroups?.[0];
+          if (!vg) return false;
+          const stockInfo = getStockInfo(vg);
+          return stockInfo.isLimited && stockInfo.remainingUnits > 0 && stockInfo.remainingUnits <= 3;
+        });
+
         // 필터링 logic
         const nextCategories = ALL_CATEGORIES.filter(cat => {
           if (cat.id === 'tomorrow') return hasTomorrow;
           if (cat.id === 'additional') return hasAdditional;
+          if (cat.id === 'lastchance') return hasLastChance;
           return true; 
         });
 
