@@ -344,7 +344,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     return validateProductForm({
       groupName,
       composition,
-      imageUrls: imagePreviews.filter(p => !p.startsWith('blob:')),
+      imageUrls: imagePreviews, // blob URL도 포함하여 검증 (업로드된 이미지도 유효한 것으로 간주)
       variantGroups,
       deadlineDate,
       pickupDate,
@@ -914,25 +914,32 @@ const ProductForm: React.FC<ProductFormProps> = ({
         return true;
       });
 
+      if (files.length === 0) return;
+
       setNewImageFiles((prev) => [...prev, ...files]);
 
-      setImagePreviews((prev) => {
-        const next = [...prev];
-        const nextMap = new Map(previewUrlToFile);
+      // 새 blob URL 생성 및 상태 업데이트
+      const newUrls: string[] = [];
+      files.forEach((file) => {
+        const url = URL.createObjectURL(file);
+        newUrls.push(url);
+      });
 
-        files.forEach((file) => {
-          const url = URL.createObjectURL(file);
-          next.push(url);
-          nextMap.set(url, file);
+      // 이미지 프리뷰 추가
+      setImagePreviews((prev) => [...prev, ...newUrls]);
+
+      // URL-to-File 매핑 업데이트
+      setPreviewUrlToFile((prevMap) => {
+        const nextMap = new Map(prevMap);
+        files.forEach((file, index) => {
+          nextMap.set(newUrls[index], file);
         });
-
-        setPreviewUrlToFile(nextMap);
-        return next;
+        return nextMap;
       });
 
       e.target.value = '';
     },
-    [previewUrlToFile]
+    []
   );
 
   const removeImage = useCallback(
@@ -1029,15 +1036,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
     }
 
     if (!isDraft) {
-      // 실제 업로드 가능한 이미지가 있는지 확인
-      // 1. 기존 이미지 URL이 있거나
-      // 2. 새로 업로드한 파일이 있거나
-      // 3. imagePreviews에 실제 이미지가 있는 경우
-      const existingImageUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
-      const hasNewFiles = imagePreviews.some(p => p.startsWith('blob:') && previewUrlToFile.has(p));
-      const hasAnyImages = existingImageUrls.length > 0 || hasNewFiles || newImageFiles.length > 0;
-      
-      if (!hasAnyImages) {
+      // imagePreviews에 이미지가 하나라도 있으면 통과
+      if (imagePreviews.length === 0) {
         toast.error('대표 이미지를 1개 이상 등록해주세요.');
         setIsSubmitting(false);
         return;
@@ -1343,7 +1343,19 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
               <button 
                 type="submit" 
-                disabled={isSubmitting || (currentStep < wizardSteps.length - 1 && !validation.isValid)} 
+                disabled={
+                  isSubmitting || 
+                  (currentStep < wizardSteps.length - 1 && (
+                    // 각 단계별로 필요한 검증만 체크
+                    (currentStep === 0 && (!groupName.trim() || !composition.trim() || imagePreviews.length === 0)) ||
+                    (currentStep === 1 && (variantGroups.length === 0 || !variantGroups.every(vg => 
+                      vg.items.length > 0 && 
+                      vg.items.every(item => item.name.trim() && typeof item.price === 'number' && item.price > 0)
+                    ))) ||
+                    (currentStep === 2 && (!deadlineDate || !pickupDate || !pickupDeadlineDate))
+                  )) ||
+                  (currentStep === wizardSteps.length - 1 && !validation.isValid)
+                } 
                 className="save-button"
                 title="저장 (Ctrl+S)"
               >
@@ -1966,7 +1978,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
               <ProductPreview
                 groupName={groupName}
                 description={description}
-                imageUrls={imagePreviews.filter(p => !p.startsWith('blob:'))}
+                imageUrls={imagePreviews}
                 price={typeof variantGroups[0]?.items[0]?.price === 'number' ? variantGroups[0].items[0].price : ''}
                 roundName={roundName}
                 publishDate={publishDate}
