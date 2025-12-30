@@ -7,7 +7,7 @@ import { updateMultipleVariantGroupStocks, deleteSalesRounds, updateSalesRound, 
 import { ensureInventoryItem, archiveInventoryItem } from '@/firebase/inventory'; // ✅ 추가
 import type { Product, SalesRound, VariantGroup, StorageType, ProductItem } from '@/shared/types';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2, Store } from 'lucide-react';
+import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2, Store, Link } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import FilterBar from '@/components/admin/FilterBar';
@@ -106,9 +106,23 @@ const CopyableId: React.FC<{ id: string }> = ({ id }) => {
       .catch(() => toast.error('복사 실패'));
   };
   return (
-    <span className="copyable-id-inline" onClick={handleCopy} title={`전체 ID: ${id}`}>
-      {id.substring(0, 6)}... <Copy size={12} />
-    </span>
+    <button 
+      className="copy-id-button-only" 
+      onClick={handleCopy} 
+      title={`ID 복사: ${id}`}
+      style={{
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        padding: '4px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#64748b'
+      }}
+    >
+      <Copy size={16} />
+    </button>
   );
 };
 
@@ -493,6 +507,20 @@ const fetchData = useCallback(async () => {
     });
   };
 
+  const handleCopyLink = useCallback(async (productId: string) => {
+    const baseUrl = window.location.origin;
+    const productLink = `${baseUrl}/product/${productId}`;
+    const linkText = `👉 예약은 여기에서!\n${productLink}`;
+    
+    try {
+      await navigator.clipboard.writeText(linkText);
+      toast.success('링크가 클립보드에 복사되었습니다!');
+    } catch (error) {
+      reportError('ProductListPageAdmin.handleCopyLink', error);
+      toast.error('링크 복사에 실패했습니다.');
+    }
+  }, []);
+
   const handleDelete = useCallback(async (productId: string, roundId: string, productName: string, roundName: string) => {
     toast((t) => (
       <div className="confirmation-toast-content" style={{ maxWidth: '420px', textAlign: 'center' }}>
@@ -558,11 +586,11 @@ const fetchData = useCallback(async () => {
             <thead>
               <tr>
                 <th className="th-align-center" style={{ width: '50px' }}>No.</th>
-                <th className="th-align-center" style={{ width: '100px' }}>ID</th>
+                <th className="th-align-center" style={{ width: '40px' }}>ID</th>
                 <th className="th-align-center sortable-header" onClick={() => handleSortChange('createdAt')} style={{ width: '80px' }}>
                   등록일 {sortConfig.key === 'createdAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                 </th>
-                <th className="th-align-left sortable-header" onClick={() => handleSortChange('productName')} style={{ minWidth: '150px' }}>
+                <th className="th-align-left sortable-header" onClick={() => handleSortChange('productName')} style={{ minWidth: '220px' }}>
                   상품/회차 {sortConfig.key === 'productName' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                 </th>
                 <th className="th-align-center" style={{ width: '90px' }}>보관</th>
@@ -691,6 +719,7 @@ const fetchData = useCallback(async () => {
                           </td>
                           <td className="td-align-center td-nowrap">
                             <div className="action-buttons-wrapper inline-actions">
+                              <button onClick={() => handleCopyLink(item.productId)} className="admin-action-button" title="상품 링크 복사"><Link size={16} /></button>
                               <button onClick={() => navigate('/admin/products/add', { state: { productId: item.productId, productGroupName: item.productName, lastRound: item.round } })} className="admin-action-button add-round" title="새 회차 추가"><Plus size={16} /></button>
                               <button 
                                 onClick={() => handleToggleOnsite(item.productId, item.round.roundId, isOnsite, item.productName, firstVg ? firstVg.price : 0)}
