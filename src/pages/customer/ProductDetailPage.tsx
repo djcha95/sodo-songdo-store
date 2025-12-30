@@ -75,7 +75,7 @@ const formatExpirationDate = (dateInput: Date | Timestamp | null | undefined): s
     return `${date.format('YY.MM.DD')}`;
 };
 
-const storageLabels: Record<StorageType, string> = { ROOM: '상온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
+const storageLabels: Record<StorageType, string> = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
 const storageIcons: Record<StorageType, React.ReactNode> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} />, FRESH: <Tag size={16} /> };
 
 // 💡 [추가] productService.ts에서 가져온 헬퍼 함수
@@ -234,6 +234,14 @@ const ProductInfo: React.FC<{
                 {isLuxury && <div className="luxury-badge">Premium Collection</div>}
                 
                 <h1 className="product-name">{product.groupName}</h1>
+                
+                {/* ✨ [추가] 상품 설명 표시 */}
+                {product.description && product.description.trim() && (
+                    <div className="markdown-content" style={{ marginTop: '0.5rem', marginBottom: '0.8rem' }}>
+                        {product.description}
+                    </div>
+                )}
+                
                 {countdown && (
                     <div className="countdown-timer-detail">
                         <Clock size={18} />

@@ -1029,7 +1029,15 @@ const ProductForm: React.FC<ProductFormProps> = ({
     }
 
     if (!isDraft) {
-      if (imagePreviews.length === 0) {
+      // 실제 업로드 가능한 이미지가 있는지 확인
+      // 1. 기존 이미지 URL이 있거나
+      // 2. 새로 업로드한 파일이 있거나
+      // 3. imagePreviews에 실제 이미지가 있는 경우
+      const existingImageUrls = imagePreviews.filter(p => !p.startsWith('blob:'));
+      const hasNewFiles = imagePreviews.some(p => p.startsWith('blob:') && previewUrlToFile.has(p));
+      const hasAnyImages = existingImageUrls.length > 0 || hasNewFiles || newImageFiles.length > 0;
+      
+      if (!hasAnyImages) {
         toast.error('대표 이미지를 1개 이상 등록해주세요.');
         setIsSubmitting(false);
         return;
@@ -1435,6 +1443,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
 
               <div className="form-group">
+                <label>상품 설명 (선택)</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="상품에 대한 간단한 설명을 입력하세요."
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-group">
                 <label>카테고리</label>
                 <div
                   className="category-chip-group"
@@ -1460,7 +1478,14 @@ const ProductForm: React.FC<ProductFormProps> = ({
                           color: active ? '#fff' : '#666',
                           cursor: 'pointer',
                         }}
-                        onClick={() => setCategories((prev) => (prev.includes(c) ? [] : [c]))}
+                        onClick={() => {
+                          // 한 개만 선택 가능 (이미 선택된 경우 해제, 아니면 선택)
+                          if (active) {
+                            setCategories([]);
+                          } else {
+                            setCategories([c]);
+                          }
+                        }}
                       >
                         {c}
                       </button>
@@ -1949,6 +1974,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 storageType={selectedStorageType}
                 composition={composition}
                 categories={categories}
+                extraInfo={extraInfo}
               />
             </div>
           </main>
