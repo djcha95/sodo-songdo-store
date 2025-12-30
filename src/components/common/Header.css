@@ -40,6 +40,34 @@
   color: #111;
   text-decoration: none;
   letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.new-year-decoration {
+  font-size: 18px;
+  animation: sparkle 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+.new-year-decoration:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.new-year-decoration:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes sparkle {
+  0%, 100% { 
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.2) rotate(180deg);
+    opacity: 0.8;
+  }
 }
 
 .icon-btn {

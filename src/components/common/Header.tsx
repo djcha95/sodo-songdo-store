@@ -5,6 +5,7 @@ import SideMenu from './SideMenu';
 import { db } from '../../firebase/firebaseConfig'; // Firebase 설정 확인 필요
 import { collection, getDocs, query } from 'firebase/firestore';
 import dayjs from 'dayjs';
+import { getDisplayRound, safeToDate, determineActionState } from '../../utils/productUtils';
 import './Header.css';
 
 const ALL_CATEGORIES = [
@@ -43,20 +44,32 @@ const Header: React.FC = () => {
       try {
         const q = query(collection(db, 'products'));
         const querySnapshot = await getDocs(q);
-        const allProducts = querySnapshot.docs.map(doc => doc.data());
+        const allProducts = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 
-        const tomorrowDate = dayjs().add(1, 'day').format('YYYY-MM-DD');
+        const tomorrowTarget = dayjs().add(1, 'day');
         
-        // 1. 내일 픽업 상품 여부 확인
+        // 1. 내일 픽업 상품 여부 확인 (ModernProductList와 동일한 로직)
         const hasTomorrow = allProducts.some(p => {
-          const rounds = p.salesRounds || [];
-          return rounds.some((r: any) => 
-            (r.arrivalDate === tomorrowDate || r.pickupDate === tomorrowDate) && r.status !== 'draft'
-          );
+          const round = getDisplayRound(p as any);
+          if (!round || round.status === 'draft') return false;
+          
+          // 현장판매는 제외
+          if ((round as any).isManuallyOnsite) return false;
+          
+          // actionState가 ENDED이면 제외
+          const actionState = determineActionState(round, null as any);
+          if (['ENDED', 'AWAITING_STOCK', 'SCHEDULED'].includes(actionState)) return false;
+          
+          // arrivalDate 또는 pickupDate가 내일인지 확인
+          const arrivalDate = safeToDate(round.arrivalDate);
+          const pickupDate = safeToDate(round.pickupDate);
+          const targetDate = arrivalDate ?? pickupDate;
+          
+          return targetDate && dayjs(targetDate).isSame(tomorrowTarget, 'day');
         });
 
         // 2. 추가 공구 상품 여부 확인
-        const hasAdditional = allProducts.some(p => p.sourceType === 'SODOMALL');
+        const hasAdditional = allProducts.some((p: any) => p.sourceType === 'SODOMALL');
 
         // 필터링 logic
         const nextCategories = ALL_CATEGORIES.filter(cat => {
@@ -112,7 +125,7 @@ const Header: React.FC = () => {
                 <Menu size={24} />
               </button>
               <NavLink to="/?tab=home" className="brand-logo">
-                송도PICK
+                <span className="new-year-decoration">🎉</span> 송도PICK <span className="new-year-decoration">✨</span>
               </NavLink>
             </div>
 

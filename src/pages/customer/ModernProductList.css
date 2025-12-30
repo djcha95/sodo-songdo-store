@@ -159,6 +159,67 @@
     background: #fff;
     transform: translateZ(0);
 }
+
+/* ✅ 2026 새해 배너 특별 스타일 */
+.event-hero-wrapper.new-year-banner {
+    box-shadow: 0 10px 40px rgba(255, 107, 107, 0.25);
+    position: relative;
+    overflow: visible;
+}
+
+.event-hero-wrapper.new-year-banner::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #FF6B6B, #FFD93D, #6BCF7F, #4D96FF, #FF6B6B);
+    background-size: 300% 300%;
+    border-radius: 22px;
+    z-index: -1;
+    animation: gradientShift 3s ease infinite;
+    opacity: 0.6;
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.event-hero-wrapper.new-year-banner .event-hero-slide {
+    position: relative;
+}
+
+.event-hero-wrapper.new-year-banner .event-hero-slide::before {
+    content: '🎉';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 32px;
+    opacity: 0.4;
+    z-index: 0;
+    animation: float 3s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.event-hero-wrapper.new-year-banner .event-hero-slide::after {
+    content: '✨';
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    font-size: 24px;
+    opacity: 0.4;
+    z-index: 0;
+    animation: float 2.5s ease-in-out infinite reverse;
+    pointer-events: none;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-10px) rotate(5deg); }
+}
 .event-hero-slider {
     display: flex; width: 100%; transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
 }

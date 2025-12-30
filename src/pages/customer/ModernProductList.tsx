@@ -51,6 +51,18 @@ interface EventBanner {
 }
 
 const EVENT_BANNERS: EventBanner[] = [
+  // ✅ [추가] 2026 새해 축하 배너
+  {
+    id: 'new-year-2026',
+    chip: '🎊 Happy New Year',
+    title: '2026년 새해를 맞이하며',
+    desc: '새로운 한 해에도 송도픽과 함께하세요! 감사합니다 ✨',
+    cta: '',
+    bg: 'linear-gradient(135deg, #FF6B6B 0%, #FFD93D 50%, #6BCF7F 100%)',
+    linkType: 'none',
+    image: undefined,
+    imageAlt: '2026 새해',
+  },
   {
     id: 'berrymom-open',
     chip: '단독 예약특가 런칭',
@@ -74,19 +86,6 @@ const EVENT_BANNERS: EventBanner[] = [
     href: '/partner/hey-u-beauty',
     image: '/images/heyu/asd.jpg',
     imageAlt: '헤이유 뷰티룸',
-  },
-
-  // ✅ [추가] 크리스마스 리뷰 감사 이벤트 (이동 없음)
-  {
-    id: 'xmas-review-gift-2025-12',
-    chip: '🎄 리뷰 감사 이벤트',
-    title: '사진 + 한줄 후기 남기면 선물🎁',
-    desc: '크리스마스 데코세트 1개 증정 (1인 1개 · 선착순 · 소진 시 종료)',
-    cta: '리뷰로 받는 작은 선물',
-    bg: 'linear-gradient(135deg, #FFF7F3 0%, #FDE2E2 40%, #E7F8EF 100%)',
-    linkType: 'none',
-    image: '/images/events/xmas-deco-review.png', // ✅ 너가 넣을 이미지 경로
-    imageAlt: '크리스마스 리뷰 이벤트',
   },
 ];
 
@@ -132,7 +131,6 @@ const ModernProductList: React.FC = () => {
   const [activeBanner, setActiveBanner] = useState(0);
 
   const [heroProducts, setHeroProducts] = useState<Product[]>([]);
-  const [beautyProducts, setBeautyProducts] = useState<Product[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [myOrderMap, setMyOrderMap] = useState<Record<string, number>>({});
@@ -181,7 +179,7 @@ const ModernProductList: React.FC = () => {
   }, [user]);
   useEffect(() => { fetchMyOrders(); }, [fetchMyOrders]);
 
-  // 특수 상품(기획전/뷰티) 로드
+  // 특수 상품(기획전) 로드
   useEffect(() => {
   const fetchSpecialProducts = async () => {
     try {
@@ -193,12 +191,6 @@ const ModernProductList: React.FC = () => {
         return hasEventTag && determineActionState(r, null) !== 'ENDED';
       });
       setHeroProducts(events);
-      
-      const beauty = fetched.filter((p) => {
-        const r = getDisplayRound(p);
-        return r && (r.eventType === 'COSMETICS' || r.eventType === 'PREMIUM');
-      });
-      setBeautyProducts(beauty);
     } catch (e) { console.error(e); }
   };
   fetchSpecialProducts();
@@ -282,10 +274,6 @@ const fetchNextPage = useCallback(async () => {
       });
   }, [heroProducts]);
 
-  const processedBeautyProducts = useMemo(() => 
-    beautyProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any, isPreorder: true }))
-      .filter(p => p.displayRound).slice(0, 7), 
-  [beautyProducts]);
 
   const processedNormal = useMemo(() => {
     const now = dayjs();
@@ -359,7 +347,7 @@ const fetchNextPage = useCallback(async () => {
         <>
           {/* ✅ [복구] 이벤트/기획전 슬라이드 배너 (베리맘, 헤이유 등) */}
           {EVENT_BANNERS.length > 0 && (
-            <section className="event-hero-wrapper">
+            <section className="event-hero-wrapper new-year-banner">
               <div
                 className="event-hero-slider"
                 style={{ transform: `translateX(-${activeBanner * 100}%)` }}
@@ -379,7 +367,7 @@ const fetchNextPage = useCallback(async () => {
                         <span className="event-hero-chip">{banner.chip}</span>
                         <h2 className="event-hero-title">{banner.title}</h2>
                         <p className="event-hero-desc">{banner.desc}</p>
-                        <div className="event-hero-cta">{banner.cta}</div>
+                        {banner.cta && <div className="event-hero-cta">{banner.cta}</div>}
                       </div>
                       {banner.image && (
                         <div className="event-hero-image-wrap">
@@ -411,38 +399,11 @@ const fetchNextPage = useCallback(async () => {
             </section>
           )}
 
-{/* 뷰티 & 프리미엄 섹션 (홈에서만) */}
-{processedBeautyProducts.length > 0 && (
-  <section className="beauty-section" style={{ backgroundColor: '#FDFBF7', padding: '16px 0', margin: '8px 0' }}>
-    <div className="beauty-section-header" style={{ padding: '0 20px', marginBottom: '8px' }}>
-      <div className="beauty-left">
-        {/* ✅ PRE-ORDER 대신 직관적인 문구로 변경 */}
-        <span className="beauty-chip" style={{ background: '#D4AF37', color: '#fff', fontSize: '10px', padding: '4px 10px' }}>
-            단독 예약특가
-        </span>
-        <h3 className="beauty-title" style={{ fontSize: '16px', marginTop: '6px' }}>프리미엄 뷰티 컬렉션</h3>
-        <p style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-          정식 판매 전, 예약 구매로 가장 먼저 만나는 최상의 혜택 🌿
-        </p>
-      </div>
-    </div>
-
-    {/* ✅ 가로 스크롤 (카드 너비가 200px로 늘어나서 이름이 더 잘 보임) */}
-    <div className="sp-hscroll" style={{ padding: '0 20px 4px' }}>
-      {processedBeautyProducts.map((p) => (
-        <ModernProductThumbCard 
-          key={`beauty-${p.id}`} 
-          product={p as any} 
-          variant="row" 
-        />
-      ))}
-    </div>
-  </section>
-)}
+          {/* ✅ 오늘의 공구 섹션 (배너 바로 아래로 이동) */}
           <section className="sp-section">
             <div className="sp-section-head">
               <div className="sp-section-left">
-                <h3 className="sp-section-title">오늘의 공구</h3>
+                <h3 className="sp-section-title">🔥 오늘의 공구</h3>
                 <span className="sp-section-desc">오늘의 새로운 공동구매</span>
               </div>
               <button className="sp-viewall" onClick={() => navigate('/?tab=today')} type="button">전체보기</button>
