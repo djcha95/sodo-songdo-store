@@ -45,6 +45,94 @@ if ('serviceWorker' in navigator) {
     });
   }
 }
+
+// ✅ [추가] 동적 import 오류 전역 핸들러
+window.addEventListener('unhandledrejection', (event) => {
+  const error = event.reason;
+  const errorMessage = error?.message || String(error);
+  
+  // 동적 import 실패 오류 감지
+  if (
+    typeof errorMessage === 'string' && 
+    errorMessage.includes('Failed to fetch dynamically imported module')
+  ) {
+    event.preventDefault(); // 기본 오류 표시 방지
+    
+    // 이미 처리 중이면 무시 (중복 처리 방지)
+    if (sessionStorage.getItem('chunk-error-handled') === 'true') {
+      return;
+    }
+    
+    sessionStorage.setItem('chunk-error-handled', 'true');
+    
+    // 3초 후 자동으로 홈으로 리다이렉트
+    setTimeout(() => {
+      sessionStorage.removeItem('chunk-error-handled');
+      window.location.href = '/';
+    }, 3000);
+    
+    // 사용자에게 친화적인 메시지 표시
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+      padding: 24px;
+    `;
+    errorDiv.innerHTML = `
+      <div style="
+        background: white;
+        border-radius: 20px;
+        padding: 32px 24px;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      ">
+        <div style="font-size: 48px; margin-bottom: 16px;">🔄</div>
+        <h2 style="
+          font-size: 18px;
+          font-weight: 700;
+          margin: 0 0 12px;
+          color: #111;
+        ">사이트가 업데이트되었습니다</h2>
+        <p style="
+          font-size: 14px;
+          color: #666;
+          line-height: 1.6;
+          margin: 0 0 24px;
+        ">최신 버전으로 자동 이동합니다...</p>
+        <div style="
+          width: 100%;
+          height: 4px;
+          background: #f0f0f0;
+          border-radius: 2px;
+          overflow: hidden;
+        ">
+          <div style="
+            width: 100%;
+            height: 100%;
+            background: #000;
+            animation: progress 3s linear;
+          "></div>
+        </div>
+        <style>
+          @keyframes progress {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+          }
+        </style>
+      </div>
+    `;
+    document.body.appendChild(errorDiv);
+  }
+});
 // 1. 고객용 페이지
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
@@ -71,7 +159,19 @@ const SalesRoundEditPage = React.lazy(() => import('@/pages/admin/SalesRoundEdit
 const UserListPage = React.lazy(() => import('@/pages/admin/UserListPage'));
 const UserDetailPage = React.lazy(() => import('@/pages/admin/UserDetailPage'));
 const OrderManagementPage = React.lazy(() => import('@/pages/admin/OrderManagementPage'));
-const QuickCheckPage = React.lazy(() => import('@/pages/admin/QuickCheckPage'));
+// ✅ [수정] 동적 import 실패 시 재시도 로직 추가
+const QuickCheckPage = React.lazy(() => {
+  return import('@/pages/admin/QuickCheckPage').catch((error) => {
+    // 동적 import 실패 시 홈으로 리다이렉트
+    if (error?.message?.includes('Failed to fetch dynamically imported module')) {
+      console.warn('[QuickCheckPage] Dynamic import failed, redirecting to home');
+      window.location.href = '/';
+      // 빈 컴포넌트 반환 (리다이렉트 중 표시)
+      return { default: () => <SodomallLoader message="페이지를 불러오는 중..." /> };
+    }
+    throw error;
+  });
+});
 const CreateOrderPage = React.lazy(() => import('@/pages/admin/CreateOrderPage'));
 const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage'));
 const PickupCheckPage = React.lazy(() => import('@/pages/admin/PickupCheckPage'));

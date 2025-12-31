@@ -86,6 +86,30 @@ const EVENT_BANNERS: EventBanner[] = [
     image: '/images/heyu/asd.jpg',
     imageAlt: '헤이유 뷰티룸',
   },
+  {
+    id: 'last-chance',
+    chip: '⚡ 마지막 찬스',
+    title: '⚡ 마지막 찬스',
+    desc: '재고 3개 이하! 놓치면 후회하는 특가 상품',
+    cta: '지금 바로 확인하기',
+    bg: '#FEF2F2',
+    linkType: 'internal',
+    href: '/?tab=lastchance',
+    image: undefined,
+    imageAlt: '마지막 찬스',
+  },
+  {
+    id: 'additional-sale',
+    chip: '🔁 추가공구',
+    title: '🔁 추가공구',
+    desc: '아쉽게 놓친 상품, 잔여 수량 줍줍 찬스',
+    cta: '추가공구 보기',
+    bg: '#F3F4F6',
+    linkType: 'internal',
+    href: '/?tab=additional',
+    image: undefined,
+    imageAlt: '추가공구',
+  },
 ];
 
 // ✅ [유지] 탭별 상단 배너 (각 탭 진입 시 보이는 배너)

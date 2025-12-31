@@ -11,11 +11,11 @@ import './Header.css';
 const ALL_CATEGORIES = [
   { id: 'home', label: '스토어홈' },
   { id: 'today', label: '🔥 오늘공구' },
-  { id: 'tomorrow', label: '🚀 내일픽업' },
-  { id: 'special', label: '✨ 기획전' },
   { id: 'additional', label: '🔁 추가공구' },
-  { id: 'onsite', label: '🏢 현장판매' },
   { id: 'lastchance', label: '⚡ 마지막찬스' },
+  { id: 'special', label: '✨ 기획전' },
+  { id: 'tomorrow', label: '🚀 내일픽업' },
+  { id: 'onsite', label: '🏢 현장판매' },
 ];
 
 const Header: React.FC = () => {

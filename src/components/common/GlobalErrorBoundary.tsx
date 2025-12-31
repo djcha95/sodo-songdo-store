@@ -32,6 +32,15 @@ class GlobalErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
     // 개발자 콘솔에서 상세 로그 확인용
     console.error("[GlobalErrorBoundary] Caught error:", error, errorInfo);
+    
+    // 동적 import 오류인 경우 자동으로 홈으로 리다이렉트
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage?.includes('Failed to fetch dynamically imported module')) {
+      // 2초 후 자동으로 홈으로 이동
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+    }
   }
 
   private handleReload = () => {

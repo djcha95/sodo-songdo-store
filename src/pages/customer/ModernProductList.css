@@ -469,6 +469,37 @@
   padding: 14px 16px 6px;
 }
 
+/* 섹션 배너 (홈 화면용) */
+.sp-section-banner {
+  margin: 0 -16px 16px -16px;
+  padding: 20px 20px;
+  border-radius: 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.sp-section-banner-content {
+  position: relative;
+  z-index: 1;
+}
+
+.sp-section-banner-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111;
+  letter-spacing: -0.3px;
+}
+
+.sp-section-banner-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #4B5563;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
 .sp-section-head {
   display: flex;
   align-items: baseline;
