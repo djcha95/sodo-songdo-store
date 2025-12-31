@@ -16,6 +16,7 @@ export const validateProductForm = (data: {
   groupName: string;
   composition: string;
   imageUrls: string[];
+  selectedStorageType?: 'ROOM' | 'COLD' | 'FROZEN' | 'FRESH';
   variantGroups: Array<{
     groupName: string;
     items: Array<{
@@ -141,11 +142,19 @@ export const validateProductForm = (data: {
   }
 
   if (data.pickupDate && data.pickupDeadlineDate && data.pickupDate >= data.pickupDeadlineDate) {
-    errors.push({
-      field: 'pickupDeadlineDate',
-      message: '픽업 마감일은 픽업 시작일보다 이후여야 합니다',
-      type: 'error',
-    });
+    const allowSameDay =
+      data.selectedStorageType === 'COLD' || data.selectedStorageType === 'FRESH';
+
+    // ✅ 냉장/신선: 당일 픽업(시작일 = 마감일) 허용
+    if (!(allowSameDay && data.pickupDate.getTime() === data.pickupDeadlineDate.getTime())) {
+      errors.push({
+        field: 'pickupDeadlineDate',
+        message: allowSameDay
+          ? '픽업 마감일은 픽업 시작일보다 이전일 수 없습니다'
+          : '픽업 마감일은 픽업 시작일보다 이후여야 합니다',
+        type: 'error',
+      });
+    }
   }
 
   return {

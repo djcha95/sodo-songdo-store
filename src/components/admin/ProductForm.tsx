@@ -109,14 +109,33 @@ const convertToDate = (dateSource: any): Date | null => {
   if (typeof dateSource.toDate === 'function') return dateSource.toDate();
   if (
     typeof dateSource === 'object' &&
-    dateSource.seconds !== undefined &&
-    dateSource.nanoseconds !== undefined
+    (
+      (dateSource.seconds !== undefined && dateSource.nanoseconds !== undefined) ||
+      (dateSource._seconds !== undefined && dateSource._nanoseconds !== undefined)
+    )
   ) {
-    return new Timestamp(dateSource.seconds, dateSource.nanoseconds).toDate();
+    // ✅ Firestore Timestamp가 직렬화될 때 {seconds,nanoseconds} 또는 {_seconds,_nanoseconds} 둘 다 케어
+    const seconds = typeof dateSource.seconds === 'number' ? dateSource.seconds : dateSource._seconds;
+    const nanos = typeof dateSource.nanoseconds === 'number' ? dateSource.nanoseconds : dateSource._nanoseconds;
+    if (typeof seconds === 'number' && typeof nanos === 'number') {
+      return new Timestamp(seconds, nanos).toDate();
+    }
   }
   const d = new Date(dateSource);
   if (!isNaN(d.getTime())) return d;
   return null;
+};
+
+// -------------------- date rules --------------------
+// ✅ 발행일 기준 "다음날 13:00" (단, 토요일 발행이면 월요일 13:00)
+const computeDefaultDeadlineFromPublish = (publishAt: Date): Date => {
+  const publishDay = dayjs(publishAt);
+  let target = publishDay.add(1, 'day');
+  // 다음날이 일요일이면(=토요일 발행) 월요일로
+  if (target.day() === 0) {
+    target = target.add(1, 'day');
+  }
+  return target.hour(13).minute(0).second(0).millisecond(0).toDate();
 };
 
 const normalizeNumberInput = (v: string): number | '' => {
@@ -343,12 +362,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
       groupName,
       composition,
       imageUrls: imagePreviews, // blob URL도 포함하여 검증 (업로드된 이미지도 유효한 것으로 간주)
+      selectedStorageType,
       variantGroups,
       deadlineDate,
       pickupDate,
       pickupDeadlineDate,
     });
-  }, [groupName, composition, imagePreviews, variantGroups, deadlineDate, pickupDate, pickupDeadlineDate]);
+  }, [groupName, composition, imagePreviews, selectedStorageType, variantGroups, deadlineDate, pickupDate, pickupDeadlineDate]);
 
   // 진행률 계산
   const progress = useMemo(() => {
@@ -607,9 +627,39 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
           if (mode === 'editRound') {
             setPublishDate(convertToDate((roundData as any).publishAt) || new Date());
-            setDeadlineDate(convertToDate((roundData as any).deadlineDate));
-            setPickupDate(convertToDate((roundData as any).pickupDate));
-            setPickupDeadlineDate(convertToDate((roundData as any).pickupDeadlineDate));
+            const loadedPublish = convertToDate((roundData as any).publishAt) || new Date();
+
+            const loadedDeadline =
+              convertToDate((roundData as any).deadlineDate) ||
+              convertToDate((roundData as any).deadlineAt);
+
+            // ✅ deadlineDate가 비어있으면 발행일 기준 자동 규칙으로 채움(덮어쓰지 않음)
+            setDeadlineDate(loadedDeadline || computeDefaultDeadlineFromPublish(loadedPublish));
+
+            // ✅ pickupDate가 비어있으면 arrivalDate(레거시/고객용)도 fallback
+            const loadedPickup =
+              convertToDate((roundData as any).pickupDate) ||
+              convertToDate((roundData as any).arrivalDate);
+            const loadedPickupDeadline = convertToDate((roundData as any).pickupDeadlineDate);
+
+            setPickupDate(loadedPickup);
+
+            // ✅ [보정] 기존 데이터가 비어있는 경우에만 보관타입 기반으로 자동 채움 (덮어쓰지 않음)
+            if (!loadedPickupDeadline && loadedPickup) {
+              const st = product.storageType;
+              if (st === 'COLD' || st === 'FRESH') {
+                setPickupDeadlineDate(loadedPickup);
+              } else if (st === 'ROOM' || st === 'FROZEN') {
+                const next = new Date(loadedPickup);
+                next.setDate(next.getDate() + 1);
+                next.setHours(13, 0, 0, 0);
+                setPickupDeadlineDate(next);
+              } else {
+                setPickupDeadlineDate(null);
+              }
+            } else {
+              setPickupDeadlineDate(loadedPickupDeadline);
+            }
           }
 
           setIsPrepaymentRequired(roundData.isPrepaymentRequired ?? false);
