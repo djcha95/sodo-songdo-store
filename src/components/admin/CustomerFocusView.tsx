@@ -21,6 +21,9 @@ interface CustomerFocusViewProps {
     onBack: () => void;
     onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
+    reviewCount?: number;
+    onAddReview?: () => void;
+    onOpenReviews?: () => void;
 }
 
 const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({ 
@@ -28,7 +31,10 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
     orders, 
     onBack, 
     onStatUpdate, 
-    onActionSuccess 
+    onActionSuccess,
+    reviewCount,
+    onAddReview,
+    onOpenReviews
 }) => {
 
     const handleMarkAsNoShow = (group: AggregatedOrderGroup) => {
@@ -66,7 +72,12 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
             </div>
             <div className="cfv-body">
                 <aside className="cfv-left-column">
-                    <CustomerProfileSummary user={user} />
+                    <CustomerProfileSummary
+                        user={user}
+                        reviewCount={reviewCount}
+                        onAddReview={onAddReview}
+                        onOpenReviews={onOpenReviews}
+                    />
                 </aside>
                 <main className="cfv-right-column">
                     <CustomerActionTabs 
@@ -75,6 +86,7 @@ const CustomerFocusView: React.FC<CustomerFocusViewProps> = ({
                         onStatUpdate={onStatUpdate}
                         onActionSuccess={onActionSuccess}
                         onMarkAsNoShow={handleMarkAsNoShow}
+                        reviewCount={reviewCount}
                     />
                 </main>
             </div>

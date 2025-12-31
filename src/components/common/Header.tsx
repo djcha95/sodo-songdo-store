@@ -14,6 +14,7 @@ const ALL_CATEGORIES = [
   { id: 'additional', label: '🔁 추가공구' },
   { id: 'lastchance', label: '⚡ 마지막찬스' },
   { id: 'special', label: '✨ 기획전' },
+  { id: 'reviews', label: '💬 후기' },
   { id: 'tomorrow', label: '🚀 내일픽업' },
   { id: 'onsite', label: '🏢 현장판매' },
 ];
@@ -27,8 +28,13 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const currentTab = searchParams.get('tab') || 'home';
-  const isModernPage = location.pathname === '/' || location.pathname.startsWith('/product');
+  const currentTab = location.pathname === '/reviews'
+    ? 'reviews'
+    : (searchParams.get('tab') || 'home');
+  const isModernPage =
+    location.pathname === '/' ||
+    location.pathname.startsWith('/product') ||
+    location.pathname === '/reviews';
   const isHistoryPage = location.pathname === '/mypage/history';
 
   // 인디케이터 위치/폭
@@ -171,7 +177,7 @@ const Header: React.FC = () => {
                     {visibleCategories.map((cat) => (
                       <li key={cat.id}>
                         <NavLink
-                          to={`/?tab=${cat.id}`}
+                          to={cat.id === 'reviews' ? '/reviews' : `/?tab=${cat.id}`}
                           replace
                           ref={(node) => {
                             tabRefs.current[cat.id] = node;

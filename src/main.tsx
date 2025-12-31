@@ -177,6 +177,8 @@ const PrepaidCheckPage = React.lazy(() => import('@/pages/admin/PrepaidCheckPage
 const PickupCheckPage = React.lazy(() => import('@/pages/admin/PickupCheckPage'));
 const AdminStockPage = React.lazy(() => import('@/pages/admin/AdminStockPage'));
 const AdminToolsPage = React.lazy(() => import('@/pages/admin/AdminToolsPage')); // 👈 추가
+const ReviewManagementPage = React.lazy(() => import('@/pages/admin/ReviewManagementPage'));
+const ReviewEventPage = React.lazy(() => import('@/pages/customer/ReviewEventPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -301,6 +303,7 @@ const router = createBrowserRouter([
               { path: "orders", element: <OrderHistoryPage /> }, // 캘린더 페이지가 별도로 있다면 교체, 일단 히스토리로 연결
             ]
           },
+          { path: "reviews", element: <ReviewEventPage /> },
         ],
       },
         ],
@@ -328,6 +331,7 @@ const router = createBrowserRouter([
           { path: "users/:userId", element: <UserDetailPage /> },
           // 👇 [추가] 시스템 도구 페이지 경로 설정
           { path: "tools", element: <MasterOnlyRoute><AdminToolsPage /></MasterOnlyRoute> },
+          { path: "reviews", element: <ReviewManagementPage /> },
 
           // ✅ 숨김/차단 대상 라우트는 여기서 자동으로 잡아서 안내 페이지로 연결
           ...ADMIN_HIDDEN_ROUTES.map((r) => ({

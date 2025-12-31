@@ -50,17 +50,19 @@ interface EventBanner {
 }
 
 const EVENT_BANNERS: EventBanner[] = [
-  // ✅ [추가] 2026 새해 축하 배너
+  // ✅ [수정] 신년 리뷰 이벤트 배너
   {
-    id: 'new-year-2026',
-    chip: '🎊 Happy New Year',
-    title: '2026년 새해를 맞이하며',
-    desc: '새로운 한 해에도 송도픽과 함께하세요! 감사합니다 ✨',
-    cta: '',
-    bg: 'linear-gradient(135deg, #FF6B6B 0%, #FFD93D 50%, #6BCF7F 100%)',
-    linkType: 'none',
-    image: undefined,
-    imageAlt: '2026 새해',
+    id: 'review-event-2026-newyear',
+    chip: '🎁 신년 리뷰 이벤트',
+    title: '신년 리뷰이벤트!',
+    desc: '카톡방에 사진+글로 후기 남기면 7,500원 상당 미주라 크래커 드려요',
+    cta: '카톡방에 후기 남기기',
+    // ✅ 밝고 깔끔한 배경
+    bg: 'linear-gradient(135deg, #FFF7ED 0%, #FFFBEB 40%, #ECFEFF 100%)',
+    linkType: 'external',
+    href: 'https://open.kakao.com/o/g917Hh9g',
+    image: '/images/events/미주라크래커.png',
+    imageAlt: '미주라 크래커',
   },
   {
     id: 'berrymom-open',
@@ -360,7 +362,7 @@ const fetchNextPage = useCallback(async () => {
 
   return (
     <div className="customer-page-container modern-list-page">
-      
+      <div className="modern-inner-shell">
       {/* 뷰티 섹션 (홈에서만) - 배너 아래에 위치하길 원하면 순서 조정 가능 */}
       {/* 일단 요청하신대로 '배너' 복구에 집중 */}
 
@@ -388,7 +390,7 @@ const fetchNextPage = useCallback(async () => {
         <>
           {/* ✅ [복구] 이벤트/기획전 슬라이드 배너 (베리맘, 헤이유 등) */}
           {EVENT_BANNERS.length > 0 && (
-            <section className="event-hero-wrapper new-year-banner">
+            <section className="event-hero-wrapper">
               <div
                 className="event-hero-slider"
                 style={{ transform: `translateX(-${activeBanner * 100}%)` }}
@@ -410,10 +412,16 @@ const fetchNextPage = useCallback(async () => {
                         <p className="event-hero-desc">{banner.desc}</p>
                         {banner.cta && <div className="event-hero-cta">{banner.cta}</div>}
                       </div>
-                      {banner.image && (
+                      {(banner.image || banner.id === 'review-event-2026-newyear') && (
                         <div className="event-hero-image-wrap">
-                           {/* alt 텍스트 안전하게 처리 */}
-                           <img src={banner.image} alt={banner.imageAlt || ''} />
+                          {banner.image ? (
+                            <img src={banner.image} alt={banner.imageAlt || ''} />
+                          ) : (
+                            <div className="event-hero-image-placeholder">
+                              <div className="event-hero-image-placeholder-title">미주라 크래커</div>
+                              <div className="event-hero-image-placeholder-sub">사진 자리</div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -588,6 +596,7 @@ const fetchNextPage = useCallback(async () => {
       {activeTab !== 'all' && <div ref={observerRef} style={{ height: 1 }} />}
       {isLoadingMore && <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>불러오는 중...</div>}
       <Outlet />
+      </div>
     </div>
   );
 };

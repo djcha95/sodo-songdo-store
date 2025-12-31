@@ -4,7 +4,7 @@ import React from 'react';
 import { Link } from 'react-router-dom'; 
 import type { UserDocument, LoyaltyTier } from '@/shared/types';
 import {
-    Crown, Gem, Sparkles, ShieldAlert, ShieldX, User, Mail, Phone, BarChart3
+    Crown, Gem, Sparkles, ShieldAlert, ShieldX, User, Mail, Phone, BarChart3, MessageSquarePlus, MessageSquare
 } from 'lucide-react'; // ✅ [수정] 사용하지 않는 TrendingUp 아이콘 제거
 import { formatPhoneNumber } from '@/utils/formatUtils';
 import './CustomerProfileSummary.css';
@@ -23,9 +23,12 @@ const getLoyaltyInfo = (tier: LoyaltyTier) => {
 
 interface CustomerProfileSummaryProps {
     user: UserDocument;
+    reviewCount?: number;
+    onAddReview?: () => void;
+    onOpenReviews?: () => void;
 }
 
-const CustomerProfileSummary: React.FC<CustomerProfileSummaryProps> = ({ user }) => {
+const CustomerProfileSummary: React.FC<CustomerProfileSummaryProps> = ({ user, reviewCount, onAddReview, onOpenReviews }) => {
     const { 
         loyaltyTier = '공구초보',
         pickupCount = 0, 
@@ -68,7 +71,33 @@ const CustomerProfileSummary: React.FC<CustomerProfileSummaryProps> = ({ user })
                         <span>신뢰도 포인트</span>
                         <strong className="text-points">{(user.points || 0).toLocaleString()} P</strong>
                     </div>
+                    {typeof reviewCount === 'number' && (
+                      <div className="cps-grid-item cps-grid-item-clickable" role="button" tabIndex={0}
+                        onClick={onOpenReviews}
+                        onKeyDown={(e) => { if (e.key === 'Enter') onOpenReviews?.(); }}
+                        title="후기 목록 보기"
+                      >
+                        <span>후기</span>
+                        <strong className="text-primary">{reviewCount}개</strong>
+                      </div>
+                    )}
                 </div>
+                {(onAddReview || onOpenReviews) && (
+                  <div className="cps-review-actions">
+                    {onAddReview && (
+                      <button type="button" className="cps-review-btn primary" onClick={onAddReview}>
+                        <MessageSquarePlus size={16} />
+                        후기 추가
+                      </button>
+                    )}
+                    {onOpenReviews && (
+                      <button type="button" className="cps-review-btn" onClick={onOpenReviews}>
+                        <MessageSquare size={16} />
+                        후기 보기
+                      </button>
+                    )}
+                  </div>
+                )}
             </div>
 
             <div className="cps-section">

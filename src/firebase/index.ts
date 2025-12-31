@@ -9,6 +9,7 @@ export * from './userService';
 export * from './bannerService';
 export * from './pointService'; // ✅ [추가] pointService의 함수들을 내보냅니다.
 export * from './notificationService'; // ✅ [추가] notificationService export
+export * from './reviewService'; // ✅ [추가] reviewService export
 
 // 설정 파일에서 db, auth, storage 인스턴스도 함께 내보내서
 // 혹시 다른 곳에서 필요할 경우 사용할 수 있게 합니다.

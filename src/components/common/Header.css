@@ -1,8 +1,8 @@
 /* src/components/common/Header.css */
 
-/* 헤더(바깥은 투명, “페이지 한 장”은 header-shell) */
+/* 헤더(바깥은 #F9FAFB, "페이지 한 장"은 header-shell) */
 .new-customer-header {
-  background: transparent;
+  background-color: #F9FAFB; /* ✅ 원래대로 복구 */
   position: sticky;
   top: 0;
   width: 100%;
@@ -10,12 +10,12 @@
   border-bottom: none;
 }
 
-/* ✅ 메인 컨테이너와 동일한 폭의 “한 장” */
+/* ✅ 메인 컨테이너와 동일한 폭의 "한 장" */
 .header-shell {
   max-width: 900px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background: #FFFFFF !important; /* ✅ 완전히 불투명한 흰색으로 통일 */
+  backdrop-filter: none; /* ✅ blur 제거하여 완전한 흰색 보장 */
 }
 
 /* 1열 */

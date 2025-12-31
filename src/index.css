@@ -26,7 +26,7 @@ body {
   font-family: 'Pretendard', var(--font-family-sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-color-gray-soft);
+  background-color: #F9FAFB; /* ✅ ModernProductList와 동일한 배경색 */
   color: var(--text-color-dark);
   line-height: 1.6;
 }

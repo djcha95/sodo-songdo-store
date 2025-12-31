@@ -1,0 +1,174 @@
+/* src/components/admin/QuickCheckReviewCard.css */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.qc-review-card {
+  background-color: #fff;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeIn 0.35s ease-out;
+  width: 100%;
+  min-height: 140px;
+  height: auto;
+  position: relative;
+}
+
+@media (min-width: 769px) {
+  .qc-review-card {
+    width: 300px;
+  }
+}
+
+.qc-review-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-color: var(--primary-color);
+}
+
+.qc-review-card.selected {
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15), 0 4px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.qc-review-card.featured {
+  background: linear-gradient(135deg, #fffef0 0%, #fff9e6 100%);
+  border-color: #ffd700;
+}
+
+.qcr-checkmark {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-dark) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top-right-radius: var(--border-radius-lg);
+  border-bottom-left-radius: var(--border-radius-full);
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+  animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 1;
+}
+
+@keyframes popIn {
+  from { transform: scale(0) rotate(-180deg); opacity: 0; }
+  to { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.qcr-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-color-regular);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color-extralight);
+  font-weight: var(--font-weight-medium);
+}
+
+.qcr-date {
+  color: var(--text-color-light);
+}
+
+.qcr-featured-badge {
+  background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.qcr-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qcr-product-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-color-dark);
+}
+
+.qcr-content {
+  font-size: 0.9rem;
+  color: var(--text-color-medium);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qcr-images {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-color-light);
+}
+
+.qcr-rating {
+  font-size: 0.9rem;
+}
+
+.qcr-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color-extralight);
+  font-size: 0.85rem;
+}
+
+.qcr-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-color-medium);
+  font-weight: 600;
+}
+
+.qcr-kakao-badge {
+  background: #FEE500;
+  color: #000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.qcr-reward-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.qcr-reward-status .fulfilled {
+  color: #28a745;
+}
+
+.qcr-reward-status .pending {
+  color: var(--text-color-light);
+}
+

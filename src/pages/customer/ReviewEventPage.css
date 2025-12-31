@@ -1,0 +1,500 @@
+/* src/pages/customer/ReviewEventPage.css */
+
+/* ✅ ModernProductList와 동일한 레이아웃 구조 사용 */
+.review-event-content {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 16px 20px;
+  background-color: rgba(255, 255, 255, 0.95); /* ✅ 헤더와 동일한 내부 배경색 */
+  min-height: 100vh;
+}
+
+@media (min-width: 1024px) {
+  .review-event-content {
+    max-width: 900px;
+  }
+}
+
+.review-event-header {
+  margin-bottom: 1.5rem;
+}
+
+.event-banner-hall-of-fame {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFFBEB 40%, #FEF3C7 100%);
+  border-radius: 20px;
+  padding: 1.5rem;
+  color: #111;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+
+.banner-crown {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+  animation: float-crown 3s ease-in-out infinite;
+}
+
+@keyframes float-crown {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(2deg); }
+}
+
+.banner-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin: 0 0 0.4rem;
+  color: #111;
+  letter-spacing: 0.05em;
+}
+
+.event-subtitle {
+  font-size: 0.85rem;
+  margin: 0 0 1.25rem;
+  color: #4B5563;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.banner-description {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.banner-desc-text {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #374151;
+  font-weight: 500;
+}
+
+.banner-desc-text strong {
+  color: #111;
+  font-weight: 800;
+}
+
+
+.review-stats-section {
+  margin-bottom: 2rem;
+}
+
+.review-stats-section h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+  text-align: center;
+  color: #1F2937;
+  letter-spacing: 0.02em;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
+  transform: translateY(-4px);
+  border-color: #667eea;
+}
+
+.stat-card:hover::before {
+  transform: scaleX(1);
+}
+
+.stat-icon {
+  color: #667eea;
+  margin-bottom: 0.75rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.top-reviewers-section {
+  margin-bottom: 2rem;
+}
+
+.top-reviewers-section h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+  text-align: center;
+  color: #1F2937;
+  letter-spacing: 0.02em;
+}
+
+.rankings-list {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.2s;
+}
+
+.ranking-item:last-child {
+  border-bottom: none;
+}
+
+.ranking-item:hover {
+  background: #f9fafb;
+}
+
+.ranking-item.top-three {
+  background: linear-gradient(135deg, #fffef0 0%, #ffffff 100%);
+  border-left: 4px solid #FFD700;
+  padding-left: calc(1.5rem - 4px);
+}
+
+.ranking-item:first-child.top-three {
+  background: linear-gradient(135deg, #fff9e6 0%, #fffef0 100%);
+  border-left-color: #FFD700;
+}
+
+.ranking-item:nth-child(2).top-three {
+  background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
+  border-left-color: #C0C0C0;
+}
+
+.ranking-item:nth-child(3).top-three {
+  background: linear-gradient(135deg, #fef5e7 0%, #ffffff 100%);
+  border-left-color: #CD7F32;
+}
+
+.rank-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  min-width: 50px;
+  text-align: center;
+}
+
+.rank-info {
+  flex: 1;
+}
+
+.rank-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+}
+
+.rank-details {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.rank-points {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.reviews-section {
+  margin-bottom: 2rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin: 0;
+  color: #1F2937;
+  letter-spacing: 0.02em;
+}
+
+.month-selector {
+  padding: 0.5rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.reviews-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .reviews-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.review-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: all 0.2s;
+}
+
+.review-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.review-card.featured {
+  border: 2px solid #FFD700;
+  background: linear-gradient(135deg, #fffef0 0%, #ffffff 100%);
+  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.25), 
+              0 0 0 1px rgba(255, 215, 0, 0.1) inset;
+  position: relative;
+  overflow: hidden;
+}
+
+.review-card.featured::before {
+  content: '⭐ 베스트';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  color: #1a1a2e;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.4);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.review-author {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.author-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.kakao-badge {
+  background: #FEE500;
+  color: #000;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.review-rating {
+  font-size: 1.2rem;
+}
+
+.review-product {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.review-content {
+  line-height: 1.6;
+  color: #374151;
+  margin-bottom: 1rem;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+}
+
+/* ✅ 이미지만 있는 경우 content 숨김 */
+.review-card:has(.review-images) .review-content:empty,
+.review-card:has(.review-images img) .review-content:empty {
+  display: none;
+}
+
+
+.review-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.review-images img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.review-images img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: #cbd5e1;
+}
+
+/* 이미지가 1개일 때는 더 크게 */
+.review-images:has(img:only-child) img {
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+/* 이미지가 2개일 때는 2열 */
+.review-images:has(img:nth-child(2):last-child) {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* 이미지가 3개 이상일 때는 그리드 */
+.review-images:has(img:nth-child(3)) {
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+}
+
+.review-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #9ca3af;
+  padding-top: 1rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.review-likes {
+  color: #ef4444;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #9ca3af;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .review-event-content {
+    padding: 16px 20px;
+  }
+
+  .review-event-header {
+    margin-bottom: 1rem;
+  }
+
+  .event-banner-hall-of-fame {
+    padding: 1rem;
+    border-radius: 16px;
+    margin-bottom: 1rem;
+  }
+
+  .banner-title {
+    font-size: 1.1rem;
+    margin: 0 0 0.25rem;
+  }
+
+  .banner-crown {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .event-subtitle {
+    font-size: 0.8rem;
+    margin: 0 0 1rem;
+  }
+
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .stat-card {
+    padding: 1rem 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .reviews-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .review-images {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .review-images:has(img:only-child) img {
+    max-width: 150px;
+  }
+
+  .section-header h2 {
+    font-size: 1.25rem;
+  }
+}
+

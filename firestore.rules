@@ -48,5 +48,13 @@ service cloud.firestore {
       // 수정/삭제: 관리자만(일반 사용자는 불가)
       allow update, delete: if isAdmin();
     }
+
+    // --- 리뷰 정보 ---
+    // ✅ 고객(후기 이벤트 페이지 등)에서 읽기는 공개
+    // ✅ 등록/수정/삭제는 관리자(토큰 role: admin/master)만 허용
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
   }
 }

@@ -273,6 +273,48 @@ export interface UserDocument {
   enteredRaffleIds?: string[];
 }
 
+// =================================================================
+// 📌 리뷰 시스템 타입
+// =================================================================
+
+export interface Review {
+  id: string;
+  productId: string | null; // 연결된 상품 ID (선택사항)
+  productName?: string; // 상품명 (캐시용)
+  userId?: string; // 작성자 ID (관리자가 등록한 경우 null)
+  userName?: string; // 작성자 이름 (카카오톡에서 가져온 경우)
+  userNickname?: string; // 작성자 닉네임
+  content: string; // 리뷰 내용
+  images?: string[]; // 리뷰 이미지 URL 배열
+  rating?: number; // 평점 (1-5, 선택사항)
+  isFromKakao?: boolean; // 카카오톡에서 가져온 리뷰인지 여부
+  isVerified?: boolean; // 관리자 검증 여부
+  isFeatured?: boolean; // 베스트 리뷰 여부
+  likeCount?: number; // 좋아요 수
+  createdAt: UniversalTimestamp;
+  updatedAt?: UniversalTimestamp;
+  // 이벤트 관련
+  eventMonth?: string; // 이벤트 월 (예: "2025-01")
+  rewardType?: 'CRACKER_7500' | string; // 실물 보상 종류 (나중에 다른 보상 타입 추가 가능)
+  rewardValueKrw?: number; // 보상 금액(원)
+  rewardStatus?: 'PENDING' | 'FULFILLED'; // 지급 대기/지급 완료
+  rewardFulfilledAt?: UniversalTimestamp; // 지급 완료 시점
+}
+
+export interface ReviewStats {
+  totalReviews: number;
+  averageRating?: number;
+  featuredReviews: number;
+  thisMonthReviews: number;
+  rewardFulfilledTotal: number;
+  topReviewers: Array<{
+    key: string; // userId가 없을 수 있어, name 기반 키도 허용
+    name: string;
+    reviewCount: number;
+    rewardFulfilledCount: number;
+  }>;
+}
+
 export interface NhnAlimtalkResponse {
   header: {
     isSuccessful: boolean;

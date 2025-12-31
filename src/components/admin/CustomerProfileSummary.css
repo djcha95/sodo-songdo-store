@@ -78,6 +78,19 @@
     grid-template-columns: repeat(2, 1fr);
     gap: var(--spacing-sm);
 }
+
+.cps-grid-item-clickable {
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.cps-grid-item-clickable:hover {
+    background-color: rgba(15, 23, 42, 0.04);
+}
+
+.cps-grid-item-clickable:active {
+    transform: scale(0.98);
+}
 .cps-grid-item {
     background-color: var(--bg-color-soft);
     border-radius: var(--border-radius-md);
@@ -98,6 +111,32 @@
 .cps-grid-item .text-danger { color: var(--danger-color); }
 .cps-grid-item .text-primary { color: var(--primary-color-dark); }
 .cps-grid-item .text-points { color: #8a2be2; } 
+
+.cps-review-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.cps-review-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: #fff;
+    color: #111;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.cps-review-btn.primary {
+    background: #111;
+    color: #fff;
+    border-color: #111;
+}
 
 
 .cps-info-item {

@@ -694,6 +694,9 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   // -------------------- auto deadline from publishDate (non-event) --------------------
   useEffect(() => {
+    // ✅ 수정 모드에서는 기존 날짜를 유지해야 하므로 자동 계산하지 않음
+    if (mode === 'editRound') return;
+    
     if (eventType === 'CHUSEOK' || eventType === 'ANNIVERSARY' || eventType === 'PREMIUM' || eventType === 'CHRISTMAS') return;
 
     const baseDate = dayjs(publishDate);
@@ -706,10 +709,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     const finalDeadline = deadline.hour(13).minute(0).second(0).millisecond(0).toDate();
     setDeadlineDate(finalDeadline);
-  }, [publishDate, eventType]);
+  }, [publishDate, eventType, mode]);
 
   // -------------------- pickup deadline auto --------------------
   useEffect(() => {
+    // ✅ 수정 모드에서는 기존 날짜를 유지해야 하므로 자동 계산하지 않음
+    if (mode === 'editRound') return;
+    
     if (!pickupDate) {
       setPickupDeadlineDate(null);
       return;
@@ -721,7 +727,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     }
     newPickupDeadline.setHours(13, 0, 0, 0);
     setPickupDeadlineDate(newPickupDeadline);
-  }, [pickupDate, selectedStorageType]);
+  }, [pickupDate, selectedStorageType, mode]);
 
   // -------------------- single mode sync groupName to first VG --------------------
   useEffect(() => {

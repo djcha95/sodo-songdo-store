@@ -8,6 +8,7 @@ import {
   Home,
   Package,
   ListOrdered,
+  MessageSquare,
   HeartHandshake,
   Instagram,
   Info,
@@ -134,6 +135,23 @@ const SideMenu: React.FC<SideMenuProps> = ({
               <span className="side-menu-main-text">예약 내역</span>
               <span className="side-menu-sub-text">
                 내가 예약한 상품과 픽업 일정 확인
+              </span>
+            </div>
+          </NavLink>
+
+          {/* 후기 이벤트 */}
+          <NavLink
+            to="/reviews"
+            className={getNavLinkClass}
+            onClick={onClose}
+          >
+            <div className="side-menu-icon-wrap">
+              <MessageSquare size={20} />
+            </div>
+            <div className="side-menu-text-wrap">
+              <span className="side-menu-main-text">후기 이벤트</span>
+              <span className="side-menu-sub-text">
+                신년 리뷰 이벤트 안내 & 베스트 후기
               </span>
             </div>
           </NavLink>

@@ -14,6 +14,9 @@ import type {
     AggregatedOrderGroup 
 } from '@/shared/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
+import QuickCheckReviewCard from './QuickCheckReviewCard';
+import { getReviewsByUserId } from '@/firebase/reviewService';
+import type { Review } from '@/shared/types';
 import {
     updateMultipleOrderStatuses,
     deleteMultipleOrders,
@@ -35,6 +38,7 @@ interface CustomerActionTabsProps {
     onStatUpdate: (updates: { pickup?: number; noshow?: number; points?: number }) => void;
     onActionSuccess: () => void;
     onMarkAsNoShow: (group: AggregatedOrderGroup) => void;
+    reviewCount?: number;
 }
 
 const convertToDate = (date: UniversalTimestamp | Date | null | undefined): Date | null => {
@@ -203,17 +207,39 @@ const TrustManagementCard: React.FC<{ user: UserDocument }> = ({ user }) => {
     );
 };
 
-type Tab = 'pickup' | 'history' | 'manage';
+type Tab = 'pickup' | 'history' | 'manage' | 'reviews';
 
 const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({ 
     user, 
     orders = [], 
     onStatUpdate, 
     onActionSuccess,
-    onMarkAsNoShow 
+    onMarkAsNoShow,
+    reviewCount = 0
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('pickup');
     const [selectedGroupKeys, setSelectedGroupKeys] = useState<string[]>([]);
+    const [reviews, setReviews] = useState<Review[]>([]);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [selectedReviewIds, setSelectedReviewIds] = useState<string[]>([]);
+
+    // 리뷰 로드
+    useEffect(() => {
+        if (activeTab === 'reviews' && user.uid) {
+            setReviewsLoading(true);
+            getReviewsByUserId(user.uid)
+                .then(setReviews)
+                .catch((err) => {
+                    console.error('리뷰 로드 실패:', err);
+                    toast.error('리뷰를 불러오는데 실패했습니다.');
+                })
+                .finally(() => setReviewsLoading(false));
+        }
+    }, [activeTab, user.uid]);
+
+    const handleSelectReview = useCallback((reviewId: string) => {
+        setSelectedReviewIds(prev => prev.includes(reviewId) ? prev.filter(id => id !== reviewId) : [...prev, reviewId]);
+    }, []);
 
     // Cloud Function 초기화
     const functions = getFunctions(getApp(), 'asia-northeast3');
@@ -453,6 +479,23 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
                 return <ActionableOrderTable orders={orders} onStatusChange={handleTableStatusChange} onSplitOrder={handleSplitOrder} />;
             case 'manage':
                 return <TrustManagementCard user={user} />;
+            case 'reviews':
+                if (reviewsLoading) {
+                    return <p className="no-data-message">리뷰를 불러오는 중...</p>;
+                }
+                return (
+                    <div className="qcp-results-grid">
+                        {reviews.map(review => (
+                            <QuickCheckReviewCard
+                                key={review.id}
+                                review={review}
+                                isSelected={selectedReviewIds.includes(review.id)}
+                                onSelect={handleSelectReview}
+                            />
+                        ))}
+                        {reviews.length === 0 && <p className="no-data-message">등록된 리뷰가 없습니다.</p>}
+                    </div>
+                );
             default:
                 return null;
         }
@@ -502,9 +545,10 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
             <div className="cat-tab-navigation">
                 <button className={activeTab === 'pickup' ? 'active' : ''} onClick={() => setActiveTab('pickup')}>픽업 카드 ({aggregatedPickupOrders.length})</button>
                 <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>전체 주문 내역 ({orders.length})</button>
+                <button className={activeTab === 'reviews' ? 'active' : ''} onClick={() => setActiveTab('reviews')}>리뷰 ({reviewCount})</button>
                 <button className={activeTab === 'manage' ? 'active' : ''} onClick={() => setActiveTab('manage')}>신뢰도 관리</button>
             </div>
-            <div className={`cat-tab-content ${activeTab === 'pickup' ? 'is-grid-view' : ''}`}>
+            <div className={`cat-tab-content ${activeTab === 'pickup' || activeTab === 'reviews' ? 'is-grid-view' : ''}`}>
                 {renderTabContent()}
             </div>
             {renderFooter()}

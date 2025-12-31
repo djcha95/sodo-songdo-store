@@ -1,17 +1,21 @@
 // src/pages/admin/QuickCheckPage.tsx
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { UserDocument, Order } from '@/shared/types';
 // [수정] getUserById를 orderService가 아닌 userService에서 가져오도록 경로를 수정합니다.
 import { getAllUsersForQuickCheck, getUserById } from '@/firebase/userService';
 import { getUserOrders } from '@/firebase/orderService';
+import { addReview, getReviewCountByUserId } from '@/firebase/reviewService';
 import toast from 'react-hot-toast';
 import CustomerFocusView from '@/components/admin/CustomerFocusView';
 import UserSearchResult from '@/components/admin/UserSearchResult';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import { AnimatePresence } from 'framer-motion';
-import { Search, X, Users, SearchSlash } from 'lucide-react';
+import { Search, X, Users, SearchSlash, MessageSquarePlus, Gift } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Timestamp } from 'firebase/firestore';
+import dayjs from 'dayjs';
 
 
 import './QuickCheckPage.css';
@@ -24,6 +28,22 @@ const QuickCheckPage: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [disambiguation, setDisambiguation] = useState<UserDocument[]>([]);
   const [allUsers, setAllUsers] = useState<UserDocument[]>([]);
+  const navigate = useNavigate();
+
+  // ✅ 후기(리뷰) 상태
+  const [reviewCount, setReviewCount] = useState<number>(0);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewProductHint, setReviewProductHint] = useState('');
+  const [reviewImages, setReviewImages] = useState<File[]>([]);
+  const [rewardFulfilledNow, setRewardFulfilledNow] = useState(false);
+  const reviewEventMonth = useMemo(() => dayjs().format('YYYY-MM'), []);
+  
+  // ✅ 보상 설정 (나중에 쉽게 변경 가능하도록 상수로 분리)
+  const REVIEW_REWARD_CONFIG = {
+    type: 'CRACKER_7500' as const,
+    valueKrw: 7500,
+    label: '크래커(7,500원 상당)',
+  };
 
   useEffect(() => {
     const fetchAllUsers = async () => {
@@ -86,6 +106,92 @@ const QuickCheckPage: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+
+  // ✅ 선택된 사용자 후기 개수 로드
+  useEffect(() => {
+    if (!focusedUser?.uid) {
+      setReviewCount(0);
+      return;
+    }
+    let mounted = true;
+    getReviewCountByUserId(focusedUser.uid)
+      .then((count) => { if (mounted) setReviewCount(count); })
+      .catch(() => { if (mounted) setReviewCount(0); });
+    return () => { mounted = false; };
+  }, [focusedUser?.uid]);
+
+  const openReviewModal = () => {
+    if (!focusedUser) return;
+    setReviewProductHint('');
+    setReviewImages([]);
+    setRewardFulfilledNow(false);
+    setIsReviewModalOpen(true);
+  };
+
+  const handlePasteImages = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.type?.startsWith('image/')) {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      setReviewImages((prev) => [...prev, ...files]);
+      toast.success(`이미지 ${files.length}장 추가됨`);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!focusedUser) return;
+    
+    // ✅ 이미지가 필수 (캡처 이미지에 글과 사진이 모두 포함되어 있음)
+    if (reviewImages.length === 0) {
+      toast.error('캡처 이미지를 업로드해주세요.');
+      return;
+    }
+    
+    try {
+      await addReview(
+        {
+          productId: null,
+          productName: reviewProductHint.trim() ? reviewProductHint.trim() : undefined,
+          userId: focusedUser.uid,
+          userName: focusedUser.displayName || undefined,
+          userNickname: focusedUser.nickname || undefined,
+          content: '', // ✅ 이미지에 모든 내용이 포함되어 있으므로 빈 문자열
+          rating: undefined,
+          isFromKakao: true,
+          isFeatured: false,
+          eventMonth: reviewEventMonth,
+          rewardType: REVIEW_REWARD_CONFIG.type,
+          rewardValueKrw: REVIEW_REWARD_CONFIG.valueKrw,
+          rewardStatus: rewardFulfilledNow ? 'FULFILLED' : 'PENDING',
+          rewardFulfilledAt: rewardFulfilledNow ? Timestamp.now() : undefined,
+        } as any,
+        reviewImages
+      );
+      toast.success('후기가 등록되었습니다.');
+      setIsReviewModalOpen(false);
+      setReviewProductHint('');
+      setReviewImages([]);
+      setRewardFulfilledNow(false);
+      // 카운트 갱신
+      const count = await getReviewCountByUserId(focusedUser.uid);
+      setReviewCount(count);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || '후기 등록에 실패했습니다.');
+    }
+  };
+
+  const openUserReviewList = () => {
+    if (!focusedUser) return;
+    navigate(`/admin/reviews?userId=${focusedUser.uid}`);
+  };
 
   // [핵심 수정 1] UI 즉시 업데이트를 담당하는 함수
   const updateFocusedUserStats = useCallback(
@@ -201,6 +307,9 @@ const QuickCheckPage: React.FC = () => {
             onBack={clearFocus}
             onStatUpdate={updateFocusedUserStats} // UI 즉시 업데이트 함수 전달
             onActionSuccess={refreshData}         // 작업 성공 후 데이터 새로고침 함수 전달
+            reviewCount={reviewCount}
+            onAddReview={openReviewModal}
+            onOpenReviews={openUserReviewList}
           />
         )}
 
@@ -244,6 +353,97 @@ const QuickCheckPage: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ✅ 후기 추가 모달 (캡처 후 Ctrl+V로 이미지 붙여넣기) */}
+      {isReviewModalOpen && focusedUser && (
+        <div
+          className="qcp-review-modal-overlay"
+          onClick={() => setIsReviewModalOpen(false)}
+        >
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+                후기 추가 - {focusedUser.displayName || focusedUser.phoneLast4 || focusedUser.uid}
+              </h2>
+              <button className="icon-button" onClick={() => setIsReviewModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>어떤 공구 후기인지 (선택)</label>
+                <input
+                  type="text"
+                  value={reviewProductHint}
+                  onChange={(e) => setReviewProductHint(e.target.value)}
+                  placeholder="예: 콤부차 / 크래커 / 딸기…"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>캡처 이미지 붙여넣기 (Ctrl+V) *</label>
+                <div
+                  className="qcp-review-pastezone"
+                  tabIndex={0}
+                  onPaste={handlePasteImages}
+                >
+                  <div className="qcp-review-pastezone-title">
+                    Shift+Win+S → 캡처 → 여기 클릭 → Ctrl+V
+                  </div>
+                  <div className="qcp-review-pastezone-sub">
+                    또는 파일 선택도 가능해요.
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) setReviewImages((prev) => [...prev, ...files]);
+                  }}
+                />
+                {reviewImages.length > 0 && (
+                  <div className="qcp-review-preview">
+                    {reviewImages.map((file, idx) => (
+                      <div key={idx} className="qcp-review-preview-item">
+                        <img src={URL.createObjectURL(file)} alt={`리뷰 이미지 ${idx + 1}`} />
+                        <button
+                          type="button"
+                          onClick={() => setReviewImages((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={rewardFulfilledNow}
+                    onChange={(e) => setRewardFulfilledNow(e.target.checked)}
+                  />
+                  <Gift size={16} />
+                  {REVIEW_REWARD_CONFIG.label} 지급완료로 바로 처리
+                </label>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="common-button button-secondary" onClick={() => setIsReviewModalOpen(false)}>
+                취소
+              </button>
+              <button className="common-button button-primary" onClick={submitReview}>
+                등록
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

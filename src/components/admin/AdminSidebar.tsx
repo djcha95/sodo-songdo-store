@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ExternalLink, Menu, Zap, PlusSquare, Wallet,
-  CalendarCheck, ClipboardList, Settings, AlertTriangle
+  CalendarCheck, ClipboardList, Settings, AlertTriangle, MessageSquare
 } from 'lucide-react';
 import MenuGroup from './MenuGroup';
 import { ADMIN_HIDDEN_ROUTES } from "@/admin/adminHiddenRoutes";
@@ -103,6 +103,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
           priority="normal"
         >
           <MenuItem to="/admin/users" icon={<Users size={22} />} text="고객 관리" isSidebarOpen={isSidebarOpen} />
+          <MenuItem to="/admin/reviews" icon={<MessageSquare size={22} />} text="리뷰 관리" isSidebarOpen={isSidebarOpen} />
         </MenuGroup>
 
         {/* 5. 위험 기능 그룹 (시각적으로 분리) */}
