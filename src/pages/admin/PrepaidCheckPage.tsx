@@ -109,11 +109,13 @@ const PrepaidCheckPage: React.FC = () => {
               });
             }
             const existing = productMap.get(mapKey)!;
-            existing.totalQuantity += item.quantity;
+            // ✅ 수정: stockDeductionAmount를 곱하여 실제 낱개 수량을 계산
+            const actualQuantity = item.quantity * (item.stockDeductionAmount || 1);
+            existing.totalQuantity += actualQuantity;
             existing.customers.push({
               name: order.customerInfo.name,
               phoneLast4: order.customerInfo.phoneLast4 || '',
-              quantity: item.quantity,
+              quantity: item.quantity, // 고객별 표시용으로는 주문 수량 그대로 유지
             });
           });
         });

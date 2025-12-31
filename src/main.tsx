@@ -49,8 +49,6 @@ if ('serviceWorker' in navigator) {
 const CustomerLayout = React.lazy(() => import('./layouts/CustomerLayout'));
 const LoginPage = React.lazy(() => import('./pages/customer/LoginPage'));
 const HeyUBeautyPage = React.lazy(() => import('./pages/customer/HeyUBeautyPage'));
-// ✅ 기존 심플 디자인 (이제 레거시 경로로 이동)
-const SimpleOrderPage = React.lazy(() => import('./pages/customer/SimpleOrderPage')); 
 const SongdoPickAboutPage = React.lazy(() => import('./pages/customer/SongdoPickAboutPage'));
 const SongdoPickGuidePage = React.lazy(() => import('./pages/customer/SongdoPickGuidePage'));
 const SongdoPickPartnerBenefitsPage = React.lazy(() => import('./pages/customer/SongdoPickPartnerBenefitsPage'));
@@ -168,15 +166,6 @@ const router = createBrowserRouter([
           path: "product/:productId",
           element: <ProductDetailPage />,
         },
-      ],
-    },
-
-// 기존 심플 디자인 ("/simple")
-          {
-      path: "simple",
-      element: <SimpleOrderPage />,
-      children: [
-        { path: "product/:productId", element: <ProductDetailPage /> },
       ],
     },
 

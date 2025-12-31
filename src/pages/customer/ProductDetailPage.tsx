@@ -1026,7 +1026,7 @@ const fetchProduct = useCallback(async () => {
                 variantGroupId: selectedVariantGroup.id, variantGroupName: selectedVariantGroup.groupName,
                 itemId: selectedItem.id, itemName: selectedItem.name,
                 quantity: quantity, unitPrice: selectedItem.price, stock: selectedItem.stock,
-                stockDeductionAmount: selectedItem.stockDeductionAmount,
+                stockDeductionAmount: selectedItem.stockDeductionAmount ?? 1, // ✅ 기본값 1로 fallback
                 arrivalDate: displayRound.arrivalDate || null, pickupDate: displayRound.pickupDate,
                 deadlineDate: displayRound.deadlineDate,
                 isPrepaymentRequired: displayRound.isPrepaymentRequired ?? false,

@@ -206,10 +206,12 @@ const DashboardPage: React.FC = () => {
             const groupKey = `${item.productId}-${item.roundId}-${item.variantGroupId}`;
             const current = reservationMap.get(groupKey) || { confirmed: 0, pending: 0 };
             
+            // ✅ 수정: stockDeductionAmount를 곱하여 실제 낱개 수량을 계산
+            const actualQuantity = item.quantity * (item.stockDeductionAmount || 1);
             if (order.status === 'RESERVED' && order.wasPrepaymentRequired) {
-              current.pending += item.quantity;
+              current.pending += actualQuantity;
             } else {
-              current.confirmed += item.quantity;
+              current.confirmed += actualQuantity;
             }
             reservationMap.set(groupKey, current);
           });
