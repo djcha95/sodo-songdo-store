@@ -260,7 +260,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   const [productType, setProductType] = useState<'single' | 'group'>('single');
   const [groupName, setGroupName] = useState('');
-  const [description, setDescription] = useState('');
 
   const [selectedStorageType, setSelectedStorageType] = useState<StorageType>('ROOM');
   const [creationDate, setCreationDate] = useState<Date>(new Date());
@@ -303,7 +302,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   // Wizard 단계 관리
   const [currentStep, setCurrentStep] = useState(0);
   const wizardSteps = [
-    { id: 'basic', title: '기본 정보', description: '상품명, 이미지, 설명', icon: <Package size={20} /> },
+    { id: 'basic', title: '기본 정보', description: '상품명, 이미지', icon: <Package size={20} /> },
     { id: 'options', title: '판매 옵션', description: '가격, 재고, 옵션', icon: <Box size={20} /> },
     { id: 'schedule', title: '발행 설정', description: '날짜, 이벤트, 조건', icon: <Clock size={20} /> },
     { id: 'review', title: '최종 확인', description: '미리보기 및 검증', icon: <Info size={20} /> },
@@ -312,7 +311,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
   // 자동 저장
   const formData = useMemo(() => ({
     groupName,
-    description,
     imageUrls: imagePreviews.filter(p => !p.startsWith('blob:')),
     composition,
     categories,
@@ -326,7 +324,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     isPrepaymentRequired,
     eventType,
   }), [
-    groupName, description, imagePreviews, composition, categories,
+    groupName, imagePreviews, composition, categories,
     selectedStorageType, variantGroups, roundName,
     publishDate, deadlineDate, pickupDate, pickupDeadlineDate,
     isPrepaymentRequired, eventType,
@@ -480,7 +478,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
           }
 
           setGroupName(product.groupName);
-          setDescription(product.description);
           setSelectedStorageType(product.storageType);
 
           setCategories((product as any).categories || []);
@@ -634,9 +631,21 @@ const ProductForm: React.FC<ProductFormProps> = ({
   useEffect(() => {
     if (mode === 'newProduct' || mode === 'newRound') {
       const saved = restore();
-      if (saved && window.confirm('이전에 작성하던 내용이 있습니다. 복구하시겠습니까?')) {
+      
+      // 저장된 데이터가 실제로 의미 있는지 확인 (빈 데이터인지 체크)
+      const hasMeaningfulData = saved && (
+        (saved.groupName && saved.groupName.trim()) ||
+        (saved.composition && saved.composition.trim()) ||
+        (saved.variantGroups && saved.variantGroups.length > 0 && saved.variantGroups.some((vg: any) => 
+          vg.items && vg.items.length > 0 && vg.items.some((item: any) => 
+            (item.name && item.name.trim()) || (typeof item.price === 'number' && item.price > 0)
+          )
+        )) ||
+        (saved.imageUrls && saved.imageUrls.length > 0)
+      );
+      
+      if (hasMeaningfulData && window.confirm('이전에 작성하던 내용이 있습니다. 복구하시겠습니까?')) {
         if (saved.groupName) setGroupName(saved.groupName);
-        if (saved.description) setDescription(saved.description);
         if (saved.composition) setComposition(saved.composition);
         if (saved.categories) setCategories(saved.categories);
         if (saved.selectedStorageType) setSelectedStorageType(saved.selectedStorageType);
@@ -649,9 +658,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
         if (saved.isPrepaymentRequired !== undefined) setIsPrepaymentRequired(saved.isPrepaymentRequired);
         if (saved.eventType) setEventType(saved.eventType);
         toast.success('이전 작성 내용이 복구되었습니다.');
+      } else if (saved && !hasMeaningfulData) {
+        // 의미 없는 데이터는 자동으로 삭제
+        clearAutoSave();
       }
     }
-  }, [mode, restore]);
+  }, [mode, restore, clearAutoSave]);
 
   // -------------------- init empty for newProduct --------------------
   useEffect(() => {
@@ -1114,7 +1126,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
       // 대표 상품 공통 데이터
       const productDataToUpdate: Partial<Omit<Product, 'id' | 'salesHistory'>> = {
         groupName: groupName.trim(),
-        description: description.trim(),
+        description: '', // 상품 설명 필드 제거됨 (빈 문자열로 유지)
         storageType: selectedStorageType,
         ...( { categories } as any ),
         ...( { composition: composition.trim() } as any ),
@@ -1194,7 +1206,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
         };
 
         if (initialProduct?.groupName !== groupName.trim()) changes.push('상품명 변경');
-        if (initialProduct?.description !== description.trim()) changes.push('상세 설명 변경');
         if (initialProduct?.storageType !== selectedStorageType) {
           changes.push(`보관 방법: ${storageTypeMap[initialProduct?.storageType!]} -> ${storageTypeMap[selectedStorageType]}`);
         }
@@ -1452,16 +1463,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
                     </ul>
                   </div>
                 )}
-              </div>
-
-              <div className="form-group">
-                <label>상품 설명 (선택)</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="상품에 대한 간단한 설명을 입력하세요."
-                  rows={3}
-                />
               </div>
 
               <div className="form-group">
@@ -1977,7 +1978,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
             <div className="preview-content-area">
               <ProductPreview
                 groupName={groupName}
-                description={description}
+                description=""
                 imageUrls={imagePreviews}
                 price={typeof variantGroups[0]?.items[0]?.price === 'number' ? variantGroups[0].items[0].price : ''}
                 roundName={roundName}
@@ -1987,6 +1988,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 composition={composition}
                 categories={categories}
                 extraInfo={extraInfo}
+                expirationDate={variantGroups[0]?.expirationDate || null}
               />
             </div>
           </main>

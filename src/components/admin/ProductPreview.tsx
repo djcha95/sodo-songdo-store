@@ -17,6 +17,7 @@ interface ProductPreviewProps {
   composition: string;
   categories: string[];
   extraInfo?: string;
+  expirationDate?: Date | null;
 }
 
 const ProductPreview: React.FC<ProductPreviewProps> = ({
@@ -31,6 +32,7 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
   composition,
   categories,
   extraInfo,
+  expirationDate,
 }) => {
   const storageLabels: Record<string, string> = {
     ROOM: '실온',
@@ -181,6 +183,18 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
                 {storageLabel}
               </div>
             </div>
+
+            {/* 유통기한 */}
+            {expirationDate && (
+              <div className="preview-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '0.8rem' }}>
+                <div className="preview-info-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontWeight: 600 }}>
+                  <Hourglass size={16} />유통기한
+                </div>
+                <div className="preview-info-value" style={{ color: '#1e293b', fontWeight: 700 }}>
+                  {dayjs(expirationDate).format('YYYY.MM.DD')}
+                </div>
+              </div>
+            )}
 
             {/* 가격 */}
             <div className="preview-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem' }}>
