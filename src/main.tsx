@@ -47,90 +47,104 @@ if ('serviceWorker' in navigator) {
 }
 
 // ✅ [추가] 동적 import 오류 전역 핸들러
+const isChunkLoadError = (msg: string) => {
+  const m = String(msg || '');
+  return (
+    m.includes('Failed to fetch dynamically imported module') ||
+    m.includes('Importing a module script failed') ||
+    m.includes('Loading chunk') ||
+    m.includes('ChunkLoadError')
+  );
+};
+
+const handleChunkLoadError = () => {
+  // 이미 처리 중이면 무시 (중복 처리 방지)
+  if (sessionStorage.getItem('chunk-error-handled') === 'true') return;
+  sessionStorage.setItem('chunk-error-handled', 'true');
+
+  // 사용자에게 친화적인 메시지 표시
+  const errorDiv = document.createElement('div');
+  errorDiv.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 24px;
+  `;
+  errorDiv.innerHTML = `
+    <div style="
+      background: white;
+      border-radius: 20px;
+      padding: 32px 24px;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    ">
+      <div style="font-size: 48px; margin-bottom: 16px;">🔄</div>
+      <h2 style="
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0 0 12px;
+        color: #111;
+      ">사이트가 업데이트되었습니다</h2>
+      <p style="
+        font-size: 14px;
+        color: #666;
+        line-height: 1.6;
+        margin: 0 0 24px;
+      ">최신 버전으로 자동 이동합니다...</p>
+      <div style="
+        width: 100%;
+        height: 4px;
+        background: #f0f0f0;
+        border-radius: 2px;
+        overflow: hidden;
+      ">
+        <div style="
+          width: 100%;
+          height: 100%;
+          background: #000;
+          animation: progress 2.2s linear;
+        "></div>
+      </div>
+      <style>
+        @keyframes progress {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
+        }
+      </style>
+    </div>
+  `;
+  document.body.appendChild(errorDiv);
+
+  // ✅ 새 index.html을 다시 받아오도록 캐시 버스터를 붙여 홈으로 이동
+  setTimeout(() => {
+    sessionStorage.removeItem('chunk-error-handled');
+    window.location.replace(`/?v=${Date.now()}`);
+  }, 2200);
+};
+
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason;
   const errorMessage = error?.message || String(error);
-  
-  // 동적 import 실패 오류 감지
-  if (
-    typeof errorMessage === 'string' && 
-    errorMessage.includes('Failed to fetch dynamically imported module')
-  ) {
-    event.preventDefault(); // 기본 오류 표시 방지
-    
-    // 이미 처리 중이면 무시 (중복 처리 방지)
-    if (sessionStorage.getItem('chunk-error-handled') === 'true') {
-      return;
-    }
-    
-    sessionStorage.setItem('chunk-error-handled', 'true');
-    
-    // 3초 후 자동으로 홈으로 리다이렉트
-    setTimeout(() => {
-      sessionStorage.removeItem('chunk-error-handled');
-      window.location.href = '/';
-    }, 3000);
-    
-    // 사용자에게 친화적인 메시지 표시
-    const errorDiv = document.createElement('div');
-    errorDiv.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 99999;
-      padding: 24px;
-    `;
-    errorDiv.innerHTML = `
-      <div style="
-        background: white;
-        border-radius: 20px;
-        padding: 32px 24px;
-        max-width: 400px;
-        text-align: center;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      ">
-        <div style="font-size: 48px; margin-bottom: 16px;">🔄</div>
-        <h2 style="
-          font-size: 18px;
-          font-weight: 700;
-          margin: 0 0 12px;
-          color: #111;
-        ">사이트가 업데이트되었습니다</h2>
-        <p style="
-          font-size: 14px;
-          color: #666;
-          line-height: 1.6;
-          margin: 0 0 24px;
-        ">최신 버전으로 자동 이동합니다...</p>
-        <div style="
-          width: 100%;
-          height: 4px;
-          background: #f0f0f0;
-          border-radius: 2px;
-          overflow: hidden;
-        ">
-          <div style="
-            width: 100%;
-            height: 100%;
-            background: #000;
-            animation: progress 3s linear;
-          "></div>
-        </div>
-        <style>
-          @keyframes progress {
-            from { transform: translateX(-100%); }
-            to { transform: translateX(0); }
-          }
-        </style>
-      </div>
-    `;
-    document.body.appendChild(errorDiv);
+  if (typeof errorMessage === 'string' && isChunkLoadError(errorMessage)) {
+    event.preventDefault();
+    handleChunkLoadError();
+  }
+});
+
+// 일부 브라우저/상황에서는 unhandledrejection이 아니라 error 이벤트로 떨어짐
+window.addEventListener('error', (event) => {
+  const msg = (event as any)?.message || (event as any)?.error?.message || '';
+  if (typeof msg === 'string' && isChunkLoadError(msg)) {
+    event.preventDefault?.();
+    handleChunkLoadError();
   }
 });
 // 1. 고객용 페이지
@@ -178,7 +192,18 @@ const PickupCheckPage = React.lazy(() => import('@/pages/admin/PickupCheckPage')
 const AdminStockPage = React.lazy(() => import('@/pages/admin/AdminStockPage'));
 const AdminToolsPage = React.lazy(() => import('@/pages/admin/AdminToolsPage')); // 👈 추가
 const ReviewManagementPage = React.lazy(() => import('@/pages/admin/ReviewManagementPage'));
-const ReviewEventPage = React.lazy(() => import('@/pages/customer/ReviewEventPage'));
+// ✅ [추가] 후기 페이지도 청크 로드 실패 시 자동 복구
+const ReviewEventPage = React.lazy(() => {
+  return import('@/pages/customer/ReviewEventPage').catch((error) => {
+    const msg = error?.message || String(error);
+    if (typeof msg === 'string' && isChunkLoadError(msg)) {
+      console.warn('[ReviewEventPage] Dynamic import failed, recovering');
+      handleChunkLoadError();
+      return { default: () => <SodomallLoader message="페이지를 불러오는 중..." /> };
+    }
+    throw error;
+  });
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {

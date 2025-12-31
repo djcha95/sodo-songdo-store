@@ -192,7 +192,9 @@ const SodomallInfoPage: React.FC = () => {
   }, [STORE_INFO.lat, STORE_INFO.lng]);
 
   return (
-    <div className="sodomall-page-container">
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell">
+        <div className="sodomall-page-container">
       {/* ✅ [수정] 헤더: 내부 래퍼(div) 추가 */}
       <header className="sodomall-header">
         <div className="header-inner">
@@ -501,6 +503,8 @@ const SodomallInfoPage: React.FC = () => {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 };

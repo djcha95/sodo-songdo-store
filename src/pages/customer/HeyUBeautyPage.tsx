@@ -60,7 +60,9 @@ const HeyUBeautyPage: React.FC = () => {
   const closeModal = () => setSelectedImage(null);
 
   return (
-    <div className="heyu-page">
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell">
+        <div className="heyu-page">
       {/* 상단 콜라보 태그 */}
       <div className="heyu-breadcrumb">
         <span>SONGDOPICK COLLABORATION</span>
@@ -380,6 +382,8 @@ const HeyUBeautyPage: React.FC = () => {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 };

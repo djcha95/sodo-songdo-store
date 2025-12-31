@@ -27,13 +27,9 @@ const CustomerLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ [수정] 메인('/')도 이제 모던 페이지입니다.
-  // location이 변경될 때마다 계산되지만, true/false 결과가 바뀌지 않으면 렌더링에 영향 없음
-  const isModernPage = 
-    location.pathname === '/' ||
-    location.pathname.startsWith('/modern') || 
-    location.pathname.includes('/history') ||
-    location.pathname.includes('/product/'); // 상세 페이지 포함
+  // ✅ 고객 페이지는 모두 "Modern Shell" 기준으로 통일합니다.
+  // (헤더 폭 900px / 바깥 #F9FAFB / 안쪽 흰 시트)
+  const isModernPage = true;
 
   const scrollToSection = useCallback((section: 'primary' | 'secondary') => {
     const ref = section === 'primary' ? primaryRef : secondaryRef;

@@ -1,11 +1,10 @@
 /* src/pages/customer/MyPage.css */
 
 /* 전체 컨테이너 */
-.mypage-container-simple {
-    padding: 20px;
-    padding-bottom: 80px;
-    max-width: 600px; /* 모바일 최적화 */
-    margin: 0 auto;
+.mypage-page {
+    padding: 20px 16px 80px;
+    max-width: 100%;
+    margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -40,6 +39,97 @@
     box-shadow: 0 10px 20px rgba(0,0,0,0.15);
     margin-bottom: 30px;
     border: 1px solid rgba(255,255,255,0.2);
+}
+
+/* ===========================
+   ✅ 대시보드 섹션/카드
+   =========================== */
+.mypage-section {
+    margin-top: 18px;
+}
+
+.mypage-section-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #111827;
+    letter-spacing: -0.2px;
+    margin: 0 0 10px;
+}
+
+.mypage-quick-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+@media (min-width: 720px) {
+    .mypage-quick-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.mypage-quick-card {
+    border: 1px solid #e5e7eb;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 14px 14px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.mypage-quick-card:active {
+    transform: scale(0.99);
+}
+
+.mypage-quick-card.primary {
+    border-color: rgba(17, 24, 39, 0.12);
+    box-shadow: 0 10px 20px rgba(17, 24, 39, 0.06);
+}
+
+.mypage-quick-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: #111827;
+}
+
+.mypage-quick-icon {
+    font-size: 18px;
+}
+
+.mypage-quick-arrow {
+    color: #9ca3af;
+}
+
+.mypage-quick-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mypage-quick-sub {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.5;
+}
+
+.mypage-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
 }
 
 /* 카드 배경 움직이는 애니메이션 (스크린샷 방지 핵심) */

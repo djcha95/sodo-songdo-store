@@ -17,3 +17,14 @@ a:hover { text-decoration: underline; }
     padding: 0px 40px 40px;
   }
 }
+
+/* =====================================================
+ * ✅ Modern Shell (Header 기준: 바깥 회색 + 안쪽 흰 시트)
+ * - 페이지별로 max-width/padding을 따로 잡지 않도록 공통화
+ * ===================================================== */
+.customer-page-container.modern-shell {
+  max-width: 100%;
+  padding: 0 !important;
+  margin: 0 auto;
+  background: transparent;
+}

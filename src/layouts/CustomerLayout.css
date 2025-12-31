@@ -40,3 +40,13 @@
   position: relative;
   overflow-x: hidden;
 }
+
+/* ✅ 공통 "안쪽 흰 시트" (Header의 header-shell과 동일 기준) */
+.modern-inner-shell {
+  max-width: 900px;
+  margin: 0 auto;
+  background: #ffffff;
+  min-height: 100vh;
+  /* 첫 자식 margin-top 붕괴 방지 */
+  display: flow-root;
+}

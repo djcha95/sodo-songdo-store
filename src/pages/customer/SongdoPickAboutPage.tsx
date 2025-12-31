@@ -4,7 +4,9 @@ import './SongdoPickAboutPage.css';
 
 const SongdoPickAboutPage: React.FC = () => {
   return (
-    <div className="customer-page-container songdo-info-page">
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell">
+        <div className="songdo-info-page">
       <header className="songdo-info-header">
         <span className="songdo-info-chip">ABOUT US</span>
         <h1 className="songdo-info-title">송도픽이란 무엇인가요?</h1>
@@ -54,6 +56,8 @@ const SongdoPickAboutPage: React.FC = () => {
           <p>상품 수령은 예전처럼 **소도몰 매장**에서 하시면 됩니다. 😊</p>
         </div>
       </section>
+        </div>
+      </div>
     </div>
   );
 };

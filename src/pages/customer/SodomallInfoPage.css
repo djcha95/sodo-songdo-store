@@ -10,7 +10,7 @@
 }
 
 .sodomall-page-container {
-  background-color: #ffffff;
+  background-color: transparent; /* ✅ modern-inner-shell(흰 시트) 사용 */
   color: var(--sodo-text-main);
   padding-bottom: 60px; /* 하단 탭바 여백 고려 */
   min-height: 100vh;

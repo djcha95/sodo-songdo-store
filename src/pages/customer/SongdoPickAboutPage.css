@@ -4,8 +4,8 @@
 .songdo-info-page {
   /* Partner 페이지와 동일한 레이아웃 구조 */
   padding: 32px 20px 80px;  /* 좌우 20px 여백은 여기서만 관리 */
-  max-width: 768px;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0;
   font-family: "Pretendard", -apple-system, system-ui, sans-serif;
   color: #111827;
 }

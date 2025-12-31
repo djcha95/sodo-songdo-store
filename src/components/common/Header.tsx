@@ -10,12 +10,14 @@ import './Header.css';
 
 const ALL_CATEGORIES = [
   { id: 'home', label: '스토어홈' },
+  // ✅ 내일 픽업 탭은 "내일 픽업 상품이 있을 때만" 노출됩니다. (아래 필터링 로직)
+  { id: 'tomorrow', label: '🚀 내일픽업' },
+  // ✅ 오늘공구/추가공구는 항상 노출
   { id: 'today', label: '🔥 오늘공구' },
   { id: 'additional', label: '🔁 추가공구' },
   { id: 'lastchance', label: '⚡ 마지막찬스' },
   { id: 'special', label: '✨ 기획전' },
   { id: 'reviews', label: '💬 후기' },
-  { id: 'tomorrow', label: '🚀 내일픽업' },
   { id: 'onsite', label: '🏢 현장판매' },
 ];
 
@@ -75,10 +77,7 @@ const Header: React.FC = () => {
           return targetDate && dayjs(targetDate).isSame(tomorrowTarget, 'day');
         });
 
-        // 2. 추가 공구 상품 여부 확인
-        const hasAdditional = allProducts.some((p: any) => p.sourceType === 'SODOMALL');
-
-        // 3. 마지막 찬스 상품 여부 확인 (재고 3개 이하)
+        // 2. 마지막 찬스 상품 여부 확인 (재고 3개 이하)
         const hasLastChance = allProducts.some((p: any) => {
           const round = getDisplayRound(p as any);
           if (!round || round.status === 'draft') return false;
@@ -100,7 +99,6 @@ const Header: React.FC = () => {
         // 필터링 logic
         const nextCategories = ALL_CATEGORIES.filter(cat => {
           if (cat.id === 'tomorrow') return hasTomorrow;
-          if (cat.id === 'additional') return hasAdditional;
           if (cat.id === 'lastchance') return hasLastChance;
           return true; 
         });

@@ -3,7 +3,7 @@
 /* 페이지 전체 컨테이너: 고급스러운 크림톤 배경 */
 .customer-page-container.beauty-page {
   padding-bottom: 80px;
-  background-color: #FDFBF7; /* 💡 [수정] 웜톤 아이보리 배경 */
+  background-color: transparent; /* ✅ modern-inner-shell(흰 시트) 사용 */
   min-height: 100vh;
 }
 
@@ -15,7 +15,7 @@
   display: flex;
   align-items: center;
   padding: 14px 20px;
-  background-color: rgba(253, 251, 247, 0.95); /* 배경색 투명도 적용 */
+  background-color: rgba(255, 255, 255, 0.95); /* ✅ 헤더 시트와 자연스럽게 */
   border-bottom: 1px solid rgba(0,0,0,0.05);
   backdrop-filter: blur(10px);
 }

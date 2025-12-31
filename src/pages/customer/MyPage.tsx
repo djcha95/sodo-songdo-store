@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { 
   Crown, Gem, Sparkles, User, ShieldAlert, ShieldX, 
-  LogOut, ChevronRight, Clock, ShieldCheck 
+  LogOut, ChevronRight, Clock, ShieldCheck, MessageSquare, MapPin, Info, Handshake, Sparkles as SparklesIcon
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import SodomallLoader from '@/components/common/SodomallLoader';
 // ✅ [수정] UserDocument 타입을 명시적으로 import 합니다.
 import type { LoyaltyTier, UserDocument } from '@/shared/types';
+import { getReviewCountByUserId } from '@/firebase/reviewService';
 import './MyPage.css';
 
 // --- 등급별 아이콘 및 정보 (기존 로직 유지) ---
@@ -74,12 +75,29 @@ const MyPage = () => {
     }
   };
 
+  const [reviewCount, setReviewCount] = useState<number | null>(null);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        if (!user?.uid) return;
+        const cnt = await getReviewCountByUserId(user.uid);
+        setReviewCount(cnt);
+      } catch (e) {
+        // 고객 마이페이지에서는 조용히 실패 처리 (권한/네트워크 등)
+        setReviewCount(null);
+      }
+    };
+    load();
+  }, [user?.uid]);
+
   return (
-    <div className="mypage-container-simple">
-      <header className="mypage-header">
-        <h2>내 정보</h2>
-        <p>제휴 매장 방문 시 이 화면을 보여주세요.</p>
-      </header>
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell">
+        <div className="mypage-page">
+          <header className="mypage-header">
+            <h2>마이페이지</h2>
+            <p>예약·후기·안내를 한 곳에서 확인하세요.</p>
+          </header>
 
       {/* --- 디지털 멤버십 카드 --- */}
       <motion.div 
@@ -121,24 +139,72 @@ const MyPage = () => {
         </div>
       </motion.div>
 
-      {/* --- 심플 메뉴 리스트 --- */}
-      <div className="simple-menu-list">
-        <div className="menu-item" onClick={() => navigate('/mypage/history')}>
-            <div className="menu-label">
-                <span>📦 주문/픽업 내역</span>
-            </div>
-            <ChevronRight size={20} className="arrow" />
-        </div>
-        
-        {/* ❌ [삭제됨] 픽업 달력 메뉴 */}
+          {/* --- 빠른 메뉴 --- */}
+          <section className="mypage-section">
+            <div className="mypage-section-title">빠른 메뉴</div>
+            <div className="mypage-quick-grid">
+              <button type="button" className="mypage-quick-card primary" onClick={() => navigate('/mypage/history')}>
+                <div className="mypage-quick-top">
+                  <span className="mypage-quick-icon">📦</span>
+                  <ChevronRight size={18} className="mypage-quick-arrow" />
+                </div>
+                <div className="mypage-quick-title">주문/픽업 내역</div>
+                <div className="mypage-quick-sub">내 예약을 한 번에 확인</div>
+              </button>
 
-        {/* 닉네임 변경 등 기타 설정이 필요하면 여기에 추가 */}
-      </div>
+              <button type="button" className="mypage-quick-card" onClick={() => navigate('/reviews')}>
+                <div className="mypage-quick-top">
+                  <MessageSquare size={18} />
+                  <ChevronRight size={18} className="mypage-quick-arrow" />
+                </div>
+                <div className="mypage-quick-title">
+                  후기 이벤트
+                  {typeof reviewCount === 'number' && (
+                    <span className="mypage-pill">내 후기 {reviewCount}개</span>
+                  )}
+                </div>
+                <div className="mypage-quick-sub">이번 달 랭킹/베스트 보기</div>
+              </button>
+            </div>
+          </section>
+
+          {/* --- 안내/바로가기 --- */}
+          <section className="mypage-section">
+            <div className="mypage-section-title">안내 / 바로가기</div>
+            <div className="simple-menu-list">
+              <div className="menu-item" onClick={() => navigate('/sodomall-info')}>
+                <div className="menu-label"><MapPin size={18} /> <span>소도몰 오시는길/매장 안내</span></div>
+                <ChevronRight size={20} className="arrow" />
+              </div>
+              <div className="menu-item" onClick={() => navigate('/guide')}>
+                <div className="menu-label"><Info size={18} /> <span>공구 이용 안내</span></div>
+                <ChevronRight size={20} className="arrow" />
+              </div>
+              <div className="menu-item" onClick={() => navigate('/about')}>
+                <div className="menu-label"><SparklesIcon size={18} /> <span>송도픽 안내</span></div>
+                <ChevronRight size={20} className="arrow" />
+              </div>
+              <div className="menu-item" onClick={() => navigate('/partner/benefits')}>
+                <div className="menu-label"><Handshake size={18} /> <span>송도픽 제휴 안내</span></div>
+                <ChevronRight size={20} className="arrow" />
+              </div>
+              <div className="menu-item" onClick={() => navigate('/partner/hey-u-beauty')}>
+                <div className="menu-label"><Sparkles size={18} /> <span>HEY, U 뷰티룸 제휴 혜택</span></div>
+                <ChevronRight size={20} className="arrow" />
+              </div>
+              <div className="menu-item" onClick={() => navigate('/beauty')}>
+                <div className="menu-label"><Sparkles size={18} /> <span>베리맘 (PREMIUM COLLECTION)</span></div>
+                <ChevronRight size={20} className="arrow" />
+              </div>
+            </div>
+          </section>
 
       <div className="mypage-footer-actions">
           <button onClick={handleLogout} className="simple-logout-btn">
             <LogOut size={16} /> 로그아웃
           </button>
+      </div>
+        </div>
       </div>
     </div>
   );

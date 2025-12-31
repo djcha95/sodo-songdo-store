@@ -2,8 +2,8 @@
 
 .heyu-page {
   padding: 32px 20px 80px;
-  max-width: 960px;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0;
   font-family: "Pretendard", -apple-system, system-ui, sans-serif;
   color: #111827;
   line-height: 1.6;

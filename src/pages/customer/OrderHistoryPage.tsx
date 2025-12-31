@@ -536,10 +536,9 @@ const OrderHistoryPage: React.FC = () => {
   };
 
   return (
-    <div className="customer-page-container">
-      {/* ✅ [삭제] 헤더 및 뒤로가기 버튼 영역 삭제됨 */}
-      
-      <div className="order-history-page">
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell" style={{ padding: '16px 16px 40px' }}>
+        <div className="order-history-page">
         <AnimatePresence mode="wait">
           <motion.div key="orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             {renderContent()}
@@ -561,6 +560,7 @@ const OrderHistoryPage: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
     </div>
   );

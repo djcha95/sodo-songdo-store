@@ -4,7 +4,9 @@ import './SongdoPickPartnerBenefitsPage.css';
 
 const SongdoPickPartnerBenefitsPage: React.FC = () => {
   return (
-    <div className="customer-page-container songdo-partner-page">
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell">
+        <div className="songdo-partner-page">
       <header className="songdo-partner-header">
         <span className="songdo-partner-chip">PARTNER</span>
         <h1 className="songdo-partner-title">송도픽 제휴 안내 ✨</h1>
@@ -65,6 +67,8 @@ const SongdoPickPartnerBenefitsPage: React.FC = () => {
         </ul>
         {/* === 수정된 부분 끝 === */}
       </section>
+        </div>
+      </div>
     </div>
   );
 };

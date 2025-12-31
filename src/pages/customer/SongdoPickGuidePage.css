@@ -3,9 +3,9 @@
 .songdo-guide-page {
   /* 제휴 안내 페이지와 동일한 레이아웃 골격으로 맞추기 */
   padding: 20px 20px 60px; /* 너가 줄여둔 여백은 그대로 유지 */
-  max-width: 768px;        /* 가운데 모으는 기준 폭 */
-  margin: 0 auto;          /* 화면 중앙 정렬 */
-  background-color: #ffffff;
+  max-width: 100%;
+  margin: 0;
+  background-color: transparent; /* ✅ modern-inner-shell(흰 시트) 사용 */
   font-family: "Pretendard", -apple-system, sans-serif;
   word-break: keep-all;
   color: #111827;

@@ -71,47 +71,49 @@ const BeautyProductList: React.FC = () => {
   if (loading) return <SodomallLoader />;
 
   return (
-    <div className="customer-page-container beauty-page">
-      {/* 헤더: 뒤로가기 버튼 + 심플 타이틀 */}
-      <header className="beauty-page-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>
-            <ArrowLeft size={22} />
-        </button>
-        <h1 className="header-title">PREMIUM COLLECTION</h1>
-      </header>
+    <div className="customer-page-container modern-shell beauty-page">
+      <div className="modern-inner-shell">
+        {/* 페이지 헤더(내부) */}
+        <header className="beauty-page-header">
+          <button className="back-btn" onClick={() => navigate(-1)}>
+              <ArrowLeft size={22} />
+          </button>
+          <h1 className="header-title">PREMIUM COLLECTION</h1>
+        </header>
 
-      {/* ✅ [수정] 뷰티 소개 섹션 멘트 강화 */}
-      <section className="beauty-intro">
-        <img 
-          src="/images/verymom/logo.jpg" 
-          alt="VERY MOM" 
-          className="intro-logo" 
-        />
-        
-        <h2 className="intro-title">
-          세대를 넘나드는<br/>최상의 피부 경험
-        </h2>
-        <p className="intro-desc">
-          아이의 순수함을 지키는 섬세함과 성인 피부의 깊은 고민을 해결하는 기술력.<br/>
-          베리맘의 시그니처 라인을 오직 송도픽 예약 혜택으로 제안합니다.
-        </p>
-      </section>
-
-      {/* 상품 리스트 */}
-      <div className="songdo-product-list beauty-list-grid">
-      {products.length > 0 ? (
-        products.map((p, idx) => (
-          <ModernProductThumbCard
-            key={p.id}
-            product={p}
-            index={idx} // 뷰티 페이지에서 순번 표시하고 싶을 때
-            variant="grid" // 그리드 형식으로 꽉 차게 표시
+        {/* ✅ [수정] 뷰티 소개 섹션 멘트 강화 */}
+        <section className="beauty-intro">
+          <img 
+            src="/images/verymom/logo.jpg" 
+            alt="VERY MOM" 
+            className="intro-logo" 
           />
-        ))
-      ) : (
-        <BeautyComingSoon />
-      )}
-    </div>
+          
+          <h2 className="intro-title">
+            세대를 넘나드는<br/>최상의 피부 경험
+          </h2>
+          <p className="intro-desc">
+            아이의 순수함을 지키는 섬세함과 성인 피부의 깊은 고민을 해결하는 기술력.<br/>
+            베리맘의 시그니처 라인을 오직 송도픽 예약 혜택으로 제안합니다.
+          </p>
+        </section>
+
+        {/* 상품 리스트 */}
+        <div className="songdo-product-list beauty-list-grid">
+        {products.length > 0 ? (
+          products.map((p, idx) => (
+            <ModernProductThumbCard
+              key={p.id}
+              product={p}
+              index={idx}
+              variant="grid"
+            />
+          ))
+        ) : (
+          <BeautyComingSoon />
+        )}
+        </div>
+      </div>
     </div>
   );
 };

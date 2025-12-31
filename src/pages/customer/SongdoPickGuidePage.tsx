@@ -3,7 +3,9 @@ import './SongdoPickGuidePage.css';
 
 const SongdoPickGuidePage: React.FC = () => {
   return (
-    <div className="customer-page-container songdo-guide-page">
+    <div className="customer-page-container modern-shell">
+      <div className="modern-inner-shell">
+        <div className="songdo-guide-page">
       <header className="songdo-guide-header">
         <h1 className="songdo-guide-title">공구 이용 안내</h1>
         <p className="songdo-guide-subtitle">
@@ -96,6 +98,8 @@ const SongdoPickGuidePage: React.FC = () => {
           매장은 픽업 장소만 제공합니다.
         </p>
       </section>
+        </div>
+      </div>
     </div>
   );
 };
