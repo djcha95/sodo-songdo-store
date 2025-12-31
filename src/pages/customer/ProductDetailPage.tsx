@@ -591,7 +591,12 @@ const PurchasePanel: React.FC<{
                 const stockMax = getMaxPurchasableQuantity(selectedVariantGroup, selectedItem);
 
                 // 👇 [추가] 1인당 제한 로직 적용
-                const limitSetting = selectedItem.limitQuantity ?? Infinity;
+                // ✅ [수정] limitQuantity가 null, undefined, -1이거나 양수가 아닐 때 Infinity로 처리
+                const limitSetting = (selectedItem.limitQuantity ?? null) !== null && 
+                                     Number.isFinite(selectedItem.limitQuantity) && 
+                                     (selectedItem.limitQuantity as number) > 0
+                    ? Number(selectedItem.limitQuantity)
+                    : Infinity;
                 const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
                 
                 // 👇 [추가] 이미 한도만큼 샀으면 '구매 완료' 버튼 표시
@@ -993,7 +998,12 @@ const fetchProduct = useCallback(async () => {
         if (reservationStatus !== 'idle' || !product || !displayRound || !selectedVariantGroup || !selectedItem) return;
 
         // 구매 한도(보안관) 체크
-        const limitSetting = selectedItem.limitQuantity ?? Infinity;
+        // ✅ [수정] limitQuantity가 null, undefined, -1이거나 양수가 아닐 때 Infinity로 처리
+        const limitSetting = (selectedItem.limitQuantity ?? null) !== null && 
+                             Number.isFinite(selectedItem.limitQuantity) && 
+                             (selectedItem.limitQuantity as number) > 0
+            ? Number(selectedItem.limitQuantity)
+            : Infinity;
         const myRemainingLimit = Math.max(0, limitSetting - myPurchasedCount);
 
         if (quantity > myRemainingLimit) {
