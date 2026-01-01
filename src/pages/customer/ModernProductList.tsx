@@ -31,6 +31,12 @@ const LazyChevronRight = React.lazy(() =>
 const LazyShoppingBag = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.ShoppingBag }))
 );
+const LazyAlertTriangle = React.lazy(() =>
+  import('lucide-react').then((module) => ({ default: module.AlertTriangle }))
+);
+const LazyRefreshCw = React.lazy(() =>
+  import('lucide-react').then((module) => ({ default: module.RefreshCw }))
+);
 
 type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite' | 'lastchance';
 const PAGE_SIZE = 30;
@@ -168,6 +174,10 @@ const ModernProductList: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] = useState<any | null>(null);
+  
+  // ✅ 에러 상태 추가
+  const [error, setError] = useState<string | null>(null);
+  const [heroError, setHeroError] = useState<string | null>(null);
 
   const observerRef = useRef<HTMLDivElement | null>(null);
   const ioRef = useRef<IntersectionObserver | null>(null);
@@ -209,10 +219,10 @@ const ModernProductList: React.FC = () => {
   }, [user]);
   useEffect(() => { fetchMyOrders(); }, [fetchMyOrders]);
 
-  // 특수 상품(기획전) 로드
-  useEffect(() => {
-  const fetchSpecialProducts = async () => {
+  // 특수 상품(기획전) 로드 함수 (재시도용으로 분리)
+  const fetchSpecialProducts = useCallback(async () => {
     try {
+      setHeroError(null);
       const { products: fetched } = await getPaginatedProductsWithStock(300, null, null, 'all');
       const events = fetched.filter((p) => {
         const r = getDisplayRound(p);
@@ -221,17 +231,23 @@ const ModernProductList: React.FC = () => {
         return hasEventTag && determineActionState(r, null) !== 'ENDED';
       });
       setHeroProducts(events);
-    } catch (e) { console.error(e); }
-  };
-  fetchSpecialProducts();
-}, []);
+    } catch (e: any) { 
+      console.error('기획전 상품 로드 실패:', e);
+      setHeroError('기획전 상품을 불러오는 중 문제가 발생했습니다.');
+    }
+  }, []);
 
-useEffect(() => {
-  const loadTabProducts = async () => {
+  useEffect(() => {
+    fetchSpecialProducts();
+  }, [fetchSpecialProducts]);
+
+  // 탭별 상품 로드 함수 (재시도용으로 분리)
+  const loadTabProducts = useCallback(async () => {
     setLoading(true);
     setProducts([]);
     setLastVisible(null);
     setHasMore(true);
+    setError(null); // ✅ 에러 상태 초기화
     isFetchingRef.current = true;
 
     try {
@@ -241,16 +257,25 @@ useEffect(() => {
       setProducts(initialProducts);
       setLastVisible(initialLastVisible);
       setHasMore(!!initialLastVisible && initialProducts.length === PAGE_SIZE);
-    } catch (err) {
-      console.error(err);
+      setError(null); // ✅ 성공 시 에러 초기화
+    } catch (err: any) {
+      console.error('상품 로드 실패:', err);
+      // ✅ 사용자 친화적인 에러 메시지
+      const errorMessage = err?.message || err?.code 
+        ? '상품을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+        : '네트워크 연결을 확인하고 다시 시도해주세요.';
+      setError(errorMessage);
+      setProducts([]); // ✅ 에러 시 빈 배열 유지
+      setHasMore(false);
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
     }
-  };
+  }, [fetchTab]);
 
-  loadTabProducts();
-}, [activeTab, fetchTab]);
+  useEffect(() => {
+    loadTabProducts();
+  }, [activeTab, loadTabProducts]);
 
 const fetchNextPage = useCallback(async () => {
   if (isFetchingRef.current || !hasMoreRef.current) return;
@@ -269,8 +294,11 @@ const fetchNextPage = useCallback(async () => {
 
     setLastVisible(newLastVisible);
     setHasMore(!!newLastVisible && newProducts.length === PAGE_SIZE);
-  } catch (err) {
-    console.error(err);
+    setError(null); // ✅ 성공 시 에러 초기화
+  } catch (err: any) {
+    console.error('다음 페이지 로드 실패:', err);
+    setError('추가 상품을 불러오는 중 문제가 발생했습니다.');
+    setHasMore(false); // ✅ 에러 시 더 이상 로드하지 않음
   } finally {
     setIsLoadingMore(false);
     isFetchingRef.current = false;
@@ -449,20 +477,37 @@ const fetchNextPage = useCallback(async () => {
           )}
 
           {/* ✅ 오늘의 공구 섹션 (배너 바로 아래로 이동) */}
-          <section className="sp-section">
-            <div className="sp-section-head">
-              <div className="sp-section-left">
-                <h3 className="sp-section-title">🔥 오늘의 공구</h3>
-                <span className="sp-section-desc">오늘의 새로운 공동구매</span>
+          {error && todayPrimary.length === 0 && processedNormal.length === 0 ? (
+            <section className="sp-section">
+              <div className="sp-error-view" style={{ marginTop: '20px', padding: '60px 20px' }}>
+                <Suspense fallback={null}><LazyAlertTriangle size={48} strokeWidth={1.5} /></Suspense>
+                <p>{error}</p>
+                <button 
+                  className="sp-retry-button" 
+                  onClick={loadTabProducts}
+                  type="button"
+                >
+                  <Suspense fallback={null}><LazyRefreshCw size={16} /></Suspense>
+                  다시 시도
+                </button>
               </div>
-              <button className="sp-viewall" onClick={() => navigate('/?tab=today')} type="button">전체보기</button>
-            </div>
-            <div className="sp-hscroll">
-              {todayPrimary.map((p) => (
-                <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
-              ))}
-            </div>
-          </section>
+            </section>
+          ) : (
+            <section className="sp-section">
+              <div className="sp-section-head">
+                <div className="sp-section-left">
+                  <h3 className="sp-section-title">🔥 오늘의 공구</h3>
+                  <span className="sp-section-desc">오늘의 새로운 공동구매</span>
+                </div>
+                <button className="sp-viewall" onClick={() => navigate('/?tab=today')} type="button">전체보기</button>
+              </div>
+              <div className="sp-hscroll">
+                {todayPrimary.map((p) => (
+                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                ))}
+              </div>
+            </section>
+          )}
 
           {tomorrowPickupProducts.length > 0 && (
             <section className="sp-section">
@@ -501,6 +546,30 @@ const fetchNextPage = useCallback(async () => {
                  ))}
                </div>
              </section>
+          )}
+          
+          {/* ✅ 기획전 로드 실패 시 에러 표시 */}
+          {heroError && processedEventProducts.length === 0 && (
+            <section className="sp-section">
+              <div className="sp-section-head">
+                <div className="sp-section-left">
+                  <h3 className="sp-section-title">기획전</h3>
+                  <span className="sp-section-desc"> 시즌 한정 기획 공동구매 </span>
+                </div>
+              </div>
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: '#EF4444' }}>
+                <p style={{ marginBottom: '16px' }}>{heroError}</p>
+                <button 
+                  className="sp-retry-button" 
+                  onClick={fetchSpecialProducts}
+                  type="button"
+                  style={{ margin: '0 auto' }}
+                >
+                  <Suspense fallback={null}><LazyRefreshCw size={16} /></Suspense>
+                  다시 시도
+                </button>
+              </div>
+            </section>
           )}
 
           {additionalSorted.length > 0 && (
@@ -562,32 +631,52 @@ const fetchNextPage = useCallback(async () => {
 {/* ================================================= */}
 {activeTab !== 'all' && (
   <div ref={primaryRef} className="sp-grid-container"> {/* 컨테이너 클래스 추가 권장 */}
-    {activeTab === 'special' ? (
-      processedEventProducts.length > 0 ? (
+    {/* ✅ 에러 표시 */}
+    {error && !loading && (
+      <div className="sp-error-view">
+        <Suspense fallback={null}><LazyAlertTriangle size={48} strokeWidth={1.5} /></Suspense>
+        <p>{error}</p>
+        <button 
+          className="sp-retry-button" 
+          onClick={loadTabProducts}
+          type="button"
+        >
+          <Suspense fallback={null}><LazyRefreshCw size={16} /></Suspense>
+          다시 시도
+        </button>
+      </div>
+    )}
+    
+    {!error && (
+      activeTab === 'special' ? (
+        processedEventProducts.length > 0 ? (
+          <div className="sp-grid">
+            {processedEventProducts.map((p, idx) => (
+              <ModernProductThumbCard key={`special-${p.id}`} product={p as any} variant="grid" index={idx} />
+            ))}
+          </div>
+        ) : (
+          !loading && (
+            <div className="sp-empty-view">
+              <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
+              <p>현재 진행 중인 기획전이 없습니다.</p>
+            </div>
+          )
+        )
+      ) : visibleNormalProducts.length > 0 ? (
         <div className="sp-grid">
-          {processedEventProducts.map((p, idx) => (
-            <ModernProductThumbCard key={`special-${p.id}`} product={p as any} variant="grid" index={idx} />
+          {visibleNormalProducts.map((p, idx) => (
+            <ModernProductThumbCard key={p.id} product={p as any} variant="grid" index={idx} />
           ))}
         </div>
       ) : (
-        <div className="sp-empty-view">
-          <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
-          <p>현재 진행 중인 기획전이 없습니다.</p>
-        </div>
-      )
-    ) : visibleNormalProducts.length > 0 ? (
-      <div className="sp-grid">
-        {visibleNormalProducts.map((p, idx) => (
-          <ModernProductThumbCard key={p.id} product={p as any} variant="grid" index={idx} />
-        ))}
-      </div>
-    ) : (
-      !loading && (
-        <div className="sp-empty-view">
-          <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
-          <p>내일 픽업 가능한 상품이 아직 없어요.</p>
-          <span>새로운 상품이 곧 준비될 예정입니다!</span>
-        </div>
+        !loading && (
+          <div className="sp-empty-view">
+            <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
+            <p>내일 픽업 가능한 상품이 아직 없어요.</p>
+            <span>새로운 상품이 곧 준비될 예정입니다!</span>
+          </div>
+        )
       )
     )}
   </div>

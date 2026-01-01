@@ -585,6 +585,61 @@
   font-weight: 400;
 }
 
+/* ✅ 에러 뷰 스타일 */
+.sp-error-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+  width: 100%;
+}
+
+.sp-error-view svg {
+  margin-bottom: 16px;
+  color: #EF4444;
+}
+
+.sp-error-view p {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1F2937;
+  margin: 0 0 24px 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.sp-retry-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #8E1E20;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sp-retry-button:hover {
+  background: #6B1517;
+  transform: translateY(-1px);
+}
+
+.sp-retry-button:active {
+  transform: translateY(0);
+}
+
+.sp-retry-button svg {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
 .sp-hscroll {
   display: flex;
   gap: 10px;
