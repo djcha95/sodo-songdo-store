@@ -275,6 +275,7 @@ const ProductListPageAdmin: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [pageData, setPageData] = useState<Product[]>([]);
+  const [stockUnitAuditOpen, setStockUnitAuditOpen] = useState(false);
   const [updatingItems, setUpdatingItems] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
@@ -304,6 +305,53 @@ const fetchData = useCallback(async () => {
 }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ✅ 단위 점검: "박스"로 입력했는데 stockDeductionAmount>1인 케이스(단위 불일치 가능) 탐지
+  const stockUnitAudit = useMemo(() => {
+    const issues: Array<{
+      productId: string;
+      productName: string;
+      roundId: string;
+      roundName: string;
+      vgId: string;
+      vgName: string;
+      stockUnitType: string;
+      totalPhysicalStock: number | null;
+      stockDeductionAmount: number;
+      reservedCount?: number;
+    }> = [];
+
+    for (const p of pageData) {
+      const salesHistory = Array.isArray(p.salesHistory) ? p.salesHistory : [];
+      for (const r of salesHistory) {
+        const vgs = Array.isArray(r.variantGroups) ? r.variantGroups : [];
+        for (const vg of vgs) {
+          const unitLabel = String((vg as any).stockUnitType || '').trim();
+          const isBoxUnit = unitLabel.includes('박스') || unitLabel.toLowerCase().includes('box');
+          const firstItem = Array.isArray(vg.items) ? vg.items[0] : undefined;
+          const deduct = Number(firstItem?.stockDeductionAmount ?? 1);
+          const total = (vg as any).totalPhysicalStock ?? null;
+          const reserved = (vg as any).reservedCount;
+          if (isBoxUnit && deduct > 1) {
+            issues.push({
+              productId: p.id,
+              productName: p.groupName,
+              roundId: (r as any).roundId,
+              roundName: (r as any).roundName,
+              vgId: (vg as any).id,
+              vgName: (vg as any).groupName,
+              stockUnitType: unitLabel || '박스',
+              totalPhysicalStock: total,
+              stockDeductionAmount: deduct,
+              reservedCount: typeof reserved === 'number' ? reserved : undefined,
+            });
+          }
+        }
+      }
+    }
+
+    return issues;
+  }, [pageData]);
 
   const processedRounds = useMemo<EnrichedRoundItem[]>(() => {
     let flatList: EnrichedRoundItem[] = [];
@@ -549,9 +597,20 @@ const fetchData = useCallback(async () => {
         icon={<PackageOpen size={28} />}
         priority="normal"
         actions={
-          <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="신규 대표 상품 등록">
-            <Plus size={18} /> 신규 대표 상품 추가
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setStockUnitAuditOpen((v) => !v)}
+              className="admin-add-button"
+              title="재고 단위(박스/개)와 차감 단위(stockDeductionAmount) 불일치 가능 케이스를 점검합니다."
+              style={{ background: stockUnitAuditOpen ? '#334155' : undefined }}
+              type="button"
+            >
+              <AlertTriangle size={18} /> 단위 점검 {stockUnitAudit.length > 0 ? `(${stockUnitAudit.length})` : ''}
+            </button>
+            <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="신규 대표 상품 등록" type="button">
+              <Plus size={18} /> 신규 대표 상품 추가
+            </button>
+          </div>
         }
       />
 
@@ -579,6 +638,80 @@ const fetchData = useCallback(async () => {
           if (key === 'status') setFilterStatus(value);
         }}
       />
+
+      {/* ✅ 단위 점검 결과 패널 */}
+      {stockUnitAuditOpen && (
+        <div
+          style={{
+            margin: '12px 0 16px',
+            padding: '12px 14px',
+            border: '1px solid #E2E8F0',
+            borderRadius: 10,
+            background: '#FFFFFF',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <div style={{ fontWeight: 800, color: '#0F172A' }}>
+              단위 점검 결과: {stockUnitAudit.length}건
+            </div>
+            <button type="button" onClick={() => setStockUnitAuditOpen(false)} style={{ border: 'none', background: 'transparent', color: '#64748B', cursor: 'pointer' }}>
+              닫기
+            </button>
+          </div>
+          <div style={{ marginTop: 6, color: '#475569', fontSize: 13, lineHeight: 1.45 }}>
+            “재고 단위가 박스(예: stockUnitType=박스)인데, 주문 1개가 stockDeductionAmount(예: 2)만큼 재고를 차감”하는 형태는
+            남은수량이 체감과 다르게 보일 수 있습니다. 아래 리스트는 그런 가능성이 높은 데이터입니다.
+          </div>
+
+          {stockUnitAudit.length === 0 ? (
+            <div style={{ marginTop: 10, color: '#16A34A', fontWeight: 700 }}>
+              현재 로딩된 데이터에서는 의심 케이스가 없습니다.
+            </div>
+          ) : (
+            <div style={{ marginTop: 10, overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#F8FAFC', textAlign: 'left' }}>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #E2E8F0' }}>상품/회차</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #E2E8F0' }}>옵션</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #E2E8F0' }}>총재고</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #E2E8F0' }}>차감단위</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #E2E8F0' }}>예약(서버)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stockUnitAudit.slice(0, 50).map((it) => (
+                    <tr key={`${it.productId}-${it.roundId}-${it.vgId}`}>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div style={{ fontWeight: 700, color: '#0F172A' }}>{it.productName}</div>
+                        <div style={{ color: '#64748B' }}>{it.roundName} ({it.productId})</div>
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div style={{ fontWeight: 700 }}>{it.vgName}</div>
+                        <div style={{ color: '#64748B' }}>vgId: {it.vgId}</div>
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                        {typeof it.totalPhysicalStock === 'number' ? `${it.totalPhysicalStock.toLocaleString()}${it.stockUnitType}` : '무제한/미설정'}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                        {it.stockDeductionAmount}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                        {typeof it.reservedCount === 'number' ? it.reservedCount.toLocaleString() : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {stockUnitAudit.length > 50 && (
+                <div style={{ marginTop: 8, color: '#64748B', fontSize: 12 }}>
+                  * 최대 50건만 표시됩니다. ({stockUnitAudit.length}건 중)
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="admin-tab-content">
         <div className="admin-product-table-container">

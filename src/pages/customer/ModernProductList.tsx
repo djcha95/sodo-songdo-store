@@ -184,6 +184,7 @@ const ModernProductList: React.FC = () => {
   const isFetchingRef = useRef(false);
   const hasMoreRef = useRef(true);
   const lastVisibleRef = useRef<any | null>(null);
+  const requestSeqRef = useRef(0);
 
   const fallbackRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = usePageRefs();
@@ -243,6 +244,7 @@ const ModernProductList: React.FC = () => {
 
   // 탭별 상품 로드 함수 (재시도용으로 분리)
   const loadTabProducts = useCallback(async () => {
+    const reqId = ++requestSeqRef.current;
     setLoading(true);
     setProducts([]);
     setLastVisible(null);
@@ -253,6 +255,9 @@ const ModernProductList: React.FC = () => {
     try {
       const { products: initialProducts, lastVisible: initialLastVisible } =
         await getPaginatedProductsWithStock(PAGE_SIZE, null, null, fetchTab);
+
+      // ✅ stale response 방지 (탭 전환/연속 호출 시 뒤늦은 응답 무시)
+      if (reqId !== requestSeqRef.current) return;
 
       setProducts(initialProducts);
       setLastVisible(initialLastVisible);
@@ -268,6 +273,7 @@ const ModernProductList: React.FC = () => {
       setProducts([]); // ✅ 에러 시 빈 배열 유지
       setHasMore(false);
     } finally {
+      if (reqId !== requestSeqRef.current) return;
       setLoading(false);
       isFetchingRef.current = false;
     }
@@ -284,8 +290,11 @@ const fetchNextPage = useCallback(async () => {
   setIsLoadingMore(true);
 
   try {
+    const reqId = requestSeqRef.current;
     const { products: newProducts, lastVisible: newLastVisible } =
       await getPaginatedProductsWithStock(PAGE_SIZE, lastVisibleRef.current, null, fetchTab);
+
+    if (reqId !== requestSeqRef.current) return;
 
     setProducts((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
@@ -327,7 +336,9 @@ const fetchNextPage = useCallback(async () => {
     return heroProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any }))
       .filter(p => {
         if (!p.displayRound) return false;
-        const stock = getStockInfo(p.displayRound.variantGroups?.[0]);
+        // ✅ 방어: variantGroup이 없는 레거시 데이터가 있어도 화면이 죽지 않도록
+        const vg = p.displayRound.variantGroups?.[0];
+        const stock = getStockInfo(vg as any);
         return !(stock.isLimited && stock.remainingUnits <= 0);
       });
   }, [heroProducts]);

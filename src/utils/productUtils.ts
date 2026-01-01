@@ -29,17 +29,27 @@ export interface StockInfo {
   unitPerBox: number;
 }
 
-export const getStockInfo = (vg: VariantGroup): StockInfo => {
+export const getStockInfo = (vg?: VariantGroup | null): StockInfo => {
+  // ✅ 방어: 옵션 그룹이 없거나 레거시 데이터면 "무제한" 취급(화면 크래시/오판 방지)
+  if (!vg) return { isLimited: false, remainingUnits: Infinity, unitPerBox: 1 };
+
   const totalStock = vg.totalPhysicalStock;
-  const isLimited = totalStock !== null && totalStock !== -1;
+
+  // ✅ null/undefined/-1은 "무제한"으로 간주
+  const isLimited = typeof totalStock === 'number' && totalStock !== -1;
   if (!isLimited) {
     return { isLimited: false, remainingUnits: Infinity, unitPerBox: 1 };
   }
-  const reserved = vg.reservedCount || 0;
-  const remainingUnits = Math.max(0, (totalStock || 0) - reserved);
-  const units = (vg.items?.map(it => it.stockDeductionAmount || 1) || []);
-  const allSame = units.length > 0 && units.every(u => u === units[0]);
-  const unitPerBox = allSame && units[0] > 1 ? (units[0] || 1) : 1;
+
+  const reservedRaw = (vg as any).reservedCount;
+  const reserved =
+    typeof reservedRaw === 'number' && Number.isFinite(reservedRaw) ? reservedRaw : 0;
+
+  const remainingUnits = Math.max(0, totalStock - reserved);
+
+  const units = (vg.items?.map((it) => it.stockDeductionAmount || 1) || []);
+  const allSame = units.length > 0 && units.every((u) => u === units[0]);
+  const unitPerBox = allSame && (units[0] || 1) > 1 ? (units[0] || 1) : 1;
   return { isLimited: true, remainingUnits, unitPerBox };
 };
 
@@ -215,11 +225,15 @@ export const sortProductsForDisplay = (a: { displayRound: OriginalSalesRound }, 
   const vgA = roundA.variantGroups?.[0], vgB = roundB.variantGroups?.[0];
   const itemA = vgA?.items?.[0], itemB = vgB?.items?.[0];
   if (!vgA || !itemA) return 1; if (!vgB || !itemB) return -1;
-  const isLimitedA = vgA.totalPhysicalStock !== null && vgA.totalPhysicalStock !== -1;
-  const remainingStockA = isLimitedA ? (vgA.totalPhysicalStock || 0) - ((vgA as VariantGroup).reservedCount || 0) : Infinity;
+  const totalA = vgA.totalPhysicalStock;
+  const isLimitedA = typeof totalA === 'number' && totalA !== -1;
+  const reservedA = typeof (vgA as any).reservedCount === 'number' ? (vgA as any).reservedCount : 0;
+  const remainingStockA = isLimitedA ? Math.max(0, totalA - reservedA) : Infinity;
   const priceA = itemA.price;
-  const isLimitedB = vgB.totalPhysicalStock !== null && vgB.totalPhysicalStock !== -1;
-  const remainingStockB = isLimitedB ? (vgB.totalPhysicalStock || 0) - ((vgB as VariantGroup).reservedCount || 0) : Infinity;
+  const totalB = vgB.totalPhysicalStock;
+  const isLimitedB = typeof totalB === 'number' && totalB !== -1;
+  const reservedB = typeof (vgB as any).reservedCount === 'number' ? (vgB as any).reservedCount : 0;
+  const remainingStockB = isLimitedB ? Math.max(0, totalB - reservedB) : Infinity;
   const priceB = itemB.price;
   if (isLimitedA && !isLimitedB) return -1; if (!isLimitedA && isLimitedB) return 1;
   if (isLimitedA && isLimitedB) { if (remainingStockA !== remainingStockB) return remainingStockA - remainingStockB; }
@@ -227,11 +241,13 @@ export const sortProductsForDisplay = (a: { displayRound: OriginalSalesRound }, 
   return 0;
 };
 
-export function computeRemainingUnits(vg: { totalPhysicalStock: number | null; reservedCount?: number | null }) {
+export function computeRemainingUnits(vg: { totalPhysicalStock: number | null | undefined; reservedCount?: number | null | undefined }) {
   const total = vg.totalPhysicalStock;
-  if (total === null || total === -1) return Infinity;
-  const reserved = vg.reservedCount || 0;
-  return Math.max(0, (total || 0) - reserved);
+  // ✅ null/undefined/-1은 무제한 취급
+  if (typeof total !== 'number' || total === -1) return Infinity;
+  const reservedRaw = vg.reservedCount;
+  const reserved = typeof reservedRaw === 'number' && Number.isFinite(reservedRaw) ? reservedRaw : 0;
+  return Math.max(0, total - reserved);
 }
 
 export function getMaxPurchasableQuantity(

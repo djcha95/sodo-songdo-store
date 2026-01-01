@@ -81,6 +81,7 @@ const deleteSalesRoundsCallable = httpsCallable(functions, 'deleteSalesRounds');
 const getWaitlistForRoundCallable = httpsCallable(functions, 'getWaitlistForRound');
 const updateMultipleVariantGroupStocksCallable = httpsCallable(functions, 'updateMultipleVariantGroupStocks');
 const updateMultipleSalesRoundStatusesCallable = httpsCallable(functions, 'updateMultipleSalesRoundStatuses');
+const getProductsWithStockCallable = httpsCallable(functions, 'getProductsWithStock');
 
 // --- 기존 함수 (이름 충돌 없음) ---
 const getProductByIdCallable = httpsCallable(functions, 'getProductByIdWithStock');
@@ -153,12 +154,9 @@ export const updateSalesRound = async (
 export const getProductById = async (productId: string): Promise<Product | null> => {
   const result = await getProductByIdCallable({ productId });
   const { product } = result.data as { product: Product | null };
-
-  if (product) {
-    const reservedMap = await getReservedQuantitiesMap();
-    return applyReservedOverlay(product, reservedMap);
-  }
-  return null;
+  // ✅ Cloud Function에서 stock/reservedCount 오버레이까지 포함해 내려주므로
+  // 클라이언트가 orders를 직접 읽어 합산할 필요가 없습니다(비관리자 permission-denied 방지).
+  return product ?? null;
 };
 
 // --- 6. 상품명으로 검색 (서버) ---
@@ -480,7 +478,12 @@ export const updateItemStock = async (
 
 export interface GetProductsWithStockResponse {
   products: Product[];
-  lastVisible: number | null;
+  /**
+   * 페이지네이션 커서
+   * - Cloud Function(getProductsWithStock): lastDocId(string)
+   * - (fallback) Firestore 직접 조회: createdAt millis(number)
+   */
+  lastVisible: string | number | null;
 }
 
 // ✅ 탭 타입 정의
@@ -488,7 +491,12 @@ type ProductTabType = 'all' | 'today' | 'additional' | 'onsite';
 
 type GetProductsWithStockPayload = {
   pageSize?: number;
-  lastVisible?: number | null;
+  /**
+   * 페이지네이션 커서
+   * - Cloud Function(getProductsWithStock): lastDocId(string)
+   * - (fallback) Firestore 직접 조회: createdAt millis(number)
+   */
+  lastVisible?: string | number | null;
   tab?: ProductTabType | null;
   /**
    * 예약수량 오버레이를 적용할지 여부
@@ -497,6 +505,20 @@ type GetProductsWithStockPayload = {
    */
   withReservedOverlay?: boolean;
 };
+
+// --------------------------------------------------------
+// ✅ Cloud Function 결과 캐시 (첫 페이지 위주)
+//  - 목적: 탭 전환/홈 재진입 시 중복 호출 감소 → 비용/속도 개선
+//  - 주의: 재고/예약수량은 변동 가능하므로 TTL을 짧게 유지
+// --------------------------------------------------------
+const PRODUCTS_CF_CACHE_TTL_MS = 10_000; // 10초
+let productsCfCache:
+  | {
+      key: string;
+      data: GetProductsWithStockResponse;
+      fetchedAt: number;
+    }
+  | null = null;
 
 // 🔁 예약수량 Map 캐시 (같은 세션에서 여러 번 재사용)
 const RESERVED_CACHE_TTL_MS = 30_000; // 30초 정도 유지
@@ -517,77 +539,146 @@ const getReservedQuantitiesMapCached = async (): Promise<Map<string, number>> =>
   return map;
 };
 
+// --------------------------------------------------------
+// (fallback) Firestore 직접 조회 버전
+//  - Cloud Function 미배포/장애 시에도 "상품은 뜨게" 하는 안전장치
+//  - orders 직접 조회(permission-denied) 가능성이 있으므로 오버레이는 실패해도 무시
+// --------------------------------------------------------
+const getProductsWithStockFirestoreFallback = async (
+  payload: GetProductsWithStockPayload
+): Promise<GetProductsWithStockResponse> => {
+  const {
+    pageSize = 10,
+    lastVisible = null,
+    tab = 'all',
+    withReservedOverlay = false,
+  } = payload;
+
+  const queryConstraints: QueryConstraint[] = [];
+
+  // 1. 탭별 필터링
+  if (tab === 'onsite') {
+    queryConstraints.push(where('isOnsite', '==', true));
+    queryConstraints.push(where('isArchived', '==', false));
+  } else {
+    queryConstraints.push(where('isArchived', '==', false));
+  }
+
+  // 2. 정렬 (createdAt 내림차순)
+  queryConstraints.push(orderBy('createdAt', 'desc'));
+
+  // 3. 페이지네이션 커서 (fallback은 숫자 커서만 지원)
+  if (typeof lastVisible === 'number' && lastVisible) {
+    const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
+    queryConstraints.push(startAfter(lastVisibleTimestamp));
+  }
+
+  // 4. limit
+  queryConstraints.push(limit(pageSize));
+
+  const productsRef = collection(db, 'products');
+  const q = query(productsRef, ...queryConstraints);
+
+  let reservedMap: Map<string, number> | null = null;
+  if (withReservedOverlay) {
+    try {
+      reservedMap = await getReservedQuantitiesMapCached();
+    } catch (e) {
+      // 비관리자 permission-denied 등의 경우: 오버레이만 포기하고 상품은 계속 노출
+      console.warn('[fallback] reserved overlay skipped:', e);
+      reservedMap = null;
+    }
+  }
+
+  const snapshot = await getDocs(q);
+
+  const products: Product[] = [];
+  snapshot.docs.forEach((docSnap) => {
+    const productData = docSnap.data() as Product;
+    const baseProduct: Product = { ...productData, id: docSnap.id };
+
+    const finalProduct =
+      withReservedOverlay && reservedMap
+        ? applyReservedOverlay(baseProduct, reservedMap)
+        : baseProduct;
+
+    products.push(finalProduct);
+  });
+
+  const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+  const newLastVisible = lastDoc
+    ? (lastDoc.data().createdAt as Timestamp).toMillis()
+    : null;
+
+  return { products, lastVisible: newLastVisible };
+};
+
 export const getProductsWithStock = async (
   payload: GetProductsWithStockPayload
 ): Promise<GetProductsWithStockResponse> => {
+  const {
+    pageSize = 10,
+    lastVisible = null,
+    tab = 'all',
+    withReservedOverlay = true, // ✅ 기본값: true (기존 동작 유지)
+  } = payload;
+
+  // ✅ 숫자 커서가 들어오면 (구 로직) fallback으로 처리
+  if (typeof lastVisible === 'number') {
+    return getProductsWithStockFirestoreFallback(payload);
+  }
+
+  // ✅ Cloud Function 우선: 비관리자도 안전하게 reservedCount(집계) 포함 가능
   try {
-    const {
-      pageSize = 10,
-      lastVisible = null,
-      tab = 'all',
-      withReservedOverlay = true, // ✅ 기본값: true (기존 동작 유지)
-    } = payload;
+    const lastDocId = typeof lastVisible === 'string' ? lastVisible : null;
 
-    const queryConstraints: QueryConstraint[] = [];
-
-    // 1. 탭별 필터링
-    if (tab === 'onsite') {
-      queryConstraints.push(where('isOnsite', '==', true));
-      queryConstraints.push(where('isArchived', '==', false));
-    } else {
-      queryConstraints.push(where('isArchived', '==', false));
+    // ✅ 캐시는 첫 페이지(lastDocId=null)에서만 적용
+    if (!lastDocId) {
+      const cacheKey = JSON.stringify({ pageSize, tab, withReservedOverlay });
+      if (
+        productsCfCache &&
+        productsCfCache.key === cacheKey &&
+        Date.now() - productsCfCache.fetchedAt < PRODUCTS_CF_CACHE_TTL_MS
+      ) {
+        return productsCfCache.data;
+      }
     }
 
-    // 2. 정렬 (createdAt 내림차순)
-    queryConstraints.push(orderBy('createdAt', 'desc'));
-
-    // 3. 페이지네이션 커서
-    if (lastVisible) {
-      const lastVisibleTimestamp = Timestamp.fromMillis(lastVisible);
-      queryConstraints.push(startAfter(lastVisibleTimestamp));
-    }
-
-    // 4. limit
-    queryConstraints.push(limit(pageSize));
-
-    const productsRef = collection(db, 'products');
-    const q = query(productsRef, ...queryConstraints);
-
-    // 🔍 예약 오버레이가 필요할 때만 무거운 Map 계산
-    let reservedMap: Map<string, number> | null = null;
-    if (withReservedOverlay) {
-      reservedMap = await getReservedQuantitiesMapCached();
-    }
-
-    const snapshot = await getDocs(q);
-
-    const products: Product[] = [];
-    snapshot.docs.forEach((docSnap) => {
-      const productData = docSnap.data() as Product;
-      const baseProduct: Product = { ...productData, id: docSnap.id };
-
-      const finalProduct =
-        withReservedOverlay && reservedMap
-          ? applyReservedOverlay(baseProduct, reservedMap)
-          : baseProduct;
-
-      products.push(finalProduct);
+    const result = await getProductsWithStockCallable({
+      pageSize,
+      lastDocId,
+      tab,
+      withReservedOverlay,
     });
 
-    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-    const newLastVisible = lastDoc
-      ? (lastDoc.data().createdAt as Timestamp).toMillis()
-      : null;
+    const data = result.data as any;
+    const products = (data?.products || []) as Product[];
+    const nextCursor = (data?.lastDocId || null) as string | null;
 
-    return { products, lastVisible: newLastVisible };
-  } catch (error: any) {
-    console.error('Error fetching products:', error);
-    if (error.code === 'failed-precondition') {
-      throw new Error(
-        'DB 인덱스가 필요합니다. 콘솔(F12)의 링크를 클릭하여 생성해주세요.'
-      );
+    const response: GetProductsWithStockResponse = { products, lastVisible: nextCursor };
+
+    // 캐시 저장(첫 페이지)
+    if (!lastDocId) {
+      const cacheKey = JSON.stringify({ pageSize, tab, withReservedOverlay });
+      productsCfCache = { key: cacheKey, data: response, fetchedAt: Date.now() };
     }
-    throw new Error('상품 로드 실패');
+
+    return response;
+  } catch (error: any) {
+    // Cloud Function 실패 시에도 고객 UX를 깨지 않도록 fallback
+    console.warn('[getProductsWithStock] Cloud Function failed, fallback to Firestore:', error);
+
+    if (error?.code === 'failed-precondition') {
+      throw new Error('DB 인덱스가 필요합니다. 콘솔(F12)의 링크를 클릭하여 생성해주세요.');
+    }
+
+    return getProductsWithStockFirestoreFallback({
+      pageSize,
+      lastVisible: null,
+      tab,
+      // fallback에서는 permission 이슈를 피하기 위해 오버레이를 기본적으로 끔
+      withReservedOverlay: false,
+    });
   }
 };
 
@@ -623,12 +714,13 @@ export const getAllProducts = () =>
  */
 export const getPaginatedProductsWithStock = (
   pageSize: number,
-  lastVisible: number | null,
+  lastVisible: string | number | null,
   _category: string | null,
   tab: ProductTabType = 'all'
 ) => getProductsWithStock({ 
   pageSize, 
   lastVisible, 
   tab, 
+  // ✅ Cloud Function 기반이면 비관리자도 안전하게 예약반영 수량을 받을 수 있음
   withReservedOverlay: true
 });

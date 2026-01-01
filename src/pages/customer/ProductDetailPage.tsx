@@ -12,8 +12,7 @@ import { getApp } from 'firebase/app';
 import { Timestamp, getFirestore, doc, getDoc } from 'firebase/firestore'; 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// 💡 [수정] OriginalVariantGroup 타입을 추가로 import합니다.
-import type { Product, ProductItem, StorageType, SalesRound as OriginalSalesRound, OrderItem, VariantGroup as OriginalVariantGroup } from '@/shared/types';
+import type { Product, ProductItem, StorageType, SalesRound as OriginalSalesRound, OrderItem } from '@/shared/types';
 import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getStockInfo, getMaxPurchasableQuantity } from '@/utils/productUtils';
 import type { ProductActionState, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
@@ -25,8 +24,10 @@ import {
   Flame, AlertTriangle, Clock, Gift, Sparkles // 💡 [추가] Gift, Sparkles 아이콘 추가
 } from 'lucide-react';
 
-// 💡 [추가/수정] 예약 수량을 가져오기 위한 import
-import { getReservedQuantitiesMap, getUserOrders } from '@/firebase/orderService'; 
+// 💡 [수정] 주문 내역은 사용자 기준 조회만 사용
+import { getUserOrders } from '@/firebase/orderService'; 
+// 💡 [추가] 상세 재고/예약수량 오버레이는 Cloud Function 기반으로 안전하게 적용
+import { getProductById } from '@/firebase/productService';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Pagination, Navigation, Zoom, Thumbs, FreeMode } from 'swiper/modules';
@@ -78,28 +79,7 @@ const formatExpirationDate = (dateInput: Date | Timestamp | null | undefined): s
 const storageLabels: Record<StorageType, string> = { ROOM: '실온', COLD: '냉장', FROZEN: '냉동', FRESH: '신선' };
 const storageIcons: Record<StorageType, React.ReactNode> = { ROOM: <Sun size={16} />, COLD: <Snowflake size={16} />, FROZEN: <Snowflake size={16} />, FRESH: <Tag size={16} /> };
 
-// 💡 [추가] productService.ts에서 가져온 헬퍼 함수
-// (productService.ts를 수정하지 않고 이 파일만 수정하기 위해 여기에 복제합니다)
-function overlayKey(productId: string, roundId: string, vgId: string) {
-  return `${productId}-${roundId}-${vgId}`;
-}
-
-function applyReservedOverlay(product: Product, reservedMap: Map<string, number>): Product {
-  // ✅ 불변성 유지: 원본 product를 절대 mutate 하지 않음
-  if (!Array.isArray(product?.salesHistory)) return product;
-
-  const salesHistory = product.salesHistory.map((round) => {
-    const vgs = (round.variantGroups || []).map((vg) => {
-      const originalVg = vg as OriginalVariantGroup;
-      const key = overlayKey(product.id, round.roundId, originalVg.id);
-      const reserved = reservedMap.get(key) || 0;
-      return { ...vg, reservedCount: reserved };
-    });
-    return { ...round, variantGroups: vgs };
-  });
-
-  return { ...product, salesHistory };
-}
+// ✅ 예약수량/픽업수량 오버레이는 Cloud Function(getProductByIdWithStock) 결과로 처리합니다.
 
 // --- Sub Components ---
 
@@ -683,21 +663,8 @@ const ProductDetailPage: React.FC = () => {
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
-    // ✅ [추가] 예약 수량 맵 캐시 (상세 진입 시 첫 체감속도 개선)
-const reservedMapCacheRef = useRef<Map<string, number> | null>(null);
-const reservedMapPromiseRef = useRef<Promise<Map<string, number>> | null>(null);
-
-const loadReservedMap = useCallback(async () => {
-  if (reservedMapCacheRef.current) return reservedMapCacheRef.current;
-  if (!reservedMapPromiseRef.current) {
-    reservedMapPromiseRef.current = (async () => {
-      const map = await getReservedQuantitiesMap();
-      reservedMapCacheRef.current = map;
-      return map;
-    })();
-  }
-  return reservedMapPromiseRef.current;
-}, []);
+    // ✅ [수정] 예약반영 재고는 Cloud Function 기반으로 백그라운드에서 업데이트
+    const overlayPromiseRef = useRef<Promise<void> | null>(null);
 
 
     // 💡 [추가] Firestore 인스턴스를 가져옵니다.
@@ -856,26 +823,46 @@ const fetchProduct = useCallback(async () => {
     setProduct(productData);
     setLoading(false);
 
-    // 2) 예약 수량 오버레이는 뒤에서 적용 (느려도 화면은 먼저 뜸)
-    //    - 캐시를 사용해 재방문/뒤로가기에 더 빠름
-    try {
-      const reservedMap = await loadReservedMap();
-      setProduct((prev) => {
-        if (!prev) return prev;
-        if (prev.id !== productData.id) return prev; // 라우팅 변경 안전장치
-        return applyReservedOverlay(prev, reservedMap);
-      });
-    } catch (overlayErr) {
-      // 오버레이 실패는 치명적이지 않으므로 조용히 처리 (원본 상품은 이미 표시됨)
-      console.warn("예약 수량 오버레이 적용 실패:", overlayErr);
+    // 2) 예약/재고 오버레이는 Cloud Function으로 뒤에서 적용
+    //    - 비관리자에서도 안전(orders 직접 조회 없음)
+    //    - 실패해도 상품 상세는 계속 표시
+    if (!overlayPromiseRef.current) {
+      overlayPromiseRef.current = (async () => {
+        try {
+          const enriched = await getProductById(productId);
+          if (!enriched) return;
+          setProduct((prev) => {
+            if (!prev) return prev;
+            if (prev.id !== productData.id) return prev; // 라우팅 변경 안전장치
+            return enriched;
+          });
+        } catch (overlayErr) {
+          console.warn("상세 오버레이(Cloud Function) 적용 실패:", overlayErr);
+        } finally {
+          overlayPromiseRef.current = null;
+        }
+      })();
     }
   } catch (e: any) {
     console.error("상품 상세 정보 로딩 실패:", e);
-    showToast('error', e?.message || "상품 정보를 불러오는 데 실패했습니다. (DB 직접 조회 오류)");
-    setError(e?.message || "상품 정보를 불러오는 데 실패했습니다.");
-    setLoading(false);
+    // ✅ DB 직접 조회가 막히거나 네트워크 이슈가 있어도 Cloud Function으로 한번 더 시도
+    try {
+      const enriched = await getProductById(productId);
+      if (!enriched) {
+        setError("상품을 찾을 수 없습니다.");
+      } else {
+        setProduct(enriched);
+        setError(null);
+      }
+    } catch (fallbackErr: any) {
+      console.error("상품 상세 Cloud Function 로딩 실패:", fallbackErr);
+      showToast('error', fallbackErr?.message || "상품 정보를 불러오는 데 실패했습니다.");
+      setError(fallbackErr?.message || "상품 정보를 불러오는 데 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }
-}, [productId, db, loadReservedMap]);
+}, [productId, db]);
 
     useEffect(() => {
         fetchProduct();
