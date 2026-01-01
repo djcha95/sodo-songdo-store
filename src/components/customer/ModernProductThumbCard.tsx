@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 
 import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, VariantGroup as OriginalVariantGroup } from '../../shared/types';
 import OptimizedImage from '../../components/common/OptimizedImage';
-import { safeToDate, getStockInfo, getRemainingPurchasableCount } from '../../utils/productUtils';
+import { safeToDate, getRemainingPurchasableCount } from '../../utils/productUtils';
+import { getMarketingBadges, getPopularityScore, getTotalReservedCount } from '../../utils/productBadges';
 import './ModernProductThumbCard.css';
 
 type Product = OriginalProduct & {
@@ -17,9 +18,11 @@ type Props = {
   product: Product;
   variant?: 'row' | 'grid';
   index?: number;
+  bestsellerRank?: number;
+  badgeSeed?: string; // YYYY-MM-DD (일일 추천 고정용)
 };
 
-const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', index }) => {
+const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', index, bestsellerRank, badgeSeed }) => {
   const navigate = useNavigate();
 
   const cardData = useMemo(() => {
@@ -46,20 +49,68 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
       }
     }
 
-    return { price, originalPrice, dateText, remainingUnits };
-  }, [product]);
+    const badges = getMarketingBadges({
+      product: product as any,
+      round: r as any,
+      selectedItem: (item as any) ?? null,
+      bestsellerRank,
+      seed: badgeSeed,
+      maxBadges: 2,
+    });
+    // ✅ 카드에서는 "인기상품"이 있으면 인기상품만, 없으면 "신상품"만 표시 (초특가/추천 등은 생략)
+    const hasBest = badges.some((b) => b.key === 'BEST');
+    const displayBadges = hasBest 
+      ? badges.filter((b) => b.key === 'BEST')
+      : badges.filter((b) => b.key === 'NEW');
+
+    const reservedCount = getTotalReservedCount(r as any);
+    const popularityScore = getPopularityScore({
+      reservedCount,
+      productId: product.id,
+      seed: badgeSeed,
+    });
+
+    return { price, originalPrice, dateText, remainingUnits, badges: displayBadges, reservedCount, popularityScore };
+  }, [product, bestsellerRank, badgeSeed]);
+
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    // 드래그 스크롤과 충돌 방지: 실제 클릭만 처리
+    e.stopPropagation();
+    navigate(`/product/${product.id}`);
+  }, [navigate, product.id]);
 
   return (
     <button
       type="button"
       className={`sp-thumb-card ${variant} ${product.displayRound?.eventType === 'PREMIUM' ? 'luxury' : ''}`}
-      onClick={() => navigate(`/product/${product.id}`)}
+      onClick={handleCardClick}
       aria-label={`${product.groupName} 상세보기`}
     >
       {/* ✅ 순번 뱃지를 이미지 래퍼 밖으로 이동 (카드 좌측 상단 외부) */}
       {index !== undefined && (
         <div className="sp-thumb-index">{index + 1}</div>
       )}
+
+      {/* ✅ 뱃지는 이미지 위가 아니라, 카드 상단의 별도 영역에 표시 */}
+      <div className="sp-thumb-topRow" aria-hidden="true">
+        <div className="sp-thumb-topLeft">
+          {cardData.badges.length > 0 && (
+            <div className="sp-thumb-badgeRow">
+              {cardData.badges.map((b) => (
+                <span key={b.key} className={`sp-thumb-badge key-${b.key} tone-${b.tone}`}>
+                  {b.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="sp-thumb-topRight">
+          <span className="sp-thumb-orderCount">
+            인기지수 {cardData.popularityScore.toLocaleString()}
+          </span>
+        </div>
+      </div>
 
       <div className="sp-thumb-imgWrap">
         <OptimizedImage

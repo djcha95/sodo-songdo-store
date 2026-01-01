@@ -146,6 +146,65 @@
   align-items: center; /* 중앙 정렬 */
 }
 
+/* ✅ 상품 마케팅 뱃지(초특가/신상품/인기상품/추천 등) */
+.marketing-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 8px 0;
+}
+
+.marketing-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.10);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.marketing-badge.tone-red { background: rgba(239, 68, 68, 0.95); color: #fff; }
+.marketing-badge.tone-orange { background: rgba(245, 158, 11, 0.95); color: #111; }
+.marketing-badge.tone-blue { background: rgba(59, 130, 246, 0.92); color: #fff; }
+.marketing-badge.tone-gray { background: rgba(15, 23, 42, 0.68); color: #fff; }
+.marketing-badge.tone-black { background: rgba(17, 17, 17, 0.92); color: #fff; }
+
+/* ✅ 인기상품(상세) 강조 */
+.marketing-badge.key-BEST {
+  background: linear-gradient(135deg, rgba(255, 59, 92, 0.98) 0%, rgba(255, 140, 0, 0.98) 100%);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+  box-shadow: 0 18px 34px rgba(239, 68, 68, 0.18);
+  position: relative;
+  overflow: hidden;
+}
+
+.marketing-badge.key-BEST::after {
+  content: '';
+  position: absolute;
+  top: -45%;
+  left: -60%;
+  width: 60%;
+  height: 190%;
+  transform: rotate(25deg);
+  background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.42), rgba(255,255,255,0));
+  animation: detailBadgeShine 3.1s ease-in-out infinite;
+}
+
+@keyframes detailBadgeShine {
+  0% { left: -70%; opacity: 0; }
+  18% { opacity: 0.55; }
+  55% { opacity: 0.28; }
+  100% { left: 140%; opacity: 0; }
+}
+
 .product-name {
   text-align: center;
   font-size: 1.35rem; /* 크기 살짝 조정 */

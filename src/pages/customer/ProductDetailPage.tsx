@@ -17,6 +17,7 @@ import { getDisplayRound, determineActionState, safeToDate, getDeadlines, getSto
 import type { ProductActionState, VariantGroup } from '@/utils/productUtils';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import PrepaymentModal from '@/components/common/PrepaymentModal';
+import { getMarketingBadges } from '@/utils/productBadges';
 
 import { 
   X, Minus, Plus, ShoppingCart, Hourglass, Box, Calendar, 
@@ -176,7 +177,8 @@ const ProductInfo: React.FC<{
     salesPhase: SalesPhase; 
     countdown: string | null;
     themeBadge: React.ReactNode;
-}> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown, themeBadge }) => {
+    marketingBadges: React.ReactNode;
+}> = React.memo(({ product, round, actionState, expirationDateInfo, salesPhase, countdown, themeBadge, marketingBadges }) => {
 
     const pickupDate = safeToDate(round.pickupDate);
     const arrivalDate: Date | null = safeToDate(round.arrivalDate);
@@ -192,6 +194,7 @@ const ProductInfo: React.FC<{
         <>
             <div className="product-header-content">
                 {themeBadge}
+                {marketingBadges}
 
                 {/* ✨ [추가] 카테고리 태그 (B&W 럭셔리 스타일) */}
                 {categories.length > 0 && (
@@ -660,6 +663,7 @@ const ProductDetailPage: React.FC = () => {
     // 👇 [추가] 내가 이미 구매한 수량을 저장할 변수
     const [myPurchasedCount, setMyPurchasedCount] = useState(0);
 
+    const badgeSeed = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
 
     const contentAreaRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
@@ -709,6 +713,28 @@ const ProductDetailPage: React.FC = () => {
         }
         return null;
     }, [themeClass]);
+
+    const marketingBadges = useMemo(() => {
+        if (!product || !displayRound) return null;
+        const representativeItem = selectedItem ?? (displayRound.variantGroups?.[0]?.items?.[0] ?? null);
+        const badges = getMarketingBadges({
+            product,
+            round: displayRound as any,
+            selectedItem: representativeItem as any,
+            seed: badgeSeed,
+            maxBadges: 3,
+        });
+        if (badges.length === 0) return null;
+        return (
+            <div className="marketing-badge-row" aria-label="상품 뱃지">
+                {badges.map((b) => (
+                    <span key={b.key} className={`marketing-badge key-${b.key} tone-${b.tone}`}>
+                        {b.label}
+                    </span>
+                ))}
+            </div>
+        );
+    }, [product, displayRound, selectedItem, badgeSeed]);
 
     // ✅ [추가] 예약 성공 후 버튼 상태를 되돌리기 위한 useEffect
     useEffect(() => {
@@ -1125,6 +1151,7 @@ const fetchProduct = useCallback(async () => {
     salesPhase={salesPhase}
     countdown={countdown}
     themeBadge={themeBadge}
+    marketingBadges={marketingBadges}
   />
 </div>
                         </div>
@@ -1208,7 +1235,6 @@ const fetchProduct = useCallback(async () => {
                     loading={reservationStatus === 'processing'}
                 />
             )}
-            x
 
             <PrepaymentModal
                 isOpen={isPrepaymentModalOpen}

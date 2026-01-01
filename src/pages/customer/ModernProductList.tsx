@@ -42,6 +42,155 @@ const LazyRefreshCw = React.lazy(() =>
 type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite' | 'lastchance';
 const PAGE_SIZE = 30;
 
+const getRoundReservedTotal = (round: any): number => {
+  const vgs = round?.variantGroups ?? [];
+  return vgs.reduce((sum: number, vg: any) => {
+    const r = typeof vg?.reservedCount === 'number' && Number.isFinite(vg.reservedCount) ? vg.reservedCount : 0;
+    return sum + r;
+  }, 0);
+};
+
+const computeBestSellerRankMap = <T extends { id: string; displayRound?: any }>(
+  items: T[],
+  topN = 3,
+  includeZero = false
+): Record<string, number> => {
+  // reservedCount 기반 "인기상품" TOP N (상대 랭킹)
+  const unique = new Map<string, T>();
+  items.forEach((p) => unique.set(p.id, p));
+
+  const sorted = [...unique.values()]
+    .map((p) => ({ id: p.id, reservedTotal: getRoundReservedTotal(p.displayRound) }))
+    .filter((x) => (includeZero ? true : x.reservedTotal > 0))
+    .sort((a, b) => b.reservedTotal - a.reservedTotal);
+
+  const rankMap: Record<string, number> = {};
+  sorted.slice(0, topN).forEach((x, idx) => {
+    rankMap[x.id] = idx + 1;
+  });
+  return rankMap;
+};
+
+const DragHScroll: React.FC<{
+  children: React.ReactNode;
+  className?: string;
+  hintLabel?: string;
+}> = ({ children, className, hintLabel = '오른쪽으로 스크롤' }) => {
+  const elRef = useRef<HTMLDivElement | null>(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startScrollLeftRef = useRef(0);
+  const didDragRef = useRef(false);
+
+  const [showHint, setShowHint] = useState(false);
+
+  const recomputeHint = useCallback(() => {
+    const el = elRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    // 오른쪽으로 더 갈 수 있을 때만 힌트 표시
+    setShowHint(max > 4 && el.scrollLeft < max - 4);
+  }, []);
+
+  useEffect(() => {
+    recomputeHint();
+    const el = elRef.current;
+    if (!el) return;
+
+    const onScroll = () => recomputeHint();
+    el.addEventListener('scroll', onScroll, { passive: true });
+
+    const ro = new ResizeObserver(() => recomputeHint());
+    ro.observe(el);
+
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, [recomputeHint]);
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // 모바일은 기존 스와이프 동작이 잘 되므로, 데스크탑(마우스)만 드래그 스크롤 활성화
+    if (e.pointerType !== 'mouse') return;
+    const el = elRef.current;
+    if (!el) return;
+
+    isDraggingRef.current = true;
+    didDragRef.current = false;
+    startXRef.current = e.clientX;
+    startScrollLeftRef.current = el.scrollLeft;
+
+    el.classList.add('dragging');
+    try { el.setPointerCapture(e.pointerId); } catch {}
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse') return;
+    if (!isDraggingRef.current) return;
+    const el = elRef.current;
+    if (!el) return;
+
+    const dx = e.clientX - startXRef.current;
+    // ✅ 너무 작은 흔들림은 클릭으로 취급(상세 진입이 잘 되도록)
+    if (Math.abs(dx) <= 6) return;
+
+    didDragRef.current = true;
+    el.scrollLeft = startScrollLeftRef.current - dx;
+    e.preventDefault();
+  }, []);
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const el = elRef.current;
+    isDraggingRef.current = false;
+    if (el) el.classList.remove('dragging');
+    try { el?.releasePointerCapture(e.pointerId); } catch {}
+    // 클릭 방지 플래그는 한 틱 뒤에 초기화(드래그 후 버튼 클릭 방지)
+    setTimeout(() => { didDragRef.current = false; }, 0);
+  }, []);
+
+  const onClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // 실제로 드래그가 발생했을 때만 클릭 방지 (작은 흔들림은 클릭으로 허용)
+    if (!didDragRef.current) return;
+    // 버튼/링크 등 클릭 가능한 요소는 클릭 허용
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, [role="button"]')) {
+      return; // 클릭 가능한 요소는 클릭 허용
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    didDragRef.current = false;
+  }, []);
+
+  return (
+    <div className="sp-hscroll-wrap">
+      <div
+        ref={elRef}
+        className={`sp-hscroll ${className ?? ''}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onPointerLeave={endDrag}
+        onClickCapture={onClickCapture}
+        aria-label={hintLabel}
+      >
+        {children}
+      </div>
+
+      {showHint && (
+        <>
+          <div className="sp-hscroll-fade" aria-hidden="true" />
+          <div className="sp-hscroll-hint" aria-hidden="true">
+            <Suspense fallback={null}>
+              <LazyChevronRight size={20} strokeWidth={2.25} />
+            </Suspense>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ✅ [복구] 메인 홈 슬라이드 배너 데이터 (베리맘, 헤이유 등)
 interface EventBanner {
   id: string;
@@ -364,6 +513,11 @@ const fetchNextPage = useCallback(async () => {
     }).filter((p): p is NonNullable<typeof p> => p !== null);
   }, [products, userDocument]);
 
+  const badgeSeed = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
+  const bestSellerRankMap = useMemo(() => {
+    return computeBestSellerRankMap([...(processedNormal as any[]), ...(processedEventProducts as any[])], 3);
+  }, [processedNormal, processedEventProducts]);
+
   const tomorrowPickupProducts = useMemo(() => {
     const target = dayjs().add(1, 'day');
     return processedNormal.filter((p) => {
@@ -407,6 +561,26 @@ const fetchNextPage = useCallback(async () => {
   }, [activeTab, processedNormal, tomorrowPickupProducts, lastChanceProducts]);
 
   const todayPrimary = useMemo(() => processedNormal.filter(p => p.phase === 'primary'), [processedNormal]);
+  const todayPrimarySorted = useMemo(() => {
+    // ✅ 오늘의 공구: 인기(예약수) 높은 순으로 왼쪽부터 보이도록 정렬
+    const copy = [...todayPrimary];
+    copy.sort((a: any, b: any) => {
+      const ra = getRoundReservedTotal(a.displayRound);
+      const rb = getRoundReservedTotal(b.displayRound);
+      if (rb !== ra) return rb - ra;
+      // tie-breaker: 최신 라운드 우선
+      const aT = safeToDate(a.displayRound?.createdAt)?.getTime() ?? 0;
+      const bT = safeToDate(b.displayRound?.createdAt)?.getTime() ?? 0;
+      return bT - aT;
+    });
+    return copy;
+  }, [todayPrimary]);
+
+  const todayBestSellerRankMap = useMemo(() => {
+    // ✅ 요청: 14개 중 1개만 인기상품이면 허전하니, 상대 랭킹으로 2~3개 지정
+    // (예약수가 전부 0이어도 topN은 찍히도록 includeZero=true)
+    return computeBestSellerRankMap(todayPrimarySorted as any[], 3, true);
+  }, [todayPrimarySorted]);
   const additionalSorted = useMemo(() => [...processedNormal].filter(p => p.phase === 'secondary'), [processedNormal]);
   const onsite = useMemo(() => processedNormal.filter(p => p.phase === 'onsite'), [processedNormal]);
 
@@ -525,11 +699,17 @@ const fetchNextPage = useCallback(async () => {
                 </div>
                 <button className="sp-viewall" onClick={() => navigate('/?tab=today')} type="button">전체보기</button>
               </div>
-              <div className="sp-hscroll">
-                {todayPrimary.map((p) => (
-                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+              <DragHScroll>
+                {todayPrimarySorted.map((p) => (
+                  <ModernProductThumbCard
+                    key={p.id}
+                    product={p as any}
+                    variant="row"
+                    bestsellerRank={todayBestSellerRankMap[p.id]}
+                    badgeSeed={badgeSeed}
+                  />
                 ))}
-              </div>
+              </DragHScroll>
             </section>
           )}
 
@@ -542,11 +722,17 @@ const fetchNextPage = useCallback(async () => {
                 </div>
                 <button className="sp-viewall" onClick={() => navigate('/?tab=tomorrow')} type="button">전체보기</button>
               </div>
-              <div className="sp-hscroll">
+              <DragHScroll>
                 {tomorrowPickupProducts.map((p) => (
-                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                  <ModernProductThumbCard
+                    key={p.id}
+                    product={p as any}
+                    variant="row"
+                    bestsellerRank={bestSellerRankMap[p.id]}
+                    badgeSeed={badgeSeed}
+                  />
                 ))}
-              </div>
+              </DragHScroll>
             </section>
           )}
 
@@ -560,15 +746,17 @@ const fetchNextPage = useCallback(async () => {
                  </div>
                  <button className="sp-viewall" onClick={() => navigate('/?tab=special')} type="button">전체보기</button>
                </div>
-               <div className="sp-hscroll">
+               <DragHScroll>
                  {processedEventProducts.map((p) => (
                    <ModernProductThumbCard 
                      key={`special-${p.id}`} 
                      product={p as any} 
                      variant="row" 
+                     bestsellerRank={bestSellerRankMap[p.id]}
+                     badgeSeed={badgeSeed}
                    />
                  ))}
-               </div>
+               </DragHScroll>
              </section>
           )}
           
@@ -605,11 +793,17 @@ const fetchNextPage = useCallback(async () => {
                 </div>
                 <button className="sp-viewall" onClick={() => navigate('/?tab=additional')} type="button">전체보기</button>
               </div>
-              <div className="sp-hscroll">
+              <DragHScroll>
                 {additionalSorted.map((p) => (
-                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                  <ModernProductThumbCard
+                    key={p.id}
+                    product={p as any}
+                    variant="row"
+                    bestsellerRank={bestSellerRankMap[p.id]}
+                    badgeSeed={badgeSeed}
+                  />
                 ))}
-              </div>
+              </DragHScroll>
             </section>
           )}
           
@@ -622,11 +816,17 @@ const fetchNextPage = useCallback(async () => {
                  </div>
                  <button className="sp-viewall" onClick={() => navigate('/?tab=onsite')} type="button">전체보기</button>
                </div>
-               <div className="sp-hscroll">
+               <DragHScroll>
                  {onsite.map((p) => (
-                   <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                  <ModernProductThumbCard
+                    key={p.id}
+                    product={p as any}
+                    variant="row"
+                    bestsellerRank={bestSellerRankMap[p.id]}
+                    badgeSeed={badgeSeed}
+                  />
                  ))}
-               </div>
+               </DragHScroll>
              </section>
           )}
 
@@ -640,11 +840,17 @@ const fetchNextPage = useCallback(async () => {
                 </div>
                 <button className="sp-viewall" onClick={() => navigate('/?tab=lastchance')} type="button">전체보기</button>
               </div>
-              <div className="sp-hscroll">
+              <DragHScroll>
                 {lastChanceProducts.map((p) => (
-                  <ModernProductThumbCard key={p.id} product={p as any} variant="row" />
+                  <ModernProductThumbCard
+                    key={p.id}
+                    product={p as any}
+                    variant="row"
+                    bestsellerRank={bestSellerRankMap[p.id]}
+                    badgeSeed={badgeSeed}
+                  />
                 ))}
-              </div>
+              </DragHScroll>
             </section>
           )}
         </>
@@ -676,7 +882,14 @@ const fetchNextPage = useCallback(async () => {
         processedEventProducts.length > 0 ? (
           <div className="sp-grid">
             {processedEventProducts.map((p, idx) => (
-              <ModernProductThumbCard key={`special-${p.id}`} product={p as any} variant="grid" index={idx} />
+              <ModernProductThumbCard
+                key={`special-${p.id}`}
+                product={p as any}
+                variant="grid"
+                index={idx}
+                bestsellerRank={bestSellerRankMap[p.id]}
+                badgeSeed={badgeSeed}
+              />
             ))}
           </div>
         ) : (
@@ -690,7 +903,14 @@ const fetchNextPage = useCallback(async () => {
       ) : visibleNormalProducts.length > 0 ? (
         <div className="sp-grid">
           {visibleNormalProducts.map((p, idx) => (
-            <ModernProductThumbCard key={p.id} product={p as any} variant="grid" index={idx} />
+            <ModernProductThumbCard
+              key={p.id}
+              product={p as any}
+              variant="grid"
+              index={idx}
+              bestsellerRank={bestSellerRankMap[p.id]}
+              badgeSeed={badgeSeed}
+            />
           ))}
         </div>
       ) : (

@@ -9,6 +9,7 @@ interface OptimizedImageProps {
   alt: string;
   className?: string;
   loading?: 'lazy' | 'eager';
+  draggable?: boolean;
 }
 
 const OptimizedImage: React.FC<OptimizedImageProps> = ({
@@ -17,6 +18,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   alt,
   className,
   loading = 'lazy',
+  draggable = false,
 }) => {
   const getPlaceholderUrl = (s: OptimizedImageProps['size']) => {
     const dim = s === '1080x1080' ? '1080x1080' : s;
@@ -56,6 +58,10 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
       className={className}
       loading={loading}
       onError={handleError}
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (!draggable) e.preventDefault();
+      }}
     />
   );
 };

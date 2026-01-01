@@ -30,6 +30,48 @@
   width: 100%;
 }
 
+/* ✅ 카드 상단 "한 칸" (뱃지 영역) */
+.sp-thumb-topRow {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sp-thumb-topLeft {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sp-thumb-topRight {
+  flex: 0 0 auto;
+}
+
+.sp-thumb-badgeRow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.sp-thumb-orderCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: rgba(255,255,255,0.95);
+  background: rgba(17, 17, 17, 0.55);
+  border: 1px solid rgba(0,0,0,0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
 .sp-thumb-imgWrap {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -37,6 +79,56 @@
   overflow: hidden;
   background: #F3F4F6;
   position: relative;
+}
+
+.sp-thumb-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.10);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.sp-thumb-badge.tone-red { background: rgba(239, 68, 68, 0.95); color: #fff; }
+.sp-thumb-badge.tone-orange { background: rgba(245, 158, 11, 0.95); color: #111; }
+.sp-thumb-badge.tone-blue { background: rgba(59, 130, 246, 0.92); color: #fff; }
+.sp-thumb-badge.tone-gray { background: rgba(15, 23, 42, 0.68); color: #fff; }
+.sp-thumb-badge.tone-black { background: rgba(17, 17, 17, 0.92); color: #fff; }
+
+/* ✅ 인기상품은 더 눈에 띄게 (특수 스타일 + 은은한 펄스) */
+.sp-thumb-badge.key-BEST {
+  background: linear-gradient(135deg, rgba(255, 59, 92, 0.98) 0%, rgba(255, 140, 0, 0.98) 100%);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+  box-shadow: 0 10px 22px rgba(239, 68, 68, 0.22);
+  position: relative;
+  overflow: hidden;
+}
+
+.sp-thumb-badge.key-BEST::after {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: -60%;
+  width: 60%;
+  height: 180%;
+  transform: rotate(25deg);
+  background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.45), rgba(255,255,255,0));
+  animation: spBadgeShine 2.8s ease-in-out infinite;
+}
+
+@keyframes spBadgeShine {
+  0% { left: -70%; opacity: 0; }
+  15% { opacity: 0.55; }
+  50% { opacity: 0.25; }
+  100% { left: 140%; opacity: 0; }
 }
 
 /* ✅ 순번 뱃지: 카드 바깥 좌측 상단 */
