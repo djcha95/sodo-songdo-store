@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import useDocumentTitle from '@/hooks/useDocumentTitle';
 import { useNavigate } from 'react-router-dom';
 import { updateMultipleVariantGroupStocks, deleteSalesRounds, updateSalesRound, getProductsWithStock, updateProductCoreInfo, toggleSalesRoundOnsiteStatus } from '@/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/firebase/firebaseConfig';
 import { ensureInventoryItem, archiveInventoryItem } from '@/firebase/inventory'; // ✅ 추가
 import type { Product, SalesRound, VariantGroup, StorageType, ProductItem } from '@/shared/types';
 import toast from 'react-hot-toast';
@@ -283,6 +285,44 @@ const ProductListPageAdmin: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
+  const [isRebuildingStats, setIsRebuildingStats] = useState(false);
+
+  // ✅ 예약 수량이 모두 0인지 확인
+  const allReservedCountsZero = useMemo(() => {
+    if (processedRounds.length === 0) return false;
+    const hasNonZeroReserved = processedRounds.some(round => 
+      round.enrichedVariantGroups.some(vg => 
+        typeof vg.reservedCount === 'number' && vg.reservedCount > 0
+      )
+    );
+    return !hasNonZeroReserved && processedRounds.length > 5; // 상품이 5개 이상인데 모두 0이면 문제
+  }, [processedRounds]);
+
+  // ✅ 재고 통계 재구축 함수
+  const rebuildStockStats = useCallback(async () => {
+    if (!confirm('⚠️ 주의: 이 작업은 orders 컬렉션 전체를 스캔하여 stockStats_v1을 재구축합니다. 계속하시겠습니까?')) {
+      return;
+    }
+
+    setIsRebuildingStats(true);
+    const toastId = toast.loading('재고 통계 재구축 중... (수 초~수 분 소요)');
+
+    try {
+      const rebuildFunction = httpsCallable(functions, 'rebuildStockStats_v1');
+      const result = await rebuildFunction();
+      
+      console.log('재구축 결과:', result.data);
+      toast.success(`재구축 완료! (주문 ${(result.data as any)?.scannedOrders || 0}개 스캔, 통계 문서 ${(result.data as any)?.statDocsWritten || 0}개 생성)`, { id: toastId, duration: 5000 });
+      
+      // 데이터 새로고침
+      await fetchData();
+    } catch (error: any) {
+      console.error('재구축 실패:', error);
+      toast.error(`재구축 실패: ${error.message}`, { id: toastId });
+    } finally {
+      setIsRebuildingStats(false);
+    }
+  }, [fetchData]);
 
 // 270번째 줄 근처
 const fetchData = useCallback(async () => {
@@ -638,6 +678,63 @@ const fetchData = useCallback(async () => {
           if (key === 'status') setFilterStatus(value);
         }}
       />
+
+      {/* ✅ 예약 수량 0 경고 배너 */}
+      {allReservedCountsZero && (
+        <div
+          style={{
+            margin: '12px 0 16px',
+            padding: '16px',
+            border: '2px solid #EF4444',
+            borderRadius: 10,
+            background: '#FEF2F2',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <AlertTriangle size={20} style={{ color: '#EF4444' }} />
+                <strong style={{ color: '#DC2626', fontSize: 16 }}>⚠️ 예약 수량이 모두 0으로 표시됩니다</strong>
+              </div>
+              <div style={{ color: '#991B1B', fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
+                이는 기존 주문들이 <code>stockStats_v1</code> 컬렉션에 기록되지 않았을 가능성이 높습니다.<br/>
+                아래 버튼을 클릭하여 기존 주문들을 기반으로 재고 통계를 재구축하세요.
+              </div>
+              <button
+                onClick={rebuildStockStats}
+                disabled={isRebuildingStats}
+                className="admin-add-button"
+                style={{ background: '#DC2626', color: 'white' }}
+                type="button"
+              >
+                {isRebuildingStats ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> 재구축 중...
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={18} /> 재고 통계 재구축 실행
+                  </>
+                )}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#64748B',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                fontSize: 12,
+              }}
+            >
+              나중에
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ✅ 단위 점검 결과 패널 */}
       {stockUnitAuditOpen && (

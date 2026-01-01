@@ -50,7 +50,16 @@ export const getStockInfo = (vg?: VariantGroup | null): StockInfo => {
   const units = (vg.items?.map((it) => it.stockDeductionAmount || 1) || []);
   const allSame = units.length > 0 && units.every((u) => u === units[0]);
   const unitPerBox = allSame && (units[0] || 1) > 1 ? (units[0] || 1) : 1;
+
   return { isLimited: true, remainingUnits, unitPerBox };
+};
+
+// ✅ UI/필터 기준 “구매 가능 수량” (차감 단위를 반영한 개수)
+export const getRemainingPurchasableCount = (vg?: VariantGroup | null): number => {
+  const stock = getStockInfo(vg);
+  if (!stock.isLimited) return Infinity;
+  const unit = stock.unitPerBox > 0 ? stock.unitPerBox : 1;
+  return Math.floor(stock.remainingUnits / unit);
 };
 
 export type ProductActionState =
@@ -197,7 +206,8 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
     if (!round.variantGroups || round.variantGroups.length === 0) return true;
     return round.variantGroups.every(vg => {
       const stockInfo = getStockInfo(vg as VariantGroup);
-      return stockInfo.isLimited && stockInfo.remainingUnits <= 0;
+      // ✅ 차감 단위(예: stockDeductionAmount=2) 반영
+      return stockInfo.isLimited && stockInfo.remainingUnits < (stockInfo.unitPerBox || 1);
     });
   };
 
@@ -211,7 +221,7 @@ export const determineActionState = (round: OriginalSalesRound, userDocument: Us
 
   if (!hasMultipleOptions) {
     const stockInfo = getStockInfo(round.variantGroups[0] as VariantGroup);
-    if (stockInfo.isLimited && stockInfo.remainingUnits <= 0) {
+    if (stockInfo.isLimited && stockInfo.remainingUnits < (stockInfo.unitPerBox || 1)) {
       return 'AWAITING_STOCK';
     }
   }

@@ -5,7 +5,7 @@ import 'dayjs/locale/ko';
 
 import type { Product as OriginalProduct, SalesRound as OriginalSalesRound, VariantGroup as OriginalVariantGroup } from '../../shared/types';
 import OptimizedImage from '../../components/common/OptimizedImage';
-import { safeToDate, getStockInfo } from '../../utils/productUtils';
+import { safeToDate, getStockInfo, getRemainingPurchasableCount } from '../../utils/productUtils';
 import './ModernProductThumbCard.css';
 
 type Product = OriginalProduct & {
@@ -39,9 +39,10 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
     // ✅ 남은 재고 계산 (마지막 찬스용)
     let remainingUnits: number | null = null;
     if (vg) {
-      const stockInfo = getStockInfo(vg);
-      if (stockInfo.isLimited && stockInfo.remainingUnits > 0 && stockInfo.remainingUnits <= 3) {
-        remainingUnits = stockInfo.remainingUnits;
+      // ✅ “구매 가능 개수” 기준으로 표시 (stockDeductionAmount 반영)
+      const purchasable = getRemainingPurchasableCount(vg as any);
+      if (Number.isFinite(purchasable) && purchasable > 0 && purchasable <= 3) {
+        remainingUnits = purchasable;
       }
     }
 

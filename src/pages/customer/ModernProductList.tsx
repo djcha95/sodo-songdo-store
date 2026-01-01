@@ -19,6 +19,7 @@ import {
   getDeadlines,
   determineActionState,
   getStockInfo,
+  getRemainingPurchasableCount,
   safeToDate,
 } from '../../utils/productUtils';
 import { usePageRefs } from '../../layouts/CustomerLayout';
@@ -336,10 +337,10 @@ const fetchNextPage = useCallback(async () => {
     return heroProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any }))
       .filter(p => {
         if (!p.displayRound) return false;
-        // ✅ 방어: variantGroup이 없는 레거시 데이터가 있어도 화면이 죽지 않도록
-        const vg = p.displayRound.variantGroups?.[0];
-        const stock = getStockInfo(vg as any);
-        return !(stock.isLimited && stock.remainingUnits <= 0);
+        // ✅ 판매 가능 기준(차감 단위 반영)
+        const vg = p.displayRound.variantGroups?.[0] as any;
+        const purchasable = getRemainingPurchasableCount(vg);
+        return purchasable > 0;
       });
   }, [heroProducts]);
 
@@ -372,16 +373,28 @@ const fetchNextPage = useCallback(async () => {
     });
   }, [processedNormal]);
 
+  const DEBUG_STOCK = import.meta.env.VITE_DEBUG_STOCK === 'true';
+
   // ✅ 마지막 찬스: 재고 3개 이하인 상품 필터링 (visibleNormalProducts보다 먼저 정의)
   const lastChanceProducts = useMemo(() => {
-    return processedNormal.filter((p) => {
+    const filtered = processedNormal.filter((p) => {
       if (p.phase === 'onsite') return false;
       const vg = p.displayRound.variantGroups?.[0];
       if (!vg) return false;
+      // ✅ "구매 가능 개수" 기준으로 마지막 찬스(<=3) 판단 (차감 단위 반영)
+      const purchasable = getRemainingPurchasableCount(vg as any);
       const stockInfo = getStockInfo(vg);
-      // 재고가 제한적이고 남은 수량이 3개 이하인 경우
-      return stockInfo.isLimited && stockInfo.remainingUnits > 0 && stockInfo.remainingUnits <= 3;
+      // ✅ 디버깅: 필요 시에만 로그 출력 (기본 OFF)
+      if (DEBUG_STOCK && purchasable > 0 && purchasable <= 10) {
+        console.log(`[마지막찬스] ${(p as any).groupName || p.id}: purchasable=${purchasable}, remainingUnits=${stockInfo.remainingUnits}, unitPerBox=${stockInfo.unitPerBox}, totalStock=${(vg as any).totalPhysicalStock}, reservedCount=${(vg as any).reservedCount}`);
+      }
+      return Number.isFinite(purchasable) && purchasable > 0 && purchasable <= 3;
     });
+    // ✅ 디버깅: 필요 시에만 로그 출력 (기본 OFF)
+    if (DEBUG_STOCK) {
+      console.log(`[마지막찬스] processedNormal=${processedNormal.length}개, 필터링 후=${filtered.length}개`);
+    }
+    return filtered;
   }, [processedNormal]);
 
   const visibleNormalProducts = useMemo(() => {

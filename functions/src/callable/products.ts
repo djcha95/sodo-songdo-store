@@ -557,6 +557,21 @@ export const getProductsWithStock = onCall(
 
       const statsMap = withReservedOverlay ? await fetchStockStatsMap(statKeys) : new Map<string, any>();
 
+      // ✅ 디버깅(옵션): 에뮬레이터 또는 DEBUG_STOCK_STATS=true 일 때만 로그
+      const DEBUG_STOCK_STATS = !!process.env.FUNCTIONS_EMULATOR || process.env.DEBUG_STOCK_STATS === "true";
+      if (DEBUG_STOCK_STATS && withReservedOverlay && statKeys.length > 0) {
+        logger.info(`[getProductsWithStock] statKeys=${statKeys.length}개, statsMap=${statsMap.size}개 문서 발견`);
+        if (statsMap.size === 0) {
+          logger.warn(`[getProductsWithStock] ⚠️ stockStats_v1 문서가 없습니다! 기존 주문들이 기록되지 않았을 수 있습니다.`);
+        } else {
+          const sampleKeys = Array.from(statsMap.keys()).slice(0, 3);
+          sampleKeys.forEach((key) => {
+            const stat = statsMap.get(key);
+            logger.info(`[getProductsWithStock] 샘플 ${key}:`, JSON.stringify(stat, null, 2));
+          });
+        }
+      }
+
       const products = productsRaw.map((p) => {
         if (!withReservedOverlay) return p;
         const salesHistory = Array.isArray(p.salesHistory) ? p.salesHistory : [];
@@ -566,10 +581,15 @@ export const getProductsWithStock = onCall(
           const vgs = Array.isArray(r.variantGroups) ? r.variantGroups : [];
           const newVgs = vgs.map((vg: any) => {
             const vgId = vg?.id || "default";
+            const reserved = getClaimed(stat, vgId);
+            const pickedUp = getPickedUp(stat, vgId);
+            if (DEBUG_STOCK_STATS && reserved === 0 && stat && vg.totalPhysicalStock && vg.totalPhysicalStock > 0) {
+              logger.warn(`[getProductsWithStock] reservedCount=0 감지: productId=${p.id}, roundId=${r.roundId}, vgId=${vgId}, stat=${JSON.stringify(stat)}`);
+            }
             return {
               ...vg,
-              reservedCount: getClaimed(stat, vgId),
-              pickedUpCount: getPickedUp(stat, vgId),
+              reservedCount: reserved,
+              pickedUpCount: pickedUp,
             };
           });
           return { ...r, variantGroups: newVgs };
