@@ -29,6 +29,7 @@ export * from "./http/manualTrigger.js";
 export * from "./http/manualTriggerRecent.js";
 export * from "./http/banner.js";
 export * from "./http/maintenance.js";
+export * from "./http/registerDeviceToken.js";
 
 
 /**
@@ -52,6 +53,7 @@ export * from "./triggers/orders.js";
 export * from "./triggers/points.js";
 export * from "./triggers/products.js";
 export * from "./triggers/users.js";
+export * from "./triggers/reservations.js";
 
 
 /**

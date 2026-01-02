@@ -284,6 +284,7 @@ export interface Review {
   userId?: string; // 작성자 ID (관리자가 등록한 경우 null)
   userName?: string; // 작성자 이름 (카카오톡에서 가져온 경우)
   userNickname?: string; // 작성자 닉네임
+  phoneLast4?: string; // 전화번호 뒷자리 (표시용)
   content: string; // 리뷰 내용
   images?: string[]; // 리뷰 이미지 URL 배열
   rating?: number; // 평점 (1-5, 선택사항)

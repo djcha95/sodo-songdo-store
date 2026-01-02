@@ -49,6 +49,7 @@ interface DateGroupedProduct {
     productName: string;
     roundId: string;
     roundName: string;
+    variantGroupId: string;
     imageUrl: string;
     confirmedReserved: number;
     pendingPrepayment: number;
@@ -228,7 +229,8 @@ const DashboardPage: React.FC = () => {
             const publishDateStr = publishDateObj ? formatDate(publishDateObj) : '날짜 없음';
             
             latestRound.variantGroups?.forEach((vg: VariantGroup) => {
-              const groupKey = `${product.id}-${latestRound.roundId}-${vg.id || vg.groupName}`;
+              const variantGroupId = vg.id || vg.groupName;
+              const groupKey = `${product.id}-${latestRound.roundId}-${variantGroupId}`;
               const reservation = reservationMap.get(groupKey) || { confirmed: 0, pending: 0 };
               
               if (!dateGroups.has(publishDateStr)) {
@@ -240,6 +242,7 @@ const DashboardPage: React.FC = () => {
                 productName: product.groupName,
                 roundId: latestRound.roundId,
                 roundName: latestRound.roundName,
+                variantGroupId,
                 imageUrl: product.imageUrls?.[0] || '/sodomall-logo.png',
                 confirmedReserved: reservation.confirmed,
                 pendingPrepayment: reservation.pending,
@@ -482,7 +485,7 @@ const DashboardPage: React.FC = () => {
                 <div className="products-grid">
                   {group.products.map((product) => (
                     <Link
-                      key={`${product.productId}-${product.roundId}`}
+                      key={`${product.productId}-${product.roundId}-${product.variantGroupId}`}
                       to={`/admin/products/edit/${product.productId}/${product.roundId}`}
                       className="product-card"
                     >

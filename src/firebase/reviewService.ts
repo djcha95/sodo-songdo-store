@@ -20,8 +20,23 @@ import {
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import type { Review, ReviewStats } from '@/shared/types';
 import { uploadImages } from './generalService';
+import dayjs from 'dayjs';
 
 const reviewsCollectionRef = collection(db, 'reviews');
+
+const normalizeEventMonth = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  // 가장 흔한 입력 케이스들을 엄격 파싱으로 정규화
+  const parsed = dayjs(trimmed, ['YYYY-MM', 'YYYY-M', 'YYYY/MM', 'YYYY/M', 'YYYY-MM-DD', 'YYYY/M/D'], true);
+  if (parsed.isValid()) return parsed.format('YYYY-MM');
+
+  // 마지막으로 느슨한 파싱도 시도 (예: Date string)
+  const fallback = dayjs(trimmed);
+  return fallback.isValid() ? fallback.format('YYYY-MM') : undefined;
+};
 
 /**
  * 홈/리스트에서 보여줄 최신 리뷰
@@ -72,13 +87,28 @@ export const addReview = async (
     imageUrls = await uploadImages(imageFiles, 'reviews');
   }
 
+  // ✅ undefined 필드 제거 (Firestore는 undefined 값을 허용하지 않음)
+  const cleanReviewData: any = {};
+  Object.keys(reviewData).forEach((key) => {
+    const value = (reviewData as any)[key];
+    // null도 제거하지 않고 유지 (명시적으로 null로 설정된 경우)
+    if (value !== undefined) {
+      cleanReviewData[key] = value;
+    }
+  });
+
+  // ✅ eventMonth 정규화 (포맷 불일치로 고객 페이지에서 필터링 누락되는 문제 방지)
+  const normalizedEventMonth = normalizeEventMonth(cleanReviewData.eventMonth) || dayjs().format('YYYY-MM');
+
   const newReview = {
-    ...reviewData,
+    ...cleanReviewData,
     images: imageUrls.length > 0 ? imageUrls : reviewData.images || [],
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
     likeCount: 0,
     isVerified: reviewData.isFromKakao ? true : false, // 카카오톡 리뷰는 자동 검증
+    // ✅ eventMonth가 없으면 현재 월로 자동 설정 + 저장 시 항상 YYYY-MM로 강제
+    eventMonth: normalizedEventMonth,
   };
 
   const docRef = await addDoc(reviewsCollectionRef, newReview);
@@ -98,6 +128,11 @@ export const updateReview = async (
     ...updates,
     updatedAt: serverTimestamp() as Timestamp,
   };
+
+  // ✅ eventMonth 업데이트가 들어오면 항상 YYYY-MM로 정규화
+  if ('eventMonth' in updates) {
+    updateData.eventMonth = normalizeEventMonth((updates as any).eventMonth) || dayjs().format('YYYY-MM');
+  }
 
   // 새 이미지가 있으면 업로드
   if (newImageFiles && newImageFiles.length > 0) {

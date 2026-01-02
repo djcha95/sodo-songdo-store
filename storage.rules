@@ -1,0 +1,35 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ✅ 관리자 권한 확인 함수
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role in ['admin', 'master'];
+    }
+    
+    // ✅ 상품 이미지 (공개 읽기, 관리자만 쓰기)
+    match /products/{productId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // ✅ 배너 이미지 (공개 읽기, 관리자만 쓰기)
+    match /banners/{bannerId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // ✅ 후기 이미지 (공개 읽기, 관리자만 쓰기)
+    match /reviews/{reviewId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // ✅ 기타 모든 경로는 기본적으로 거부 (보안 강화)
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

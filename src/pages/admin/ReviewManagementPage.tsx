@@ -370,13 +370,17 @@ const ReviewManagementPage: React.FC = () => {
                 </div>
               )}
               <div className="review-content">{review.content}</div>
-              {review.images && review.images.length > 0 && (
-                <div className="review-images">
-                  {review.images.map((img, idx) => (
-                    <img key={idx} src={img} alt={`리뷰 이미지 ${idx + 1}`} />
-                  ))}
-                </div>
-              )}
+              {(() => {
+                // ✅ images가 배열인지 확인하고 안전하게 처리
+                const images = Array.isArray(review.images) ? review.images : [];
+                return images.length > 0 ? (
+                  <div className="review-images">
+                    {images.map((img, idx) => (
+                      <img key={idx} src={img} alt={`리뷰 이미지 ${idx + 1}`} />
+                    ))}
+                  </div>
+                ) : null;
+              })()}
               <div className="review-footer">
                 <span className="review-date">
                   {dayjs(review.createdAt instanceof Date ? review.createdAt : (review.createdAt as any)?.toDate?.() || new Date()).format('YYYY.MM.DD')}
