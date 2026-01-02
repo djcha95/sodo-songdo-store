@@ -45,8 +45,32 @@ const convertToDate = (date: UniversalTimestamp | Date | null | undefined): Date
     if (!date) return null;
     if (date instanceof Date) return date; 
     if ('toDate' in date && typeof date.toDate === 'function') return date.toDate();
-    if ('_seconds' in date && typeof date._seconds === 'number') return date.toDate();
+    if ('_seconds' in date && typeof date._seconds === 'number') {
+        try {
+            return new Timestamp(date._seconds, date._nanoseconds || 0).toDate();
+        } catch {
+            return null;
+        }
+    }
+    // seconds/nanoseconds 형태의 객체 처리
+    if (typeof date === 'object' && 'seconds' in date && typeof date.seconds === 'number') {
+        try {
+            return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
+        } catch {
+            return null;
+        }
+    }
+    // 숫자(밀리초) 형태 처리
+    if (typeof date === 'number') {
+        return new Date(date);
+    }
     return null; 
+};
+
+// ✅ 안전하게 Date로 변환하여 타임스탬프(밀리초)를 얻는 헬퍼
+const getTimestampMillis = (date: UniversalTimestamp | Date | null | undefined): number => {
+    const jsDate = convertToDate(date);
+    return jsDate ? jsDate.getTime() : 0;
 };
 
 const performAction = async (
@@ -75,7 +99,7 @@ const ActionableOrderTable: React.FC<{
     onSplitOrder: (orderId: string) => void;
 }> = ({ orders = [], onStatusChange, onSplitOrder }) => {
     const sortedOrders = useMemo(() =>
-        [...orders].sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()),
+        [...orders].sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)),
         [orders]
     );
     const statusInfo: Record<OrderStatus, { label: string; className: string }> = {
@@ -108,7 +132,10 @@ const ActionableOrderTable: React.FC<{
 
                                 return (
                                     <tr key={order.id} className={`status-row-${order.status}`}>
-                                        <td>{format((order.createdAt as Timestamp).toDate(), 'M/d(eee)', { locale: ko })}</td>
+                                        <td>{(() => {
+                                            const date = convertToDate(order.createdAt);
+                                            return date ? format(date, 'M/d(eee)', { locale: ko }) : '-';
+                                        })()}</td>
                                         <td>{order.items.map(item => `${item.productName} (${item.quantity}개)`).join(', ')}</td>
                                         <td>{(order.totalPrice || 0).toLocaleString()}원</td>
                                         <td className="status-cell">
