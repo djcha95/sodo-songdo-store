@@ -288,17 +288,35 @@ const ProductListPageAdmin: React.FC = () => {
   const [isRebuildingStats, setIsRebuildingStats] = useState(false);
 
   // ✅ fetchData 먼저 정의 (다른 함수들이 참조함)
+  // ✅ [수정] 모든 상품을 가져오도록 페이지네이션 구현
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const productsData = await getProductsWithStock({
-        pageSize: 500,
-        lastVisible: null,
-        tab: "all",
-        withReservedOverlay: true,
-      });
+      const allProducts: Product[] = [];
+      let lastVisible: string | number | null = null;
+      let hasMore = true;
+      const pageSize = 500;
 
-      setPageData(productsData.products);
+      // 모든 상품을 페이지네이션으로 가져오기
+      while (hasMore) {
+        const productsData = await getProductsWithStock({
+          pageSize,
+          lastVisible,
+          tab: "all",
+          withReservedOverlay: true,
+        });
+
+        allProducts.push(...productsData.products);
+        
+        // 더 이상 가져올 데이터가 없으면 종료
+        if (productsData.products.length < pageSize || !productsData.lastVisible) {
+          hasMore = false;
+        } else {
+          lastVisible = productsData.lastVisible;
+        }
+      }
+
+      setPageData(allProducts);
     } catch (error: any) {
       reportError('ProductListPageAdmin.fetchData', error);
       toast.error("데이터 로딩 실패: " + error.message);

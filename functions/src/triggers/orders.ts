@@ -5,6 +5,7 @@ import * as logger from "firebase-functions/logger";
 import { dbAdmin as db } from "../firebase/admin.js";
 import { FieldValue, Timestamp, Transaction } from "firebase-admin/firestore";
 import type { Order, UserDocument, PointLog, LoyaltyTier } from "@/shared/types";
+import { applyClaimedDelta, applyPickedUpDelta } from "../utils/stockStats.js";
 
 const POINT_POLICIES = {
   FRIEND_INVITED: { points: 100, reason: '친구 초대 성공' },
@@ -180,50 +181,26 @@ export const onOrderCreated = onDocumentCreated(
         return;
     }
 
-    // --- 1. 재고 수량 업데이트 로직 ---
-    if (order.status !== "CANCELED") {
-      const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
-      for (const item of order.items) {
-          const currentChanges = changesByProduct.get(item.productId) || [];
-          // ✅ [수정] item.quantity에 stockDeductionAmount를 곱하여 실제 재고 차감량을 계산합니다.
-          const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
-          currentChanges.push({
-              roundId: item.roundId,
-              variantGroupId: item.variantGroupId,
-              delta: actualDeduction,
-          });
-          changesByProduct.set(item.productId, currentChanges);
-      }
+    // ✅ Callable이 stockStats_v1을 직접 관리하는 주문이면 트리거는 스킵 (중복 반영 방지)
+    if ((order as any).stockStatsV1Managed) {
+      logger.info(`Skipping onOrderCreated trigger for stockStats-managed order ${orderId}.`);
+      return;
+    }
 
+    // --- 1. ✅ [수정] stockStats_v1 컬렉션 업데이트 로직 (기존 products 컬렉션 직접 업데이트 제거) ---
+    if (order.status !== "CANCELED") {
       try {
           await db.runTransaction(async (transaction: Transaction) => {
-              for (const [productId, changes] of changesByProduct.entries()) {
-                  const productRef = db.collection("products").doc(productId);
-                  const productDoc = await transaction.get(productRef);
-                  if (!productDoc.exists) {
-                      logger.error(`Product ${productId} not found during order creation.`);
-                      continue;
-                  }
-                  const productData = productDoc.data() as any;
-                  const newSalesHistory = productData?.salesHistory?.map((round: any) => {
-                      const relevantChanges = changes.filter(c => c.roundId === round.roundId);
-                      if (relevantChanges.length > 0) {
-                          const newVariantGroups = round.variantGroups.map((vg: any) => {
-                              const change = relevantChanges.find(c => c.variantGroupId === vg.id);
-                              if (change) {
-                                  const currentReserved = vg.reservedCount || 0;
-                                  vg.reservedCount = currentReserved + change.delta;
-                              }
-                              return vg;
-                          });
-                          return { ...round, variantGroups: newVariantGroups };
-                      }
-                      return round;
-                  }) || [];
-                  transaction.update(productRef, { salesHistory: newSalesHistory });
+              for (const item of order.items) {
+                  // ✅ [수정] item.quantity에 stockDeductionAmount를 곱하여 실제 재고 차감량을 계산합니다.
+                  const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
+                  const vgId = item.variantGroupId || "default";
+                  
+                  // ✅ stockStats_v1 컬렉션 업데이트
+                  applyClaimedDelta(transaction, item.productId, item.roundId, vgId, actualDeduction);
               }
           });
-          logger.info(`Successfully updated reservedCount for order ${orderId}`);
+          logger.info(`Successfully updated stockStats_v1 for order ${orderId}`);
       } catch (error) {
           logger.error(`Transaction failed for order ${orderId} creation:`, error);
       }
@@ -251,51 +228,22 @@ export const onOrderDeleted = onDocumentDeleted(
     const order = snapshot.data() as Order;
     if (order.status === "CANCELED") return;
 
-    const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
-    for (const item of order.items) {
-        const currentChanges = changesByProduct.get(item.productId) || [];
-        // ✅ [수정] 복원되는 재고량도 stockDeductionAmount를 곱하여 정확하게 계산합니다.
-        const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
-        currentChanges.push({
-            roundId: item.roundId,
-            variantGroupId: item.variantGroupId,
-            delta: -actualDeduction,
-        });
-        changesByProduct.set(item.productId, currentChanges);
-    }
+    // ✅ Callable이 stockStats_v1을 직접 관리하는 주문이면 트리거는 스킵 (중복 반영 방지)
+    if ((order as any).stockStatsV1Managed) return;
 
+    // ✅ [수정] stockStats_v1 컬렉션 업데이트 (기존 products 컬렉션 직접 업데이트 제거)
     try {
         await db.runTransaction(async (transaction: Transaction) => {
-            for (const [productId, changes] of changesByProduct.entries()) {
-                const productRef = db.collection("products").doc(productId);
-                const productDoc = await transaction.get(productRef);
-
-                if (!productDoc.exists) {
-                    logger.error(`Product ${productId} not found during order deletion.`);
-                    continue;
-                }
-
-                const productData = productDoc.data() as ProductWithHistory;
-                const newSalesHistory = productData?.salesHistory?.map((round: any) => {
-                    const relevantChanges = changes.filter(c => c.roundId === round.roundId);
-                    if (relevantChanges.length > 0) {
-                        const newVariantGroups = round.variantGroups.map((vg: any) => {
-                            const change = relevantChanges.find(c => c.variantGroupId === vg.id);
-                            if (change) {
-                                const currentReserved = vg.reservedCount || 0;
-                                vg.reservedCount = Math.max(0, currentReserved + change.delta);
-                            }
-                            return vg;
-                        });
-                        return { ...round, variantGroups: newVariantGroups };
-                    }
-                    return round;
-                }) || [];
-
-                transaction.update(productRef, { salesHistory: newSalesHistory });
+            for (const item of order.items) {
+                // ✅ [수정] 복원되는 재고량도 stockDeductionAmount를 곱하여 정확하게 계산합니다.
+                const actualDeduction = item.quantity * (item.stockDeductionAmount || 1);
+                const vgId = item.variantGroupId || "default";
+                
+                // ✅ stockStats_v1 컬렉션에서 claimed 차감 (재고 복원)
+                applyClaimedDelta(transaction, item.productId, item.roundId, vgId, -actualDeduction);
             }
         });
-        logger.info(`Successfully updated reservedCount for deleted order ${event.params.orderId}`);
+        logger.info(`Successfully updated stockStats_v1 for deleted order ${event.params.orderId}`);
     } catch (error) {
         logger.error(`Transaction failed for order ${event.params.orderId} deletion:`, error);
     }
@@ -312,6 +260,9 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
 
     const before = event.data.before.data() as Order;
     const after = event.data.after.data() as Order;
+
+    // ✅ Callable이 stockStats_v1을 직접 관리하는 주문이면 트리거는 스킵 (중복 반영 방지)
+    if ((before as any).stockStatsV1Managed || (after as any).stockStatsV1Managed) return;
     const changesByProduct = new Map<string, { roundId: string, variantGroupId: string, delta: number }[]>();
 
     // ✅ [수정] 주문 수량(quantity) 대신 실제 재고 차감량(totalDeduction)을 Map에 저장합니다.
@@ -352,37 +303,19 @@ export const onOrderUpdatedForStock = onDocumentUpdated(
         return;
     }
 
+    // ✅ [수정] stockStats_v1 컬렉션 업데이트 (기존 products 컬렉션 직접 업데이트 제거)
     try {
         await db.runTransaction(async (transaction: Transaction) => {
             for (const [productId, changes] of changesByProduct.entries()) {
-                const productRef = db.collection("products").doc(productId);
-                const productDoc = await transaction.get(productRef);
-
-                if (!productDoc.exists) {
-                    logger.error(`Product ${productId} not found during order update.`);
-                    continue;
+                for (const change of changes) {
+                    const vgId = change.variantGroupId || "default";
+                    
+                    // ✅ stockStats_v1 컬렉션 업데이트
+                    applyClaimedDelta(transaction, productId, change.roundId, vgId, change.delta);
                 }
-
-                const productData = productDoc.data() as ProductWithHistory;
-                const newSalesHistory = productData?.salesHistory?.map((round: any) => {
-                    const relevantChanges = changes.filter(c => c.roundId === round.roundId);
-                    if (relevantChanges.length > 0) {
-                        const newVariantGroups = round.variantGroups.map((vg: any) => {
-                            const change = relevantChanges.find(c => c.variantGroupId === vg.id);
-                            if (change) {
-                                const currentReserved = vg.reservedCount || 0;
-                                vg.reservedCount = Math.max(0, currentReserved + change.delta);
-                            }
-                            return vg;
-                        });
-                        return { ...round, variantGroups: newVariantGroups };
-                    }
-                    return round;
-                }) || [];
-                transaction.update(productRef, { salesHistory: newSalesHistory });
             }
         });
-        logger.info(`Successfully updated reservedCount for updated order ${event.params.orderId}`);
+        logger.info(`Successfully updated stockStats_v1 for updated order ${event.params.orderId}`);
     } catch (error) {
         logger.error(`Transaction failed for order ${event.params.orderId} update:`, error);
     }

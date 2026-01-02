@@ -551,7 +551,14 @@ export const getProductsWithStock = onCall(
       for (const p of productsRaw) {
         const salesHistory = Array.isArray(p.salesHistory) ? p.salesHistory : [];
         for (const r of salesHistory) {
-          if (r?.roundId) statKeys.push(statDocId(p.id, r.roundId));
+          if (r?.roundId) {
+            const key = statDocId(p.id, r.roundId);
+            statKeys.push(key);
+            // ✅ [디버깅] roundId가 productId와 동일한 경우 경고
+            if (r.roundId === p.id) {
+              logger.warn(`[getProductsWithStock] ⚠️ roundId가 productId와 동일합니다: productId=${p.id}, roundId=${r.roundId}, statKey=${key}`);
+            }
+          }
         }
       }
 
@@ -569,6 +576,14 @@ export const getProductsWithStock = onCall(
             const stat = statsMap.get(key);
             logger.info(`[getProductsWithStock] 샘플 ${key}:`, JSON.stringify(stat, null, 2));
           });
+        }
+      }
+      
+      // ✅ [추가] 누락된 statKeys 경고 (항상 로그)
+      if (withReservedOverlay && statKeys.length > 0) {
+        const missingKeys = statKeys.filter(key => !statsMap.has(key));
+        if (missingKeys.length > 0) {
+          logger.warn(`[getProductsWithStock] ⚠️ ${missingKeys.length}개의 stockStats_v1 문서가 없습니다. 누락된 키: ${missingKeys.slice(0, 5).join(', ')}${missingKeys.length > 5 ? '...' : ''}`);
         }
       }
 

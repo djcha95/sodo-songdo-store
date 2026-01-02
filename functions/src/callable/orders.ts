@@ -10,24 +10,14 @@ import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, Sa
 // ===============================
 // StockStats v1 helpers (재고 칠판 도구)
 // ===============================
-const STOCK_STATS_COL = "stockStats_v1";
+import { applyClaimedDelta, applyPickedUpDelta, statDocId } from "../utils/stockStats.js";
 
-function statDocId(productId: string, roundId: string) {
-  return `${productId}__${roundId}`;
-}
+const STOCK_STATS_COL = "stockStats_v1";
 
 function itemDeduct(it: OrderItem): number {
   const q = typeof it.quantity === "number" ? it.quantity : 0;
   const d = typeof it.stockDeductionAmount === "number" && it.stockDeductionAmount > 0 ? it.stockDeductionAmount : 1;
   return q * d;
-}
-
-function claimedField(vgId: string) {
-  return `claimed.${vgId}`;
-}
-
-function pickedUpField(vgId: string) {
-  return `pickedUp.${vgId}`;
 }
 
 // 칠판에서 현재 판매된 수량 읽기
@@ -42,55 +32,6 @@ async function getClaimedNow(
   const data = snap.exists ? (snap.data() as any) : {};
   const n = data?.claimed?.[variantGroupId];
   return typeof n === "number" ? n : 0;
-}
-
-// ===============================
-// StockStats v1 helpers (재고 칠판 도구)
-// ===============================
-// ✅ 1-write(= tx.set merge)로 최적화된 버전
-
-function applyClaimedDelta(
-  tx: FirebaseFirestore.Transaction,
-  productId: string,
-  roundId: string,
-  variantGroupId: string,
-  delta: number
-) {
-  if (!delta) return;
-
-  const ref = db.collection(STOCK_STATS_COL).doc(statDocId(productId, roundId));
-  tx.set(
-    ref,
-    {
-      productId,
-      roundId,
-      updatedAt: AdminTimestamp.now(),
-      [claimedField(variantGroupId)]: FieldValue.increment(delta),
-    } as any,
-    { merge: true }
-  );
-}
-
-function applyPickedUpDelta(
-  tx: FirebaseFirestore.Transaction,
-  productId: string,
-  roundId: string,
-  variantGroupId: string,
-  delta: number
-) {
-  if (!delta) return;
-
-  const ref = db.collection(STOCK_STATS_COL).doc(statDocId(productId, roundId));
-  tx.set(
-    ref,
-    {
-      productId,
-      roundId,
-      updatedAt: AdminTimestamp.now(),
-      [pickedUpField(variantGroupId)]: FieldValue.increment(delta),
-    } as any,
-    { merge: true }
-  );
 }
 
 // ===============================
@@ -380,6 +321,8 @@ export const submitOrder = onCall(
                 notes: client.notes ?? "",
                 isBookmarked: false,
                 wasPrepaymentRequired: !!client.wasPrepaymentRequired,
+                // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+                stockStatsV1Managed: true as any,
               };
               transaction.set(newOrderRef, newOrder);
               createdOrderIds.push(newOrderRef.id);
@@ -477,6 +420,8 @@ export const updateOrderQuantity = onCall(
           items: [updatedItem],
           totalPrice: originalItem.unitPrice * newQuantity,
           notes: order.notes ? `${order.notes}\n${note}` : note,
+          // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+          stockStatsV1Managed: true as any,
         });
 
         // 5) ✅ 칠판(Claimed) 증감 반영
@@ -592,6 +537,8 @@ export const cancelOrder = onCall(
           status: penaltyType === "late" ? "LATE_CANCELED" : "CANCELED",
           canceledAt: AdminTimestamp.now(),
           notes: order.notes ? `${order.notes}\n[취소] ${finalMessage}` : `[취소] ${finalMessage}`,
+          // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+          stockStatsV1Managed: true as any,
           stockStats: {
             ...(order.stockStats || {}),
             v: 1,
@@ -879,6 +826,8 @@ export const splitBundledOrder = onCall(
             splitFrom: orderId,
             status: "RESERVED", // ✅ 분할된 개별 주문은 예약 상태로
             notes: `[분할된 주문] 원본: ${originalOrder.orderNumber}`,
+            // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+            stockStatsV1Managed: true as any,
           };
 
           // 원본의 완료/취소 관련 필드는 제거 (새 주문이므로)
@@ -904,6 +853,8 @@ export const splitBundledOrder = onCall(
           notes: originalOrder.notes
             ? `${originalOrder.notes}\n[주문 분할 완료] ${newOrderIds.length}개의 개별 주문(${newOrderIds.join(", ")})으로 분할되었습니다.`
             : `[주문 분할 완료] ${newOrderIds.length}개의 개별 주문(${newOrderIds.join(", ")})으로 분할되었습니다.`,
+          // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+          stockStatsV1Managed: true as any,
         });
 
         return {
@@ -1009,6 +960,8 @@ export const createOrderAsAdmin = onCall(
             notes: `관리자가 생성한 주문입니다.`,
             isBookmarked: false,
             wasPrepaymentRequired: round.isPrepaymentRequired ?? false,
+            // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+            stockStatsV1Managed: true as any,
           };
 
           transaction.set(newOrderRef, newOrderData);
@@ -1111,6 +1064,8 @@ export const processPartialPickup = onCall(
           totalPrice: newTotalPrice,
           pickedUpAt: AdminTimestamp.now(),
           notes: order.notes ? `${order.notes}\n${note}` : note,
+          // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+          stockStatsV1Managed: true as any,
         });
 
         // 3. ✅ [핵심] 재고 칠판(StockStats) 업데이트
@@ -1257,6 +1212,8 @@ export const revertFinalizedOrder = onCall(
         // 주문 상태 복구
         const orderUpdateData: any = {
           status: "RESERVED",
+          // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+          stockStatsV1Managed: true,
         };
 
         // 상태별 타임스탬프 필드 삭제
