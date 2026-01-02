@@ -146,12 +146,7 @@ export function getMarketingBadges(args: {
     badges.push({ key: 'NEW', label: '신상품', tone: 'blue' });
   }
 
-  // 4) 수량 한정 (라벨이 있는 경우에만)
-  if (specialLabels.includes('수량 한정')) {
-    badges.push({ key: 'LIMITED', label: '수량 한정', tone: 'black' });
-  }
-
-  // 5) 추천(일일 랜덤) - 상위 뱃지들로 꽉 차면 생략
+  // 4) 추천(일일 랜덤) - 상위 뱃지들로 꽉 차면 생략
   const minPurchasable = (() => {
     const vgs = round?.variantGroups ?? [];
     if (vgs.length === 0) return null;
@@ -166,6 +161,18 @@ export function getMarketingBadges(args: {
 
   // 마지막 찬스(재고 3 이하)는 이미 숫자 뱃지가 있어서 추천 확률에서 제외(덜 산만하게)
   const isLastChance = typeof minPurchasable === 'number' && minPurchasable > 0 && minPurchasable <= 3;
+
+  // 5) 한정: 라벨(수량 한정) 또는 재고(4~20개) 기반
+  const isLimitedByStock =
+    !isLastChance &&
+    typeof minPurchasable === 'number' &&
+    Number.isFinite(minPurchasable) &&
+    minPurchasable >= 4 &&
+    minPurchasable <= 20;
+
+  if (specialLabels.includes('수량 한정') || isLimitedByStock) {
+    badges.push({ key: 'LIMITED', label: '한정', tone: 'black' });
+  }
   if (!isLastChance && pickRecommendedDaily(product.id, seed) && badges.length < maxBadges) {
     badges.push({ key: 'RECOMMENDED', label: '추천', tone: 'gray' });
   }
@@ -173,9 +180,9 @@ export function getMarketingBadges(args: {
   // 우선순위 정렬 + 최대 개수 제한
   const priority: Record<MarketingBadgeKey, number> = {
     BEST: 10,
-    HOT_DEAL: 20,
+    LIMITED: 20,
     NEW: 30,
-    LIMITED: 40,
+    HOT_DEAL: 40,
     RECOMMENDED: 50,
   };
 

@@ -57,11 +57,14 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
       seed: badgeSeed,
       maxBadges: 2,
     });
-    // ✅ 카드에서는 "인기상품"이 있으면 인기상품만, 없으면 "신상품"만 표시 (초특가/추천 등은 생략)
+    // ✅ 카드에서는 뱃지 1개만: 인기상품 > 한정 > 신상품
     const hasBest = badges.some((b) => b.key === 'BEST');
-    const displayBadges = hasBest 
+    const hasLimited = !hasBest && badges.some((b) => b.key === 'LIMITED');
+    const displayBadges = hasBest
       ? badges.filter((b) => b.key === 'BEST')
-      : badges.filter((b) => b.key === 'NEW');
+      : hasLimited
+        ? badges.filter((b) => b.key === 'LIMITED')
+        : badges.filter((b) => b.key === 'NEW');
 
     const reservedCount = getTotalReservedCount(r as any);
     const popularityScore = getPopularityScore({

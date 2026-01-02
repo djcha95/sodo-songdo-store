@@ -287,62 +287,25 @@ const ProductListPageAdmin: React.FC = () => {
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
   const [isRebuildingStats, setIsRebuildingStats] = useState(false);
 
-  // ✅ 예약 수량이 모두 0인지 확인
-  const allReservedCountsZero = useMemo(() => {
-    if (processedRounds.length === 0) return false;
-    const hasNonZeroReserved = processedRounds.some(round => 
-      round.enrichedVariantGroups.some(vg => 
-        typeof vg.reservedCount === 'number' && vg.reservedCount > 0
-      )
-    );
-    return !hasNonZeroReserved && processedRounds.length > 5; // 상품이 5개 이상인데 모두 0이면 문제
-  }, [processedRounds]);
-
-  // ✅ 재고 통계 재구축 함수
-  const rebuildStockStats = useCallback(async () => {
-    if (!confirm('⚠️ 주의: 이 작업은 orders 컬렉션 전체를 스캔하여 stockStats_v1을 재구축합니다. 계속하시겠습니까?')) {
-      return;
-    }
-
-    setIsRebuildingStats(true);
-    const toastId = toast.loading('재고 통계 재구축 중... (수 초~수 분 소요)');
-
+  // ✅ fetchData 먼저 정의 (다른 함수들이 참조함)
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const rebuildFunction = httpsCallable(functions, 'rebuildStockStats_v1');
-      const result = await rebuildFunction();
-      
-      console.log('재구축 결과:', result.data);
-      toast.success(`재구축 완료! (주문 ${(result.data as any)?.scannedOrders || 0}개 스캔, 통계 문서 ${(result.data as any)?.statDocsWritten || 0}개 생성)`, { id: toastId, duration: 5000 });
-      
-      // 데이터 새로고침
-      await fetchData();
+      const productsData = await getProductsWithStock({
+        pageSize: 500,
+        lastVisible: null,
+        tab: "all",
+        withReservedOverlay: true,
+      });
+
+      setPageData(productsData.products);
     } catch (error: any) {
-      console.error('재구축 실패:', error);
-      toast.error(`재구축 실패: ${error.message}`, { id: toastId });
+      reportError('ProductListPageAdmin.fetchData', error);
+      toast.error("데이터 로딩 실패: " + error.message);
     } finally {
-      setIsRebuildingStats(false);
+      setLoading(false);
     }
-  }, [fetchData]);
-
-// 270번째 줄 근처
-const fetchData = useCallback(async () => {
-  setLoading(true);
-  try {
-    const productsData = await getProductsWithStock({
-  pageSize: 500,
-  lastVisible: null,
-  tab: "all",
-  withReservedOverlay: true,
-});
-
-    setPageData(productsData.products);
-  } catch (error: any) {
-    reportError('ProductListPageAdmin.fetchData', error);
-    toast.error("데이터 로딩 실패: " + error.message);
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -472,6 +435,43 @@ const fetchData = useCallback(async () => {
       return 0;
     });
   }, [pageData, searchQuery, filterStatus, sortConfig]);
+
+  // ✅ 예약 수량이 모두 0인지 확인 (processedRounds 이후에 정의)
+  const allReservedCountsZero = useMemo(() => {
+    if (processedRounds.length === 0) return false;
+    const hasNonZeroReserved = processedRounds.some(round => 
+      round.enrichedVariantGroups.some(vg => 
+        typeof vg.reservedCount === 'number' && vg.reservedCount > 0
+      )
+    );
+    return !hasNonZeroReserved && processedRounds.length > 5; // 상품이 5개 이상인데 모두 0이면 문제
+  }, [processedRounds]);
+
+  // ✅ 재고 통계 재구축 함수 (fetchData 이후에 정의)
+  const rebuildStockStats = useCallback(async () => {
+    if (!confirm('⚠️ 주의: 이 작업은 orders 컬렉션 전체를 스캔하여 stockStats_v1을 재구축합니다. 계속하시겠습니까?')) {
+      return;
+    }
+
+    setIsRebuildingStats(true);
+    const toastId = toast.loading('재고 통계 재구축 중... (수 초~수 분 소요)');
+
+    try {
+      const rebuildFunction = httpsCallable(functions, 'rebuildStockStats_v1');
+      const result = await rebuildFunction();
+      
+      console.log('재구축 결과:', result.data);
+      toast.success(`재구축 완료! (주문 ${(result.data as any)?.scannedOrders || 0}개 스캔, 통계 문서 ${(result.data as any)?.statDocsWritten || 0}개 생성)`, { id: toastId, duration: 5000 });
+      
+      // 데이터 새로고침
+      await fetchData();
+    } catch (error: any) {
+      console.error('재구축 실패:', error);
+      toast.error(`재구축 실패: ${error.message}`, { id: toastId });
+    } finally {
+      setIsRebuildingStats(false);
+    }
+  }, [fetchData]);
 
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterStatus, itemsPerPage]);
 
