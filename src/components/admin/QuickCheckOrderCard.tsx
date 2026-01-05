@@ -8,6 +8,7 @@ import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle } from 'lucide-reac
 import useLongPress from '@/hooks/useLongPress';
 import './QuickCheckOrderCard.css';
 import { formatKRW } from '@/utils/number';
+import { safeToDate } from '@/utils/productUtils';
 
 // ❌ [삭제됨] 로컬 인터페이스 정의 삭제
 // export interface AggregatedOrderGroup { ... }
@@ -115,13 +116,18 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
 
   const pressHandlers = useLongPress(handleLongClick, handleShortClick, { initialDelay: 300, delay: 150 });
 
+  // ✅ 날짜 타입이 Timestamp/Date/epochMillis/seconds 객체 등으로 섞여 들어와도 안전하게 처리
+  const toSafeDate = (v: any): Date | null => {
+    if (v === null || v === undefined) return null;
+    // 일부 레거시/백엔드 로직에서 0을 "없음"으로 쓰는 경우 방어
+    if (typeof v === 'number' && v <= 0) return null;
+    if (typeof v === 'string' && v.trim() === '') return null;
+    return safeToDate(v);
+  };
+
   const formatDate = (timestamp: any): string => {
-    if (!timestamp) return '미지정';
-    let date: Date;
-    if (typeof timestamp.toDate === 'function') date = timestamp.toDate();
-    else if (typeof timestamp.seconds === 'number') date = new Date(timestamp.seconds * 1000);
-    else return '형식 오류';
-    if (isNaN(date.getTime())) return '날짜 오류';
+    const date = toSafeDate(timestamp);
+    if (!date) return '미지정';
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
@@ -129,14 +135,8 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
   };
 
   const isSameDay = (date1: any, date2: any): boolean => {
-    const toJsDate = (ts: any): Date | null => {
-      if (!ts) return null;
-      if (typeof ts.toDate === 'function') return ts.toDate();
-      if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
-      return null;
-    };
-    const d1 = toJsDate(date1);
-    const d2 = toJsDate(date2);
+    const d1 = toSafeDate(date1);
+    const d2 = toSafeDate(date2);
     if (!d1 || !d2) return false;
     return d1.getFullYear() === d2.getFullYear() &&
            d1.getMonth() === d2.getMonth() &&

@@ -370,6 +370,8 @@ const OrderHistoryPage: React.FC = () => {
   const { orders, setOrders, loading, loadingMore, hasMore, loadMore } = usePaginatedOrders(user?.uid);
   const [selectedOrderKeys, setSelectedOrderKeys] = useState<Set<string>>(new Set());
   const [cancellationRequest, setCancellationRequest] = useState<CancellationRequest | null>(null);
+  // ✅ 과거 내역(취소/노쇼)까지 포함해서 볼지 여부
+  const [showHiddenOrders, setShowHiddenOrders] = useState(false);
 
   // ✅ [수정 반영] groupedOrders 만들 때 필터링
   const groupedOrders = useMemo(() => {
@@ -377,7 +379,7 @@ const OrderHistoryPage: React.FC = () => {
 
     orders.forEach(order => {
       // ✅ 취소/노쇼는 아예 목록에서 제외
-      if (isHiddenStatus(order.status as OrderStatus)) return;
+      if (!showHiddenOrders && isHiddenStatus(order.status as OrderStatus)) return;
 
       const date = order.pickupDate as unknown as Date;
       if (date && date instanceof Date) {
@@ -388,7 +390,7 @@ const OrderHistoryPage: React.FC = () => {
     });
 
     return groups;
-  }, [orders]);
+  }, [orders, showHiddenOrders]);
 
   const handleItemSelect = useCallback((orderId: string) => {
     setSelectedOrderKeys(prev => {
@@ -484,6 +486,19 @@ const OrderHistoryPage: React.FC = () => {
     
     return (
       <div className="orders-list">
+        {/* ✅ 과거(취소/노쇼) 내역 토글 */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '6px 0 12px' }}>
+          <button
+            type="button"
+            className="common-button button-secondary button-small"
+            onClick={() => setShowHiddenOrders((v) => !v)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="취소/노쇼 내역까지 포함해서 볼지 선택합니다."
+          >
+            <Info size={14} />
+            <span>{showHiddenOrders ? '취소/노쇼 숨기기' : '취소/노쇼 포함 보기'}</span>
+          </button>
+        </div>
         <AnimatePresence>
           {sortedDates.map((dateStr, index) => (
             <motion.div key={dateStr} layout>
