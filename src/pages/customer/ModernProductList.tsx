@@ -77,7 +77,8 @@ const DragHScroll: React.FC<{
   hintLabel?: string;
 }> = ({ children, className, hintLabel = '오른쪽으로 스크롤' }) => {
   const elRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = useRef(false);
+  const isPointerDownRef = useRef(false);
+  const hasPointerCaptureRef = useRef(false);
   const startXRef = useRef(0);
   const startScrollLeftRef = useRef(0);
   const didDragRef = useRef(false);
@@ -115,18 +116,20 @@ const DragHScroll: React.FC<{
     const el = elRef.current;
     if (!el) return;
 
-    isDraggingRef.current = true;
+    isPointerDownRef.current = true;
+    hasPointerCaptureRef.current = false;
     didDragRef.current = false;
     startXRef.current = e.clientX;
     startScrollLeftRef.current = el.scrollLeft;
 
-    el.classList.add('dragging');
-    try { el.setPointerCapture(e.pointerId); } catch {}
+    // ✅ 클릭만 하는 경우엔 포인터 캡처를 걸지 않습니다.
+    // 실제 드래그로 판단되는 순간(onPointerMove에서 임계값 초과)부터 캡처를 잡아
+    // 카드 클릭(상세 진입)이 씹히는 문제를 방지합니다.
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== 'mouse') return;
-    if (!isDraggingRef.current) return;
+    if (!isPointerDownRef.current) return;
     const el = elRef.current;
     if (!el) return;
 
@@ -134,16 +137,29 @@ const DragHScroll: React.FC<{
     // ✅ 너무 작은 흔들림은 클릭으로 취급(상세 진입이 잘 되도록)
     if (Math.abs(dx) <= 6) return;
 
-    didDragRef.current = true;
+    // ✅ 드래그로 확정되는 순간에만 pointer capture + dragging class 적용
+    if (!didDragRef.current) {
+      didDragRef.current = true;
+      el.classList.add('dragging');
+      try {
+        el.setPointerCapture(e.pointerId);
+        hasPointerCaptureRef.current = true;
+      } catch {
+        hasPointerCaptureRef.current = false;
+      }
+    }
     el.scrollLeft = startScrollLeftRef.current - dx;
     e.preventDefault();
   }, []);
 
   const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const el = elRef.current;
-    isDraggingRef.current = false;
+    isPointerDownRef.current = false;
     if (el) el.classList.remove('dragging');
-    try { el?.releasePointerCapture(e.pointerId); } catch {}
+    if (hasPointerCaptureRef.current) {
+      try { el?.releasePointerCapture(e.pointerId); } catch {}
+    }
+    hasPointerCaptureRef.current = false;
     // 클릭 방지 플래그는 한 틱 뒤에 초기화(드래그 후 버튼 클릭 방지)
     setTimeout(() => { didDragRef.current = false; }, 0);
   }, []);
