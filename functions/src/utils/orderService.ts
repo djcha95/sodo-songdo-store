@@ -4,6 +4,7 @@ import { dbAdmin as db } from '../firebase/admin.js';
 import { Timestamp, Transaction } from 'firebase-admin/firestore';
 import type { Order, OrderItem, Product, SalesRound, WaitlistEntry, UserDocument } from '@/shared/types';
 import * as logger from "firebase-functions/logger";
+import { applyClaimedDelta } from './stockStats.js';
 
 /**
  * @description 대기 목록 항목으로부터 새로운 주문을 생성합니다. (트랜잭션 내부에서만 호출)
@@ -81,6 +82,13 @@ export const submitOrderFromWaitlist = async (
     customerInfo: { name: userDoc?.displayName || '알 수 없음', phone: userDoc?.phone || '', phoneLast4 },
     notes: '대기 신청에서 자동으로 전환된 주문입니다.',
     wasPrepaymentRequired: round.isPrepaymentRequired ?? false,
+    // ✅ stockStats_v1은 서버가 직접 관리 (트리거 중복 반영 방지)
+    stockStatsV1Managed: true as any,
   };
   transaction.set(newOrderRef, orderData);
+
+  // ✅ [핵심] 칠판 업데이트 (수량 증가)
+  const vgId = vg.id || 'default';
+  const deduct = quantity * (itemDetail.stockDeductionAmount || 1);
+  applyClaimedDelta(transaction, product.id, round.roundId, vgId, deduct);
 };

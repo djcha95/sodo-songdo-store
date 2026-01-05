@@ -303,7 +303,9 @@ export const submitOrder = onCall(
               transaction.update(existingDoc.ref, {
                   items: [updatedItem],
                   totalPrice: newTotalPrice,
-                  notes: (existingOrder.notes || "") + `\n[추가주문] +${singleItem.quantity}개`
+                  notes: (existingOrder.notes || "") + `\n[추가주문] +${singleItem.quantity}개`,
+                  // ✅ stockStats_v1은 서버(Callable)가 직접 관리 (트리거 중복 반영 방지)
+                  stockStatsV1Managed: true as any,
               });
               updatedOrderIds.push(existingDoc.id);
           } else {

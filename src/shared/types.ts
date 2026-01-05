@@ -226,6 +226,7 @@ export interface Order {
   eventId?: string;
   noShowAt?: any | null;       // 노쇼 처리 시각
   stockStats?: StockStatsMeta; // 칠판 적용 중복 방지용 메타
+  stockStatsV1Managed?: boolean; // ✅ stockStats_v1 컬렉션이 서버에서 직접 관리됨을 표시 (트리거 중복 반영 방지)
 }
 
 export interface UserTutorialProgress {

@@ -24,49 +24,56 @@ import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firest
 import type { Order, OrderStatus, OrderItem } from '@/shared/types';
 
 /**
- * @description 주문 생성 시 클라이언트가 사용자 정보를 직접 수정하지 않도록 변경합니다.
- * 주문 생성에만 집중하고, 사용자 정보 업데이트(totalOrders 등)는 서버 트리거에 위임합니다.
+ * @description 주문 생성을 위한 Callable Cloud Function 호출 래퍼.
+ * ✅ [수정] 서버의 submitOrder callable function을 호출하여 칠판(stockStats_v1) 업데이트를 보장합니다.
+ * 이전에는 클라이언트에서 직접 주문을 생성했지만, 이제는 서버에서 처리하여 재고 통계가 정확하게 반영됩니다.
  */
 export const submitOrder = async (
   orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber' | 'status'>
-): Promise<{ orderId?: string }> => {
-  let newOrderId: string | undefined = undefined;
+): Promise<{ orderId?: string; orderIds?: string[]; updatedOrderIds?: string[] }> => {
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const submitOrderCallable = httpsCallable<
+      {
+        items: OrderItem[];
+        totalPrice: number;
+        customerInfo: { name: string; phone: string };
+        pickupDate?: any;
+        wasPrepaymentRequired?: boolean;
+        notes?: string;
+      },
+      { success: boolean; orderIds?: string[]; updatedOrderIds?: string[] }
+    >(functions, 'submitOrder');
 
-  await runTransaction(db, async (transaction) => {
-    const userRef = doc(db, 'users', orderData.userId);
-    const userSnap = await transaction.get(userRef);
-    if (!userSnap.exists()) {
-      throw new Error('주문 처리 중 사용자 정보를 찾을 수 없습니다.');
-    }
-
-    const newOrderRef = doc(collection(db, 'orders'));
-    newOrderId = newOrderRef.id;
-
-    const itemsWithDeduction = orderData.items.map((item) => {
-      return {
+    const result = await submitOrderCallable({
+      items: orderData.items.map(item => ({
         ...item,
         stockDeductionAmount: item.stockDeductionAmount ?? 1,
-      };
+      })),
+      totalPrice: orderData.items.reduce(
+        (sum, item) => sum + item.unitPrice * item.quantity,
+        0
+      ),
+      customerInfo: orderData.customerInfo,
+      pickupDate: orderData.pickupDate,
+      wasPrepaymentRequired: orderData.wasPrepaymentRequired,
+      notes: orderData.notes,
     });
 
-    const originalTotalPrice = itemsWithDeduction.reduce(
-      (sum, item) => sum + item.unitPrice * item.quantity,
-      0
-    );
-
-    const newOrderData: Omit<Order, 'id'> = {
-      ...orderData,
-      items: itemsWithDeduction,
-      status: 'RESERVED',
-      createdAt: serverTimestamp(),
-      orderNumber: `SODOMALL-${Date.now()}`,
-      totalPrice: originalTotalPrice,
+    const data = result.data;
+    return {
+      orderId: data.orderIds?.[0],
+      orderIds: data.orderIds,
+      updatedOrderIds: data.updatedOrderIds,
     };
-
-    transaction.set(newOrderRef, newOrderData);
-  });
-
-  return { orderId: newOrderId };
+  } catch (error: any) {
+    console.error("Callable function 'submitOrder' failed:", error);
+    if (error.code && error.message) {
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
+    }
+    throw new Error('주문 처리 중 예상치 못한 오류가 발생했습니다.');
+  }
 };
 
 /**

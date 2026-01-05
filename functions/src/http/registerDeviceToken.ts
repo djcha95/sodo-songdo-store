@@ -48,7 +48,12 @@ function hasBotKey(req: any): boolean {
 export const registerKakaoBotDeviceToken = onRequest(
   {
     region: REGION,
-    secrets: ["KAKAO_BOT_REGISTRATION_KEY"],
+    // ✅ 배포 안전장치:
+    // Secret Manager에 KAKAO_BOT_REGISTRATION_KEY가 없으면(firebase deploy 단계에서 검증 실패)
+    // functions 전체 배포가 막히므로, 시크릿 의존을 "옵션"으로 둡니다.
+    // - 운영에서 봇키 인증을 쓰고 싶으면: Secret을 추가로 생성하고, 아래 배열을 다시 활성화하세요.
+    // - 지금은 admin/master ID 토큰 기반 인증(Authorization: Bearer ...)만으로도 충분히 운영 가능
+    // secrets: ["KAKAO_BOT_REGISTRATION_KEY"],
   },
   async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
