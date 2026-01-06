@@ -578,9 +578,17 @@ export const updateMultipleOrderStatuses = onCall(
     }
     if (!status) throw new HttpsError("invalid-argument", "status가 필요합니다.");
 
+    // ✅ 입력 검증: 빈 값/비문자 방지 (invalid doc path로 500 나는 케이스 방어)
+    const normalizedOrderIds = Array.from(
+      new Set(orderIds.filter((id) => typeof id === "string" && id.trim().length > 0).map((id) => id.trim()))
+    );
+    if (normalizedOrderIds.length === 0) {
+      throw new HttpsError("invalid-argument", "유효한 orderIds가 없습니다.");
+    }
+
     try {
       await db.runTransaction(async (tx) => {
-        for (const orderId of orderIds) {
+        for (const orderId of normalizedOrderIds) {
           const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
           const snap = await tx.get(ref);
           if (!snap.exists) throw new HttpsError("not-found", `주문을 찾을 수 없습니다: ${orderId}`);
@@ -593,6 +601,15 @@ export const updateMultipleOrderStatuses = onCall(
 
           // ✅ stockStats 반영: 상태 전환에 따른 claimed/pickedUp 이동
           for (const it of order.items || []) {
+            // ✅ 레거시/오염 데이터 방어: 핵심 키 없으면 500 대신 명확한 에러
+            if (!it || typeof (it as any).productId !== "string" || !(it as any).productId) {
+              logger.error("[updateMultipleOrderStatuses] invalid order item (missing productId)", { orderId, item: it });
+              throw new HttpsError("failed-precondition", `주문 데이터가 손상되어 처리할 수 없습니다. (orderId=${orderId})`);
+            }
+            if (typeof (it as any).roundId !== "string" || !(it as any).roundId) {
+              logger.error("[updateMultipleOrderStatuses] invalid order item (missing roundId)", { orderId, item: it });
+              throw new HttpsError("failed-precondition", `주문 데이터가 손상되어 처리할 수 없습니다. (orderId=${orderId})`);
+            }
             const vgId = it.variantGroupId || "default";
             const deduct = itemDeduct(it);
             if (deduct <= 0) continue;

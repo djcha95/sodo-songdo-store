@@ -16,6 +16,15 @@ import {
 import type { DocumentData, OrderByDirection } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem } from '@/shared/types';
 
+const unwrapCallableError = (error: any, fallback: string) => {
+  console.error(fallback, error);
+  if (error?.code && error?.message) {
+    const message = (error.details as any)?.message || error.message;
+    throw new Error(message);
+  }
+  throw new Error(fallback);
+};
+
 /**
  * @description 주문 생성을 위한 Callable Cloud Function 호출 래퍼.
  * ✅ [수정] 서버의 submitOrder callable function을 호출하여 칠판(stockStats_v1) 업데이트를 보장합니다.
@@ -108,12 +117,16 @@ export const cancelOrder = async (
  */
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
   if (orderIds.length === 0) return;
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const fn = httpsCallable<{ orderIds: string[]; status: OrderStatus }, { success: boolean }>(
-    functions,
-    'updateMultipleOrderStatuses'
-  );
-  await fn({ orderIds, status });
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<{ orderIds: string[]; status: OrderStatus }, { success: boolean }>(
+      functions,
+      'updateMultipleOrderStatuses'
+    );
+    await fn({ orderIds, status });
+  } catch (error: any) {
+    unwrapCallableError(error, '주문 상태 변경 중 오류가 발생했습니다.');
+  }
 };
 
 /**
@@ -288,36 +301,56 @@ export const updateOrderItemQuantity = async (orderId: string, itemId: string, n
 };
 
 export const revertOrderStatus = async (orderIds: string[], currentStatus: OrderStatus): Promise<void> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const fn = httpsCallable<
-    { orderIds: string[]; currentStatus: OrderStatus },
-    { success: boolean }
-  >(functions, 'revertOrderStatus');
-  await fn({ orderIds, currentStatus });
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<
+      { orderIds: string[]; currentStatus: OrderStatus },
+      { success: boolean }
+    >(functions, 'revertOrderStatus');
+    await fn({ orderIds, currentStatus });
+  } catch (error: any) {
+    unwrapCallableError(error, '주문 상태 되돌리기 중 오류가 발생했습니다.');
+  }
 };
 
 export const updateOrderNotes = async (orderId: string, notes: string): Promise<void> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const fn = httpsCallable<{ orderId: string; notes: string }, { success: boolean }>(functions, 'updateOrderNotes');
-  await fn({ orderId, notes });
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<{ orderId: string; notes: string }, { success: boolean }>(functions, 'updateOrderNotes');
+    await fn({ orderId, notes });
+  } catch (error: any) {
+    unwrapCallableError(error, '메모 저장 중 오류가 발생했습니다.');
+  }
 };
 
 export const toggleOrderBookmark = async (orderId: string, isBookmarked: boolean): Promise<void> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const fn = httpsCallable<{ orderId: string; isBookmarked: boolean }, { success: boolean }>(functions, 'toggleOrderBookmark');
-  await fn({ orderId, isBookmarked });
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<{ orderId: string; isBookmarked: boolean }, { success: boolean }>(functions, 'toggleOrderBookmark');
+    await fn({ orderId, isBookmarked });
+  } catch (error: any) {
+    unwrapCallableError(error, '북마크 저장 중 오류가 발생했습니다.');
+  }
 };
 
 export const deleteOrder = async (orderId: string): Promise<void> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const fn = httpsCallable<{ orderId: string }, { success: boolean }>(functions, 'deleteOrder');
-  await fn({ orderId });
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<{ orderId: string }, { success: boolean }>(functions, 'deleteOrder');
+    await fn({ orderId });
+  } catch (error: any) {
+    unwrapCallableError(error, '주문 삭제 중 오류가 발생했습니다.');
+  }
 };
 
 export const deleteMultipleOrders = async (orderIds: string[]): Promise<void> => {
-  const functions = getFunctions(getApp(), 'asia-northeast3');
-  const fn = httpsCallable<{ orderIds: string[] }, { success: boolean }>(functions, 'deleteMultipleOrders');
-  await fn({ orderIds });
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<{ orderIds: string[] }, { success: boolean }>(functions, 'deleteMultipleOrders');
+    await fn({ orderIds });
+  } catch (error: any) {
+    unwrapCallableError(error, '주문 삭제 중 오류가 발생했습니다.');
+  }
 }
 
 export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> => {
