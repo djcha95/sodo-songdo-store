@@ -588,20 +588,42 @@ export const updateMultipleOrderStatuses = onCall(
 
     try {
       await db.runTransaction(async (tx) => {
-        for (const orderId of normalizedOrderIds) {
-          const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
-          const snap = await tx.get(ref);
-          if (!snap.exists) throw new HttpsError("not-found", `주문을 찾을 수 없습니다: ${orderId}`);
+        // =========================================================
+        // ✅ Firestore 트랜잭션 규칙 준수:
+        //    1) 필요한 모든 reads를 먼저 수행
+        //    2) 그 다음 writes 수행
+        // =========================================================
 
+        // 1) 모든 주문 문서 읽기
+        const orderRefs = normalizedOrderIds.map((orderId) =>
+          db.collection("orders").withConverter(orderConverter).doc(orderId)
+        );
+        const orderSnaps = await Promise.all(orderRefs.map((ref) => tx.get(ref)));
+
+        const ordersById = new Map<string, { ref: FirebaseFirestore.DocumentReference<Order>; order: Order }>();
+        for (let i = 0; i < orderSnaps.length; i++) {
+          const snap = orderSnaps[i];
+          const orderId = normalizedOrderIds[i];
+          const ref = orderRefs[i];
+          if (!snap.exists) throw new HttpsError("not-found", `주문을 찾을 수 없습니다: ${orderId}`);
           const order = snap.data();
           if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+          ordersById.set(orderId, { ref, order });
+        }
 
+        // 2) “취소/노쇼 -> 예약/선입금” 복구 케이스만 oversell 체크 필요
+        type RestoreNeed = { productId: string; roundId: string; vgId: string; deduct: number; unit: number };
+        const restoreNeeds: RestoreNeed[] = [];
+
+        const productIdsToRead = new Set<string>();
+        const statKeysToRead = new Set<string>(); // statDocId(productId, roundId)
+
+        for (const [orderId, { order }] of ordersById.entries()) {
           const beforeStatus = order.status;
           const afterStatus = status;
+          if (!(isCanceledLike(beforeStatus) && isClaimedStatus(afterStatus))) continue;
 
-          // ✅ stockStats 반영: 상태 전환에 따른 claimed/pickedUp 이동
           for (const it of order.items || []) {
-            // ✅ 레거시/오염 데이터 방어: 핵심 키 없으면 500 대신 명확한 에러
             if (!it || typeof (it as any).productId !== "string" || !(it as any).productId) {
               logger.error("[updateMultipleOrderStatuses] invalid order item (missing productId)", { orderId, item: it });
               throw new HttpsError("failed-precondition", `주문 데이터가 손상되어 처리할 수 없습니다. (orderId=${orderId})`);
@@ -613,60 +635,108 @@ export const updateMultipleOrderStatuses = onCall(
             const vgId = it.variantGroupId || "default";
             const deduct = itemDeduct(it);
             if (deduct <= 0) continue;
+            const unit = typeof it.stockDeductionAmount === "number" && it.stockDeductionAmount > 0 ? it.stockDeductionAmount : 1;
 
-            // claimed -> pickedUp (픽업 처리)
+            restoreNeeds.push({ productId: it.productId, roundId: it.roundId, vgId, deduct, unit });
+            productIdsToRead.add(it.productId);
+            statKeysToRead.add(statDocId(it.productId, it.roundId));
+          }
+        }
+
+        // 3) 필요한 product / stockStats 문서 읽기 (모두 read phase)
+        const productRefs = Array.from(productIdsToRead).map((pid) =>
+          db.collection("products").withConverter(productConverter).doc(pid)
+        );
+        const productSnaps = await Promise.all(productRefs.map((ref) => tx.get(ref)));
+        const productsById = new Map<string, any>();
+        for (let i = 0; i < productRefs.length; i++) {
+          const pid = productRefs[i].id;
+          const snap = productSnaps[i];
+          if (!snap.exists) throw new HttpsError("not-found", `상품을 찾을 수 없습니다: ${pid}`);
+          productsById.set(pid, snap.data());
+        }
+
+        const statRefs = Array.from(statKeysToRead).map((key) => db.collection(STOCK_STATS_COL).doc(key));
+        const statSnaps = await Promise.all(statRefs.map((ref) => tx.get(ref)));
+        const statsByKey = new Map<string, any>();
+        for (let i = 0; i < statRefs.length; i++) {
+          statsByKey.set(statRefs[i].id, statSnaps[i].exists ? statSnaps[i].data() : {});
+        }
+
+        // 4) oversell 검증 (복구되는 claimed 총합이 remaining을 넘지 않아야 함)
+        const plannedRestoreByKey = new Map<string, number>(); // `${statKey}::${vgId}` -> total deduct
+        for (const n of restoreNeeds) {
+          const k = `${statDocId(n.productId, n.roundId)}::${n.vgId}`;
+          plannedRestoreByKey.set(k, (plannedRestoreByKey.get(k) || 0) + n.deduct);
+        }
+
+        for (const [k, plannedDeduct] of plannedRestoreByKey.entries()) {
+          const [statKey, vgId] = k.split("::");
+          const stat = statsByKey.get(statKey) || {};
+          const claimedNow = typeof stat?.claimed?.[vgId] === "number" ? stat.claimed[vgId] : 0;
+          const pickedUpNow = typeof stat?.pickedUp?.[vgId] === "number" ? stat.pickedUp[vgId] : 0;
+
+          const [productId, roundId] = statKey.split("__");
+          const product = productsById.get(productId);
+          const total = getTotalStockForVariantGroup(product as any, roundId, vgId);
+
+          if (typeof total === "number" && total !== -1) {
+            const remaining = total - claimedNow - pickedUpNow;
+            if (remaining < 0) {
+              logger.error("[updateMultipleOrderStatuses] stockStats inconsistency (remaining < 0)", {
+                productId,
+                roundId,
+                vgId,
+                totalPhysicalStock: total,
+                claimedNow,
+                pickedUpNow,
+                actor: adminUid,
+              });
+              throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 복구할 수 없습니다.");
+            }
+            if (plannedDeduct > remaining) {
+              // unit은 복구 아이템별로 다를 수 있으나, 메시지용으로만 사용 → 우선 1로 처리
+              const maxAdd = Math.max(0, Math.floor(remaining / 1));
+              throw new HttpsError("resource-exhausted", `재고 부족: 복구 가능 수량 최대 ${maxAdd}개`);
+            }
+          }
+        }
+
+        // 5) 이제 write phase: stockStats delta + order 업데이트
+        for (const [orderId, { ref, order }] of ordersById.entries()) {
+          const beforeStatus = order.status;
+          const afterStatus = status;
+
+          for (const it of order.items || []) {
+            if (!it || typeof (it as any).productId !== "string" || !(it as any).productId) {
+              logger.error("[updateMultipleOrderStatuses] invalid order item (missing productId)", { orderId, item: it });
+              throw new HttpsError("failed-precondition", `주문 데이터가 손상되어 처리할 수 없습니다. (orderId=${orderId})`);
+            }
+            if (typeof (it as any).roundId !== "string" || !(it as any).roundId) {
+              logger.error("[updateMultipleOrderStatuses] invalid order item (missing roundId)", { orderId, item: it });
+              throw new HttpsError("failed-precondition", `주문 데이터가 손상되어 처리할 수 없습니다. (orderId=${orderId})`);
+            }
+
+            const vgId = it.variantGroupId || "default";
+            const deduct = itemDeduct(it);
+            if (deduct <= 0) continue;
+
             if (isClaimedStatus(beforeStatus) && afterStatus === PICKEDUP_STATUS) {
               applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
               applyPickedUpDelta(tx, it.productId, it.roundId, vgId, deduct);
               continue;
             }
 
-            // claimed 해제 (취소/노쇼)
             if (isClaimedStatus(beforeStatus) && isCanceledLike(afterStatus)) {
               applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
               continue;
             }
 
-            // 취소/노쇼 -> claimed 복구 (관리자 복구)
             if (isCanceledLike(beforeStatus) && isClaimedStatus(afterStatus)) {
-              // ✅ 복구 시에도 oversell-safe: remaining 체크
-              // - remaining = stock - claimed - pickedUp
-              const productRef = db.collection("products").withConverter(productConverter).doc(it.productId);
-              const pSnap = await tx.get(productRef);
-              if (!pSnap.exists) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
-              const product = pSnap.data();
-              if (!product) throw new HttpsError("internal", "상품 데이터를 읽는 데 실패했습니다.");
-
-              const total = getTotalStockForVariantGroup(product as any, it.roundId, vgId);
-
-              if (typeof total === "number" && total !== -1) {
-                const claimedNow = await getClaimedNow(tx, it.productId, it.roundId, vgId);
-                const pickedUpNow = await getPickedUpNow(tx, it.productId, it.roundId, vgId);
-                const remaining = total - claimedNow - pickedUpNow;
-
-                if (remaining < 0) {
-                  logger.error("[updateMultipleOrderStatuses] stockStats inconsistency (remaining < 0)", {
-                    productId: it.productId,
-                    roundId: it.roundId,
-                    vgId,
-                    totalPhysicalStock: total,
-                    claimedNow,
-                    pickedUpNow,
-                    actor: adminUid,
-                  });
-                  throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 복구할 수 없습니다.");
-                }
-                if (deduct > remaining) {
-                  const maxAdd = Math.max(0, Math.floor(remaining / (it.stockDeductionAmount || 1)));
-                  throw new HttpsError("resource-exhausted", `재고 부족: 복구 가능 수량 최대 ${maxAdd}개`);
-                }
-              }
-
               applyClaimedDelta(tx, it.productId, it.roundId, vgId, deduct);
               continue;
             }
 
-            // pickedUp -> claimed (관리자 복구)
             if (beforeStatus === PICKEDUP_STATUS && isClaimedStatus(afterStatus)) {
               applyPickedUpDelta(tx, it.productId, it.roundId, vgId, -deduct);
               applyClaimedDelta(tx, it.productId, it.roundId, vgId, deduct);
@@ -678,7 +748,6 @@ export const updateMultipleOrderStatuses = onCall(
             status: afterStatus,
             stockStatsV1Managed: true as any,
           };
-
           if (afterStatus === "PICKED_UP") updateData.pickedUpAt = AdminTimestamp.now();
           if (afterStatus === "PREPAID") updateData.prepaidAt = AdminTimestamp.now();
           if (afterStatus === "CANCELED" || afterStatus === "LATE_CANCELED") updateData.canceledAt = AdminTimestamp.now();
