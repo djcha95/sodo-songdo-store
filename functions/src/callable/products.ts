@@ -517,22 +517,33 @@ export const getProductsWithStock = onCall(
   { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
   async (request) => {
     // ✅ lastVisible(Timestamp) 대신 lastDocId(string)를 받음
-    const { pageSize = 10, lastDocId = null, tab = "all", withReservedOverlay = true } = request.data as {
+    const { pageSize = 10, lastDocId = null, tab = "all", withReservedOverlay = true, includeArchived = false } = request.data as {
       pageSize?: number;
       lastDocId?: string | null;
       tab?: "all" | "today" | "additional" | "onsite";
       withReservedOverlay?: boolean;
+      // ✅ 관리자용: 아카이브된 상품도 포함해서 조회
+      includeArchived?: boolean;
     };
 
     try {
-      let q = db.collection("products").where("isArchived", "==", false).orderBy("createdAt", "desc").limit(pageSize);
+      // ✅ 기본(고객/일반): 아카이브 제외
+      // ✅ 관리자(includeArchived=true): 아카이브 포함
+      let q = includeArchived
+        ? db.collection("products").orderBy("createdAt", "desc").limit(pageSize)
+        : db.collection("products").where("isArchived", "==", false).orderBy("createdAt", "desc").limit(pageSize);
 
       if (tab === "onsite") {
-        q = db.collection("products")
-          .where("isArchived", "==", false)
-          .where("isOnsite", "==", true)
-          .orderBy("createdAt", "desc")
-          .limit(pageSize);
+        q = includeArchived
+          ? db.collection("products")
+              .where("isOnsite", "==", true)
+              .orderBy("createdAt", "desc")
+              .limit(pageSize)
+          : db.collection("products")
+              .where("isArchived", "==", false)
+              .where("isOnsite", "==", true)
+              .orderBy("createdAt", "desc")
+              .limit(pageSize);
       }
 
       // ✅ [개선] 문서 ID로 스냅샷을 가져와 startAfter에 전달 (가장 안전한 커서 방식)
@@ -603,7 +614,9 @@ export const getProductsWithStock = onCall(
             }
             return {
               ...vg,
-              reservedCount: reserved,
+              // ✅ UI에서 "남은 수량" 계산은 reservedCount만 바라보는 로직이 많아서,
+              // claimed(예약/선입금) + pickedUp(소진)을 합산한 값을 reservedCount로 제공합니다.
+              reservedCount: reserved + pickedUp,
               pickedUpCount: pickedUp,
             };
           });
@@ -650,7 +663,8 @@ export const getProductByIdWithStock = onCall(
           const vgId = vg?.id || "default";
           return {
             ...vg,
-            reservedCount: getClaimed(stat, vgId),
+            // ✅ 동일 정책: reservedCount = claimed + pickedUp
+            reservedCount: getClaimed(stat, vgId) + getPickedUp(stat, vgId),
             pickedUpCount: getPickedUp(stat, vgId),
           };
         });

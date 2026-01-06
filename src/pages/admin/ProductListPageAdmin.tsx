@@ -286,6 +286,8 @@ const ProductListPageAdmin: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
   const [isRebuildingStats, setIsRebuildingStats] = useState(false);
+  // ✅ 아카이브 상품까지 포함해서 보이기 (레거시/과거 주문 상품이 "안 뜨는" 문제 대응)
+  const [includeArchived, setIncludeArchived] = useState(true);
 
   // ✅ fetchData 먼저 정의 (다른 함수들이 참조함)
   // ✅ [수정] 모든 상품을 가져오도록 페이지네이션 구현
@@ -304,6 +306,7 @@ const ProductListPageAdmin: React.FC = () => {
           lastVisible,
           tab: "all",
           withReservedOverlay: true,
+          includeArchived,
         });
 
         allProducts.push(...productsData.products);
@@ -323,7 +326,7 @@ const ProductListPageAdmin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeArchived]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -656,6 +659,15 @@ const ProductListPageAdmin: React.FC = () => {
         priority="normal"
         actions={
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setIncludeArchived((v) => !v)}
+              className="admin-add-button"
+              title="아카이브된 상품(과거/비노출)도 함께 표시합니다."
+              style={{ background: includeArchived ? '#334155' : undefined }}
+              type="button"
+            >
+              <Filter size={18} /> 아카이브 {includeArchived ? '포함' : '제외'}
+            </button>
             <button
               onClick={() => setStockUnitAuditOpen((v) => !v)}
               className="admin-add-button"

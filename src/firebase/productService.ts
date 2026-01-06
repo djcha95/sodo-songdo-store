@@ -499,6 +499,11 @@ type GetProductsWithStockPayload = {
   lastVisible?: string | number | null;
   tab?: ProductTabType | null;
   /**
+   * ✅ 관리자용: 아카이브된 상품까지 포함해서 조회
+   * - 기본값 false (고객 UX/검색 안정성)
+   */
+  includeArchived?: boolean;
+  /**
    * 예약수량 오버레이를 적용할지 여부
    * - true: getReservedQuantitiesMap 호출 + applyReservedOverlay 적용
    * - false: 그냥 products 컬렉션 데이터만 사용 (리스트/프리뷰용으로 빠름)
@@ -621,6 +626,7 @@ export const getProductsWithStock = async (
     lastVisible = null,
     tab = 'all',
     withReservedOverlay = true, // ✅ 기본값: true (기존 동작 유지)
+    includeArchived = false,
   } = payload;
 
   // ✅ 숫자 커서가 들어오면 (구 로직) fallback으로 처리
@@ -634,7 +640,7 @@ export const getProductsWithStock = async (
 
     // ✅ 캐시는 첫 페이지(lastDocId=null)에서만 적용
     if (!lastDocId) {
-      const cacheKey = JSON.stringify({ pageSize, tab, withReservedOverlay });
+      const cacheKey = JSON.stringify({ pageSize, tab, withReservedOverlay, includeArchived });
       if (
         productsCfCache &&
         productsCfCache.key === cacheKey &&
@@ -649,6 +655,7 @@ export const getProductsWithStock = async (
       lastDocId,
       tab,
       withReservedOverlay,
+      includeArchived,
     });
 
     const data = result.data as any;
@@ -659,7 +666,7 @@ export const getProductsWithStock = async (
 
     // 캐시 저장(첫 페이지)
     if (!lastDocId) {
-      const cacheKey = JSON.stringify({ pageSize, tab, withReservedOverlay });
+      const cacheKey = JSON.stringify({ pageSize, tab, withReservedOverlay, includeArchived });
       productsCfCache = { key: cacheKey, data: response, fetchedAt: Date.now() };
     }
 

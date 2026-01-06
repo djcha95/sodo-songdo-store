@@ -11,6 +11,7 @@ import type { Order, OrderStatus, OrderItem, CartItem, UserDocument, Product, Sa
 // StockStats v1 helpers (재고 칠판 도구)
 // ===============================
 import { applyClaimedDelta, applyPickedUpDelta, statDocId } from "../utils/stockStats.js";
+import { CLAIMED_STATUSES, PICKEDUP_STATUS, isClaimedStatus as policyIsClaimedStatus, isCancelledLike as policyIsCancelledLike } from "../utils/stockPolicy.js";
 
 const STOCK_STATS_COL = "stockStats_v1";
 
@@ -18,6 +19,27 @@ function itemDeduct(it: OrderItem): number {
   const q = typeof it.quantity === "number" ? it.quantity : 0;
   const d = typeof it.stockDeductionAmount === "number" && it.stockDeductionAmount > 0 ? it.stockDeductionAmount : 1;
   return q * d;
+}
+
+// ✅ stock 조회 헬퍼: 신규 스키마(stock map) + 기존 스키마(totalPhysicalStock) 모두 지원
+function getTotalStockForVariantGroup(product: any, roundId: string, variantGroupId: string): number | null {
+  // 1) product.stock[vgId] (요구사항 가정)
+  const stockMap = product?.stock;
+  const fromProductMap = stockMap && typeof stockMap === "object" ? stockMap?.[variantGroupId] : undefined;
+  if (typeof fromProductMap === "number") return fromProductMap;
+
+  // 2) round.stock[vgId] (확장 옵션)
+  const round = Array.isArray(product?.salesHistory) ? product.salesHistory.find((r: any) => r?.roundId === roundId) : null;
+  const roundStockMap = round?.stock;
+  const fromRoundMap = roundStockMap && typeof roundStockMap === "object" ? roundStockMap?.[variantGroupId] : undefined;
+  if (typeof fromRoundMap === "number") return fromRoundMap;
+
+  // 3) 기존: variantGroup.totalPhysicalStock
+  const vg = round?.variantGroups?.find((v: any) => v?.id === variantGroupId);
+  const total = vg?.totalPhysicalStock;
+  if (typeof total === "number") return total;
+
+  return null;
 }
 
 // 칠판에서 현재 판매된 수량 읽기
@@ -32,6 +54,31 @@ async function getClaimedNow(
   const data = snap.exists ? (snap.data() as any) : {};
   const n = data?.claimed?.[variantGroupId];
   return typeof n === "number" ? n : 0;
+}
+
+async function getPickedUpNow(
+  tx: FirebaseFirestore.Transaction,
+  productId: string,
+  roundId: string,
+  variantGroupId: string
+): Promise<number> {
+  const ref = db.collection(STOCK_STATS_COL).doc(statDocId(productId, roundId));
+  const snap = await tx.get(ref);
+  const data = snap.exists ? (snap.data() as any) : {};
+  const n = data?.pickedUp?.[variantGroupId];
+  return typeof n === "number" ? n : 0;
+}
+
+function assertPositiveInt(name: string, v: any) {
+  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || !Number.isInteger(v)) {
+    throw new HttpsError("invalid-argument", `${name} 값이 올바르지 않습니다.`);
+  }
+}
+
+function assertNonNegativeFinite(name: string, v: any) {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+    throw new HttpsError("invalid-argument", `${name} 값이 올바르지 않습니다.`);
+  }
 }
 
 // ===============================
@@ -267,6 +314,13 @@ export const submitOrder = onCall(
 
         // 4. 주문 처리 루프
         for (const singleItem of client.items) {
+          // ✅ 기본 검증 (음수/이상값 차단)
+          assertPositiveInt("quantity", singleItem.quantity);
+          const unit = typeof singleItem.stockDeductionAmount === "number" && singleItem.stockDeductionAmount > 0
+            ? singleItem.stockDeductionAmount
+            : 1;
+          assertNonNegativeFinite("unitPrice", singleItem.unitPrice);
+
           const product = productDataMap.get(singleItem.productId);
           if (!product) throw new HttpsError("not-found", "상품 정보를 찾을 수 없습니다.");
           
@@ -276,22 +330,43 @@ export const submitOrder = onCall(
 
           // ✅ [변경] 칠판(StockStats) 확인
           const vgId = vg.id || 'default';
-          const addDeduct = singleItem.quantity * (singleItem.stockDeductionAmount || 1);
-
-          if (vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
-             const claimedNow = await getClaimedNow(transaction, singleItem.productId, singleItem.roundId, vgId);
-             const remaining = vg.totalPhysicalStock - claimedNow;
-             
-             if (addDeduct > remaining) {
-                throw new HttpsError("failed-precondition", `재고 부족: ${vg.groupName} (남은수량: ${Math.floor(remaining / (singleItem.stockDeductionAmount || 1))}개)`);
-             }
-          }
+          const addDeduct = singleItem.quantity * unit;
 
           // 병합 또는 생성 로직
           const targetPickupDate = singleItem.pickupDate ? singleItem.pickupDate : round.pickupDate;
           const targetPickupMillis = toEpochMillis(targetPickupDate) || 0;
           const mergeKey = `${singleItem.productId}-${singleItem.roundId}-${singleItem.variantGroupId}-${targetPickupMillis}`;
           const existingDoc = existingOrderMap.get(mergeKey);
+
+          // ✅ [핵심 수정] 재고 체크는 “추가분(delta)” 기준으로만 검사해야 안전합니다.
+          // - claimedNow에는 이미 내 기존 주문(병합 대상)의 점유도 포함되어 있을 수 있음
+          // - 따라서 병합/신규 모두 동일하게: delta(addDeduct) <= remaining(total - claimedNow)
+          const totalStock = getTotalStockForVariantGroup(product as any, singleItem.roundId, vgId);
+          if (typeof totalStock === "number" && totalStock !== -1) {
+            const claimedNow = await getClaimedNow(transaction, singleItem.productId, singleItem.roundId, vgId);
+            const pickedUpNow = await getPickedUpNow(transaction, singleItem.productId, singleItem.roundId, vgId);
+            const remaining = totalStock - claimedNow - pickedUpNow;
+
+            if (remaining < 0) {
+              logger.error("[submitOrder] stockStats inconsistency (remaining < 0)", {
+                productId: singleItem.productId,
+                roundId: singleItem.roundId,
+                vgId,
+                totalPhysicalStock: totalStock,
+                claimedNow,
+                pickedUpNow,
+              });
+              throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 주문할 수 없습니다. 관리자에게 문의해주세요.");
+            }
+
+            if (addDeduct > remaining) {
+              const maxAllowedQuantity = Math.max(0, Math.floor(remaining / unit));
+              throw new HttpsError(
+                "failed-precondition",
+                `재고 부족: ${vg.groupName} (추가 요청: ${singleItem.quantity}개, 추가 가능: 최대 ${maxAllowedQuantity}개)`
+              );
+            }
+          }
 
           if (existingDoc) {
               const existingOrder = existingDoc.data();
@@ -355,7 +430,7 @@ export const updateOrderQuantity = onCall(
     const requesterId = request.auth.uid;
     const { orderId, newQuantity } = request.data as { orderId: string; newQuantity: number };
 
-    if (!orderId || typeof newQuantity !== "number" || newQuantity <= 0) {
+    if (!orderId || typeof newQuantity !== "number" || !Number.isFinite(newQuantity) || newQuantity <= 0) {
       throw new HttpsError("invalid-argument", "필수 정보(주문 ID, 새 수량)가 올바르지 않습니다.");
     }
 
@@ -405,10 +480,25 @@ export const updateOrderQuantity = onCall(
         const delta = newDeduct - oldDeduct; // +면 추가예약, -면 예약 감소
         const vgId = vg.id || "default";
 
-        if (delta > 0 && vg.totalPhysicalStock !== null && vg.totalPhysicalStock !== -1) {
+          const totalStock = getTotalStockForVariantGroup(product as any, originalItem.roundId, vgId);
+          if (typeof totalStock === "number" && totalStock !== -1) {
           const claimedNow = await getClaimedNow(transaction, originalItem.productId, originalItem.roundId, vgId);
-          const remaining = vg.totalPhysicalStock - claimedNow; // claimedNow에는 내 기존 oldDeduct도 이미 포함됨
-          if (delta > remaining) {
+          const pickedUpNow = await getPickedUpNow(transaction, originalItem.productId, originalItem.roundId, vgId);
+          const remaining = totalStock - claimedNow - pickedUpNow; // 추가 가능 재고
+
+          if (remaining < 0) {
+            logger.error("[updateOrderQuantity] stockStats inconsistency (remaining < 0)", {
+              productId: originalItem.productId,
+              roundId: originalItem.roundId,
+              vgId,
+              totalPhysicalStock: totalStock,
+              claimedNow,
+              pickedUpNow,
+            });
+            throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 수량 변경이 불가합니다. 관리자에게 문의해주세요.");
+          }
+
+          if (delta > 0 && delta > remaining) {
             const maxAdd = Math.max(0, Math.floor(remaining / unit));
             throw new HttpsError("resource-exhausted", `재고가 부족합니다. 추가 가능 수량: 최대 ${maxAdd}개`);
           }
@@ -438,6 +528,296 @@ export const updateOrderQuantity = onCall(
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "주문 수량 변경 중 오류가 발생했습니다.");
     }
+  }
+);
+
+// ========================================================
+// ✅ Admin/Owner order management (client write 차단 대응)
+// ========================================================
+
+function requireAuth(request: any): { uid: string; role?: string } {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  const role = (request.auth?.token as any)?.role;
+  return { uid, role };
+}
+
+function requireAdminRole(request: any): string {
+  const { uid, role } = requireAuth(request);
+  if (role !== "admin" && role !== "master") {
+    throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+  }
+  return uid;
+}
+
+function isAdminRole(role?: string): boolean {
+  return role === "admin" || role === "master";
+}
+
+function isClaimedStatus(status: OrderStatus): boolean {
+  return policyIsClaimedStatus(status);
+}
+
+function isCanceledLike(status: OrderStatus): boolean {
+  return policyIsCancelledLike(status);
+}
+
+/**
+ * ✅ 주문 상태 일괄 변경 (서버에서만 orders write)
+ * - 필요한 경우 stockStats_v1도 같이 갱신
+ * - 트리거 중복 반영 방지: stockStatsV1Managed=true 설정
+ */
+export const updateMultipleOrderStatuses = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
+  async (request) => {
+    const adminUid = requireAdminRole(request);
+
+    const { orderIds, status } = request.data as { orderIds: string[]; status: OrderStatus };
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      throw new HttpsError("invalid-argument", "orderIds가 필요합니다.");
+    }
+    if (!status) throw new HttpsError("invalid-argument", "status가 필요합니다.");
+
+    try {
+      await db.runTransaction(async (tx) => {
+        for (const orderId of orderIds) {
+          const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
+          const snap = await tx.get(ref);
+          if (!snap.exists) throw new HttpsError("not-found", `주문을 찾을 수 없습니다: ${orderId}`);
+
+          const order = snap.data();
+          if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+
+          const beforeStatus = order.status;
+          const afterStatus = status;
+
+          // ✅ stockStats 반영: 상태 전환에 따른 claimed/pickedUp 이동
+          for (const it of order.items || []) {
+            const vgId = it.variantGroupId || "default";
+            const deduct = itemDeduct(it);
+            if (deduct <= 0) continue;
+
+            // claimed -> pickedUp (픽업 처리)
+            if (isClaimedStatus(beforeStatus) && afterStatus === PICKEDUP_STATUS) {
+              applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
+              applyPickedUpDelta(tx, it.productId, it.roundId, vgId, deduct);
+              continue;
+            }
+
+            // claimed 해제 (취소/노쇼)
+            if (isClaimedStatus(beforeStatus) && isCanceledLike(afterStatus)) {
+              applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
+              continue;
+            }
+
+            // 취소/노쇼 -> claimed 복구 (관리자 복구)
+            if (isCanceledLike(beforeStatus) && isClaimedStatus(afterStatus)) {
+              // ✅ 복구 시에도 oversell-safe: remaining 체크
+              // - remaining = stock - claimed - pickedUp
+              const productRef = db.collection("products").withConverter(productConverter).doc(it.productId);
+              const pSnap = await tx.get(productRef);
+              if (!pSnap.exists) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
+              const product = pSnap.data();
+              if (!product) throw new HttpsError("internal", "상품 데이터를 읽는 데 실패했습니다.");
+
+              const total = getTotalStockForVariantGroup(product as any, it.roundId, vgId);
+
+              if (typeof total === "number" && total !== -1) {
+                const claimedNow = await getClaimedNow(tx, it.productId, it.roundId, vgId);
+                const pickedUpNow = await getPickedUpNow(tx, it.productId, it.roundId, vgId);
+                const remaining = total - claimedNow - pickedUpNow;
+
+                if (remaining < 0) {
+                  logger.error("[updateMultipleOrderStatuses] stockStats inconsistency (remaining < 0)", {
+                    productId: it.productId,
+                    roundId: it.roundId,
+                    vgId,
+                    totalPhysicalStock: total,
+                    claimedNow,
+                    pickedUpNow,
+                    actor: adminUid,
+                  });
+                  throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 복구할 수 없습니다.");
+                }
+                if (deduct > remaining) {
+                  const maxAdd = Math.max(0, Math.floor(remaining / (it.stockDeductionAmount || 1)));
+                  throw new HttpsError("resource-exhausted", `재고 부족: 복구 가능 수량 최대 ${maxAdd}개`);
+                }
+              }
+
+              applyClaimedDelta(tx, it.productId, it.roundId, vgId, deduct);
+              continue;
+            }
+
+            // pickedUp -> claimed (관리자 복구)
+            if (beforeStatus === PICKEDUP_STATUS && isClaimedStatus(afterStatus)) {
+              applyPickedUpDelta(tx, it.productId, it.roundId, vgId, -deduct);
+              applyClaimedDelta(tx, it.productId, it.roundId, vgId, deduct);
+              continue;
+            }
+          }
+
+          const updateData: any = {
+            status: afterStatus,
+            stockStatsV1Managed: true as any,
+          };
+
+          if (afterStatus === "PICKED_UP") updateData.pickedUpAt = AdminTimestamp.now();
+          if (afterStatus === "PREPAID") updateData.prepaidAt = AdminTimestamp.now();
+          if (afterStatus === "CANCELED" || afterStatus === "LATE_CANCELED") updateData.canceledAt = AdminTimestamp.now();
+          if (afterStatus === "NO_SHOW") updateData.noShowAt = AdminTimestamp.now();
+
+          tx.update(ref, updateData);
+        }
+      });
+
+      logger.info("[updateMultipleOrderStatuses] done", { count: orderIds.length, status, actor: adminUid });
+      return { success: true };
+    } catch (e: any) {
+      logger.error("[updateMultipleOrderStatuses] failed", e);
+      if (e instanceof HttpsError) throw e;
+      throw new HttpsError("internal", "주문 상태 변경 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+export const updateOrderNotes = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins },
+  async (request) => {
+    requireAdminRole(request);
+    const { orderId, notes } = request.data as { orderId: string; notes: string };
+    if (!orderId || typeof orderId !== "string") throw new HttpsError("invalid-argument", "orderId가 필요합니다.");
+    if (typeof notes !== "string") throw new HttpsError("invalid-argument", "notes가 올바르지 않습니다.");
+
+    const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
+    await ref.update({ notes, stockStatsV1Managed: true as any });
+    return { success: true };
+  }
+);
+
+export const toggleOrderBookmark = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins },
+  async (request) => {
+    const { uid, role } = requireAuth(request);
+    const { orderId, isBookmarked } = request.data as { orderId: string; isBookmarked: boolean };
+    if (!orderId || typeof orderId !== "string") throw new HttpsError("invalid-argument", "orderId가 필요합니다.");
+    if (typeof isBookmarked !== "boolean") throw new HttpsError("invalid-argument", "isBookmarked가 올바르지 않습니다.");
+
+    const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "주문을 찾을 수 없습니다.");
+    const order = snap.data();
+    if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+
+    if (order.userId !== uid && !isAdminRole(role)) {
+      throw new HttpsError("permission-denied", "권한이 없습니다.");
+    }
+
+    await ref.update({ isBookmarked, stockStatsV1Managed: true as any });
+    return { success: true };
+  }
+);
+
+export const deleteOrder = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
+  async (request) => {
+    requireAdminRole(request);
+    const { orderId } = request.data as { orderId: string };
+    if (!orderId || typeof orderId !== "string") throw new HttpsError("invalid-argument", "orderId가 필요합니다.");
+
+    const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "주문을 찾을 수 없습니다.");
+      const order = snap.data();
+      if (!order) throw new HttpsError("internal", "주문 데이터를 읽는 데 실패했습니다.");
+
+      // ✅ 삭제 시 stockStats도 정리 (상태별로 claimed/pickedUp 차감)
+      for (const it of order.items || []) {
+        const vgId = it.variantGroupId || "default";
+        const deduct = itemDeduct(it);
+        if (deduct <= 0) continue;
+        if (isClaimedStatus(order.status)) {
+          applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
+        } else if (order.status === PICKEDUP_STATUS) {
+          applyPickedUpDelta(tx, it.productId, it.roundId, vgId, -deduct);
+        }
+      }
+
+      tx.delete(ref);
+    });
+
+    return { success: true };
+  }
+);
+
+export const deleteMultipleOrders = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "1GiB" },
+  async (request) => {
+    requireAdminRole(request);
+    const { orderIds } = request.data as { orderIds: string[] };
+    if (!Array.isArray(orderIds) || orderIds.length === 0) throw new HttpsError("invalid-argument", "orderIds가 필요합니다.");
+
+    // ⚠️ 너무 큰 요청 방지
+    if (orderIds.length > 200) throw new HttpsError("invalid-argument", "한 번에 최대 200개까지 삭제할 수 있습니다.");
+
+    for (const orderId of orderIds) {
+      const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return;
+        const order = snap.data();
+        if (!order) return;
+
+        for (const it of order.items || []) {
+          const vgId = it.variantGroupId || "default";
+          const deduct = itemDeduct(it);
+          if (deduct <= 0) continue;
+          if (isClaimedStatus(order.status)) {
+            applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
+          } else if (order.status === PICKEDUP_STATUS) {
+            applyPickedUpDelta(tx, it.productId, it.roundId, vgId, -deduct);
+          }
+        }
+        tx.delete(ref);
+      });
+    }
+
+    return { success: true };
+  }
+);
+
+export const revertOrderStatus = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB" },
+  async (request) => {
+    requireAdminRole(request);
+    const { orderIds, currentStatus } = request.data as { orderIds: string[]; currentStatus: OrderStatus };
+    if (!Array.isArray(orderIds) || orderIds.length === 0) throw new HttpsError("invalid-argument", "orderIds가 필요합니다.");
+    if (!currentStatus) throw new HttpsError("invalid-argument", "currentStatus가 필요합니다.");
+
+    await db.runTransaction(async (tx) => {
+      for (const orderId of orderIds) {
+        const ref = db.collection("orders").withConverter(orderConverter).doc(orderId);
+        const snap = await tx.get(ref);
+        if (!snap.exists) continue;
+        const order = snap.data();
+        if (!order) continue;
+
+        // ✅ 상태 복구: RESERVED로
+        const updateData: any = {
+          status: "RESERVED",
+          stockStatsV1Managed: true as any,
+        };
+
+        // 타임스탬프 정리(정확한 delete는 FieldValue.delete 사용)
+        if (currentStatus === "PICKED_UP") updateData.pickedUpAt = FieldValue.delete();
+        if (currentStatus === "PREPAID") updateData.prepaidAt = FieldValue.delete();
+
+        tx.update(ref, updateData);
+      }
+    });
+
+    return { success: true };
   }
 );
 
@@ -1331,7 +1711,7 @@ export const rebuildStockStats_v1 = onCall(
     }
 
     // ✅ 어떤 상태를 claimed/pickedUp 집계에 포함할지 “정책”을 고정
-    const CLAIMED_STATUSES: Array<OrderStatus> = ["RESERVED", "PREPAID", "PICKED_UP"];
+    const CLAIMED_STATUSES: Array<OrderStatus> = ["RESERVED", "PREPAID"];
     const PICKEDUP_STATUS: OrderStatus = "PICKED_UP";
 
     type Acc = {
@@ -1379,9 +1759,9 @@ export const rebuildStockStats_v1 = onCall(
           const o = doc.data() as Order;
 
           if (!o || !o.status) continue;
-          if (!CLAIMED_STATUSES.includes(o.status as OrderStatus)) continue;
-
+          const isClaimed = CLAIMED_STATUSES.includes(o.status as OrderStatus);
           const isPickedUp = (o.status as OrderStatus) === PICKEDUP_STATUS;
+          if (!isClaimed && !isPickedUp) continue;
 
           for (const it of (o.items || [])) {
             const productId = it.productId;
@@ -1396,13 +1776,10 @@ export const rebuildStockStats_v1 = onCall(
 
             const acc = ensureAcc(productId, roundId);
 
-            // claimed: RESERVED/PREPAID/PICKED_UP 모두 포함
-            inc(acc.claimed, vgId, deduct);
-
+            // claimed: RESERVED/PREPAID만
+            if (isClaimed) inc(acc.claimed, vgId, deduct);
             // pickedUp: PICKED_UP만
-            if (isPickedUp) {
-              inc(acc.pickedUp, vgId, deduct);
-            }
+            if (isPickedUp) inc(acc.pickedUp, vgId, deduct);
           }
         }
 

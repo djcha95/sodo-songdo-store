@@ -5,22 +5,15 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from './firebaseConfig';
 import {
   collection,
-  doc,
   getDocs,
-  updateDoc,
   query,
   where,
   orderBy,
-  runTransaction,
-  serverTimestamp,
-  deleteDoc,
-  writeBatch,
-  deleteField,
   limit,
   startAfter,
   Timestamp,
 } from 'firebase/firestore';
-import type { FieldValue, DocumentData, OrderByDirection } from 'firebase/firestore';
+import type { DocumentData, OrderByDirection } from 'firebase/firestore';
 import type { Order, OrderStatus, OrderItem } from '@/shared/types';
 
 /**
@@ -115,24 +108,12 @@ export const cancelOrder = async (
  */
 export const updateMultipleOrderStatuses = async (orderIds: string[], status: OrderStatus): Promise<void> => {
   if (orderIds.length === 0) return;
-
-  const batch = writeBatch(db);
-  
-  let timestampField: string | null = null;
-  if (status === 'PICKED_UP') timestampField = 'pickedUpAt';
-  if (status === 'PREPAID') timestampField = 'prepaidAt';
-  if (status === 'CANCELED') timestampField = 'canceledAt';
-
-  orderIds.forEach(orderId => {
-    const orderRef = doc(db, 'orders', orderId);
-    const updateData: { status: OrderStatus, [key: string]: any } = { status };
-    if (timestampField) {
-      updateData[timestampField] = serverTimestamp();
-    }
-    batch.update(orderRef, updateData);
-  });
-
-  await batch.commit();
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const fn = httpsCallable<{ orderIds: string[]; status: OrderStatus }, { success: boolean }>(
+    functions,
+    'updateMultipleOrderStatuses'
+  );
+  await fn({ orderIds, status });
 };
 
 /**
@@ -144,53 +125,7 @@ export const splitAndUpdateOrderStatus = async (
   pickedUpQuantity: number,
   remainingStatus: OrderStatus
 ): Promise<void> => {
-  if (pickedUpQuantity <= 0) {
-    throw new Error('픽업 수량은 1 이상이어야 합니다.');
-  }
-
-  await runTransaction(db, async (transaction) => {
-    const originalOrderRef = doc(db, 'orders', originalOrderId);
-    const originalOrderDoc = await transaction.get(originalOrderRef);
-
-    if (!originalOrderDoc.exists()) {
-      throw new Error('분할할 원본 주문을 찾을 수 없습니다.');
-    }
-
-    const originalOrder = { id: originalOrderId, ...originalOrderDoc.data() } as Order;
-    const originalItem = originalOrder.items[0];
-    const originalQuantity = originalItem.quantity;
-    const remainingQuantity = originalQuantity - pickedUpQuantity;
-
-    if (remainingQuantity <= 0) {
-      throw new Error('남는 수량이 없어 주문을 분할할 수 없습니다. 일반 상태 변경을 이용해주세요.');
-    }
-
-    const remainingItem: OrderItem = { ...originalItem, quantity: remainingQuantity };
-    const remainingOrder: Omit<Order, 'id'> = {
-      ...originalOrder,
-      orderNumber: `${originalOrder.orderNumber}-REMAIN`,
-      items: [remainingItem],
-      totalPrice: remainingItem.unitPrice * remainingQuantity,
-      status: remainingStatus,
-      createdAt: serverTimestamp(),
-      splitFrom: originalOrderId,
-      notes: `[${originalOrder.orderNumber}]에서 분할된 ${remainingStatus} 주문`,
-    };
-    
-    const newOrderRef = doc(collection(db, 'orders'));
-    transaction.set(newOrderRef, remainingOrder);
-    
-    const pickedUpItem: OrderItem = { ...originalItem, quantity: pickedUpQuantity };
-    const pickedUpOrderUpdate = {
-      items: [pickedUpItem],
-      totalPrice: pickedUpItem.unitPrice * pickedUpQuantity,
-      status: 'PICKED_UP' as OrderStatus,
-      pickedUpAt: serverTimestamp(),
-      notes: `[${newOrderRef.id}]로 ${remainingQuantity}개 분할 처리됨`,
-    };
-    
-    transaction.update(originalOrderRef, pickedUpOrderUpdate);
-  });
+  throw new Error("이 함수는 더 이상 사용되지 않습니다. 서버 Callable(splitBundledOrder/processPartialPickup)를 사용하세요.");
 };
 
 /**
@@ -345,61 +280,44 @@ export const getOrdersByPhoneLast4 = async (phoneLast4: string): Promise<Order[]
 };
 
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
-  const updateData: { status: OrderStatus; pickedUpAt?: FieldValue } = { status };
-  if (status === 'PICKED_UP') { updateData.pickedUpAt = serverTimestamp(); }
-  await updateDoc(doc(db, 'orders', orderId), updateData);
+  await updateMultipleOrderStatuses([orderId], status);
 };
 
 export const updateOrderItemQuantity = async (orderId: string, itemId: string, newQuantity: number): Promise<void> => {
-  if (newQuantity <= 0) { throw new Error("수량은 1 이상이어야 합니다."); }
-  const orderRef = doc(db, 'orders', orderId);
-  await runTransaction(db, async (transaction) => {
-    const orderDoc = await transaction.get(orderRef);
-    if (!orderDoc.exists()) { throw new Error("주문을 찾을 수 없습니다."); }
-    const order = orderDoc.data() as Order;
-    let itemFound = false;
-    const newItems = order.items.map(item => {
-      if (item.itemId === itemId) { itemFound = true; return { ...item, quantity: newQuantity }; }
-      return item;
-    });
-    if (!itemFound) { throw new Error("주문에서 해당 품목을 찾을 수 없습니다."); }
-    const newTotalPrice = newItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-    transaction.update(orderRef, { items: newItems, totalPrice: newTotalPrice });
-  });
+  throw new Error("클라이언트에서 주문(items) 직접 수정은 금지되었습니다. 서버 Callable(updateOrderQuantity 등)을 사용하세요.");
 };
 
 export const revertOrderStatus = async (orderIds: string[], currentStatus: OrderStatus): Promise<void> => {
-  const batch = writeBatch(db);
-  orderIds.forEach(orderId => {
-    const orderRef = doc(db, 'orders', orderId);
-    const updateData: any = { status: 'RESERVED' };
-    if (currentStatus === 'PICKED_UP') { updateData.pickedUpAt = deleteField(); } 
-    else if (currentStatus === 'PREPAID') { updateData.prepaidAt = deleteField(); }
-    batch.update(orderRef, updateData);
-  });
-  await batch.commit();
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const fn = httpsCallable<
+    { orderIds: string[]; currentStatus: OrderStatus },
+    { success: boolean }
+  >(functions, 'revertOrderStatus');
+  await fn({ orderIds, currentStatus });
 };
 
 export const updateOrderNotes = async (orderId: string, notes: string): Promise<void> => {
-  await updateDoc(doc(db, 'orders', orderId), { notes });
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const fn = httpsCallable<{ orderId: string; notes: string }, { success: boolean }>(functions, 'updateOrderNotes');
+  await fn({ orderId, notes });
 };
 
 export const toggleOrderBookmark = async (orderId: string, isBookmarked: boolean): Promise<void> => {
-  await updateDoc(doc(db, 'orders', orderId), { isBookmarked });
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const fn = httpsCallable<{ orderId: string; isBookmarked: boolean }, { success: boolean }>(functions, 'toggleOrderBookmark');
+  await fn({ orderId, isBookmarked });
 };
 
 export const deleteOrder = async (orderId: string): Promise<void> => {
-  const orderRef = doc(db, 'orders', orderId);
-  await deleteDoc(orderRef);
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const fn = httpsCallable<{ orderId: string }, { success: boolean }>(functions, 'deleteOrder');
+  await fn({ orderId });
 };
 
 export const deleteMultipleOrders = async (orderIds: string[]): Promise<void> => {
-  const batch = writeBatch(db);
-  orderIds.forEach(orderId => {
-    const orderRef = doc(db, 'orders', orderId);
-    batch.delete(orderRef);
-  });
-  await batch.commit();
+  const functions = getFunctions(getApp(), 'asia-northeast3');
+  const fn = httpsCallable<{ orderIds: string[] }, { success: boolean }>(functions, 'deleteMultipleOrders');
+  await fn({ orderIds });
 }
 
 export const searchOrdersUnified = async (searchTerm: string): Promise<Order[]> => {

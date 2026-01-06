@@ -41,12 +41,17 @@ service cloud.firestore {
       allow read: if request.auth != null
                   && (resource.data.userId == request.auth.uid || isAdmin());
 
-      // ✅ 생성: 문서에 기록될 userId가 본인일 때만 허용
-      allow create: if request.auth != null
-                    && request.resource.data.userId == request.auth.uid;
+      // ✅ [정책] orders 컬렉션은 클라이언트 write 전면 금지
+      // - 주문 생성/수정/취소/상태변경은 모두 Cloud Functions(Admin SDK)에서만 수행
+      allow create, update, delete: if false;
+    }
 
-      // 수정/삭제: 관리자만(일반 사용자는 불가)
-      allow update, delete: if isAdmin();
+    // --- 재고 칠판(stockStats_v1) ---
+    match /stockStats_v1/{docId} {
+      // ✅ 운영/디버깅용: 관리자만 읽기 허용 (고객 앱은 CF가 오버레이하여 전달)
+      allow read: if isAdmin();
+      // ✅ [정책] stockStats_v1은 서버에서만 갱신
+      allow create, update, delete: if false;
     }
 
     // --- 리뷰 정보 ---
