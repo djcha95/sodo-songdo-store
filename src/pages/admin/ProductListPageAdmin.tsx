@@ -380,50 +380,112 @@ const ProductListPageAdmin: React.FC = () => {
   const processedRounds = useMemo<EnrichedRoundItem[]>(() => {
     let flatList: EnrichedRoundItem[] = [];
     pageData.forEach(p => {
-      (Array.isArray(p.salesHistory) ? p.salesHistory : []).forEach(r => {
-        const enrichedVariantGroups: EnrichedVariantGroup[] = (Array.isArray(r.variantGroups) ? r.variantGroups : []).map(vg => {
-          const stockInfo = getStockInfo(vg);
-          const safeItems: ProductItem[] = Array.isArray(vg.items) ? vg.items : [];
-          const firstItem = safeItems[0];
-          const configuredStock = vg.totalPhysicalStock ?? -1;
-          const remainingStock = stockInfo.remainingUnits === Infinity ? '무제한' : stockInfo.remainingUnits;
-          const status = getSimplifiedStatus(r, remainingStock);
-          const earliestExpiration = safeItems.length > 0
-            ? Math.min(...safeItems.map(i => safeToDate(i.expirationDate)?.getTime() || Infinity).filter(t => t !== Infinity))
-            : null;
+      try {
+        (Array.isArray(p.salesHistory) ? p.salesHistory : []).forEach(r => {
+          try {
+            const enrichedVariantGroups: EnrichedVariantGroup[] = (Array.isArray(r.variantGroups) ? r.variantGroups : []).map(vg => {
+              try {
+                const stockInfo = getStockInfo(vg);
+                const safeItems: ProductItem[] = Array.isArray(vg.items) ? vg.items : [];
+                const firstItem = safeItems[0];
+                const configuredStock = vg.totalPhysicalStock ?? -1;
+                const remainingStock = stockInfo.remainingUnits === Infinity ? '무제한' : stockInfo.remainingUnits;
+                const status = getSimplifiedStatus(r, remainingStock);
+                
+                // ✅ expirationDate 파싱 에러 방지
+                let earliestExpiration: number | null = null;
+                try {
+                  const expirationDates = safeItems
+                    .map(i => {
+                      try {
+                        return safeToDate(i?.expirationDate)?.getTime();
+                      } catch {
+                        return null;
+                      }
+                    })
+                    .filter((t): t is number => t !== null && t !== undefined && isFinite(t));
+                  if (expirationDates.length > 0) {
+                    earliestExpiration = Math.min(...expirationDates);
+                  }
+                } catch (e) {
+                  console.warn(`[ProductListPageAdmin] expirationDate 파싱 실패: ${p.id}/${r.roundId}`, e);
+                }
 
-          return {
-            ...vg, configuredStock, remainingStock, status,
-            expirationDate: earliestExpiration !== Infinity ? earliestExpiration : null,
-            price: firstItem?.price ?? null,
-            itemId: firstItem?.id ?? null,
-          };
+                return {
+                  ...vg, configuredStock, remainingStock, status,
+                  expirationDate: earliestExpiration,
+                  price: firstItem?.price ?? null,
+                  itemId: firstItem?.id ?? null,
+                };
+              } catch (vgError) {
+                console.error(`[ProductListPageAdmin] variantGroup 처리 실패: ${p.id}/${r.roundId}/${vg?.id}`, vgError);
+                // ✅ 에러 발생 시 기본값으로 fallback
+                return {
+                  ...vg,
+                  configuredStock: vg?.totalPhysicalStock ?? -1,
+                  remainingStock: '무제한',
+                  status: '데이터 오류' as SimplifiedStatus,
+                  expirationDate: null,
+                  price: vg?.items?.[0]?.price ?? null,
+                  itemId: vg?.items?.[0]?.id ?? null,
+                };
+              }
+            });
+
+            const totalRemaining = enrichedVariantGroups.reduce((acc, vg) => {
+              if (vg.remainingStock === '무제한') return Infinity;
+              if (acc === Infinity) return Infinity;
+              return acc + (vg.remainingStock as number);
+            }, 0);
+            const overallStatus = getSimplifiedStatus(r, totalRemaining);
+            
+            let overallEarliestExpiration: number | null = null;
+            try {
+              const expirationDates = enrichedVariantGroups
+                .map(vg => vg.expirationDate)
+                .filter((t): t is number => t !== null && t !== undefined && isFinite(t));
+              if (expirationDates.length > 0) {
+                overallEarliestExpiration = Math.min(...expirationDates);
+              }
+            } catch (e) {
+              console.warn(`[ProductListPageAdmin] overall expirationDate 계산 실패: ${p.id}/${r.roundId}`, e);
+            }
+
+            flatList.push({
+              uniqueId: `${p.id}-${r.roundId}`,
+              productId: p.id,
+              productName: p.groupName,
+              productImage: p.imageUrls?.[0] || '/sodomall-logo.png',
+              round: r,
+              createdAt: safeToDate(r.createdAt)?.getTime() || 0,
+              pickupDate: (r.pickupDate ? safeToDate(r.pickupDate) : null)?.getTime() || 0,
+              storageType: p.storageType,
+              status: overallStatus,
+              enrichedVariantGroups: enrichedVariantGroups,
+              expirationDate: overallEarliestExpiration,
+            });
+          } catch (roundError) {
+            console.error(`[ProductListPageAdmin] round 처리 실패: ${p.id}/${r?.roundId}`, roundError);
+            // ✅ 에러 발생해도 상품은 표시 (데이터 오류 상태로)
+            flatList.push({
+              uniqueId: `${p.id}-${r?.roundId || 'unknown'}`,
+              productId: p.id,
+              productName: p.groupName,
+              productImage: p.imageUrls?.[0] || '/sodomall-logo.png',
+              round: r,
+              createdAt: safeToDate(r?.createdAt)?.getTime() || 0,
+              pickupDate: (r?.pickupDate ? safeToDate(r.pickupDate) : null)?.getTime() || 0,
+              storageType: p.storageType,
+              status: '데이터 오류' as SimplifiedStatus,
+              enrichedVariantGroups: [],
+              expirationDate: null,
+            });
+          }
         });
-
-        const totalRemaining = enrichedVariantGroups.reduce((acc, vg) => {
-          if (vg.remainingStock === '무제한') return Infinity;
-          if (acc === Infinity) return Infinity;
-          return acc + (vg.remainingStock as number);
-        }, 0);
-        const overallStatus = getSimplifiedStatus(r, totalRemaining);
-        const overallEarliestExpiration = enrichedVariantGroups.length > 0
-          ? Math.min(...enrichedVariantGroups.map(vg => vg.expirationDate || Infinity).filter(t => t !== Infinity))
-          : null;
-
-        flatList.push({
-          uniqueId: `${p.id}-${r.roundId}`,
-          productId: p.id,
-          productName: p.groupName,
-          productImage: p.imageUrls?.[0] || '/sodomall-logo.png',
-          round: r,
-          createdAt: safeToDate(r.createdAt)?.getTime() || 0,
-          pickupDate: (r.pickupDate ? safeToDate(r.pickupDate) : null)?.getTime() || 0,
-          storageType: p.storageType,
-          status: overallStatus,
-          enrichedVariantGroups: enrichedVariantGroups,
-          expirationDate: overallEarliestExpiration !== Infinity ? overallEarliestExpiration : null,
-        });
-      });
+      } catch (productError) {
+        console.error(`[ProductListPageAdmin] product 처리 실패: ${p.id}`, productError);
+        // ✅ 상품 레벨 에러는 로그만 남기고 건너뜀
+      }
     });
 
     let filteredList = flatList;

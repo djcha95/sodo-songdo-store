@@ -53,8 +53,8 @@ export const submitOrder = async (
         stockDeductionAmount: item.stockDeductionAmount ?? 1,
       })),
       totalPrice: orderData.items.reduce(
-        (sum, item) => sum + item.unitPrice * item.quantity,
-        0
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0
       ),
       customerInfo: orderData.customerInfo,
       pickupDate: orderData.pickupDate,

@@ -139,7 +139,7 @@ const DragHScroll: React.FC<{
 
     // ✅ 드래그로 확정되는 순간에만 pointer capture + dragging class 적용
     if (!didDragRef.current) {
-      didDragRef.current = true;
+    didDragRef.current = true;
       el.classList.add('dragging');
       try {
         el.setPointerCapture(e.pointerId);
@@ -157,7 +157,7 @@ const DragHScroll: React.FC<{
     isPointerDownRef.current = false;
     if (el) el.classList.remove('dragging');
     if (hasPointerCaptureRef.current) {
-      try { el?.releasePointerCapture(e.pointerId); } catch {}
+    try { el?.releasePointerCapture(e.pointerId); } catch {}
     }
     hasPointerCaptureRef.current = false;
     // 클릭 방지 플래그는 한 틱 뒤에 초기화(드래그 후 버튼 클릭 방지)

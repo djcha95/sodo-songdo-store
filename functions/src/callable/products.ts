@@ -375,6 +375,33 @@ export const updateSalesRound = onCall(
 }
       }
 
+      // ✅ variantGroups가 포함된 경우, items 배열 내부의 expirationDate Timestamp 변환
+      if (converted.variantGroups && Array.isArray(converted.variantGroups)) {
+        const convertedVariantGroups = converted.variantGroups.map((vg: any) => {
+          if (!vg || !Array.isArray(vg.items)) return vg;
+          const convertedItems = vg.items.map((item: any) => {
+            if (!item || !item.expirationDate) return item;
+            const expDate = item.expirationDate;
+            let d: Date | undefined;
+            // 1. Firebase Timestamp 객체 형태({seconds, nanoseconds})인지 확인
+            if (typeof expDate === 'object' && expDate !== null && 'seconds' in expDate && typeof expDate.seconds === 'number') {
+              d = new Date(expDate.seconds * 1000);
+            }
+            // 2. 그 외 일반 날짜 문자열이나 Date 객체인 경우
+            else {
+              d = new Date(expDate as any);
+            }
+            // 유효한 날짜인 경우에만 Firestore Timestamp로 변환
+            if (d && !isNaN(d.getTime())) {
+              return { ...item, expirationDate: admin.firestore.Timestamp.fromDate(d) };
+            }
+            return item;
+          });
+          return { ...vg, items: convertedItems };
+        });
+        converted.variantGroups = convertedVariantGroups;
+      }
+
       await db.runTransaction(async (tx) => {
         const ref = db.collection("products").doc(productId);
         const snap = await tx.get(ref);
@@ -390,7 +417,48 @@ export const updateSalesRound = onCall(
         const idx = newSalesHistory.findIndex(r => r.roundId === roundId);
         if (idx === -1) throw new HttpsError("not-found", "해당 판매 회차를 찾을 수 없습니다.");
 
-        newSalesHistory[idx] = { ...newSalesHistory[idx], ...converted };
+        // ✅ variantGroups가 포함된 경우, 기존 variantGroups와 병합하여 데이터 손실 방지
+        if (converted.variantGroups && Array.isArray(converted.variantGroups)) {
+          const existingVgs = newSalesHistory[idx].variantGroups || [];
+          const updatedVgs = converted.variantGroups;
+          
+          // variantGroups를 ID로 매칭하여 병합
+          const mergedVgs = existingVgs.map((existingVg: any) => {
+            const updatedVg = updatedVgs.find((v: any) => v.id === existingVg.id);
+            if (updatedVg) {
+              // 기존 variantGroup과 업데이트된 variantGroup 병합
+              const existingItems = existingVg.items || [];
+              const updatedItems = updatedVg.items || [];
+              
+              // items를 ID로 매칭하여 병합
+              const mergedItems = existingItems.map((existingItem: any) => {
+                const updatedItem = updatedItems.find((i: any) => i.id === existingItem.id);
+                return updatedItem ? { ...existingItem, ...updatedItem } : existingItem;
+              });
+              
+              // 새로운 items 추가 (기존에 없던 것들)
+              updatedItems.forEach((updatedItem: any) => {
+                if (!existingItems.find((i: any) => i.id === updatedItem.id)) {
+                  mergedItems.push(updatedItem);
+                }
+              });
+              
+              return { ...existingVg, ...updatedVg, items: mergedItems };
+            }
+            return existingVg;
+          });
+          
+          // 새로운 variantGroups 추가 (기존에 없던 것들)
+          updatedVgs.forEach((updatedVg: any) => {
+            if (!existingVgs.find((v: any) => v.id === updatedVg.id)) {
+              mergedVgs.push(updatedVg);
+            }
+          });
+          
+          newSalesHistory[idx] = { ...newSalesHistory[idx], ...converted, variantGroups: mergedVgs };
+        } else {
+          newSalesHistory[idx] = { ...newSalesHistory[idx], ...converted };
+        }
 
         tx.update(ref, {
           salesHistory: newSalesHistory,
@@ -540,10 +608,10 @@ export const getProductsWithStock = onCall(
               .orderBy("createdAt", "desc")
               .limit(pageSize)
           : db.collection("products")
-              .where("isArchived", "==", false)
-              .where("isOnsite", "==", true)
-              .orderBy("createdAt", "desc")
-              .limit(pageSize);
+          .where("isArchived", "==", false)
+          .where("isOnsite", "==", true)
+          .orderBy("createdAt", "desc")
+          .limit(pageSize);
       }
 
       // ✅ [개선] 문서 ID로 스냅샷을 가져와 startAfter에 전달 (가장 안전한 커서 방식)
@@ -675,6 +743,190 @@ export const getProductByIdWithStock = onCall(
     } catch (e: any) {
       logger.error("getProductByIdWithStock failed:", e);
       throw new HttpsError("internal", "상세 조회 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+// =================================================================
+// 11. variantGroups Timestamp 복구 (데이터 복구용)
+// =================================================================
+export const fixVariantGroupsTimestamps = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB", timeoutSeconds: 540 },
+  async (request) => {
+    logger.info(`[fixVariantGroupsTimestamps] called. v=${BUILD_VERSION}`);
+
+    const userRole = request.auth?.token.role;
+    if (!userRole || !['admin', 'master'].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    try {
+      /**
+       * Timestamp 객체를 Firestore Timestamp로 변환
+       */
+      const convertToFirestoreTimestamp = (value: any): Timestamp | null => {
+        if (!value) return null;
+        
+        // 이미 Firestore Timestamp인 경우
+        if (value instanceof Timestamp) return value;
+        
+        // 클라이언트 Timestamp 객체 형태 ({seconds, nanoseconds})
+        if (typeof value === 'object' && value !== null && 'seconds' in value && typeof value.seconds === 'number') {
+          return Timestamp.fromMillis(value.seconds * 1000 + (value.nanoseconds || 0) / 1000000);
+        }
+        
+        // 레거시 형식 ({_seconds, _nanoseconds})
+        if (typeof value === 'object' && value !== null && '_seconds' in value && typeof value._seconds === 'number') {
+          return Timestamp.fromMillis(value._seconds * 1000 + (value._nanoseconds || 0) / 1000000);
+        }
+        
+        // Date 객체
+        if (value instanceof Date) {
+          return Timestamp.fromDate(value);
+        }
+        
+        // 숫자 (milliseconds)
+        if (typeof value === 'number' && !isNaN(value)) {
+          return Timestamp.fromMillis(value);
+        }
+        
+        // 문자열
+        if (typeof value === 'string') {
+          const date = new Date(value);
+          if (!isNaN(date.getTime())) {
+            return Timestamp.fromDate(date);
+          }
+        }
+        
+        return null;
+      };
+
+      /**
+       * variantGroups의 items 배열 내부 expirationDate 복구
+       */
+      const fixVariantGroupsItems = (variantGroups: any[]): any[] => {
+        return variantGroups.map((vg: any) => {
+          if (!vg || !Array.isArray(vg.items)) return vg;
+          
+          const fixedItems = vg.items.map((item: any) => {
+            if (!item || !item.expirationDate) return item;
+            
+            const fixedTimestamp = convertToFirestoreTimestamp(item.expirationDate);
+            if (fixedTimestamp) {
+              return { ...item, expirationDate: fixedTimestamp };
+            }
+            
+            return item;
+          });
+          
+          return { ...vg, items: fixedItems };
+        });
+      };
+
+      let scanned = 0;
+      let fixed = 0;
+      let errors = 0;
+      
+      const productsRef = db.collection("products");
+      const snapshot = await productsRef.get();
+      
+      logger.info(`[fixVariantGroupsTimestamps] 총 ${snapshot.size}개 상품 스캔 시작...`);
+      
+      let currentBatch = db.batch();
+      let batchCount = 0;
+      const BATCH_LIMIT = 450;
+      
+      for (const doc of snapshot.docs) {
+        scanned++;
+        const productId = doc.id;
+        const productData = doc.data() as Product;
+        
+        try {
+          const salesHistory = Array.isArray(productData.salesHistory) ? productData.salesHistory : [];
+          let hasChanges = false;
+          
+          const fixedSalesHistory = salesHistory.map((round: any) => {
+            if (!round || !Array.isArray(round.variantGroups)) return round;
+            
+            const fixedVariantGroups = fixVariantGroupsItems(round.variantGroups);
+            
+            // 변경사항이 있는지 확인
+            const hasRoundChanges = fixedVariantGroups.some((fixedVg, idx) => {
+              const originalVg = round.variantGroups[idx];
+              if (!originalVg || !Array.isArray(originalVg.items)) return false;
+              
+              return fixedVariantGroups[idx].items.some((fixedItem, itemIdx) => {
+                const originalItem = originalVg.items[itemIdx];
+                if (!originalItem) return false;
+                
+                const originalExp = originalItem.expirationDate;
+                const fixedExp = fixedItem.expirationDate;
+                
+                // Timestamp 객체 비교
+                if (originalExp instanceof Timestamp && fixedExp instanceof Timestamp) {
+                  return originalExp.seconds !== fixedExp.seconds || originalExp.nanoseconds !== fixedExp.nanoseconds;
+                }
+                
+                // 다른 형식이면 변경된 것으로 간주
+                return originalExp !== fixedExp;
+              });
+            });
+            
+            if (hasRoundChanges) {
+              hasChanges = true;
+              return { ...round, variantGroups: fixedVariantGroups };
+            }
+            
+            return round;
+          });
+          
+          if (hasChanges) {
+            fixed++;
+            const productRef = productsRef.doc(productId);
+            
+            currentBatch.update(productRef, {
+              salesHistory: fixedSalesHistory,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+            batchCount++;
+            
+            if (batchCount >= BATCH_LIMIT) {
+              await currentBatch.commit();
+              logger.info(`[fixVariantGroupsTimestamps] 배치 커밋 완료 (${batchCount}개)`);
+              currentBatch = db.batch();
+              batchCount = 0;
+            }
+          }
+        } catch (error: any) {
+          errors++;
+          logger.error(`[fixVariantGroupsTimestamps] ${productId} 처리 실패:`, error.message);
+        }
+        
+        if (scanned % 100 === 0) {
+          logger.info(`[fixVariantGroupsTimestamps] 진행: ${scanned}/${snapshot.size} (복구: ${fixed}, 에러: ${errors})`);
+        }
+      }
+      
+      // 남은 배치 커밋
+      if (batchCount > 0) {
+        await currentBatch.commit();
+        logger.info(`[fixVariantGroupsTimestamps] 최종 배치 커밋 완료 (${batchCount}개)`);
+      }
+      
+      const result = {
+        success: true,
+        scanned,
+        fixed,
+        errors,
+        message: `총 ${scanned}개 상품 중 ${fixed}개 복구 완료 (에러: ${errors}개)`
+      };
+      
+      logger.info(`[fixVariantGroupsTimestamps] 완료:`, result);
+      return result;
+      
+    } catch (error: any) {
+      logger.error(`[fixVariantGroupsTimestamps] 전체 프로세스 실패:`, error);
+      throw new HttpsError("internal", `복구 중 오류가 발생했습니다: ${error.message}`);
     }
   }
 );
