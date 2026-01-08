@@ -86,6 +86,22 @@
   margin-bottom: 4px;
 }
 .step-blue { background-color: #dbeafe; color: #1e40af; }
+.step-purple { background-color: #ede9fe; color: #5b21b6; }
+
+.tool-input {
+  width: 260px;
+  max-width: 40vw;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+  color: #111827;
+}
+
+.tool-input::placeholder {
+  color: #9ca3af;
+}
 
 .run-btn {
   display: flex;

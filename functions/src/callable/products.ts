@@ -932,6 +932,154 @@ export const fixVariantGroupsTimestamps = onCall(
 );
 
 // =================================================================
+// 12. salesHistory/variantGroups 구조 백필(배열 복구) v1
+//  - 특정 상품만(productId) 또는 전체 스캔
+//  - ProductListPageAdmin에서 "상품이 아예 안 뜨는" 케이스(배열→객체 손상) 복구용
+// =================================================================
+export const fixSalesHistoryShape_v1 = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "512MiB", timeoutSeconds: 540 },
+  async (request) => {
+    logger.info(`[fixSalesHistoryShape_v1] called. v=${BUILD_VERSION}`, JSON.stringify(request.data ?? {}, null, 2));
+
+    const userRole = request.auth?.token.role;
+    if (!userRole || !["admin", "master"].includes(userRole)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    const { productId } = (request.data || {}) as { productId?: string | null };
+
+    const toArrayIfMap = <T = any>(v: any): T[] => {
+      if (Array.isArray(v)) return v as T[];
+      if (v && typeof v === "object") return Object.values(v) as T[];
+      return [];
+    };
+
+    const normalizeItem = (item: any, idxKey: string) => {
+      if (!item || typeof item !== "object") return item;
+      const id = item.id || `recovered-item-${idxKey}`;
+      return { ...item, id };
+    };
+
+    const normalizeVariantGroup = (vg: any, idxKey: string) => {
+      if (!vg || typeof vg !== "object") return vg;
+      const id = vg.id || `recovered-vg-${idxKey}`;
+      const itemsRaw = vg.items;
+      const itemsArr = toArrayIfMap<any>(itemsRaw).map((it, i) => normalizeItem(it, `${idxKey}-${i}`));
+      return { ...vg, id, items: itemsArr };
+    };
+
+    const normalizeRound = (round: any, idxKey: string) => {
+      if (!round || typeof round !== "object") return round;
+      const roundId = round.roundId || `recovered-round-${idxKey}`;
+      const roundName = round.roundName || "복구된 회차";
+      const status = round.status || "draft";
+
+      const vgsRaw = round.variantGroups;
+      const vgsArr = toArrayIfMap<any>(vgsRaw).map((vg, i) => normalizeVariantGroup(vg, `${idxKey}-${i}`));
+
+      // createdAt이 완전히 없어서 UI에서 정렬/표시가 꼬이는 케이스만 최소 보정
+      const createdAt = round.createdAt ?? Timestamp.now();
+
+      return {
+        ...round,
+        roundId,
+        roundName,
+        status,
+        createdAt,
+        variantGroups: vgsArr,
+      };
+    };
+
+    try {
+      const productsRef = db.collection("products");
+
+      const docs: QueryDocumentSnapshot<DocumentData>[] = [];
+      if (productId) {
+        const snap = await productsRef.doc(productId).get();
+        if (!snap.exists) throw new HttpsError("not-found", "상품을 찾을 수 없습니다.");
+        docs.push(snap as any);
+      } else {
+        const snap = await productsRef.get();
+        docs.push(...snap.docs);
+      }
+
+      let scanned = 0;
+      let fixedProducts = 0;
+      let fixedRounds = 0;
+      let errors = 0;
+
+      const BATCH_LIMIT = 450;
+      let currentBatch = db.batch();
+      let batchCount = 0;
+
+      for (const doc of docs) {
+        scanned++;
+        try {
+          const product = doc.data() as any;
+          const rawHistory = product?.salesHistory;
+
+          const historyArr = toArrayIfMap<any>(rawHistory);
+          const shouldFixSalesHistoryShape = !!rawHistory && !Array.isArray(rawHistory) && typeof rawHistory === "object";
+
+          // 배열이어도 내부 round.variantGroups/items가 객체인 케이스가 있어 보정
+          let anyRoundFixed = false;
+          const normalized = historyArr.map((r: any, i: number) => {
+            const beforeVgIsArray = Array.isArray(r?.variantGroups);
+            const beforeItemsIsArray = Array.isArray(r?.variantGroups?.[0]?.items);
+            const nr = normalizeRound(r, `${doc.id}-${i}`);
+            const afterVgIsArray = Array.isArray(nr?.variantGroups);
+            const afterItemsIsArray = Array.isArray(nr?.variantGroups?.[0]?.items);
+            if (beforeVgIsArray !== afterVgIsArray || beforeItemsIsArray !== afterItemsIsArray) anyRoundFixed = true;
+            return nr;
+          });
+
+          const shouldWrite = shouldFixSalesHistoryShape || anyRoundFixed;
+          if (!shouldWrite) continue;
+
+          fixedProducts++;
+          if (anyRoundFixed || shouldFixSalesHistoryShape) fixedRounds += normalized.length;
+
+          currentBatch.update(doc.ref, {
+            salesHistory: normalized,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await currentBatch.commit();
+            logger.info(`[fixSalesHistoryShape_v1] 배치 커밋 완료 (${batchCount}문서)`);
+            currentBatch = db.batch();
+            batchCount = 0;
+          }
+        } catch (e: any) {
+          errors++;
+          logger.error(`[fixSalesHistoryShape_v1] doc=${doc.id} 처리 실패:`, e);
+        }
+      }
+
+      if (batchCount > 0) {
+        await currentBatch.commit();
+        logger.info(`[fixSalesHistoryShape_v1] 마지막 배치 커밋 완료 (${batchCount}문서)`);
+      }
+
+      return {
+        success: true,
+        scanned,
+        fixedProducts,
+        fixedRounds,
+        errors,
+        message: productId
+          ? `단일 상품 복구 완료: fixedProducts=${fixedProducts}, fixedRounds=${fixedRounds}, errors=${errors}`
+          : `전체 스캔 완료: scanned=${scanned}, fixedProducts=${fixedProducts}, fixedRounds=${fixedRounds}, errors=${errors}`,
+      };
+    } catch (e: any) {
+      logger.error(`[fixSalesHistoryShape_v1] 전체 실패:`, e);
+      throw new HttpsError("internal", e?.message || "복구 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+// =================================================================
 // 11. 상품 목록 페이징 (일반 버전도 안전한 커서로 변경)
 // =================================================================
 export const getProductsPage = onCall(
