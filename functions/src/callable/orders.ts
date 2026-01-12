@@ -69,6 +69,7 @@ async function getPickedUpNow(
   return typeof n === "number" ? n : 0;
 }
 
+
 function assertPositiveInt(name: string, v: any) {
   if (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || !Number.isInteger(v)) {
     throw new HttpsError("invalid-argument", `${name} 값이 올바르지 않습니다.`);
@@ -341,14 +342,32 @@ export const submitOrder = onCall(
           const mergeKey = `${singleItem.productId}-${singleItem.roundId}-${singleItem.variantGroupId}-${targetPickupMillis}`;
           const existingDoc = existingOrderMap.get(mergeKey);
 
-          // ✅ [핵심 수정] 재고 체크는 “추가분(delta)” 기준으로만 검사해야 안전합니다.
-          // - claimedNow에는 이미 내 기존 주문(병합 대상)의 점유도 포함되어 있을 수 있음
-          // - 따라서 병합/신규 모두 동일하게: delta(addDeduct) <= remaining(total - claimedNow)
+          // ✅ [핵심 수정] 재고 체크와 업데이트를 같은 트랜잭션 내에서 원자적으로 처리
+          // - stockStats_v1 문서를 먼저 읽고
+          // - 재고 체크를 하고
+          // - 통과하면 업데이트
           const totalStock = getTotalStockForVariantGroup(product as any, singleItem.roundId, vgId);
+          
+          // 기존 주문이 있으면 그 주문의 점유량을 계산
+          let existingOrderDeduct = 0;
+          if (existingDoc) {
+            const existingOrder = existingDoc.data();
+            const existingItem = existingOrder.items[0];
+            existingOrderDeduct = itemDeduct(existingItem);
+          }
+          
           if (typeof totalStock === "number" && totalStock !== -1) {
-            const claimedNow = await getClaimedNow(transaction, singleItem.productId, singleItem.roundId, vgId);
-            const pickedUpNow = await getPickedUpNow(transaction, singleItem.productId, singleItem.roundId, vgId);
-            const remaining = totalStock - claimedNow - pickedUpNow;
+            // ✅ stockStats_v1 문서를 트랜잭션 내에서 읽기
+            const statRef = db.collection(STOCK_STATS_COL).doc(statDocId(singleItem.productId, singleItem.roundId));
+            const statSnap = await transaction.get(statRef);
+            const statData = statSnap.exists ? (statSnap.data() as any) : {};
+            
+            const claimedNow = typeof statData?.claimed?.[vgId] === "number" ? statData.claimed[vgId] : 0;
+            const pickedUpNow = typeof statData?.pickedUp?.[vgId] === "number" ? statData.pickedUp[vgId] : 0;
+            
+            // ✅ 기존 주문의 점유량을 제외한 실제 남은 재고 계산 (병합 케이스 대응)
+            const actualClaimed = claimedNow - existingOrderDeduct;
+            const remaining = totalStock - actualClaimed - pickedUpNow;
 
             if (remaining < 0) {
               logger.error("[submitOrder] stockStats inconsistency (remaining < 0)", {
@@ -357,6 +376,8 @@ export const submitOrder = onCall(
                 vgId,
                 totalPhysicalStock: totalStock,
                 claimedNow,
+                actualClaimed,
+                existingOrderDeduct,
                 pickedUpNow,
               });
               throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 주문할 수 없습니다. 관리자에게 문의해주세요.");
@@ -369,6 +390,31 @@ export const submitOrder = onCall(
                 `재고 부족: ${vg.groupName} (추가 요청: ${singleItem.quantity}개, 추가 가능: 최대 ${maxAllowedQuantity}개)`
               );
             }
+            
+            // ✅ 재고 체크 통과 후, 같은 트랜잭션 내에서 stockStats_v1 업데이트
+            // FieldValue.increment 대신 직접 값을 계산해서 업데이트 (트랜잭션 일관성 보장)
+            const newClaimed = claimedNow + addDeduct;
+            
+            logger.info(`[submitOrder] stockStats_v1 업데이트: productId=${singleItem.productId}, roundId=${singleItem.roundId}, vgId=${vgId}, claimedNow=${claimedNow}, addDeduct=${addDeduct}, newClaimed=${newClaimed}`);
+            
+            transaction.set(
+              statRef,
+              {
+                productId: singleItem.productId,
+                roundId: singleItem.roundId,
+                updatedAt: AdminTimestamp.now(),
+                claimed: {
+                  ...(statData.claimed || {}),
+                  [vgId]: newClaimed,
+                },
+                pickedUp: statData.pickedUp || {},
+              } as any,
+              { merge: true }
+            );
+          } else {
+            // 무제한 재고인 경우에도 stockStats_v1은 업데이트 (통계 목적)
+            logger.info(`[submitOrder] 무제한 재고 stockStats_v1 업데이트: productId=${singleItem.productId}, roundId=${singleItem.roundId}, vgId=${vgId}, addDeduct=${addDeduct}`);
+            applyClaimedDelta(transaction, singleItem.productId, singleItem.roundId, vgId, addDeduct);
           }
 
           if (existingDoc) {
@@ -407,13 +453,28 @@ export const submitOrder = onCall(
               transaction.set(newOrderRef, newOrder);
               createdOrderIds.push(newOrderRef.id);
           }
-
-          // ✅ [핵심] 칠판 업데이트 (수량 증가)
-          applyClaimedDelta(transaction, singleItem.productId, singleItem.roundId, vgId, addDeduct);
         }
 
+        logger.info(`[submitOrder] 트랜잭션 성공: createdOrderIds=${createdOrderIds.length}, updatedOrderIds=${updatedOrderIds.length}`);
+        
+        // ✅ 트랜잭션 커밋 후 stockStats_v1 업데이트 확인 (디버깅용)
+        for (const singleItem of client.items) {
+          const statRef = db.collection(STOCK_STATS_COL).doc(statDocId(singleItem.productId, singleItem.roundId));
+          const statSnap = await statRef.get();
+          if (statSnap.exists) {
+            const statData = statSnap.data() as any;
+            const vgId = singleItem.variantGroupId || "default";
+            const claimed = statData?.claimed?.[vgId] || 0;
+            logger.info(`[submitOrder] stockStats_v1 확인: productId=${singleItem.productId}, roundId=${singleItem.roundId}, vgId=${vgId}, claimed=${claimed}`);
+          } else {
+            logger.warn(`[submitOrder] ⚠️ stockStats_v1 문서가 없음: productId=${singleItem.productId}, roundId=${singleItem.roundId}`);
+          }
+        }
+        
         return { success: true, orderIds: createdOrderIds, updatedOrderIds };
       });
+      
+      logger.info(`[submitOrder] 주문 처리 완료: userId=${userId}, orderIds=${result.orderIds?.length || 0}, updatedOrderIds=${result.updatedOrderIds?.length || 0}`);
       return result;
     } catch (err) {
       logger.error("Order submission failed", err);

@@ -182,10 +182,15 @@ export const onOrderCreated = onDocumentCreated(
     }
 
     // ✅ Callable이 stockStats_v1을 직접 관리하는 주문이면 트리거는 스킵 (중복 반영 방지)
+    // ⚠️ 하지만 callable이 실패하거나 트랜잭션이 롤백된 경우를 대비해 트리거도 실행
+    // 실제로는 callable에서 이미 업데이트했으므로 트리거는 스킵하되, 로그만 남김
     if ((order as any).stockStatsV1Managed) {
-      logger.info(`Skipping onOrderCreated trigger for stockStats-managed order ${orderId}.`);
+      logger.info(`[onOrderCreated] stockStats-managed order ${orderId} - callable에서 이미 처리됨, 트리거 스킵`);
       return;
     }
+    
+    // ⚠️ stockStatsV1Managed가 없는 경우는 레거시 주문이거나 직접 생성된 주문일 수 있음
+    logger.warn(`[onOrderCreated] stockStatsV1Managed 플래그가 없는 주문 ${orderId} - 트리거에서 처리`);
 
     // --- 1. ✅ [수정] stockStats_v1 컬렉션 업데이트 로직 (기존 products 컬렉션 직접 업데이트 제거) ---
     if (order.status !== "CANCELED") {
