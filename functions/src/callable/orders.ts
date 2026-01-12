@@ -383,13 +383,18 @@ export const submitOrder = onCall(
               throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 주문할 수 없습니다. 관리자에게 문의해주세요.");
             }
 
+            // ✅ [수정] 재고 체크: 추가하려는 수량(addDeduct)이 남은 재고(remaining)를 초과하면 안 됨
+            // 병합 케이스든 신규 주문이든 동일하게 체크 (addDeduct는 항상 "추가분"만)
             if (addDeduct > remaining) {
               const maxAllowedQuantity = Math.max(0, Math.floor(remaining / unit));
+              logger.warn(`[submitOrder] 재고 부족 차단: productId=${singleItem.productId}, roundId=${singleItem.roundId}, vgId=${vgId}, totalStock=${totalStock}, claimedNow=${claimedNow}, existingOrderDeduct=${existingOrderDeduct}, pickedUpNow=${pickedUpNow}, actualClaimed=${actualClaimed}, remaining=${remaining}, addDeduct=${addDeduct}, quantity=${singleItem.quantity}, unit=${unit}`);
               throw new HttpsError(
                 "failed-precondition",
-                `재고 부족: ${vg.groupName} (추가 요청: ${singleItem.quantity}개, 추가 가능: 최대 ${maxAllowedQuantity}개)`
+                `재고 부족: ${vg.groupName} (요청: ${singleItem.quantity}개, 남은 재고: ${remaining}개, 추가 가능: 최대 ${maxAllowedQuantity}개)`
               );
             }
+            
+            logger.info(`[submitOrder] 재고 체크 통과: productId=${singleItem.productId}, roundId=${singleItem.roundId}, vgId=${vgId}, totalStock=${totalStock}, claimedNow=${claimedNow}, existingOrderDeduct=${existingOrderDeduct}, pickedUpNow=${pickedUpNow}, remaining=${remaining}, addDeduct=${addDeduct}, quantity=${singleItem.quantity}`);
             
             // ✅ 재고 체크 통과 후, 같은 트랜잭션 내에서 stockStats_v1 업데이트
             // FieldValue.increment 대신 직접 값을 계산해서 업데이트 (트랜잭션 일관성 보장)
