@@ -1233,8 +1233,11 @@ export const validateCart = onCall({
           const stat = statsMap.get(statDocId(item.productId, item.roundId));
           const vgId = vg.id || "default"; 
 
-          // 점유 수량 = 예약됨(claimed)만 계산
-          const occupied = getClaimed(stat, vgId);
+          // ✅ [수정] 점유 수량 = 예약됨(claimed) + 픽업완료(pickedUp) 모두 계산
+          // pickedUp도 이미 소진된 재고이므로 예약 불가
+          const claimed = getClaimed(stat, vgId);
+          const pickedUp = getPickedUp(stat, vgId);
+          const occupied = claimed + pickedUp;
 
           const remainingRaw = total - occupied;
           const remaining = Math.max(0, remainingRaw);

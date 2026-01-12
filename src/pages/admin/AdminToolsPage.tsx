@@ -7,6 +7,23 @@ import ConfirmModal from '@/components/admin/ConfirmModal';
 import './AdminToolsPage.css';
 import { functions } from '@/firebase/firebaseConfig';
 
+type FixVariantGroupsTimestampsResult = {
+  success: boolean;
+  scanned?: number;
+  fixed?: number;
+  errors?: number;
+  message?: string;
+};
+
+type FixSalesHistoryShapeResult = {
+  success: boolean;
+  scanned?: number;
+  fixedProducts?: number;
+  fixedRounds?: number;
+  errors?: number;
+  message?: string;
+};
+
 const AdminToolsPage = () => {
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
@@ -22,8 +39,14 @@ const AdminToolsPage = () => {
 
   // ✅ getFunctions(region 하드코딩) 대신 프로젝트 공용 functions 인스턴스 사용
   const rebuildFunction = useMemo(() => httpsCallable(functions, 'rebuildStockStats_v1'), []);
-  const fixTimestampFunction = useMemo(() => httpsCallable(functions, 'fixVariantGroupsTimestamps'), []);
-  const fixShapeFunction = useMemo(() => httpsCallable(functions, 'fixSalesHistoryShape_v1'), []);
+  const fixTimestampFunction = useMemo(
+    () => httpsCallable<undefined, FixVariantGroupsTimestampsResult>(functions, 'fixVariantGroupsTimestamps'),
+    []
+  );
+  const fixShapeFunction = useMemo(
+    () => httpsCallable<{ productId: string | null }, FixSalesHistoryShapeResult>(functions, 'fixSalesHistoryShape_v1'),
+    []
+  );
 
   const runRebuild = async () => {
     setLoading(true);

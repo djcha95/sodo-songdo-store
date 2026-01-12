@@ -219,13 +219,16 @@ export const checkCartStock = onCall(
 
         // ✅ [변경] 칠판 확인 로직
         const statData = statsMap.get(statDocId(item.productId, item.roundId));
-        const currentReserved = statData?.claimed?.[item.variantGroupId] || 0;
+        const claimed = statData?.claimed?.[item.variantGroupId] || 0;
+        const pickedUp = statData?.pickedUp?.[item.variantGroupId] || 0;
+        // ✅ [수정] pickedUp도 이미 소진된 재고이므로 빼야 함
+        const currentOccupied = claimed + pickedUp;
         
         const totalStock = group.totalPhysicalStock;
         let availableStock = Infinity;
 
         if (totalStock !== null && totalStock !== -1) {
-          availableStock = totalStock - currentReserved;
+          availableStock = totalStock - currentOccupied;
         }
 
         const stockDeductionAmount = item.stockDeductionAmount || 1;
@@ -1398,8 +1401,22 @@ export const createOrderAsAdmin = onCall(
           // ✅ [변경] 관리자 주문 생성도 칠판(StockStats) 기준 재고 확인
           if (variantGroup.totalPhysicalStock !== null && variantGroup.totalPhysicalStock !== -1) {
             const claimedNow = await getClaimedNow(transaction, item.productId, item.roundId, vgId);
-            const remaining = variantGroup.totalPhysicalStock - claimedNow;
+            const pickedUpNow = await getPickedUpNow(transaction, item.productId, item.roundId, vgId);
+            // ✅ [수정] pickedUp도 이미 소진된 재고이므로 빼야 함
+            const remaining = variantGroup.totalPhysicalStock - claimedNow - pickedUpNow;
             const requiredStock = item.quantity * (item.stockDeductionAmount || 1);
+            
+            if (remaining < 0) {
+              logger.error("[createOrderAsAdmin] stockStats inconsistency (remaining < 0)", {
+                productId: item.productId,
+                roundId: item.roundId,
+                vgId,
+                totalPhysicalStock: variantGroup.totalPhysicalStock,
+                claimedNow,
+                pickedUpNow,
+              });
+              throw new HttpsError("failed-precondition", "재고 데이터가 손상되어 주문할 수 없습니다. 관리자에게 문의해주세요.");
+            }
             
             if (requiredStock > remaining) {
               throw new HttpsError('resource-exhausted', `상품 재고가 부족합니다. (남은 수량: ${Math.max(0, Math.floor(remaining / (item.stockDeductionAmount || 1)))})`);
@@ -1784,6 +1801,202 @@ export const markOrderAsNoShow = onCall(
       logger.error(`Error marking order ${orderId} as NO_SHOW:`, error);
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", "노쇼 처리 중 오류가 발생했습니다.");
+    }
+  }
+);
+
+// =================================================================
+// ✅ [신규] 초과 예약된 주문 찾기 및 취소
+// =================================================================
+export const findAndCancelOversoldOrders = onCall(
+  { region: "asia-northeast3", cors: allowedOrigins, memory: "1GiB", timeoutSeconds: 540 },
+  async (request) => {
+    const role = request.auth?.token?.role;
+    if (!role || !["admin", "master"].includes(role)) {
+      throw new HttpsError("permission-denied", "관리자 권한이 필요합니다.");
+    }
+
+    const { productId, roundId, variantGroupId, autoCancel = false } = (request.data || {}) as {
+      productId?: string;
+      roundId?: string;
+      variantGroupId?: string;
+      autoCancel?: boolean;
+    };
+
+    try {
+      // 1. 모든 RESERVED/PREPAID 주문 조회
+      const ordersQuery = db.collection("orders")
+        .where("status", "in", ["RESERVED", "PREPAID"])
+        .orderBy("createdAt", "asc");
+      
+      const ordersSnapshot = await ordersQuery.get();
+      
+      // 2. 상품별/회차별/옵션별로 주문 그룹화
+      type OrderGroup = {
+        productId: string;
+        roundId: string;
+        variantGroupId: string;
+        orders: Array<{ orderId: string; order: Order; deduct: number }>;
+      };
+      
+      const orderGroups = new Map<string, OrderGroup>();
+      
+      for (const doc of ordersSnapshot.docs) {
+        const order = doc.data() as Order;
+        if (!order.items || order.items.length === 0) continue;
+        
+        for (const item of order.items) {
+          // 필터링: 특정 상품/회차/옵션만 조회하는 경우
+          if (productId && item.productId !== productId) continue;
+          if (roundId && item.roundId !== roundId) continue;
+          if (variantGroupId && item.variantGroupId !== variantGroupId) continue;
+          
+          const key = `${item.productId}__${item.roundId}__${item.variantGroupId}`;
+          const deduct = itemDeduct(item);
+          if (deduct <= 0) continue;
+          
+          if (!orderGroups.has(key)) {
+            orderGroups.set(key, {
+              productId: item.productId,
+              roundId: item.roundId,
+              variantGroupId: item.variantGroupId,
+              orders: [],
+            });
+          }
+          
+          orderGroups.get(key)!.orders.push({
+            orderId: doc.id,
+            order,
+            deduct,
+          });
+        }
+      }
+      
+      // 3. 각 그룹별로 재고 확인 및 초과 예약 찾기
+      const oversoldOrders: Array<{
+        orderId: string;
+        productId: string;
+        roundId: string;
+        variantGroupId: string;
+        deduct: number;
+        reason: string;
+      }> = [];
+      
+      for (const [key, group] of orderGroups.entries()) {
+        // 상품 정보 조회
+        const productRef = db.collection("products").doc(group.productId);
+        const productSnap = await productRef.get();
+        if (!productSnap.exists) continue;
+        
+        const product = productSnap.data() as Product;
+        const round = product.salesHistory?.find(r => r.roundId === group.roundId);
+        if (!round) continue;
+        
+        const vg = round.variantGroups?.find(v => v.id === group.variantGroupId);
+        if (!vg) continue;
+        
+        const totalStock = getTotalStockForVariantGroup(product as any, group.roundId, group.variantGroupId);
+        if (typeof totalStock !== "number" || totalStock === -1) continue; // 무제한 재고는 스킵
+        
+        // StockStats 조회
+        const statKey = statDocId(group.productId, group.roundId);
+        const statRef = db.collection(STOCK_STATS_COL).doc(statKey);
+        const statSnap = await statRef.get();
+        const stat = statSnap.exists ? statSnap.data() : {};
+        
+        const vgId = group.variantGroupId || "default";
+        const claimed = typeof stat?.claimed?.[vgId] === "number" ? stat.claimed[vgId] : 0;
+        const pickedUp = typeof stat?.pickedUp?.[vgId] === "number" ? stat.pickedUp[vgId] : 0;
+        const totalOccupied = claimed + pickedUp;
+        
+        // 초과 예약 확인
+        if (totalOccupied > totalStock) {
+          const oversoldAmount = totalOccupied - totalStock;
+          
+          // 주문을 생성 시간순으로 정렬 (나중에 생성된 주문이 초과분)
+          const sortedOrders = [...group.orders].sort((a, b) => {
+            const timeA = (a.order.createdAt as any)?.toMillis?.() || 0;
+            const timeB = (b.order.createdAt as any)?.toMillis?.() || 0;
+            return timeB - timeA; // 최신순
+          });
+          
+          // 초과분만큼 주문 취소 대상으로 표시
+          let remainingOversold = oversoldAmount;
+          for (const { orderId, deduct } of sortedOrders) {
+            if (remainingOversold <= 0) break;
+            
+            oversoldOrders.push({
+              orderId,
+              productId: group.productId,
+              roundId: group.roundId,
+              variantGroupId: group.variantGroupId,
+              deduct: Math.min(deduct, remainingOversold),
+              reason: `재고 초과: 총 재고 ${totalStock}, 예약 ${totalOccupied} (초과 ${oversoldAmount})`,
+            });
+            
+            remainingOversold -= deduct;
+          }
+        }
+      }
+      
+      // 4. 자동 취소 옵션이 켜져 있으면 취소 실행
+      let canceledCount = 0;
+      if (autoCancel && oversoldOrders.length > 0) {
+        const orderIdsToCancel = [...new Set(oversoldOrders.map(o => o.orderId))];
+        
+        for (const orderId of orderIdsToCancel) {
+          try {
+            const orderRef = db.collection("orders").withConverter(orderConverter).doc(orderId);
+            await db.runTransaction(async (tx) => {
+              const orderSnap = await tx.get(orderRef);
+              if (!orderSnap.exists) return;
+              
+              const order = orderSnap.data();
+              if (!order) return;
+              
+              // RESERVED/PREPAID 상태만 취소
+              if (order.status !== "RESERVED" && order.status !== "PREPAID") return;
+              
+              // claimed 해제
+              for (const it of order.items || []) {
+                const vgId = it.variantGroupId || "default";
+                const deduct = itemDeduct(it);
+                if (deduct > 0) {
+                  applyClaimedDelta(tx, it.productId, it.roundId, vgId, -deduct);
+                }
+              }
+              
+              // 주문 취소 처리
+              tx.update(orderRef, {
+                status: "CANCELED",
+                canceledAt: AdminTimestamp.now(),
+                notes: order.notes
+                  ? `${order.notes}\n[자동 취소] 재고 초과로 인한 자동 취소 처리되었습니다.`
+                  : "[자동 취소] 재고 초과로 인한 자동 취소 처리되었습니다.",
+                stockStatsV1Managed: true as any,
+              });
+            });
+            
+            canceledCount++;
+          } catch (error: any) {
+            logger.error(`[findAndCancelOversoldOrders] 취소 실패: orderId=${orderId}`, error);
+          }
+        }
+      }
+      
+      return {
+        success: true,
+        oversoldCount: oversoldOrders.length,
+        uniqueOrderCount: new Set(oversoldOrders.map(o => o.orderId)).size,
+        canceledCount,
+        oversoldOrders: oversoldOrders.slice(0, 100), // 최대 100개만 반환
+        message: autoCancel
+          ? `${oversoldOrders.length}개의 초과 예약 항목 중 ${canceledCount}개 주문이 자동 취소되었습니다.`
+          : `${oversoldOrders.length}개의 초과 예약 항목이 발견되었습니다.`,
+      };
+    } catch (e: any) {
+      logger.error("findAndCancelOversoldOrders failed", e);
+      throw new HttpsError("internal", `초과 예약 확인 중 오류가 발생했습니다: ${e.message}`);
     }
   }
 );
