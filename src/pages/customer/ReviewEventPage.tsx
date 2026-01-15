@@ -20,6 +20,18 @@ const normalizeEventMonth = (value: unknown): string | undefined => {
   return fallback.isValid() ? fallback.format('YYYY-MM') : undefined;
 };
 
+/**
+ * 고객 페이지에서 이름을 마스킹하여 표시
+ * 예: "고정원" → "고**님"
+ */
+const maskUserName = (name: string | null | undefined): string => {
+  if (!name || name === '익명') return '익명';
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return '익명';
+  if (trimmed.length === 1) return `${trimmed}**님`;
+  return `${trimmed[0]}**님`;
+};
+
 const toDateSafe = (value: any): Date | null => {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -52,7 +64,12 @@ const computeTopReviewers = (reviews: Review[]): ReviewStats['topReviewers'] => 
   });
 
   return Array.from(reviewerMap.entries())
-    .map(([key, v]) => ({ key, ...v }))
+    .map(([key, v]) => ({ 
+      key, 
+      ...v, 
+      // 고객 페이지에서는 마스킹된 이름 사용
+      name: maskUserName(v.name)
+    }))
     .sort((a, b) => b.reviewCount - a.reviewCount)
     .slice(0, 10);
 };
@@ -269,7 +286,7 @@ const ReviewEventPage: React.FC = () => {
                   <div className="photo-tile-overlay">
                     <div className="photo-tile-top">
                       <span className="photo-tile-author">
-                        {review.userName || review.userNickname || '익명'}님
+                        {maskUserName(review.userName || review.userNickname)}
                         {review.phoneLast4 && ` (${review.phoneLast4})`}
                       </span>
                     </div>
@@ -299,7 +316,7 @@ const ReviewEventPage: React.FC = () => {
                   {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                 </div>
                 <div className="rank-info">
-                  <div className="rank-name">{reviewer.name}님</div>
+                  <div className="rank-name">{reviewer.name}</div>
                   <div className="rank-details">
                     <span>{reviewer.reviewCount}개 리뷰</span>
                   </div>
@@ -350,7 +367,7 @@ const ReviewEventPage: React.FC = () => {
                     <div className="review-header">
                       <div className="review-author">
                         <span className="author-name">
-                          {review.userName || review.userNickname || '익명'}님
+                          {maskUserName(review.userName || review.userNickname)}
                           {review.phoneLast4 && ` (${review.phoneLast4})`}
                         </span>
                       </div>
@@ -405,7 +422,7 @@ const ReviewEventPage: React.FC = () => {
                   <div className="review-header">
                     <div className="review-author">
                       <span className="author-name">
-                        {review.userName || review.userNickname || '익명'}
+                        {maskUserName(review.userName || review.userNickname)}
                         {review.phoneLast4 && ` (${review.phoneLast4})`}
                       </span>
                       {review.isFeatured && <span className="featured-badge">⭐ 베스트</span>}
@@ -486,7 +503,7 @@ const ReviewEventPage: React.FC = () => {
             <div className={`lightbox-header ${isTransitioning ? 'transitioning' : ''}`}>
               <div className="lightbox-author">
                 <span className="lightbox-author-name">
-                  {currentReview.userName || currentReview.userNickname || '익명'}님
+                  {maskUserName(currentReview.userName || currentReview.userNickname)}
                   {currentReview.phoneLast4 && ` (${currentReview.phoneLast4})`}
                 </span>
                 {currentReview.isFeatured && <span className="featured-badge">⭐ 베스트</span>}

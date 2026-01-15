@@ -432,3 +432,64 @@ export const getPrepaidOrders = async (): Promise<Order[]> => {
   }
 };
 
+/**
+ * @description 초과 예약된 주문을 찾고 선택적으로 자동 취소합니다.
+ * @param options - 검색 옵션 (productId, roundId, variantGroupId, autoCancel)
+ */
+export const findAndCancelOversoldOrders = async (options?: {
+  productId?: string;
+  roundId?: string;
+  variantGroupId?: string;
+  autoCancel?: boolean;
+}): Promise<{
+  success: boolean;
+  oversoldCount: number;
+  uniqueOrderCount: number;
+  canceledCount: number;
+  oversoldOrders: Array<{
+    orderId: string;
+    productId: string;
+    roundId: string;
+    variantGroupId: string;
+    deduct: number;
+    reason: string;
+  }>;
+  message: string;
+}> => {
+  try {
+    const functions = getFunctions(getApp(), 'asia-northeast3');
+    const fn = httpsCallable<
+      {
+        productId?: string;
+        roundId?: string;
+        variantGroupId?: string;
+        autoCancel?: boolean;
+      },
+      {
+        success: boolean;
+        oversoldCount: number;
+        uniqueOrderCount: number;
+        canceledCount: number;
+        oversoldOrders: Array<{
+          orderId: string;
+          productId: string;
+          roundId: string;
+          variantGroupId: string;
+          deduct: number;
+          reason: string;
+        }>;
+        message: string;
+      }
+    >(functions, 'findAndCancelOversoldOrders');
+    
+    const result = await fn(options || {});
+    return result.data;
+  } catch (error: any) {
+    console.error("Callable function 'findAndCancelOversoldOrders' failed:", error);
+    if (error.code && error.message) {
+      const message = (error.details as any)?.message || error.message;
+      throw new Error(message);
+    }
+    throw new Error('초과 예약 확인 중 예상치 못한 오류가 발생했습니다.');
+  }
+};

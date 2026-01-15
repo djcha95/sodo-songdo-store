@@ -18,11 +18,12 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import type { Review, ReviewStats } from '@/shared/types';
+import type { Review, ReviewStats, UserDocument } from '@/shared/types';
 import { uploadImages } from './generalService';
 import dayjs from 'dayjs';
 
 const reviewsCollectionRef = collection(db, 'reviews');
+const usersCollectionRef = collection(db, 'users');
 
 const normalizeEventMonth = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -39,15 +40,54 @@ const normalizeEventMonth = (value: unknown): string | undefined => {
 };
 
 /**
+ * 리뷰 배열에 phoneLast4를 보완하는 헬퍼 함수
+ */
+const enrichReviewsWithPhoneLast4 = async (reviews: Review[]): Promise<Review[]> => {
+  // phoneLast4가 없는 리뷰 중 userId가 있는 것들만 필터링
+  const reviewsNeedingPhone = reviews.filter(
+    (r) => r.userId && !r.phoneLast4
+  );
+
+  if (reviewsNeedingPhone.length === 0) return reviews;
+
+  // 사용자 정보를 병렬로 조회
+  const userPhoneMap = new Map<string, string | undefined>();
+  await Promise.all(
+    reviewsNeedingPhone.map(async (review) => {
+      if (review.userId && !userPhoneMap.has(review.userId)) {
+        const phoneLast4 = await getUserPhoneLast4(review.userId);
+        if (phoneLast4) {
+          userPhoneMap.set(review.userId, phoneLast4);
+        }
+      }
+    })
+  );
+
+  // phoneLast4 보완
+  return reviews.map((review) => {
+    if (review.userId && !review.phoneLast4 && userPhoneMap.has(review.userId)) {
+      return {
+        ...review,
+        phoneLast4: userPhoneMap.get(review.userId),
+      };
+    }
+    return review;
+  });
+};
+
+/**
  * 홈/리스트에서 보여줄 최신 리뷰
  */
 export const getRecentReviews = async (limitCount: number = 20): Promise<Review[]> => {
   const q = query(reviewsCollectionRef, orderBy('createdAt', 'desc'), limit(limitCount));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  const reviews = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Review[];
+  
+  // phoneLast4 보완
+  return await enrichReviewsWithPhoneLast4(reviews);
 };
 
 /**
@@ -67,10 +107,30 @@ export const getReviewsByUserId = async (userId: string): Promise<Review[]> => {
   if (!userId) return [];
   const q = query(reviewsCollectionRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  const reviews = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Review[];
+  
+  // phoneLast4 보완
+  return await enrichReviewsWithPhoneLast4(reviews);
+};
+
+/**
+ * userId로부터 phoneLast4를 조회하는 헬퍼 함수
+ */
+const getUserPhoneLast4 = async (userId: string | undefined): Promise<string | undefined> => {
+  if (!userId) return undefined;
+  try {
+    const userDoc = await getDoc(doc(usersCollectionRef, userId));
+    if (userDoc.exists()) {
+      const userData = userDoc.data() as UserDocument;
+      return userData.phoneLast4;
+    }
+  } catch (error) {
+    console.warn('사용자 정보 조회 실패:', error);
+  }
+  return undefined;
 };
 
 /**
@@ -96,6 +156,14 @@ export const addReview = async (
       cleanReviewData[key] = value;
     }
   });
+
+  // ✅ userId가 있지만 phoneLast4가 없으면 사용자 정보에서 가져오기
+  if (cleanReviewData.userId && !cleanReviewData.phoneLast4) {
+    const phoneLast4 = await getUserPhoneLast4(cleanReviewData.userId);
+    if (phoneLast4) {
+      cleanReviewData.phoneLast4 = phoneLast4;
+    }
+  }
 
   // ✅ eventMonth 정규화 (포맷 불일치로 고객 페이지에서 필터링 누락되는 문제 방지)
   const normalizedEventMonth = normalizeEventMonth(cleanReviewData.eventMonth) || dayjs().format('YYYY-MM');
@@ -195,10 +263,13 @@ export const getReviewsByProduct = async (
   }
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  const reviews = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Review[];
+  
+  // phoneLast4 보완
+  return await enrichReviewsWithPhoneLast4(reviews);
 };
 
 /**
@@ -207,10 +278,13 @@ export const getReviewsByProduct = async (
 export const getAllReviews = async (): Promise<Review[]> => {
   const q = query(reviewsCollectionRef, orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  const reviews = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Review[];
+  
+  // phoneLast4 보완
+  return await enrichReviewsWithPhoneLast4(reviews);
 };
 
 /**
@@ -224,10 +298,13 @@ export const getFeaturedReviews = async (limitCount: number = 10): Promise<Revie
     limit(limitCount)
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  const reviews = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Review[];
+  
+  // phoneLast4 보완
+  return await enrichReviewsWithPhoneLast4(reviews);
 };
 
 /**
@@ -240,10 +317,13 @@ export const getReviewsByEventMonth = async (eventMonth: string): Promise<Review
     orderBy('createdAt', 'desc')
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  const reviews = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Review[];
+  
+  // phoneLast4 보완
+  return await enrichReviewsWithPhoneLast4(reviews);
 };
 
 /**

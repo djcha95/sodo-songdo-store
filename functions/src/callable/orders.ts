@@ -1064,7 +1064,30 @@ export const cancelOrder = onCall(
             const vgId = it.variantGroupId || "default";
             const deduct = itemDeduct(it);
             if (deduct > 0) {
-              applyClaimedDelta(transaction, it.productId, it.roundId, vgId, -deduct);
+              // ✅ [수정] submitOrder와 동일하게 트랜잭션 내에서 직접 값을 계산해서 업데이트
+              const statRef = db.collection(STOCK_STATS_COL).doc(statDocId(it.productId, it.roundId));
+              const statSnap = await transaction.get(statRef);
+              const statData = statSnap.exists ? (statSnap.data() as any) : {};
+              
+              const claimedNow = typeof statData?.claimed?.[vgId] === "number" ? statData.claimed[vgId] : 0;
+              const newClaimed = Math.max(0, claimedNow - deduct); // 음수 방지
+              
+              logger.info(`[cancelOrder] stockStats_v1 업데이트: productId=${it.productId}, roundId=${it.roundId}, vgId=${vgId}, claimedNow=${claimedNow}, deduct=${deduct}, newClaimed=${newClaimed}`);
+              
+              transaction.set(
+                statRef,
+                {
+                  productId: it.productId,
+                  roundId: it.roundId,
+                  updatedAt: AdminTimestamp.now(),
+                  claimed: {
+                    ...(statData.claimed || {}),
+                    [vgId]: newClaimed,
+                  },
+                  pickedUp: statData.pickedUp || {},
+                } as any,
+                { merge: true }
+              );
             }
           }
         }
