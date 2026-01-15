@@ -526,10 +526,16 @@ let productsCfCache:
   | null = null;
 
 // 🔁 예약수량 Map 캐시 (같은 세션에서 여러 번 재사용)
-const RESERVED_CACHE_TTL_MS = 30_000; // 30초 정도 유지
+// ✅ [수정] 캐시 TTL을 5초로 줄여서 주문 후 즉시 반영되도록 개선
+const RESERVED_CACHE_TTL_MS = 5_000; // 5초로 단축 (기존 30초)
 let reservedOverlayCache:
   | { map: Map<string, number>; fetchedAt: number }
   | null = null;
+
+// ✅ [추가] 캐시 무효화 함수 (주문 후 호출)
+export const invalidateReservedCache = () => {
+  reservedOverlayCache = null;
+};
 
 const getReservedQuantitiesMapCached = async (): Promise<Map<string, number>> => {
   if (
@@ -679,6 +685,9 @@ export const getProductsWithStock = async (
       throw new Error('DB 인덱스가 필요합니다. 콘솔(F12)의 링크를 클릭하여 생성해주세요.');
     }
 
+    // ✅ [수정] fallback에서는 withReservedOverlay를 false로 설정
+    // getReservedQuantitiesMap은 orders 컬렉션을 직접 읽어서 eventual consistency 문제가 있음
+    // 서버의 stockStats_v1을 사용하는 것이 정확하므로, fallback에서는 오버레이를 끔
     return getProductsWithStockFirestoreFallback({
       pageSize,
       lastVisible: null,

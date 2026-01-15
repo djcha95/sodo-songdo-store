@@ -124,10 +124,12 @@ const usePaginatedOrders = (uid?: string) => {
 
         // ✅ [핵심 수정 1] 쿼리에서 'pickupDate' 정렬을 제거했습니다.
         // 이제 pickupDate가 없는 예전 데이터도 필터링되지 않고 모두 가져옵니다.
+        // ✅ [개선] 초기 로딩 시 더 많은 항목을 가져와서 사용자가 더 많은 내역을 볼 수 있도록 함
+        const pageSize = isInitial ? 30 : 20; // 초기: 30개, 더보기: 20개씩
         const queryConstraints: QueryConstraint[] = [
           where("userId", "==", uid),
           orderBy("createdAt", "desc"), // 생성일 기준 정렬만 유지
-          limit(10),
+          limit(pageSize),
         ];
 
         // ✅ [변경] 커서도 createdAt 하나만 사용합니다.
@@ -185,8 +187,8 @@ const usePaginatedOrders = (uid?: string) => {
           setHasMore(false);
         }
 
-        // 10개 미만이면 더 이상 데이터 없음
-        if (newOrders.length < 10) setHasMore(false);
+        // 페이지 크기보다 적게 가져왔으면 더 이상 데이터 없음
+        if (newOrders.length < pageSize) setHasMore(false);
 
       } catch (error: any) {
         console.error("Order fetching error:", error);
@@ -486,19 +488,38 @@ const OrderHistoryPage: React.FC = () => {
     
     return (
       <div className="orders-list">
+        {/* ✅ [추가] 초기 로딩 시 안내 메시지 */}
+        {loading && orders.length === 0 && (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '24px', 
+            color: '#6b7280',
+            fontSize: '14px'
+          }}>
+            <SodomallLoader />
+            <div style={{ marginTop: '12px' }}>예약 내역을 불러오는 중...</div>
+          </div>
+        )}
+        
         {/* ✅ 과거(취소/노쇼) 내역 토글 */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '6px 0 12px' }}>
-          <button
-            type="button"
-            className="common-button button-secondary button-small"
-            onClick={() => setShowHiddenOrders((v) => !v)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            title="취소/노쇼 내역까지 포함해서 볼지 선택합니다."
-          >
-            <Info size={14} />
-            <span>{showHiddenOrders ? '취소/노쇼 숨기기' : '취소/노쇼 포함 보기'}</span>
-          </button>
-        </div>
+        {!loading && Object.keys(groupedOrders).length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0 16px' }}>
+            <div style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Info size={14} />
+              <span>총 {orders.filter(o => !isHiddenStatus(o.status as OrderStatus) || showHiddenOrders).length}개의 예약 내역</span>
+            </div>
+            <button
+              type="button"
+              className="common-button button-secondary button-small"
+              onClick={() => setShowHiddenOrders((v) => !v)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              title="취소/노쇼 내역까지 포함해서 볼지 선택합니다."
+            >
+              <Info size={14} />
+              <span>{showHiddenOrders ? '취소/노쇼 숨기기' : '취소/노쇼 포함 보기'}</span>
+            </button>
+          </div>
+        )}
         <AnimatePresence>
           {sortedDates.map((dateStr, index) => (
             <motion.div key={dateStr} layout>
@@ -526,21 +547,42 @@ const OrderHistoryPage: React.FC = () => {
           ))}
         </AnimatePresence>
 
-        {/* ✅ [추가] 더보기 버튼 (수동 로딩) */}
+        {/* ✅ [개선] 더보기 버튼 (더 눈에 띄게 개선) */}
         {hasMore && (
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0 40px' }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            margin: '32px 0 40px',
+            padding: '20px 0',
+            borderTop: '1px solid #e5e7eb'
+          }}>
             <button 
               onClick={loadMore} 
               disabled={loadingMore}
-              className="common-button button-secondary"
-              style={{ width: '100%', maxWidth: '300px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              className="common-button button-primary"
+              style={{ 
+                width: '100%', 
+                maxWidth: '400px', 
+                padding: '14px 24px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '8px',
+                fontSize: '15px',
+                fontWeight: '600',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s ease'
+              }}
             >
               {loadingMore ? (
-                <span>로딩 중...</span>
+                <>
+                  <SodomallLoader size={20} />
+                  <span>지난 내역 불러오는 중...</span>
+                </>
               ) : (
                 <>
-                  <ChevronDown size={18} />
-                  <span>지난 내역 더보기</span>
+                  <ChevronDown size={20} />
+                  <span>지난 예약 내역 더 보기</span>
                 </>
               )}
             </button>
@@ -560,7 +602,19 @@ const OrderHistoryPage: React.FC = () => {
           </motion.div>
         </AnimatePresence>
 
-        {!hasMore && Object.keys(groupedOrders).length > 0 && <div className="end-of-list-message">모든 내역을 불러왔습니다.</div>}
+        {!hasMore && Object.keys(groupedOrders).length > 0 && (
+          <div className="end-of-list-message" style={{
+            textAlign: 'center',
+            padding: '20px',
+            color: '#6b7280',
+            fontSize: '14px',
+            borderTop: '1px solid #e5e7eb',
+            marginTop: '20px'
+          }}>
+            <PackageCheck size={20} style={{ marginBottom: '8px', opacity: 0.6 }} />
+            <div>모든 예약 내역을 불러왔습니다.</div>
+          </div>
+        )}
         
         <AnimatePresence>
           {selectedOrderKeys.size > 0 && (

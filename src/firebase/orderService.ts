@@ -63,6 +63,16 @@ export const submitOrder = async (
     });
 
     const data = result.data;
+    
+    // ✅ [추가] 주문 성공 후 예약 수량 캐시 무효화 (즉시 반영을 위해)
+    try {
+      const { invalidateReservedCache } = await import('./productService');
+      invalidateReservedCache();
+    } catch (e) {
+      // 캐시 무효화 실패는 치명적이지 않으므로 로그만 남김
+      console.warn('[submitOrder] 캐시 무효화 실패:', e);
+    }
+    
     return {
       orderId: data.orderIds?.[0],
       orderIds: data.orderIds,
@@ -97,6 +107,15 @@ export const cancelOrder = async (
       orderId: orderId, 
       penaltyType: options.penaltyType 
     });
+    
+    // ✅ [추가] 주문 취소 후 예약 수량 캐시 무효화 (즉시 반영을 위해)
+    try {
+      const { invalidateReservedCache } = await import('./productService');
+      invalidateReservedCache();
+    } catch (e) {
+      // 캐시 무효화 실패는 치명적이지 않으므로 로그만 남김
+      console.warn('[cancelOrder] 캐시 무효화 실패:', e);
+    }
     
     return result.data;
   
@@ -492,4 +511,4 @@ export const findAndCancelOversoldOrders = async (options?: {
     }
     throw new Error('초과 예약 확인 중 예상치 못한 오류가 발생했습니다.');
   }
-};
+}
