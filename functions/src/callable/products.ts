@@ -165,7 +165,14 @@ export const updateProductCoreInfo = onCall(
     }
     try {
       const productRef = db.collection("products").doc(productId);
-      const dataToUpdate = { ...productData, imageUrls: finalImageUrls };
+      
+      // ✅ finalImageUrls가 제공되지 않으면 기존 이미지를 유지
+      let dataToUpdate = { ...productData };
+      if (finalImageUrls !== undefined && finalImageUrls !== null) {
+        dataToUpdate.imageUrls = finalImageUrls;
+      }
+      // finalImageUrls가 undefined/null이면 imageUrls 필드를 업데이트하지 않음 (기존 값 유지)
+      
       await productRef.update(dataToUpdate);
       logger.info(`Product core info updated successfully for product ID: ${productId}`);
       return { success: true, message: "상품 정보가 성공적으로 업데이트되었습니다." };
