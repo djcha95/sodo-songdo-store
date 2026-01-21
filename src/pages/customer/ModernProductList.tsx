@@ -405,21 +405,20 @@ const ModernProductList: React.FC = () => {
   }, [user]);
   useEffect(() => { fetchMyOrders(); }, [fetchMyOrders]);
 
-  // 특수 상품(기획전) 로드 함수 (재시도용으로 분리)
+  // 설날공구 상품 로드 함수 (재시도용으로 분리)
   const fetchSpecialProducts = useCallback(async () => {
     try {
       setHeroError(null);
       const { products: fetched } = await getPaginatedProductsWithStock(300, null, null, 'all');
-      const events = fetched.filter((p) => {
+      const seollalProducts = fetched.filter((p) => {
         const r = getDisplayRound(p);
-        // ✅ [수정] 'PREMIUM'과 'COSMETICS'를 제외 목록에서 삭제하여 기획전 탭에 노출되도록 변경
-        const hasEventTag = r && r.eventType && !['NONE'].includes(r.eventType);
-        return hasEventTag && determineActionState(r, null) !== 'ENDED';
+        // 설날공구 상품만 필터링
+        return r && r.eventType === 'SEOLLAL' && determineActionState(r, null) !== 'ENDED';
       });
-      setHeroProducts(events);
+      setHeroProducts(seollalProducts);
     } catch (e: any) { 
-      console.error('기획전 상품 로드 실패:', e);
-      setHeroError('기획전 상품을 불러오는 중 문제가 발생했습니다.');
+      console.error('설날공구 상품 로드 실패:', e);
+      setHeroError('설날공구 상품을 불러오는 중 문제가 발생했습니다.');
     }
   }, []);
 
@@ -518,7 +517,7 @@ const fetchNextPage = useCallback(async () => {
 
   // --- 데이터 가공 ---
   const processedEventProducts = useMemo(() => {
-    return heroProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any }))
+    const filtered = heroProducts.map(p => ({ ...p, displayRound: getDisplayRound(p) as any }))
       .filter(p => {
         if (!p.displayRound) return false;
         // ✅ 판매 가능 기준(차감 단위 반영)
@@ -526,6 +525,12 @@ const fetchNextPage = useCallback(async () => {
         const purchasable = getRemainingPurchasableCount(vg);
         return purchasable > 0;
       });
+    // ✅ 등록일 기준 오름차순 정렬 (오래된 상품이 먼저)
+    return [...filtered].sort((a, b) => {
+      const dateA = safeToDate(a.displayRound?.createdAt)?.getTime() || 0;
+      const dateB = safeToDate(b.displayRound?.createdAt)?.getTime() || 0;
+      return dateA - dateB; // 오름차순: 작은 값(오래된 것)이 앞에
+    });
   }, [heroProducts]);
 
 
@@ -603,7 +608,13 @@ const fetchNextPage = useCallback(async () => {
     if (activeTab === 'lastchance') return lastChanceProducts;
     if (activeTab === 'seollal') {
       // 설날 공구 상품 필터링: eventType이 SEOLLAL인 상품만 표시
-      return processedNormal.filter(p => p.displayRound?.eventType === 'SEOLLAL');
+      const seollalProducts = processedNormal.filter(p => p.displayRound?.eventType === 'SEOLLAL');
+      // ✅ 등록일 기준 오름차순 정렬 (오래된 상품이 먼저)
+      return [...seollalProducts].sort((a, b) => {
+        const dateA = safeToDate(a.displayRound?.createdAt)?.getTime() || 0;
+        const dateB = safeToDate(b.displayRound?.createdAt)?.getTime() || 0;
+        return dateA - dateB; // 오름차순: 작은 값(오래된 것)이 앞에
+      });
     }
     return processedNormal;
   }, [activeTab, processedNormal, tomorrowPickupProducts, lastChanceProducts]);
@@ -770,20 +781,20 @@ const fetchNextPage = useCallback(async () => {
             </section>
           )}
 
-          {/* ✅ 기획전 상품 리스트 (오늘의 공구 바로 아래로 이동) */}
+          {/* ✅ 설날공구 상품 리스트 (오늘의 공구 바로 아래로 이동) */}
           {processedEventProducts.length > 0 && (
              <section className="sp-section">
                <div className="sp-section-head">
                  <div className="sp-section-left">
-                   <h3 className="sp-section-title">✨ 기획전</h3>
-                   <span className="sp-section-desc">시즌 한정 기획 공동구매</span>
+                   <h3 className="sp-section-title">🧧 설날공구</h3>
+                   <span className="sp-section-desc">설 선물로 딱 좋은 특별한 상품들</span>
                  </div>
-                 <button className="sp-viewall" onClick={() => navigate('/?tab=special')} type="button">전체보기</button>
+                 <button className="sp-viewall" onClick={() => navigate('/seollal')} type="button">전체보기</button>
                </div>
                <DragHScroll>
                  {processedEventProducts.map((p) => (
                    <ModernProductThumbCard 
-                     key={`special-${p.id}`} 
+                     key={`seollal-${p.id}`} 
                      product={p as any} 
                      variant="row" 
                      bestsellerRank={bestSellerRankMap[p.id]}
@@ -817,13 +828,13 @@ const fetchNextPage = useCallback(async () => {
             </section>
           )}
           
-          {/* ✅ 기획전 로드 실패 시 에러 표시 */}
+          {/* ✅ 설날공구 로드 실패 시 에러 표시 */}
           {heroError && processedEventProducts.length === 0 && (
             <section className="sp-section">
               <div className="sp-section-head">
                 <div className="sp-section-left">
-                  <h3 className="sp-section-title">기획전</h3>
-                  <span className="sp-section-desc"> 시즌 한정 기획 공동구매 </span>
+                  <h3 className="sp-section-title">🧧 설날공구</h3>
+                  <span className="sp-section-desc">설 선물로 딱 좋은 특별한 상품들</span>
                 </div>
               </div>
               <div style={{ padding: '40px 20px', textAlign: 'center', color: '#EF4444' }}>
@@ -935,29 +946,7 @@ const fetchNextPage = useCallback(async () => {
     )}
     
     {!error && (
-      activeTab === 'special' ? (
-        processedEventProducts.length > 0 ? (
-          <div className="sp-grid">
-            {processedEventProducts.map((p, idx) => (
-              <ModernProductThumbCard
-                key={`special-${p.id}`}
-                product={p as any}
-                variant="grid"
-                index={idx}
-                bestsellerRank={bestSellerRankMap[p.id]}
-                badgeSeed={badgeSeed}
-              />
-            ))}
-          </div>
-        ) : (
-          !loading && (
-            <div className="sp-empty-view">
-              <Suspense fallback={null}><LazyShoppingBag size={48} strokeWidth={1} /></Suspense>
-              <p>현재 진행 중인 기획전이 없습니다.</p>
-            </div>
-          )
-        )
-      ) : visibleNormalProducts.length > 0 ? (
+      visibleNormalProducts.length > 0 ? (
         <div className="sp-grid">
           {visibleNormalProducts.map((p, idx) => (
             <ModernProductThumbCard

@@ -17,7 +17,6 @@ const ALL_CATEGORIES = [
   { id: 'additional', label: '🔁 추가공구' },
   { id: 'seollal', label: '🧧 설날공구' },
   { id: 'lastchance', label: '⚡ 마지막찬스' },
-  { id: 'special', label: '✨ 기획전' },
   { id: 'reviews', label: '💬 후기' },
   { id: 'onsite', label: '🏢 현장판매' },
 ];
