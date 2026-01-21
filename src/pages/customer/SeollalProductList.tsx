@@ -1,8 +1,6 @@
 // src/pages/customer/SeollalProductList.tsx
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { getPaginatedProductsWithStock } from '@/firebase/productService';
 import { getDisplayRound, determineActionState } from '@/utils/productUtils';
 import ModernProductThumbCard from '@/components/customer/ModernProductThumbCard';
@@ -16,7 +14,6 @@ interface DisplayProduct extends OriginalProduct {
 }
 
 const SeollalProductList: React.FC = () => {
-  const navigate = useNavigate();
   const { userDocument } = useAuth();
   const [products, setProducts] = useState<DisplayProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,22 +57,13 @@ const SeollalProductList: React.FC = () => {
   return (
     <div className="customer-page-container modern-shell seollal-page">
       <div className="modern-inner-shell">
-        {/* 페이지 헤더(내부) */}
-        <header className="seollal-page-header">
-          <button className="back-btn" onClick={() => navigate(-1)}>
-              <ArrowLeft size={22} />
-          </button>
-          <h1 className="header-title">🧧 설날 선물 공구</h1>
-        </header>
-
-        {/* 인트로 섹션 */}
-        <section className="seollal-intro">
-          <h2 className="intro-title">
-            설날 선물 공구
-          </h2>
-          <p className="intro-desc">
-            정성 가득한 설 선물을 만나보세요.
-          </p>
+        {/* 설날 프로모션 배너 */}
+        <section className="seollal-promo-banner">
+          <img 
+            src="/images/events/seollal-promo-2026.jpg" 
+            alt="2026 설날 선물 공구 프로모션"
+            className="seollal-promo-image"
+          />
         </section>
 
         {/* 상품 리스트 */}
