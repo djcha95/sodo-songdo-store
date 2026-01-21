@@ -171,7 +171,7 @@ const Header: React.FC = () => {
                 <Menu size={24} />
               </button>
               <NavLink to="/?tab=home" className="brand-logo">
-                <span className="new-year-decoration">🎉</span> 송도PICK <span className="new-year-decoration">✨</span>
+                <span className="brand-emoji">🧧</span> 송도PICK
               </NavLink>
             </div>
 

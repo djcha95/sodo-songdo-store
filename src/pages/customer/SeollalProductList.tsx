@@ -9,7 +9,7 @@ import ModernProductThumbCard from '@/components/customer/ModernProductThumbCard
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { useAuth } from '@/context/AuthContext';
 import type { Product as OriginalProduct, SalesRound } from '@/shared/types';
-import './BeautyProductList.css'; // 같은 스타일 재사용
+import './SeollalProductList.css'; // 설날 전용 스타일
 
 interface DisplayProduct extends OriginalProduct {
   displayRound: SalesRound;
@@ -58,10 +58,10 @@ const SeollalProductList: React.FC = () => {
   if (loading) return <SodomallLoader />;
 
   return (
-    <div className="customer-page-container modern-shell beauty-page">
+    <div className="customer-page-container modern-shell seollal-page">
       <div className="modern-inner-shell">
         {/* 페이지 헤더(내부) */}
-        <header className="beauty-page-header">
+        <header className="seollal-page-header">
           <button className="back-btn" onClick={() => navigate(-1)}>
               <ArrowLeft size={22} />
           </button>
@@ -69,18 +69,17 @@ const SeollalProductList: React.FC = () => {
         </header>
 
         {/* 인트로 섹션 */}
-        <section className="beauty-intro">
+        <section className="seollal-intro">
           <h2 className="intro-title">
-            2026 설날,<br/>마음을 전하는 특별한 선물
+            설날 선물 공구
           </h2>
           <p className="intro-desc">
-            한 해의 시작을 더욱 의미 있게 만들어 줄<br/>
-            정성 가득한 설 선물 세트를 만나보세요.
+            정성 가득한 설 선물을 만나보세요.
           </p>
         </section>
 
         {/* 상품 리스트 */}
-        <div className="songdo-product-list beauty-list-grid">
+        <div className="seollal-product-list">
         {products.length > 0 ? (
           products.map((p, idx) => (
             <ModernProductThumbCard
@@ -91,8 +90,8 @@ const SeollalProductList: React.FC = () => {
             />
           ))
         ) : (
-          <div className="beauty-coming-soon-card">
-            <p className="main-text">🧧 설날 상품 준비 중</p>
+          <div className="seollal-coming-soon-card">
+            <p className="main-text">설날 상품 준비 중</p>
             <p className="sub-text">
               설날 특별 상품을 준비하고 있습니다.<br/>
               곧 만나보실 수 있습니다.

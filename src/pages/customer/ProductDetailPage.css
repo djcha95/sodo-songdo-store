@@ -137,6 +137,8 @@
 
 .product-info-area {
   padding: 1rem 1.25rem 1.5rem 1.25rem; /* 상단 패딩 살짝 줄임 */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .product-header-content {
@@ -144,6 +146,8 @@
   display: flex;
   flex-direction: column;
   align-items: center; /* 중앙 정렬 */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ✅ 상품 마케팅 뱃지(초특가/신상품/인기상품/추천 등) */
@@ -215,8 +219,14 @@
   line-height: 1.35;
   color: #222;
   
-
-  word-break: keep-all;
+  width: 100%;
+  max-width: 100%; /* 최대 너비 제한 */
+  white-space: nowrap; /* 한 줄로 표시 */
+  overflow: hidden; /* 넘치는 텍스트 숨김 */
+  text-overflow: ellipsis; /* 말줄임표(...) 표시 */
+  padding: 0; /* 패딩 제거하여 공간 최대 활용 */
+  box-sizing: border-box;
+  word-break: normal; /* 단어 단위로 줄바꿈 */
 }
 
 /* ✅ [최종 재수정] 마크다운 콘텐츠 스타일 (단일 엔터 줄바꿈 활성화 + 간격 최적화) */
@@ -1227,6 +1237,64 @@
   border-top: 2px solid #ef4444; /* 상단에 빨간 포인트 라인 */
 }
 
+
+/* =========================================
+   🧧 THEME: SEOLLAL (설날)
+   ========================================= */
+.product-detail-modal-content.theme-seollal {
+  /* 설날 느낌의 따뜻한 빨간/핑크 그라데이션 */
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFF1F1 50%, #FFEBEB 100%);
+  border: 1px solid #FFE4E1;
+}
+
+/* 설날 뱃지 */
+.theme-banner-badge.seollal {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+}
+
+.theme-seollal .theme-decoration-bar {
+  color: #DC2626; /* 진한 빨강 */
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: -0.5px;
+  border-bottom: 1px dashed #FFE4E1;
+}
+
+.theme-seollal .theme-decoration-bar .deco-icon {
+  font-size: 1.2rem;
+}
+
+/* 설날 키 인포 박스 */
+.theme-seollal .product-key-info {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-color: #FFE4E1;
+}
+
+/* 구매 버튼 (설날) */
+.theme-seollal .add-to-cart-btn-fixed {
+  background: linear-gradient(to right, #EF4444, #DC2626) !important;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+  border: none;
+}
+.theme-seollal .add-to-cart-btn-fixed:hover {
+  background: linear-gradient(to right, #DC2626, #B91C1C) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+}
+
+/* 푸터 */
+.theme-seollal .product-purchase-footer {
+  background-color: rgba(255, 250, 248, 0.95);
+  border-top: 2px solid #EF4444; /* 상단에 빨간 포인트 라인 */
+}
+
+/* 설날 상품명 강조 */
+.theme-seollal .product-name {
+  color: #1F2937;
+  text-shadow: 0 2px 10px rgba(239, 68, 68, 0.1);
+}
 
 /* =========================================
    🎁 THEME: SPECIAL (기획전/이벤트)

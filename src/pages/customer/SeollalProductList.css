@@ -1,0 +1,195 @@
+/* src/pages/customer/SeollalProductList.css */
+
+/* 설날 페이지 전체 컨테이너: 따뜻한 빨강-크림 그라데이션 배경 */
+.customer-page-container.seollal-page {
+  padding-bottom: 80px;
+  background: linear-gradient(180deg, #FFF7ED 0%, #FFF1F1 40%, #FFEBEB 100%);
+  min-height: 100vh;
+  position: relative;
+}
+
+.customer-page-container.seollal-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 10%, rgba(220, 20, 60, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 90%, rgba(255, 215, 0, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.customer-page-container.seollal-page .modern-inner-shell {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border-radius: 0;
+}
+
+/* 헤더 영역 - 설날 테마 */
+.seollal-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #DC143C 0%, #C8102E 100%);
+  border-bottom: 2px solid #FFD700;
+  box-shadow: 0 4px 20px rgba(220, 20, 60, 0.2);
+}
+
+.seollal-page-header .back-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.seollal-page-header .back-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.seollal-page-header .header-title {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 설날 인트로 섹션 - 특별한 디자인 */
+.seollal-intro {
+  padding: 30px 20px 24px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #fff 0%, #FFF7ED 100%);
+  border-bottom: 2px solid #DC143C;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.seollal-intro::before {
+  content: '🧧';
+  position: absolute;
+  top: -20px;
+  right: 20px;
+  font-size: 80px;
+  opacity: 0.1;
+  transform: rotate(-15deg);
+}
+
+.seollal-intro::after {
+  content: '🧧';
+  position: absolute;
+  bottom: -30px;
+  left: 10px;
+  font-size: 60px;
+  opacity: 0.1;
+  transform: rotate(15deg);
+}
+
+.seollal-intro .intro-title {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #DC143C 0%, #C8102E 50%, #FF6B6B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  position: relative;
+  z-index: 1;
+}
+
+.seollal-intro .intro-desc {
+  font-family: 'Pretendard', sans-serif;
+  font-size: 14px;
+  color: #8B4513;
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: 85%;
+  font-weight: 400;
+  position: relative;
+  z-index: 1;
+}
+
+/* 설날 상품 리스트 그리드 */
+.seollal-product-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  padding: 24px 20px;
+}
+
+/* 데스크탑 최적화 */
+@media (min-width: 768px) {
+  .seollal-product-list {
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 1200px;
+    margin: 0 auto;
+    gap: 24px;
+    padding: 32px 24px;
+  }
+  
+  .seollal-intro {
+    padding: 40px 24px 32px;
+  }
+  
+  .seollal-intro .intro-title {
+    font-size: 28px;
+  }
+}
+
+/* Coming Soon 카드 - 설날 테마 */
+.seollal-coming-soon-card {
+  grid-column: 1 / -1;
+  width: 100%;
+  text-align: center;
+  padding: 80px 20px;
+  background: linear-gradient(135deg, #fff 0%, #FFF7ED 100%);
+  border-radius: 16px;
+  margin: 20px 0;
+  box-shadow: 0 10px 40px rgba(220, 20, 60, 0.1);
+  border: 2px dashed #DC143C;
+  position: relative;
+}
+
+.seollal-coming-soon-card::before {
+  content: '🧧';
+  font-size: 60px;
+  display: block;
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+.seollal-coming-soon-card .main-text {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 26px;
+  margin-bottom: 16px;
+  font-weight: 700;
+  color: #DC143C;
+}
+
+.seollal-coming-soon-card .sub-text {
+  font-size: 16px;
+  color: #8B4513;
+  line-height: 1.8;
+  margin-bottom: 0;
+}

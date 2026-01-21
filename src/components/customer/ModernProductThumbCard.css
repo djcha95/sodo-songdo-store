@@ -297,3 +297,102 @@
   letter-spacing: 1px;
   opacity: 0.6;
 }
+
+/* 🧧 설날 특선 카드 스타일 */
+.sp-thumb-card.seollal {
+  border: 2px solid #DC143C;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FFF7ED 50%, #FFF1F1 100%);
+  box-shadow: 0 8px 24px rgba(220, 20, 60, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.sp-thumb-card.seollal::before {
+  content: '🧧';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 24px;
+  opacity: 0.15;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sp-thumb-card.seollal:hover {
+  border-color: #C8102E;
+  box-shadow: 0 12px 32px rgba(220, 20, 60, 0.25);
+  transform: translateY(-3px);
+}
+
+/* 설날 카드 상단 장식선 */
+.sp-thumb-card.seollal::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #DC143C 0%, #FFD700 50%, #DC143C 100%);
+  z-index: 1;
+}
+
+/* 설날 카드 순번 뱃지 */
+.sp-thumb-card.seollal .sp-thumb-index {
+  background: linear-gradient(135deg, #DC143C 0%, #C8102E 100%);
+  box-shadow: 2px 2px 8px rgba(220, 20, 60, 0.4);
+  border: 1.5px solid #FFD700;
+}
+
+/* 설날 카드 상품명 */
+.sp-thumb-card.seollal .sp-thumb-title {
+  color: #8B0000;
+  font-family: 'Noto Serif KR', serif;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+}
+
+/* 설날 카드 가격 강조 */
+.sp-thumb-card.seollal .sp-thumb-price {
+  color: #DC143C;
+  font-weight: 900;
+  font-size: 16px;
+}
+
+/* 설날 카드 날짜 스타일 */
+.sp-thumb-card.seollal .sp-thumb-date {
+  color: #C8102E;
+  font-weight: 700;
+}
+
+/* 설날 카드 뱃지 스타일 */
+.sp-thumb-card.seollal .sp-thumb-badge {
+  box-shadow: 0 4px 12px rgba(220, 20, 60, 0.3);
+}
+
+.sp-thumb-card.seollal .sp-thumb-badge.tone-red,
+.sp-thumb-card.seollal .sp-thumb-badge.key-SEOLLAL {
+  background: linear-gradient(135deg, #DC143C 0%, #C8102E 100%);
+  border: 1px solid #FFD700;
+  box-shadow: 0 6px 16px rgba(220, 20, 60, 0.35);
+  font-weight: 800;
+}
+
+/* 설날 카드 인기지수 스타일 */
+.sp-thumb-card.seollal .sp-thumb-orderCount {
+  background: rgba(220, 20, 60, 0.9);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  color: #fff;
+}
+
+/* 설날 카드 이미지 래퍼 장식 */
+.sp-thumb-card.seollal .sp-thumb-imgWrap {
+  border: 1px solid rgba(220, 20, 60, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 215, 0, 0.1);
+}
+
+/* 설날 카드 이미지 호버 효과 */
+.sp-thumb-card.seollal:hover .sp-thumb-imgWrap {
+  border-color: rgba(220, 20, 60, 0.4);
+  box-shadow: inset 0 0 0 2px rgba(255, 215, 0, 0.2);
+}

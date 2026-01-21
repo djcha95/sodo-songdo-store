@@ -222,6 +222,19 @@ interface EventBanner {
 }
 
 const EVENT_BANNERS: EventBanner[] = [
+  // ✅ 설날 공구 배너 (제일 앞에 배치)
+  {
+    id: 'seollal-2026',
+    chip: '🧧 설날 특집',
+    title: '2026 설날 선물 공구',
+    desc: '마음을 전하는 특별한 설 선물 세트를 만나보세요',
+    cta: '설날 공구 보기',
+    bg: 'linear-gradient(135deg, #FFF7ED 0%, #FFF1F1 50%, #FFEBEB 100%)',
+    linkType: 'internal',
+    href: '/seollal',
+    image: '/images/events/seollal-banner.jpg', // ✅ 이미지 경로 추가 (필요시 수정 가능)
+    imageAlt: '설날 공구',
+  },
   // ✅ [수정] 신년 리뷰 이벤트 배너
   {
     id: 'review-event-2026-newyear',
@@ -248,18 +261,19 @@ const EVENT_BANNERS: EventBanner[] = [
     image: '/images/verymom/logo.jpg',
     imageAlt: '베리맘 런칭',
   },
-  {
-    id: 'hey-u-beauty',
-    chip: '💄 헤이유뷰티룸 제휴',
-    title: '멜라즈마 풀페이스 50% 할인',
-    desc: '송도픽 고객 전 시술 10% 추가 혜택! 기미·잡티 케어 특가.',
-    cta: '혜택 자세히 보기',
-    bg: 'linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%)',
-    linkType: 'internal',
-    href: '/partner/hey-u-beauty',
-    image: '/images/heyu/asd.jpg',
-    imageAlt: '헤이유 뷰티룸',
-  },
+  // ✅ 헤이유 뷰티룸 배너 비활성화 (주석 처리)
+  // {
+  //   id: 'hey-u-beauty',
+  //   chip: '💄 헤이유뷰티룸 제휴',
+  //   title: '멜라즈마 풀페이스 50% 할인',
+  //   desc: '송도픽 고객 전 시술 10% 추가 혜택! 기미·잡티 케어 특가.',
+  //   cta: '혜택 자세히 보기',
+  //   bg: 'linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%)',
+  //   linkType: 'internal',
+  //   href: '/partner/hey-u-beauty',
+  //   image: '/images/heyu/asd.jpg',
+  //   imageAlt: '헤이유 뷰티룸',
+  // },
   {
     id: 'last-chance',
     chip: '⚡ 마지막 찬스',
@@ -573,7 +587,16 @@ const fetchNextPage = useCallback(async () => {
   }, [processedNormal]);
 
   const visibleNormalProducts = useMemo(() => {
-    if (activeTab === 'today') return processedNormal.filter(p => p.phase === 'primary');
+    if (activeTab === 'today') {
+      // ✅ 오늘의 공구에서는 이벤트 상품 제외 (eventType이 있고 NONE이 아닌 상품 = 기획전/설날 등)
+      return processedNormal.filter(p => {
+        if (p.phase !== 'primary') return false;
+        const eventType = p.displayRound?.eventType;
+        // eventType이 없거나 'NONE'이면 일반 상품 (포함)
+        // eventType이 있고 'NONE'이 아니면 이벤트 상품 (제외: 기획전, 설날특선 등)
+        return !eventType || eventType === 'NONE';
+      });
+    }
     if (activeTab === 'additional') return processedNormal.filter(p => p.phase === 'secondary');
     if (activeTab === 'onsite') return processedNormal.filter(p => p.phase === 'onsite');
     if (activeTab === 'tomorrow') return tomorrowPickupProducts;
@@ -585,7 +608,16 @@ const fetchNextPage = useCallback(async () => {
     return processedNormal;
   }, [activeTab, processedNormal, tomorrowPickupProducts, lastChanceProducts]);
 
-  const todayPrimary = useMemo(() => processedNormal.filter(p => p.phase === 'primary'), [processedNormal]);
+  const todayPrimary = useMemo(() => {
+    // ✅ 오늘의 공구: 이벤트 상품(기획전/설날 등) 제외
+    return processedNormal.filter(p => {
+      if (p.phase !== 'primary') return false;
+      const eventType = p.displayRound?.eventType;
+      // eventType이 없거나 'NONE'이면 일반 상품 (포함)
+      // eventType이 있고 'NONE'이 아니면 이벤트 상품 (제외)
+      return !eventType || eventType === 'NONE';
+    });
+  }, [processedNormal]);
   const todayPrimarySorted = useMemo(() => {
     // ✅ 오늘의 공구: 인기(예약수) 높은 순으로 왼쪽부터 보이도록 정렬
     const copy = [...todayPrimary];
@@ -738,6 +770,30 @@ const fetchNextPage = useCallback(async () => {
             </section>
           )}
 
+          {/* ✅ 기획전 상품 리스트 (오늘의 공구 바로 아래로 이동) */}
+          {processedEventProducts.length > 0 && (
+             <section className="sp-section">
+               <div className="sp-section-head">
+                 <div className="sp-section-left">
+                   <h3 className="sp-section-title">✨ 기획전</h3>
+                   <span className="sp-section-desc">시즌 한정 기획 공동구매</span>
+                 </div>
+                 <button className="sp-viewall" onClick={() => navigate('/?tab=special')} type="button">전체보기</button>
+               </div>
+               <DragHScroll>
+                 {processedEventProducts.map((p) => (
+                   <ModernProductThumbCard 
+                     key={`special-${p.id}`} 
+                     product={p as any} 
+                     variant="row" 
+                     bestsellerRank={bestSellerRankMap[p.id]}
+                     badgeSeed={badgeSeed}
+                   />
+                 ))}
+               </DragHScroll>
+             </section>
+          )}
+
           {tomorrowPickupProducts.length > 0 && (
             <section className="sp-section">
               <div className="sp-section-head">
@@ -759,30 +815,6 @@ const fetchNextPage = useCallback(async () => {
                 ))}
               </DragHScroll>
             </section>
-          )}
-
-          {/* 기획전 상품 리스트 (홈 화면 가로 스크롤) */}
-          {processedEventProducts.length > 0 && (
-             <section className="sp-section">
-               <div className="sp-section-head">
-                 <div className="sp-section-left">
-                   <h3 className="sp-section-title">기획전</h3>
-                   <span className="sp-section-desc"> 시즌 한정 기획 공동구매 </span>
-                 </div>
-                 <button className="sp-viewall" onClick={() => navigate('/?tab=special')} type="button">전체보기</button>
-               </div>
-               <DragHScroll>
-                 {processedEventProducts.map((p) => (
-                   <ModernProductThumbCard 
-                     key={`special-${p.id}`} 
-                     product={p as any} 
-                     variant="row" 
-                     bestsellerRank={bestSellerRankMap[p.id]}
-                     badgeSeed={badgeSeed}
-                   />
-                 ))}
-               </DragHScroll>
-             </section>
           )}
           
           {/* ✅ 기획전 로드 실패 시 에러 표시 */}

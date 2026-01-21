@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import {
   Package, CircleCheck, AlertCircle, PackageCheck,
-  PackageX, Hourglass, CreditCard, Info, XCircle, Plus, Minus, ChevronDown
+  PackageX, Hourglass, CreditCard, Info, XCircle, Plus, Minus, ChevronDown, MessageCircle
 } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { getOptimizedImageUrl } from '@/utils/imageUtils';
@@ -322,6 +322,15 @@ const isQuantityEditable =
   (order.status === 'RESERVED' || order.status === 'PREPAID') && cancellable;
   const isInactive = isHiddenStatus(order.status); // 이제 isHiddenStatus를 사용
 
+  // ✅ 선입금 필요 여부 확인
+  const needsPrepayment = order.wasPrepaymentRequired && order.status === 'RESERVED' && !order.prepaidAt;
+
+  // ✅ 채널톡 열기 함수
+  const openChannelTalk = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open('http://pf.kakao.com/_CxjNKn/chat', '_blank', 'noopener,noreferrer');
+  }, []);
+
   const handleClick = (e: React.MouseEvent) => {
     if (isInactive) return;
     if (cancellable) { e.preventDefault(); onSelect(order.id); }
@@ -358,6 +367,62 @@ const isQuantityEditable =
           {!cancellable && reason && !isInactive && (
             <div className="order-notice-message" style={{ marginTop: '8px', fontSize: '12px', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Info size={12} /> <span>{reason}</span>
+            </div>
+          )}
+
+          {/* ✅ 선입금 필요 안내 */}
+          {needsPrepayment && (
+            <div style={{ 
+              marginTop: '12px', 
+              padding: '12px', 
+              background: '#FFF7ED', 
+              border: '2px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#D97706' }}>
+                <CreditCard size={14} />
+                <span>선입금 필요</span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#92400E', lineHeight: '1.5', margin: 0 }}>
+                해당 상품은 선입금 후 예약이 확정됩니다.
+                <br />
+                입금 계좌: <strong>우리은행 1005-504-763060 (차동진)</strong>
+                <br />
+                입금 금액: <strong>{order.totalPrice.toLocaleString()}원</strong>
+              </p>
+              <button
+                onClick={openChannelTalk}
+                style={{
+                  marginTop: '4px',
+                  padding: '8px 12px',
+                  background: '#F59E0B',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#D97706';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#F59E0B';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <MessageCircle size={16} />
+                입금 내역 보내기 (채널톡)
+              </button>
             </div>
           )}
         </div>

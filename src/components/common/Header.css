@@ -2,7 +2,7 @@
 
 /* 헤더(바깥은 #F9FAFB, "페이지 한 장"은 header-shell) */
 .new-customer-header {
-  background-color: #F9FAFB; /* ✅ 원래대로 복구 */
+  background-color: #F9FAFB;
   position: sticky;
   top: 0;
   width: 100%;
@@ -14,8 +14,8 @@
 .header-shell {
   max-width: 900px;
   margin: 0 auto;
-  background: #FFFFFF !important; /* ✅ 완전히 불투명한 흰색으로 통일 */
-  backdrop-filter: none; /* ✅ blur 제거하여 완전한 흰색 보장 */
+  background: #FFFFFF !important;
+  backdrop-filter: none;
 }
 
 /* 1열 */
@@ -42,32 +42,12 @@
   letter-spacing: -0.5px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
-.new-year-decoration {
+.brand-emoji {
   font-size: 18px;
-  animation: sparkle 2s ease-in-out infinite;
   display: inline-block;
-}
-
-.new-year-decoration:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.new-year-decoration:nth-child(3) {
-  animation-delay: 1s;
-}
-
-@keyframes sparkle {
-  0%, 100% { 
-    transform: scale(1) rotate(0deg);
-    opacity: 1;
-  }
-  50% { 
-    transform: scale(1.2) rotate(180deg);
-    opacity: 0.8;
-  }
 }
 
 .icon-btn {

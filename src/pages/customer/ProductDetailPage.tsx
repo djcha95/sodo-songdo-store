@@ -697,6 +697,7 @@ const ProductDetailPage: React.FC = () => {
     const themeClass = useMemo(() => {
         if (!displayRound) return '';
         const type = displayRound.eventType;
+        if (type === 'SEOLLAL') return 'theme-seollal';    // 설날
         if (type === 'CHRISTMAS') return 'theme-christmas'; // 크리스마스
         if (type === 'SPECIAL') return 'theme-special';     // 기획전/스페셜
         if (type === 'PREMIUM') return 'luxury-mode';       // 기존 럭셔리(유지)
@@ -705,6 +706,9 @@ const ProductDetailPage: React.FC = () => {
 
     // 💡 [추가] 테마별 뱃지/아이콘 설정
     const themeBadge = useMemo(() => {
+        if (themeClass === 'theme-seollal') {
+            return <div className="theme-banner-badge seollal">🧧 설날 특선</div>;
+        }
         if (themeClass === 'theme-christmas') {
             return <div className="theme-banner-badge christmas"><Snowflake size={14} /> MERRY CHRISTMAS</div>;
         }
@@ -1136,8 +1140,11 @@ const fetchProduct = useCallback(async () => {
                             {themeClass !== '' && themeClass !== 'luxury-mode' && (
                                 <div className="theme-decoration-bar">
                                     {themeClass === 'theme-christmas' && <span className="deco-icon"><Sparkles size={16}/></span>}
+                                    {themeClass === 'theme-seollal' && <span className="deco-icon">🧧</span>}
                                     <span className="deco-text">
-                                        {themeClass === 'theme-christmas' ? '송도픽 홀리데이 에디션' : '한정수량 특별 기획전'}
+                                        {themeClass === 'theme-christmas' ? '송도픽 홀리데이 에디션' 
+                                         : themeClass === 'theme-seollal' ? '정성 가득한 설날 선물'
+                                         : '한정수량 특별 기획전'}
                                     </span>
                                 </div>
                             )}

@@ -42,29 +42,37 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
     // ✅ 남은 재고 계산 (마지막 찬스용)
     let remainingUnits: number | null = null;
     if (vg) {
-      // ✅ “구매 가능 개수” 기준으로 표시 (stockDeductionAmount 반영)
+      // ✅ "구매 가능 개수" 기준으로 표시 (stockDeductionAmount 반영)
       const purchasable = getRemainingPurchasableCount(vg as any);
       if (Number.isFinite(purchasable) && purchasable > 0 && purchasable <= 3) {
         remainingUnits = purchasable;
       }
     }
 
-    const badges = getMarketingBadges({
-      product: product as any,
-      round: r as any,
-      selectedItem: (item as any) ?? null,
-      bestsellerRank,
-      seed: badgeSeed,
-      maxBadges: 2,
-    });
-    // ✅ 카드에서는 뱃지 1개만: 인기상품 > 한정 > 신상품
-    const hasBest = badges.some((b) => b.key === 'BEST');
-    const hasLimited = !hasBest && badges.some((b) => b.key === 'LIMITED');
-    const displayBadges = hasBest
-      ? badges.filter((b) => b.key === 'BEST')
-      : hasLimited
-        ? badges.filter((b) => b.key === 'LIMITED')
-        : badges.filter((b) => b.key === 'NEW');
+    // ✅ 설날 상품인 경우 '설날특선' 뱃지만 표시
+    const isSeollalProduct = r?.eventType === 'SEOLLAL';
+    let displayBadges: any[] = [];
+    
+    if (isSeollalProduct) {
+      displayBadges = [{ key: 'SEOLLAL', label: '설날특선', tone: 'red' }];
+    } else {
+      const badges = getMarketingBadges({
+        product: product as any,
+        round: r as any,
+        selectedItem: (item as any) ?? null,
+        bestsellerRank,
+        seed: badgeSeed,
+        maxBadges: 2,
+      });
+      // ✅ 카드에서는 뱃지 1개만: 인기상품 > 한정 > 신상품
+      const hasBest = badges.some((b) => b.key === 'BEST');
+      const hasLimited = !hasBest && badges.some((b) => b.key === 'LIMITED');
+      displayBadges = hasBest
+        ? badges.filter((b) => b.key === 'BEST')
+        : hasLimited
+          ? badges.filter((b) => b.key === 'LIMITED')
+          : badges.filter((b) => b.key === 'NEW');
+    }
 
     const reservedCount = getTotalReservedCount(r as any);
     const popularityScore = getPopularityScore({
@@ -82,10 +90,15 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
     navigate(`/product/${product.id}`);
   }, [navigate, product.id]);
 
+  const isSeollal = product.displayRound?.eventType === 'SEOLLAL';
+  const isPremium = product.displayRound?.eventType === 'PREMIUM';
+  // ✅ 기획전 상품 여부 확인 (eventType이 있고 'NONE'이 아닌 경우)
+  const isEventProduct = product.displayRound?.eventType && product.displayRound.eventType !== 'NONE';
+
   return (
     <button
       type="button"
-      className={`sp-thumb-card ${variant} ${product.displayRound?.eventType === 'PREMIUM' ? 'luxury' : ''}`}
+      className={`sp-thumb-card ${variant} ${isPremium ? 'luxury' : ''} ${isSeollal ? 'seollal' : ''}`}
       onClick={handleCardClick}
       aria-label={`${product.groupName} 상세보기`}
     >
@@ -108,11 +121,14 @@ const ModernProductThumbCard: React.FC<Props> = ({ product, variant = 'row', ind
           )}
         </div>
 
-        <div className="sp-thumb-topRight">
-          <span className="sp-thumb-orderCount">
-            인기지수 {cardData.popularityScore.toLocaleString()}
-          </span>
-        </div>
+        {/* ✅ 기획전 상품이 아닌 경우에만 인기지수 표시 */}
+        {!isEventProduct && (
+          <div className="sp-thumb-topRight">
+            <span className="sp-thumb-orderCount">
+              인기지수 {cardData.popularityScore.toLocaleString()}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="sp-thumb-imgWrap">

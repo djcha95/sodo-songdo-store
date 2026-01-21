@@ -950,6 +950,18 @@ const ProductListPageAdmin: React.FC = () => {
                     }
                     const bandClass = dateBand === 0 ? "date-band-a" : "date-band-b";
 
+                    // ✅ 이벤트 타입 확인 및 클래스 생성
+                    const eventType = item.round.eventType;
+                    const eventClass = eventType && eventType !== 'NONE' 
+                      ? `event-${eventType.toLowerCase()}` 
+                      : '';
+                    const eventLabel = eventType === 'SEOLLAL' ? '🧧 설날' 
+                      : eventType === 'CHUSEOK' ? '🌕 추석' 
+                      : eventType === 'CHRISTMAS' ? '🎄 크리스마스' 
+                      : eventType === 'ANNIVERSARY' ? '🎉 기념일' 
+                      : eventType === 'PREMIUM' ? '✨ 프리미엄' 
+                      : null;
+
                     // 현장 판매 여부 확인
                     const isOnsite = !!item.round.isManuallyOnsite;
                     const loadingOnsiteKey = `${item.productId}-${item.round.roundId}-onsite`;
@@ -957,8 +969,8 @@ const ProductListPageAdmin: React.FC = () => {
 
                     return (
                       <React.Fragment key={item.uniqueId}>
-                        {/* ✅ master-row에 bandClass 추가 */}
-                        <tr className={`master-row ${bandClass}`}>
+                        {/* ✅ master-row에 bandClass와 eventClass 추가 */}
+                        <tr className={`master-row ${bandClass} ${eventClass}`}>
                           <td className="td-align-center td-nowrap">
                             <div className="no-and-expander">
                               <span>{(currentPage - 1) * itemsPerPage + index + 1}</span>
@@ -982,6 +994,7 @@ const ProductListPageAdmin: React.FC = () => {
                               <div className="product-name-text">
                                 <span className="product-group-name">
                                   {isOnsite && <span className="onsite-badge" title="현장판매 전용">🏢</span>}
+                                  {eventLabel && <span className="event-badge" title={`${eventLabel} 이벤트`}>{eventLabel}</span>}
                                   {item.productName}
                                 </span>
                                 <span className="round-name-separator">/</span>
@@ -1063,9 +1076,9 @@ const ProductListPageAdmin: React.FC = () => {
                           </td>
                         </tr>
 
-                        {/* ✅ detail-row에도 bandClass 동일하게 적용 */}
+                        {/* ✅ detail-row에도 bandClass와 eventClass 동일하게 적용 */}
                         {isExpanded && item.enrichedVariantGroups.map((vg, vgIndex) => (
-                          <tr key={vg.id} className={`detail-row ${bandClass}`}>
+                          <tr key={vg.id} className={`detail-row ${bandClass} ${eventClass}`}>
                             <td className="td-align-center td-nowrap"></td>
                             <td className="td-align-center td-nowrap"><span className="sub-row-no">{(currentPage - 1) * itemsPerPage + index + 1}-{vgIndex + 1}</span></td>
                             <td className="td-align-center td-nowrap"></td>
