@@ -152,7 +152,7 @@ const CreateOrderPage: React.FC = () => {
         }
     };
 
-    if (isLoading) return <SodomallLoader message="데이터 로딩 중..." />;
+    if (isLoading) return <SodomallLoader message="복 담는 중이에요…" />;
 
     const isFormComplete = selectedUser && selectedProduct && selectedRound && selectedVg && selectedItem && quantity > 0;
 

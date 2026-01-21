@@ -1,6 +1,6 @@
 import React from 'react';
 import Lottie from 'lottie-react';
-import newYearAnimation from '@/lottie/new-year.json'; // ✅ 새해 Lottie 파일 (사용자가 받은 파일명에 맞게 수정 필요)
+import redEnvelopeAnimation from '@/lottie/red envelope.json'; // ✅ 복 Lottie 파일
 import './LottieSantaLoader.css';
 
 interface LottieSantaLoaderProps {
@@ -8,13 +8,13 @@ interface LottieSantaLoaderProps {
 }
 
 const LottieSantaLoader: React.FC<LottieSantaLoaderProps> = ({
-  message = "🎉 2026년 새해를 준비하는 중이에요…",
+  message = "복 담는 중이에요…",
 }) => {
   return (
     <div className="lottie-loader-overlay">
       <div className="lottie-loader-card">
         <Lottie
-          animationData={newYearAnimation}
+          animationData={redEnvelopeAnimation}
           loop={true}
           autoplay={true}
           style={{ width: 220, height: 220 }}

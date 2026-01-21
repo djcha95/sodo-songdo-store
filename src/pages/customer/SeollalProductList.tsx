@@ -1,8 +1,8 @@
 // src/pages/customer/SeollalProductList.tsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { getPaginatedProductsWithStock } from '@/firebase/productService';
-import { getDisplayRound, determineActionState } from '@/utils/productUtils';
+import { getDisplayRound, determineActionState, safeToDate } from '@/utils/productUtils';
 import ModernProductThumbCard from '@/components/customer/ModernProductThumbCard';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import { useAuth } from '@/context/AuthContext';
@@ -41,7 +41,14 @@ const SeollalProductList: React.FC = () => {
           displayRound: getDisplayRound(p)!, 
         }));
 
-        setProducts(processed);
+        // ✅ 등록일 기준 오름차순 정렬 (오래된 것부터)
+        const sorted = processed.sort((a, b) => {
+          const dateA = safeToDate(a.displayRound?.createdAt)?.getTime() || 0;
+          const dateB = safeToDate(b.displayRound?.createdAt)?.getTime() || 0;
+          return dateA - dateB; // 오름차순: 작은 값(오래된 것)이 앞에
+        });
+
+        setProducts(sorted);
       } catch (e) {
         console.error("설날 상품 로드 실패", e);
       } finally {

@@ -224,7 +224,7 @@ const PickupCheckPage: React.FC = () => {
     return days;
   }, [currentMonth]);
 
-  if (loading) return <SodomallLoader message="로딩 중..." />;
+  if (loading) return <SodomallLoader message="복 담는 중이에요…" />;
 
   // 3. 렌더링 부분 수정 시작
   return (

@@ -1,8 +1,8 @@
 .lottie-loader-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(3px);
+  background: linear-gradient(135deg, rgba(220, 20, 60, 0.15), rgba(255, 215, 0, 0.1));
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -10,16 +10,42 @@
 }
 
 .lottie-loader-card {
-  background: #ffffff;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
   border-radius: 14px;
+  border: 3px solid #DC143C;
+  border-top: 4px solid #FFD700;
   padding: 24px;
   text-align: center;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  box-shadow: 
+    0 12px 28px rgba(220, 20, 60, 0.3),
+    0 0 0 1px rgba(255, 215, 0, 0.2) inset,
+    0 4px 12px rgba(255, 215, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 설날 장식 패턴 (카드 상단) */
+.lottie-loader-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    #DC143C 0px,
+    #DC143C 8px,
+    #FFD700 8px,
+    #FFD700 16px
+  );
+  border-radius: 14px 14px 0 0;
 }
 
 .lottie-loader-text {
   margin-top: 14px;
-  color: #111827;
+  color: #8B0000;
   font-size: 15px;
   font-weight: 600;
+  text-shadow: 0 1px 2px rgba(255, 215, 0, 0.3);
 }

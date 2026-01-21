@@ -1,7 +1,7 @@
 // src/components/common/SodomallLoader.tsx
 import React from 'react';
 import Lottie from 'lottie-react';
-import newYearAnimation from '@/lottie/new-year.json'; // ✅ 새해 Lottie 파일 (사용자가 받은 파일명에 맞게 수정 필요)
+import redEnvelopeAnimation from '@/lottie/red envelope.json'; // ✅ 복 Lottie 파일
 import './SodomallLoader.css';
 
 interface SodomallLoaderProps {
@@ -28,13 +28,13 @@ const SodomallLoader: React.FC<SodomallLoaderProps> = ({
         <div className="santa-loader-brand">SONGDOPICK</div>
 
         <Lottie
-          animationData={newYearAnimation}
+          animationData={redEnvelopeAnimation}
           loop
           autoplay
           style={{ width: 240, height: 240 }}
         />
         <p className="santa-loader-text">
-          {message || '🎉 2026년 새해를 준비하는 중이에요…'}
+          {message || '복 담는 중이에요…'}
         </p>
       </div>
     </div>
