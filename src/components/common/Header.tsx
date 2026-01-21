@@ -15,6 +15,7 @@ const ALL_CATEGORIES = [
   // ✅ 오늘공구/추가공구는 항상 노출
   { id: 'today', label: '🔥 오늘공구' },
   { id: 'additional', label: '🔁 추가공구' },
+  { id: 'seollal', label: '🧧 설날공구' },
   { id: 'lastchance', label: '⚡ 마지막찬스' },
   { id: 'special', label: '✨ 기획전' },
   { id: 'reviews', label: '💬 후기' },
@@ -32,11 +33,14 @@ const Header: React.FC = () => {
 
   const currentTab = location.pathname === '/reviews'
     ? 'reviews'
+    : location.pathname === '/seollal'
+    ? 'seollal'
     : (searchParams.get('tab') || 'home');
   const isModernPage =
     location.pathname === '/' ||
     location.pathname.startsWith('/product') ||
-    location.pathname === '/reviews';
+    location.pathname === '/reviews' ||
+    location.pathname === '/seollal';
   const isHistoryPage = location.pathname === '/mypage/history';
 
   // 인디케이터 위치/폭
@@ -96,10 +100,27 @@ const Header: React.FC = () => {
           return stockInfo.isLimited && stockInfo.remainingUnits > 0 && stockInfo.remainingUnits <= 3;
         });
 
+        // 3. 설날 공구 상품 여부 확인
+        const hasSeollal = allProducts.some((p: any) => {
+          const round = getDisplayRound(p as any);
+          if (!round || round.status === 'draft') return false;
+          
+          // 현장판매는 제외
+          if ((round as any).isManuallyOnsite) return false;
+          
+          // actionState가 ENDED이면 제외
+          const actionState = determineActionState(round, null as any);
+          if (['ENDED', 'AWAITING_STOCK', 'SCHEDULED'].includes(actionState)) return false;
+          
+          // eventType이 SEOLLAL인지 확인
+          return round.eventType === 'SEOLLAL';
+        });
+
         // 필터링 logic
         const nextCategories = ALL_CATEGORIES.filter(cat => {
           if (cat.id === 'tomorrow') return hasTomorrow;
           if (cat.id === 'lastchance') return hasLastChance;
+          if (cat.id === 'seollal') return hasSeollal;
           return true; 
         });
 
@@ -172,20 +193,29 @@ const Header: React.FC = () => {
               <div className="header-inner">
                 <div className="category-track" ref={trackRef}>
                   <ul className="category-list" ref={listRef}>
-                    {visibleCategories.map((cat) => (
-                      <li key={cat.id}>
-                        <NavLink
-                          to={cat.id === 'reviews' ? '/reviews' : `/?tab=${cat.id}`}
-                          replace
-                          ref={(node) => {
-                            tabRefs.current[cat.id] = node;
-                          }}
-                          className={`category-item ${currentTab === cat.id ? 'active' : ''}`}
-                        >
-                          <span className="tab-label">{cat.label}</span>
-                        </NavLink>
-                      </li>
-                    ))}
+                    {visibleCategories.map((cat) => {
+                      // 설날 공구는 별도 페이지로 이동
+                      const toPath = cat.id === 'reviews' 
+                        ? '/reviews' 
+                        : cat.id === 'seollal' 
+                        ? '/seollal'
+                        : `/?tab=${cat.id}`;
+                      
+                      return (
+                        <li key={cat.id}>
+                          <NavLink
+                            to={toPath}
+                            replace
+                            ref={(node) => {
+                              tabRefs.current[cat.id] = node;
+                            }}
+                            className={`category-item ${currentTab === cat.id ? 'active' : ''}`}
+                          >
+                            <span className="tab-label">{cat.label}</span>
+                          </NavLink>
+                        </li>
+                      );
+                    })}
 
                     <span
                       className="tab-indicator"

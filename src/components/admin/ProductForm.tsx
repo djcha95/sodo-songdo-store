@@ -316,7 +316,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [extraInfo, setExtraInfo] = useState('');
 
   // 이벤트 타입
-  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM'>('NONE');
+  const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM' | 'SEOLLAL'>('NONE');
 
   // Wizard 단계 관리
   const [currentStep, setCurrentStep] = useState(0);
@@ -553,7 +553,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         if (roundToLoad && product) {
           const roundData = roundToLoad as SalesRound & {
             preOrderTiers?: LoyaltyTier[];
-            eventType?: 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM';
+            eventType?: 'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM' | 'SEOLLAL';
           };
 
           if (mode === 'editRound') setRoundName(roundData.roundName);
@@ -747,7 +747,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     // ✅ 수정 모드에서는 기존 날짜를 유지해야 하므로 자동 계산하지 않음
     if (mode === 'editRound') return;
     
-    if (eventType === 'CHUSEOK' || eventType === 'ANNIVERSARY' || eventType === 'PREMIUM' || eventType === 'CHRISTMAS') return;
+    if (eventType === 'CHUSEOK' || eventType === 'ANNIVERSARY' || eventType === 'PREMIUM' || eventType === 'CHRISTMAS' || eventType === 'SEOLLAL') return;
 
     const baseDate = dayjs(publishDate);
     let deadline = baseDate.add(1, 'day');
@@ -1893,6 +1893,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                   >
                     <option value="NONE">일반 상품</option>
                     <option value="CHUSEOK">🌕 추석 특집</option>
+                    <option value="SEOLLAL">🧧 설날 특집</option>
                     <option value="ANNIVERSARY">🎉 1주년 기념 🎉</option>
                     <option value="CHRISTMAS">🎁 크리스마스 특집 🎁</option>
                     <option value="PREMIUM">👑 프리미엄 (베리맘/럭셔리)</option>

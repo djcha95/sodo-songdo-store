@@ -39,7 +39,7 @@ const LazyRefreshCw = React.lazy(() =>
   import('lucide-react').then((module) => ({ default: module.RefreshCw }))
 );
 
-type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite' | 'lastchance';
+type TabId = 'all' | 'today' | 'tomorrow' | 'special' | 'additional' | 'onsite' | 'lastchance' | 'seollal';
 const PAGE_SIZE = 30;
 
 const getRoundReservedTotal = (round: any): number => {
@@ -318,6 +318,11 @@ const TAB_BANNERS: Record<string, { title: string; desc: string; bg: string; ima
     desc: "재고 3개 이하! 놓치면 후회하는 특가 상품",
     bg: "#FEF2F2",
   },
+  seollal: {
+    title: "🧧 설날 공구",
+    desc: "설 선물로 딱 좋은 특별한 상품들을 만나보세요",
+    bg: "#FFF7ED",
+  },
 };
 
 const ModernProductList: React.FC = () => {
@@ -573,6 +578,10 @@ const fetchNextPage = useCallback(async () => {
     if (activeTab === 'onsite') return processedNormal.filter(p => p.phase === 'onsite');
     if (activeTab === 'tomorrow') return tomorrowPickupProducts;
     if (activeTab === 'lastchance') return lastChanceProducts;
+    if (activeTab === 'seollal') {
+      // 설날 공구 상품 필터링: eventType이 SEOLLAL인 상품만 표시
+      return processedNormal.filter(p => p.displayRound?.eventType === 'SEOLLAL');
+    }
     return processedNormal;
   }, [activeTab, processedNormal, tomorrowPickupProducts, lastChanceProducts]);
 

@@ -159,6 +159,7 @@ const MyPage = React.lazy(() => import('./pages/customer/MyPage'));
 // ✅ 모던 디자인 (이제 메인 페이지!)
 const ModernProductList = React.lazy(() => import('./pages/customer/ModernProductList')); 
 const BeautyProductList = React.lazy(() => import('./pages/customer/BeautyProductList'));
+const SeollalProductList = React.lazy(() => import('./pages/customer/SeollalProductList'));
 const ProductDetailPage = React.lazy(() => import('./pages/customer/ProductDetailPage'));
 const OrderHistoryPage = React.lazy(() => import('./pages/customer/OrderHistoryPage'));
 const TermsPage = React.lazy(() => import('./pages/customer/TermsPage'));
@@ -309,6 +310,15 @@ const router = createBrowserRouter([
           {
             path: "beauty",
             element: <BeautyProductList />,
+            children: [
+              { path: "product/:productId", element: <ProductDetailPage /> },
+            ],
+          },
+
+          // 설날 공구 ("/seollal")
+          {
+            path: "seollal",
+            element: <SeollalProductList />,
             children: [
               { path: "product/:productId", element: <ProductDetailPage /> },
             ],
