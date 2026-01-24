@@ -155,8 +155,6 @@ const storageTypeOptions: { key: StorageType; name: string; className: string }[
 const bundleUnitKeywords = ['묶음', '박스', '곽', '세트', '팩', '봉지'];
 const singleUnitKeywords = ['개', '병', '잔', '포', '장', '통', '회', 'g', 'kg', 'ml', 'l', '낱개'];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
 const ALL_LOYALTY_TIERS: LoyaltyTier[] = [
   '공구의 신',
   '공구왕',
@@ -974,14 +972,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!e.target.files) return;
 
-      const files = Array.from(e.target.files).filter((file) => {
-        if (file.size > MAX_FILE_SIZE) {
-          toast.error(`${file.name} 파일 크기가 너무 큽니다 (최대 10MB).`);
-          return false;
-        }
-        return true;
-      });
+      const raw = Array.from(e.target.files);
+      const gifCount = raw.filter((f) => f.type === 'image/gif').length;
+      const files = raw.filter((f) => f.type !== 'image/gif');
 
+      if (gifCount > 0) {
+        toast.error('GIF 파일은 사용할 수 없습니다. PNG 또는 JPEG로 등록해 주세요.');
+      }
       if (files.length === 0) return;
 
       setNewImageFiles((prev) => [...prev, ...files]);
