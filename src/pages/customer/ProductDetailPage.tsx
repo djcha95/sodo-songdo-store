@@ -966,14 +966,23 @@ const fetchProduct = useCallback(async () => {
         // 옵션이 필요한데 아이템이 선택된 경우 (PURCHASABLE로 보정)
         if (baseState === 'REQUIRE_OPTION' && selectedItem) return 'PURCHASABLE';
 
-        // 구매 가능한데 아이템이 선택되지 않은 경우 (REQUIRE_OPTION으로 보정)
+        // ✅ [수정] 그룹 상품(옵션이 2개 이상)일 때만 REQUIRE_OPTION으로 보정
+        // 일반 상품(옵션이 1개만 있는 경우)은 자동 선택되므로 REQUIRE_OPTION이 되지 않음
+        const isGroupProduct = displayRound.variantGroups.length > 1;
+        const hasMultipleItems = selectedVariantGroup && selectedVariantGroup.items && selectedVariantGroup.items.length > 1;
+        const needsOptionSelection = isGroupProduct || hasMultipleItems;
+
+        // 구매 가능한데 아이템이 선택되지 않은 경우
         if (baseState === 'PURCHASABLE' && !selectedItem) {
-            // (productUtils에서 이 로직을 이미 처리함, 'REQUIRE_OPTION'으로 반환됨)
-            return 'REQUIRE_OPTION'; 
+            // 그룹 상품이거나 여러 아이템이 있는 경우에만 REQUIRE_OPTION으로 보정
+            if (needsOptionSelection) {
+                return 'REQUIRE_OPTION';
+            }
+            // 일반 상품(옵션 1개)은 자동 선택되므로 그대로 PURCHASABLE 유지
         }
         
         return baseState;
-    }, [displayRound, userDocument, selectedItem, salesPhase]);
+    }, [displayRound, userDocument, selectedItem, salesPhase, selectedVariantGroup]);
 
     const selectInitialItemForVg = useCallback((vg: VariantGroup) => {
         const findFirstAvailableItem = (variantGroup: VariantGroup) => {
@@ -989,9 +998,26 @@ const fetchProduct = useCallback(async () => {
         setSelectedItem(availableItem);
     }, []);
 
-    // ✅ [수정] 그룹 상품인 경우 초기 자동 선택을 하지 않도록 변경
-    // 사용자가 명시적으로 옵션을 선택하도록 중립 상태로 시작
-    // useEffect 제거 - 더 이상 자동으로 첫 번째 그룹을 선택하지 않음
+    // ✅ [수정] 일반 상품(옵션이 1개만 있는 경우)은 자동 선택, 그룹 상품 또는 선택지가 여러 개인 경우는 선택 요구
+    useEffect(() => {
+        if (!displayRound || !displayRound.variantGroups || displayRound.variantGroups.length === 0) return;
+
+        const isGroupProduct = displayRound.variantGroups.length > 1;
+        
+        // 일반 상품(옵션이 1개만 있는 경우)이고 아이템도 1개만 있으면 자동으로 선택
+        if (!isGroupProduct && !selectedVariantGroup) {
+            const singleVg = displayRound.variantGroups[0];
+            if (singleVg) {
+                // 아이템이 정확히 1개만 있는 경우에만 자동 선택
+                if (singleVg.items && singleVg.items.length === 1) {
+                    setSelectedVariantGroup(singleVg);
+                    setSelectedItem(singleVg.items[0]);
+                }
+                // 아이템이 여러 개이거나 그룹 상품인 경우는 자동 선택하지 않음 - 사용자가 선택해야 함
+            }
+        }
+        // 그룹 상품(옵션이 2개 이상) 또는 아이템이 여러 개인 경우는 자동 선택하지 않음
+    }, [displayRound, selectedVariantGroup]);
 
 
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
