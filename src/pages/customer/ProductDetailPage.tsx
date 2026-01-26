@@ -989,19 +989,9 @@ const fetchProduct = useCallback(async () => {
         setSelectedItem(availableItem);
     }, []);
 
-
-    useEffect(() => {
-        if (displayRound && displayRound.variantGroups.length > 0 && !selectedVariantGroup) {
-            // ✅ [수정] 첫 번째 옵션 그룹을 기본으로 선택하되,
-            // 해당 그룹에서 선택 가능한 아이템이 있는지 확인
-            const initialVg = displayRound.variantGroups[0];
-            if (initialVg) {
-                setSelectedVariantGroup(initialVg);
-                // ✅ [수정] 아이템 선택 로직은 selectInitialItemForVg에 맡김
-                selectInitialItemForVg(initialVg);
-            }
-        }
-    }, [displayRound, selectedVariantGroup, selectInitialItemForVg]);
+    // ✅ [수정] 그룹 상품인 경우 초기 자동 선택을 하지 않도록 변경
+    // 사용자가 명시적으로 옵션을 선택하도록 중립 상태로 시작
+    // useEffect 제거 - 더 이상 자동으로 첫 번째 그룹을 선택하지 않음
 
 
     const handleOpenLightbox = useCallback((index: number) => { setLightboxStartIndex(index); setIsLightboxOpen(true); }, []);
