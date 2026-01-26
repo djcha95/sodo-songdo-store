@@ -123,6 +123,7 @@ const ReviewManagementPage: React.FC = () => {
           isFromKakao: formData.isFromKakao,
           isFeatured: formData.isFeatured,
           eventMonth: formData.eventMonth,
+          rewardStatus: 'PENDING' as const, // ✅ 명시적으로 대기중 상태로 설정
         },
         formData.images.length > 0 ? formData.images : undefined
       );

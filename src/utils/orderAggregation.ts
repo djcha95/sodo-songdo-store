@@ -57,7 +57,8 @@ export const aggregateOrders = (orders: Order[]): AggregatedOrderGroup[] => {
           orderId: order.id,
           quantity: item.quantity,
           status: order.status
-        }]
+        }],
+        notes: order.notes // 주문 메모 포함 (리뷰 보상 등)
       });
     }
   });

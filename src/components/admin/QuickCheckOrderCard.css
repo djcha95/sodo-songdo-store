@@ -150,6 +150,33 @@
 .qco-qty-input { width: 45px; padding: 2px 6px; border: 1px solid var(--border-color-light); border-radius: var(--border-radius-sm); text-align: center; font-size: 0.95rem; font-weight: var(--font-weight-semibold); -moz-appearance: textfield; appearance: textfield; }
 .qco-qty-input::-webkit-outer-spin-button, .qco-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
+.qco-noshow-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background-color: #fee2e2;
+    color: #991b1b;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-semibold);
+    margin-top: 4px;
+}
+
+.qco-review-reward-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-semibold);
+    margin-top: 4px;
+    border: 1px solid #fbbf24;
+}
+
 .qco-bottom-row { display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid var(--border-color-extralight); padding-top: 8px; margin-top: 4px; }
 .qco-customer-name { font-size: 1rem; font-weight: var(--font-weight-semibold); }
 .qco-total-price { font-size: 1.15rem; font-weight: var(--font-weight-bold); color: var(--primary-color-dark); }

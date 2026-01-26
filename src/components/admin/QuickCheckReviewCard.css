@@ -81,6 +81,12 @@
   font-weight: var(--font-weight-medium);
 }
 
+.qcr-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .qcr-date {
   color: var(--text-color-light);
 }
@@ -164,11 +170,94 @@
   font-weight: 600;
 }
 
-.qcr-reward-status .fulfilled {
+.qcr-reward-status.fulfilled {
   color: #28a745;
 }
 
-.qcr-reward-status .pending {
-  color: var(--text-color-light);
+.qcr-reward-status.pending {
+  color: var(--text-color-light, #6c757d);
+}
+
+.qcr-reward-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+}
+
+.qcr-reward-button:hover {
+  background: linear-gradient(135deg, #218838 0%, #1aa179 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.qcr-reward-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+}
+
+.qcr-reward-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qcr-reward-cancel-button {
+  padding: 4px 10px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+.qcr-reward-cancel-button:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+.qcr-reward-cancel-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+.qcr-delete-button {
+  padding: 4px 8px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+.qcr-delete-button:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+.qcr-delete-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
 }
 

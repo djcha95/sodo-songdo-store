@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import type { 
     UserDocument, 
     Order, 
@@ -15,7 +15,7 @@ import type {
 } from '@/shared/types';
 import QuickCheckOrderCard from './QuickCheckOrderCard';
 import QuickCheckReviewCard from './QuickCheckReviewCard';
-import { getReviewsByUserId } from '@/firebase/reviewService';
+import { getReviewsByUserId, updateReview, deleteReview } from '@/firebase/reviewService';
 import type { Review } from '@/shared/types';
 import {
     updateMultipleOrderStatuses,
@@ -27,7 +27,7 @@ import {
 import { adjustUserCounts, setManualTierForUser } from '@/firebase/userService';
 import { aggregateOrders } from '@/utils/orderAggregation'; 
 import toast from 'react-hot-toast';
-import { CheckCircle, DollarSign, XCircle, RotateCcw, Save, Shield, AlertTriangle, Undo2, GitBranch } from 'lucide-react';
+import { CheckCircle, DollarSign, XCircle, RotateCcw, Save, Shield, AlertTriangle, Undo2, GitBranch, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './CustomerActionTabs.css';
@@ -250,23 +250,104 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
     const [reviewsLoading, setReviewsLoading] = useState(false);
     const [selectedReviewIds, setSelectedReviewIds] = useState<string[]>([]);
 
-    // 리뷰 로드
+    // 리뷰 로드 (사용자가 변경될 때마다 미리 로드하여 배지 표시)
     useEffect(() => {
-        if (activeTab === 'reviews' && user.uid) {
+        if (user.uid) {
             setReviewsLoading(true);
             getReviewsByUserId(user.uid)
                 .then(setReviews)
                 .catch((err) => {
                     console.error('리뷰 로드 실패:', err);
-                    toast.error('리뷰를 불러오는데 실패했습니다.');
+                    if (activeTab === 'reviews') {
+                        toast.error('리뷰를 불러오는데 실패했습니다.');
+                    }
                 })
                 .finally(() => setReviewsLoading(false));
+        } else {
+            setReviews([]);
         }
-    }, [activeTab, user.uid]);
+    }, [user.uid]);
 
     const handleSelectReview = useCallback((reviewId: string) => {
         setSelectedReviewIds(prev => prev.includes(reviewId) ? prev.filter(id => id !== reviewId) : [...prev, reviewId]);
     }, []);
+
+    // 사은품 증정 완료 처리
+    const handleMarkRewardFulfilled = useCallback(async (review: Review) => {
+        if (review.rewardStatus === 'FULFILLED') {
+            toast.error('이미 사은품 증정이 완료된 리뷰입니다.');
+            return;
+        }
+
+        try {
+            await updateReview(review.id, {
+                rewardType: review.rewardType || 'CRACKER_7500',
+                rewardValueKrw: review.rewardValueKrw || 7500,
+                rewardStatus: 'FULFILLED',
+                rewardFulfilledAt: Timestamp.now(),
+            });
+
+            toast.success('사은품 증정 완료로 처리했습니다.');
+            
+            // 리뷰 목록 새로고침
+            const updatedReviews = await getReviewsByUserId(user.uid);
+            setReviews(updatedReviews);
+        } catch (error: any) {
+            console.error('사은품 증정 처리 실패:', error);
+            toast.error(error.message || '사은품 증정 처리에 실패했습니다.');
+        }
+    }, [user.uid]);
+
+    // 사은품 증정 취소 처리 (대기중으로 되돌리기)
+    const handleMarkRewardPending = useCallback(async (review: Review) => {
+        if (review.rewardStatus !== 'FULFILLED') {
+            toast.error('증정 완료 상태가 아닌 리뷰입니다.');
+            return;
+        }
+
+        if (!window.confirm('사은품 증정을 취소하고 대기중 상태로 되돌리시겠습니까?')) {
+            return;
+        }
+
+        try {
+            await updateReview(review.id, {
+                rewardStatus: 'PENDING',
+                rewardFulfilledAt: null,
+            });
+
+            toast.success('사은품 증정을 취소했습니다.');
+            
+            // 리뷰 목록 새로고침
+            const updatedReviews = await getReviewsByUserId(user.uid);
+            setReviews(updatedReviews);
+        } catch (error: any) {
+            console.error('사은품 증정 취소 실패:', error);
+            toast.error(error.message || '사은품 증정 취소에 실패했습니다.');
+        }
+    }, [user.uid]);
+
+    // 리뷰 삭제 처리
+    const handleDeleteReview = useCallback(async (review: Review) => {
+        const userName = review.userName || review.userNickname || '익명';
+        if (!window.confirm(`${userName}님의 리뷰를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+            return;
+        }
+
+        try {
+            await deleteReview(review.id);
+            toast.success('리뷰가 삭제되었습니다.');
+            
+            // 리뷰 목록 새로고침
+            const updatedReviews = await getReviewsByUserId(user.uid);
+            setReviews(updatedReviews);
+            
+            // 선택된 리뷰에서도 제거
+            setSelectedReviewIds(prev => prev.filter(id => id !== review.id));
+        } catch (error: any) {
+            console.error('리뷰 삭제 실패:', error);
+            toast.error(error.message || '리뷰 삭제에 실패했습니다.');
+        }
+    }, [user.uid]);
 
     // Cloud Function 초기화
     const functions = getFunctions(getApp(), 'asia-northeast3');
@@ -511,17 +592,19 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
                     return <p className="no-data-message">리뷰를 불러오는 중...</p>;
                 }
                 return (
-                    <div className="qcp-results-grid">
-                        {reviews.map(review => (
-                            <QuickCheckReviewCard
-                                key={review.id}
-                                review={review}
-                                isSelected={selectedReviewIds.includes(review.id)}
-                                onSelect={handleSelectReview}
-                            />
-                        ))}
-                        {reviews.length === 0 && <p className="no-data-message">등록된 리뷰가 없습니다.</p>}
-                    </div>
+                    <>
+                        <div className="qcp-results-grid">
+                            {reviews.map(review => (
+                                <QuickCheckReviewCard
+                                    key={review.id}
+                                    review={review}
+                                    isSelected={selectedReviewIds.includes(review.id)}
+                                    onSelect={handleSelectReview}
+                                />
+                            ))}
+                            {reviews.length === 0 && <p className="no-data-message">등록된 리뷰가 없습니다.</p>}
+                        </div>
+                    </>
                 );
             default:
                 return null;
@@ -529,6 +612,80 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
     };
 
     const renderFooter = () => {
+        // 리뷰 탭 푸터
+        if (activeTab === 'reviews') {
+            if (selectedReviewIds.length === 0) return null;
+            
+            const selectedReviews = reviews.filter(r => selectedReviewIds.includes(r.id));
+            const unfulfilledReviews = selectedReviews.filter(r => r.rewardStatus !== 'FULFILLED');
+            const fulfilledReviews = selectedReviews.filter(r => r.rewardStatus === 'FULFILLED');
+            
+            return (
+                <div className="cat-review-action-footer">
+                    <span className="cat-footer-summary">{selectedReviewIds.length}개 리뷰 선택</span>
+                    <div className="cat-footer-actions">
+                        {unfulfilledReviews.length > 0 && (
+                            <button 
+                                onClick={() => {
+                                    if (window.confirm(`${unfulfilledReviews.length}개 리뷰의 사은품 증정을 완료 처리하시겠습니까?`)) {
+                                        Promise.all(unfulfilledReviews.map(r => handleMarkRewardFulfilled(r)))
+                                            .then(() => {
+                                                setSelectedReviewIds([]);
+                                            });
+                                    }
+                                }}
+                                className="common-button button-primary"
+                            >
+                                <CheckCircle size={16} />
+                                사은품 증정 완료 ({unfulfilledReviews.length}개)
+                            </button>
+                        )}
+                        {fulfilledReviews.length > 0 && (
+                            <button 
+                                onClick={() => {
+                                    if (window.confirm(`${fulfilledReviews.length}개 리뷰의 사은품 증정을 취소하고 대기중으로 되돌리시겠습니까?`)) {
+                                        Promise.all(fulfilledReviews.map(r => handleMarkRewardPending(r)))
+                                            .then(() => {
+                                                setSelectedReviewIds([]);
+                                            });
+                                    }
+                                }}
+                                className="common-button button-secondary"
+                            >
+                                <RotateCcw size={16} />
+                                증정 취소 ({fulfilledReviews.length}개)
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => {
+                                const count = selectedReviewIds.length;
+                                if (window.confirm(`선택한 ${count}개 리뷰를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+                                    Promise.all(selectedReviews.map(r => deleteReview(r.id)))
+                                        .then(() => {
+                                            setSelectedReviewIds([]);
+                                            return getReviewsByUserId(user.uid);
+                                        })
+                                        .then(setReviews)
+                                        .then(() => {
+                                            toast.success(`${count}개 리뷰가 삭제되었습니다.`);
+                                        })
+                                        .catch((error: any) => {
+                                            console.error('리뷰 삭제 실패:', error);
+                                            toast.error(error.message || '리뷰 삭제에 실패했습니다.');
+                                        });
+                                }
+                            }}
+                            className="common-button button-danger"
+                        >
+                            <XCircle size={16} />
+                            삭제 ({selectedReviewIds.length}개)
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        
+        // 픽업 탭 푸터
         if (activeTab !== 'pickup') return null;
         
         if (selectedGroupKeys.length === 0) return null;
@@ -567,12 +724,25 @@ const CustomerActionTabs: React.FC<CustomerActionTabsProps> = ({
         )
     }
 
+    // 미처리 사은품 증정 리뷰 개수 계산
+    const pendingRewardCount = useMemo(() => {
+        return reviews.filter(r => r.rewardStatus !== 'FULFILLED').length;
+    }, [reviews]);
+
     return (
         <div className="cat-container">
             <div className="cat-tab-navigation">
                 <button className={activeTab === 'pickup' ? 'active' : ''} onClick={() => setActiveTab('pickup')}>픽업 카드 ({aggregatedPickupOrders.length})</button>
                 <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>전체 주문 내역 ({orders.length})</button>
-                <button className={activeTab === 'reviews' ? 'active' : ''} onClick={() => setActiveTab('reviews')}>리뷰 ({reviewCount})</button>
+                <button className={activeTab === 'reviews' ? 'active' : ''} onClick={() => setActiveTab('reviews')}>
+                    리뷰 ({reviewCount})
+                    {pendingRewardCount > 0 && (
+                        <span className="cat-tab-badge" title={`사은품 증정 미처리 ${pendingRewardCount}개`}>
+                            <AlertCircle size={14} />
+                            {pendingRewardCount}
+                        </span>
+                    )}
+                </button>
                 <button className={activeTab === 'manage' ? 'active' : ''} onClick={() => setActiveTab('manage')}>신뢰도 관리</button>
             </div>
             <div className={`cat-tab-content ${activeTab === 'pickup' || activeTab === 'reviews' ? 'is-grid-view' : ''}`}>

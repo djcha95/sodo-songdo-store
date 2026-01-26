@@ -55,6 +55,7 @@ export * from "./triggers/points.js";
 export * from "./triggers/products.js";
 export * from "./triggers/users.js";
 export * from "./triggers/reservations.js";
+export * from "./triggers/reviews.js";
 
 
 /**

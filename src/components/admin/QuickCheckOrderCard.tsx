@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 // ✅ [수정] AggregatedOrderGroup을 shared/types에서 import (로컬 선언 삭제됨)
 import type { OrderStatus, OrderItem, AggregatedOrderGroup } from '@/shared/types';
 import toast from 'react-hot-toast';
-import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle } from 'lucide-react';
+import { MinusCircle, PlusCircle, CheckSquare, AlertTriangle, Gift } from 'lucide-react';
 import useLongPress from '@/hooks/useLongPress';
 import './QuickCheckOrderCard.css';
 import { formatKRW } from '@/utils/number';
@@ -192,6 +192,12 @@ const QuickCheckOrderCard: React.FC<OrderCardProps> = ({
         <div className="qco-noshow-badge">
             <AlertTriangle size={14} />
             <span>노쇼 처리됨</span>
+        </div>
+      )}
+      {group.notes && group.notes.includes('[리뷰 보상]') && (
+        <div className="qco-review-reward-badge">
+            <Gift size={14} />
+            <span>리뷰 보상</span>
         </div>
       )}
       <div className="qco-bottom-row">

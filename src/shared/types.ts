@@ -362,5 +362,7 @@ export interface AggregatedOrderGroup {
   pickupDeadlineDate?: UniversalTimestamp | Date | null;
   // 원래 어떤 주문들이 합쳐졌는지 추적 (기존 데이터 호환성 및 개별 취소 대비)
   originalOrders: { orderId: string; quantity: number; status: OrderStatus }[];
+  // 주문 메모 (리뷰 보상 등 특별 표시용)
+  notes?: string;
 }
 

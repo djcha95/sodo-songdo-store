@@ -169,7 +169,7 @@ const QuickCheckPage: React.FC = () => {
           eventMonth: reviewEventMonth,
           rewardType: REVIEW_REWARD_CONFIG.type,
           rewardValueKrw: REVIEW_REWARD_CONFIG.valueKrw,
-          rewardStatus: rewardFulfilledNow ? 'FULFILLED' : 'PENDING',
+          rewardStatus: rewardFulfilledNow ? 'FULFILLED' : ('PENDING' as const), // ✅ 명시적으로 'PENDING' 설정
           rewardFulfilledAt: rewardFulfilledNow ? Timestamp.now() : undefined,
         } as any,
         reviewImages

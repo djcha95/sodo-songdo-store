@@ -15,7 +15,7 @@ interface QuickCheckReviewCardProps {
 const QuickCheckReviewCard: React.FC<QuickCheckReviewCardProps> = ({ 
   review, 
   isSelected = false,
-  onSelect 
+  onSelect
 }) => {
   const handleClick = () => {
     if (onSelect) {
@@ -34,7 +34,8 @@ const QuickCheckReviewCard: React.FC<QuickCheckReviewCardProps> = ({
   };
 
   const hasImages = review.images && review.images.length > 0;
-  const rewardStatus = review.rewardStatus === 'FULFILLED' ? '지급완료' : '대기중';
+  // ✅ rewardStatus가 undefined이거나 'PENDING'이면 대기중, 'FULFILLED'면 완료
+  const isRewardFulfilled = review.rewardStatus === 'FULFILLED';
 
   return (
     <div 
@@ -87,10 +88,17 @@ const QuickCheckReviewCard: React.FC<QuickCheckReviewCardProps> = ({
           {review.isFromKakao && <span className="qcr-kakao-badge">카톡</span>}
         </div>
         <div className="qcr-reward-status">
-          <Gift size={14} />
-          <span className={review.rewardStatus === 'FULFILLED' ? 'fulfilled' : 'pending'}>
-            {rewardStatus}
-          </span>
+          {isRewardFulfilled ? (
+            <div className="qcr-reward-status fulfilled">
+              <Gift size={14} />
+              <span>사은품 증정완료</span>
+            </div>
+          ) : (
+            <div className="qcr-reward-status pending">
+              <Gift size={14} />
+              <span>대기중</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
