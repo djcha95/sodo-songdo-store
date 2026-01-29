@@ -291,11 +291,15 @@ export const updateMultipleVariantGroupStocks = onCall(
     }
 
     try {
+      const notFoundItems: string[] = [];
       await db.runTransaction(async (tx) => {
         for (const [productId, productUpdatesMap] of updatesByProduct.entries()) {
           const productRef = db.collection("products").doc(productId);
           const snap = await tx.get(productRef);
-          if (!snap.exists) continue;
+          if (!snap.exists) {
+            notFoundItems.push(`상품을 찾을 수 없음: ${productId}`);
+            continue;
+          }
 
           const product = snap.data() as Product;
           const safeSalesHistory = Array.isArray(product.salesHistory) ? product.salesHistory : [];
@@ -307,11 +311,17 @@ export const updateMultipleVariantGroupStocks = onCall(
           for (const [key, newStock] of productUpdatesMap.entries()) {
             const [roundId, variantGroupId] = key.split('::');
             const rIdx = newSalesHistory.findIndex(r => r.roundId === roundId);
-            if (rIdx === -1) continue;
+            if (rIdx === -1) {
+              notFoundItems.push(`회차를 찾을 수 없음: ${productId}/${roundId}`);
+              continue;
+            }
 
             const round = newSalesHistory[rIdx];
             const vgIdx = round.variantGroups.findIndex(v => v.id === variantGroupId);
-            if (vgIdx === -1) continue;
+            if (vgIdx === -1) {
+              notFoundItems.push(`옵션을 찾을 수 없음: ${productId}/${roundId}/${variantGroupId}`);
+              continue;
+            }
 
             round.variantGroups[vgIdx].totalPhysicalStock = newStock;
             if (newStock > 0 || newStock === -1) {
@@ -326,10 +336,20 @@ export const updateMultipleVariantGroupStocks = onCall(
           });
         }
       });
-      return { success: true, message: "재고가 성공적으로 업데이트되었습니다." };
-    } catch (error) {
+      
+      if (notFoundItems.length > 0) {
+        logger.warn(`[updateMultipleVariantGroupStocks] 일부 항목을 찾을 수 없음:`, notFoundItems);
+      }
+      
+      return { 
+        success: true, 
+        message: "재고가 성공적으로 업데이트되었습니다.",
+        notFoundItems: notFoundItems.length > 0 ? notFoundItems : undefined
+      };
+    } catch (error: any) {
       logger.error("Error in updateMultipleVariantGroupStocks:", error);
-      throw new HttpsError("internal", "재고 업데이트 중 오류가 발생했습니다.");
+      const errorMessage = error?.message || "알 수 없는 오류";
+      throw new HttpsError("internal", `재고 업데이트 중 오류가 발생했습니다: ${errorMessage}`);
     }
   }
 );

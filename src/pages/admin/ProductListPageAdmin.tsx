@@ -9,7 +9,7 @@ import { functions } from '@/firebase/firebaseConfig';
 import { ensureInventoryItem, archiveInventoryItem } from '@/firebase/inventory'; // ✅ 추가
 import type { Product, SalesRound, VariantGroup, StorageType, ProductItem } from '@/shared/types';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2, Store, Link } from 'lucide-react';
+import { Plus, Edit, Filter, Search, ChevronDown, Trash2, PackageOpen, ChevronsLeft, ChevronsRight, AlertTriangle, Copy, Sun, Snowflake, Tag, Loader2, Store, Link, CheckSquare, Square } from 'lucide-react';
 import SodomallLoader from '@/components/common/SodomallLoader';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import FilterBar from '@/components/admin/FilterBar';
@@ -175,7 +175,19 @@ const InlineEditor: React.FC<{
   if (isEditing) {
     return (<input ref={inputRef} type={type === 'price' ? 'text' : 'number'} value={type === 'price' && typeof value === 'number' ? formatKRW(value) : value} onChange={(e) => setValue(type === 'price' ? parseKRW(e.target.value) : e.target.value)} onBlur={handleSave} onKeyDown={handleKeyDown} className={`inline-input inline-input-${type}`} onClick={(e) => e.stopPropagation()} />);
   }
-  return (<span className="editable-field" onClick={() => setIsEditing(true)}> {displayValue} </span>);
+  const isUnlimited = type === 'number' && initialValue === -1;
+  return (
+    <span 
+      className="editable-field" 
+      onClick={() => setIsEditing(true)}
+      style={isUnlimited ? {
+        color: '#DC2626',
+        fontWeight: 700,
+      } : undefined}
+    > 
+      {displayValue} 
+    </span>
+  );
 };
 
 const InlineStorageEditor: React.FC<{
@@ -288,6 +300,10 @@ const ProductListPageAdmin: React.FC = () => {
   const [isRebuildingStats, setIsRebuildingStats] = useState(false);
   // ✅ 아카이브 상품까지 포함해서 보이기 (레거시/과거 주문 상품이 "안 뜨는" 문제 대응)
   const [includeArchived, setIncludeArchived] = useState(true);
+  // ✅ 일괄 재고 편집 모드
+  const [isBulkStockEditMode, setIsBulkStockEditMode] = useState(false);
+  const [selectedStockItems, setSelectedStockItems] = useState<Set<string>>(new Set());
+  const [bulkStockValue, setBulkStockValue] = useState<string>('');
 
   // ✅ fetchData 먼저 정의 (다른 함수들이 참조함)
   // ✅ [수정] 모든 상품을 가져오도록 페이지네이션 구현
@@ -376,6 +392,8 @@ const ProductListPageAdmin: React.FC = () => {
 
     return issues;
   }, [pageData]);
+
+  // ✅ 무제한 재고인 상품 개수 확인 (processedRounds 이후에 계산)
 
   const processedRounds = useMemo<EnrichedRoundItem[]>(() => {
     let flatList: EnrichedRoundItem[] = [];
@@ -498,6 +516,12 @@ const ProductListPageAdmin: React.FC = () => {
     if (filterStatus !== 'all') {
       filteredList = filteredList.filter(item => {
         if (filterStatus === '매진') { return item.status === '매진'; }
+        if (filterStatus === 'unlimited') {
+          // 무제한 재고인지 확인 (variantGroups 중 하나라도 totalPhysicalStock이 -1이거나 null)
+          return item.enrichedVariantGroups.some(vg => 
+            vg.configuredStock === -1 || vg.configuredStock === null
+          );
+        }
         return item.status === filterStatus;
       });
     }
@@ -518,6 +542,22 @@ const ProductListPageAdmin: React.FC = () => {
       return 0;
     });
   }, [pageData, searchQuery, filterStatus, sortConfig]);
+
+  // ✅ 무제한 재고인 상품 개수 확인 (필터링 전 전체 목록 기준)
+  const unlimitedStockCount = useMemo(() => {
+    let count = 0;
+    pageData.forEach(p => {
+      const salesHistory = Array.isArray(p.salesHistory) ? p.salesHistory : [];
+      salesHistory.forEach(r => {
+        const vgs = Array.isArray(r.variantGroups) ? r.variantGroups : [];
+        const hasUnlimited = vgs.some(vg => {
+          return vg.totalPhysicalStock === -1 || vg.totalPhysicalStock === null;
+        });
+        if (hasUnlimited) count++;
+      });
+    });
+    return count;
+  }, [pageData]);
 
   // ✅ 예약 수량이 모두 0인지 확인 (processedRounds 이후에 정의)
   const allReservedCountsZero = useMemo(() => {
@@ -600,7 +640,8 @@ const ProductListPageAdmin: React.FC = () => {
         const newDate = Timestamp.fromDate(new Date(newValue as number));
         const updatedItem = { ...item, expirationDate: newDate };
         const updatedVg = { ...vg, items: safeItems.map(i => i.id === itemId ? updatedItem : i) };
-        const updatedRound = { ...round, variantGroups: (Array.isArray(round.variantGroups) ? round.variantGroups : []).map(v => v.id === vgId ? updatedVg : v) };
+        // ✅ variantGroups만 전달하여 날짜 필드(createdAt, pickupDate 등)가 null로 설정되는 문제 방지
+        const updatedRound = { variantGroups: (Array.isArray(round.variantGroups) ? round.variantGroups : []).map(v => v.id === vgId ? updatedVg : v) };
         backendPromise = updateSalesRound(productId, roundId, updatedRound);
       }
       else if (field === 'price' && vgId && itemId) {
@@ -613,7 +654,8 @@ const ProductListPageAdmin: React.FC = () => {
         if (!product || !round || !vg || !item) throw new Error("가격 업데이트 정보 누락");
         const updatedItem = { ...item, price: newValue as number };
         const updatedVg = { ...vg, items: safeItems.map(i => i.id === itemId ? updatedItem : i) };
-        const updatedRound = { ...round, variantGroups: (Array.isArray(round.variantGroups) ? round.variantGroups : []).map(v => v.id === vgId ? updatedVg : v) };
+        // ✅ variantGroups만 전달하여 날짜 필드(createdAt, pickupDate 등)가 null로 설정되는 문제 방지
+        const updatedRound = { variantGroups: (Array.isArray(round.variantGroups) ? round.variantGroups : []).map(v => v.id === vgId ? updatedVg : v) };
         backendPromise = updateSalesRound(productId, roundId, updatedRound);
       }
       else if (field === 'stock' && vgId) {
@@ -711,6 +753,106 @@ const ProductListPageAdmin: React.FC = () => {
     ), { id: 'delete-round-confirm', duration: Infinity, position: 'top-center' });
   }, [fetchData]);
 
+  // ✅ 일괄 재고 편집 관련 함수들
+  const toggleStockItemSelection = useCallback((uniqueId: string, vgId: string) => {
+    const key = `${uniqueId}-${vgId}`;
+    setSelectedStockItems(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllStockItems = useCallback(() => {
+    if (selectedStockItems.size === paginatedRounds.reduce((acc, item) => {
+      return acc + item.enrichedVariantGroups.length;
+    }, 0)) {
+      setSelectedStockItems(new Set());
+    } else {
+      const allKeys = new Set<string>();
+      paginatedRounds.forEach(item => {
+        item.enrichedVariantGroups.forEach(vg => {
+          allKeys.add(`${item.uniqueId}-${vg.id}`);
+        });
+      });
+      setSelectedStockItems(allKeys);
+    }
+  }, [paginatedRounds, selectedStockItems.size]);
+
+  const handleBulkStockUpdate = useCallback(async () => {
+    if (selectedStockItems.size === 0) {
+      toast.error('선택된 항목이 없습니다.');
+      return;
+    }
+
+    const stockValue = bulkStockValue.trim();
+    if (!stockValue) {
+      toast.error('재고 수량을 입력해주세요.');
+      return;
+    }
+
+    const newStock = stockValue === '무제한' || stockValue === '-1' ? -1 : parseInt(stockValue, 10);
+    if (isNaN(newStock) || (newStock < 0 && newStock !== -1)) {
+      toast.error('올바른 재고 수량을 입력해주세요 (0 이상 또는 -1).');
+      return;
+    }
+
+    const updates: Array<{ productId: string; roundId: string; variantGroupId: string; newStock: number }> = [];
+    
+    // ✅ processedRounds를 순회하면서 선택된 키와 매칭 (vgId에 하이픈이 포함될 수 있어서 역순으로 찾기)
+    processedRounds.forEach(item => {
+      item.enrichedVariantGroups.forEach(vg => {
+        const key = `${item.uniqueId}-${vg.id}`;
+        if (selectedStockItems.has(key)) {
+          // ✅ roundId 확인: item.round.roundId 또는 item.round.id 사용
+          const roundId = item.round.roundId || (item.round as any).id;
+          if (!roundId) {
+            console.error(`[handleBulkStockUpdate] roundId를 찾을 수 없음:`, item.round);
+            return;
+          }
+          updates.push({
+            productId: item.productId,
+            roundId: roundId,
+            variantGroupId: vg.id,
+            newStock: newStock
+          });
+        }
+      });
+    });
+
+    if (updates.length === 0) {
+      toast.error('업데이트할 항목을 찾을 수 없습니다.');
+      return;
+    }
+
+    // ✅ 디버깅: 전송할 데이터 확인
+    console.log('[handleBulkStockUpdate] 전송할 업데이트 데이터:', JSON.stringify(updates, null, 2));
+
+    try {
+      await toast.promise(
+        updateMultipleVariantGroupStocks(updates),
+        {
+          loading: `${updates.length}개 항목의 재고를 업데이트하는 중...`,
+          success: `${updates.length}개 항목의 재고가 성공적으로 업데이트되었습니다.`,
+          error: (err) => {
+            console.error('[handleBulkStockUpdate] 에러 상세:', err);
+            return `재고 업데이트 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`;
+          }
+        }
+      );
+      setSelectedStockItems(new Set());
+      setBulkStockValue('');
+      setIsBulkStockEditMode(false);
+      await fetchData();
+    } catch (error: any) {
+      reportError('ProductListPageAdmin.handleBulkStockUpdate', error);
+    }
+  }, [selectedStockItems, bulkStockValue, processedRounds, fetchData]);
+
   if (loading) return <SodomallLoader />;
 
   return (
@@ -720,7 +862,7 @@ const ProductListPageAdmin: React.FC = () => {
         icon={<PackageOpen size={28} />}
         priority="normal"
         actions={
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               onClick={() => setIncludeArchived((v) => !v)}
               className="admin-add-button"
@@ -742,9 +884,119 @@ const ProductListPageAdmin: React.FC = () => {
             <button onClick={() => navigate('/admin/products/add')} className="admin-add-button" title="신규 대표 상품 등록" type="button">
               <Plus size={18} /> 신규 대표 상품 추가
             </button>
+            <button
+              onClick={() => {
+                setIsBulkStockEditMode(v => !v);
+                if (isBulkStockEditMode) {
+                  setSelectedStockItems(new Set());
+                  setBulkStockValue('');
+                }
+              }}
+              className="admin-add-button"
+              title="여러 상품의 재고를 한번에 변경"
+              style={{ background: isBulkStockEditMode ? '#334155' : undefined }}
+              type="button"
+            >
+              <CheckSquare size={18} /> 일괄 재고 편집 {isBulkStockEditMode ? 'ON' : ''}
+            </button>
+            {unlimitedStockCount > 0 && (
+              <button
+                onClick={() => {
+                  setFilterStatus('unlimited');
+                  setCurrentPage(1);
+                }}
+                className="admin-add-button"
+                title="무제한 재고로 설정된 상품만 보기"
+                type="button"
+                style={{
+                  background: '#FEF2F2',
+                  border: '2px solid #FCA5A5',
+                  color: '#DC2626',
+                  fontWeight: 700,
+                }}
+              >
+                <AlertTriangle size={18} /> 아직 재고가 무제한인 상품이 있습니다! ({unlimitedStockCount})
+              </button>
+            )}
           </div>
         }
       />
+
+      {/* ✅ 일괄 재고 편집 바 */}
+      {isBulkStockEditMode && (
+        <div style={{
+          margin: '12px 0 16px',
+          padding: '16px',
+          background: '#F0F9FF',
+          border: '2px solid #0EA5E9',
+          borderRadius: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '200px' }}>
+            <button
+              onClick={toggleSelectAllStockItems}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="전체 선택/해제"
+            >
+              {selectedStockItems.size > 0 ? <CheckSquare size={20} color="#0EA5E9" /> : <Square size={20} color="#64748B" />}
+            </button>
+            <span style={{ fontWeight: 700, color: '#0F172A' }}>
+              {selectedStockItems.size}개 선택됨
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '250px' }}>
+            <label style={{ fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
+              재고 수량:
+            </label>
+            <input
+              type="text"
+              value={bulkStockValue}
+              onChange={(e) => setBulkStockValue(e.target.value)}
+              placeholder="숫자 또는 '무제한'"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: '1px solid #CBD5E1',
+                borderRadius: '6px',
+                fontSize: '14px',
+                minWidth: '120px'
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleBulkStockUpdate();
+                }
+              }}
+            />
+            <button
+              onClick={handleBulkStockUpdate}
+              disabled={selectedStockItems.size === 0 || !bulkStockValue.trim()}
+              style={{
+                padding: '8px 16px',
+                background: selectedStockItems.size === 0 || !bulkStockValue.trim() ? '#CBD5E1' : '#0EA5E9',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 700,
+                cursor: selectedStockItems.size === 0 || !bulkStockValue.trim() ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              일괄 저장 ({selectedStockItems.size})
+            </button>
+          </div>
+        </div>
+      )}
 
       <FilterBar
         searchPlaceholder="상품명, 회차명 검색"
@@ -762,6 +1014,12 @@ const ProductListPageAdmin: React.FC = () => {
               { value: '판매종료', label: '판매종료' },
               { value: '판매예정', label: '판매예정' },
               { value: '데이터 오류', label: '오류' },
+              { 
+                value: 'unlimited', 
+                label: unlimitedStockCount > 0 
+                  ? `⚠️ 무제한 재고 (${unlimitedStockCount})` 
+                  : '무제한 재고'
+              },
             ]
           }
         ]}
@@ -907,6 +1165,26 @@ const ProductListPageAdmin: React.FC = () => {
           <table className="admin-product-table simple inline-edit-table">
             <thead>
               <tr>
+                {isBulkStockEditMode && (
+                  <th className="th-align-center" style={{ width: '40px' }}>
+                    <button
+                      onClick={toggleSelectAllStockItems}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto'
+                      }}
+                      title="전체 선택/해제"
+                    >
+                      {selectedStockItems.size > 0 ? <CheckSquare size={18} color="#0EA5E9" /> : <Square size={18} color="#64748B" />}
+                    </button>
+                  </th>
+                )}
                 <th className="th-align-center" style={{ width: '50px' }}>No.</th>
                 <th className="th-align-center" style={{ width: '40px' }}>ID</th>
                 <th className="th-align-center sortable-header" onClick={() => handleSortChange('createdAt')} style={{ width: '80px' }}>
@@ -971,6 +1249,30 @@ const ProductListPageAdmin: React.FC = () => {
                       <React.Fragment key={item.uniqueId}>
                         {/* ✅ master-row에 bandClass와 eventClass 추가 */}
                         <tr className={`master-row ${bandClass} ${eventClass}`}>
+                          {isBulkStockEditMode && (
+                            <td className="td-align-center td-nowrap">
+                              <button
+                                onClick={() => toggleStockItemSelection(item.uniqueId, firstVg.id)}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  padding: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  margin: '0 auto'
+                                }}
+                                title="선택/해제"
+                              >
+                                {selectedStockItems.has(`${item.uniqueId}-${firstVg.id}`) ? (
+                                  <CheckSquare size={18} color="#0EA5E9" />
+                                ) : (
+                                  <Square size={18} color="#64748B" />
+                                )}
+                              </button>
+                            </td>
+                          )}
                           <td className="td-align-center td-nowrap">
                             <div className="no-and-expander">
                               <span>{(currentPage - 1) * itemsPerPage + index + 1}</span>
@@ -1042,13 +1344,37 @@ const ProductListPageAdmin: React.FC = () => {
                             {!isExpandable && firstVg ? (
                               <>
                                 <span className='reserved-count-display'>예약: {firstVg.reservedCount || 0} /</span>
-                                <InlineEditor
-                                  initialValue={firstVg.configuredStock}
-                                  type="number"
-                                  onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id })}
-                                  isLoading={updatingItems[`${item.uniqueId}-stock-${firstVg.id}`]}
-                                  disabled={item.status === '데이터 오류' || item.status === '옵션 오류'}
-                                />
+                                {firstVg.configuredStock === -1 ? (
+                                  <span style={{ 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '4px',
+                                    padding: '4px 8px',
+                                    background: '#FEF2F2',
+                                    border: '1px solid #FCA5A5',
+                                    borderRadius: '6px',
+                                    color: '#DC2626',
+                                    fontWeight: 700,
+                                    fontSize: '13px'
+                                  }}>
+                                    <AlertTriangle size={14} />
+                                    <InlineEditor
+                                      initialValue={firstVg.configuredStock}
+                                      type="number"
+                                      onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id })}
+                                      isLoading={updatingItems[`${item.uniqueId}-stock-${firstVg.id}`]}
+                                      disabled={item.status === '데이터 오류' || item.status === '옵션 오류'}
+                                    />
+                                  </span>
+                                ) : (
+                                  <InlineEditor
+                                    initialValue={firstVg.configuredStock}
+                                    type="number"
+                                    onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: firstVg.id })}
+                                    isLoading={updatingItems[`${item.uniqueId}-stock-${firstVg.id}`]}
+                                    disabled={item.status === '데이터 오류' || item.status === '옵션 오류'}
+                                  />
+                                )}
                               </>
                             ) : (<span className="disabled-field">{isExpandable ? '옵션별' : '–'}</span>)}
                           </td>
@@ -1079,6 +1405,30 @@ const ProductListPageAdmin: React.FC = () => {
                         {/* ✅ detail-row에도 bandClass와 eventClass 동일하게 적용 */}
                         {isExpanded && item.enrichedVariantGroups.map((vg, vgIndex) => (
                           <tr key={vg.id} className={`detail-row ${bandClass} ${eventClass}`}>
+                            {isBulkStockEditMode && (
+                              <td className="td-align-center td-nowrap">
+                                <button
+                                  onClick={() => toggleStockItemSelection(item.uniqueId, vg.id)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    padding: '4px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    margin: '0 auto'
+                                  }}
+                                  title="선택/해제"
+                                >
+                                  {selectedStockItems.has(`${item.uniqueId}-${vg.id}`) ? (
+                                    <CheckSquare size={18} color="#0EA5E9" />
+                                  ) : (
+                                    <Square size={18} color="#64748B" />
+                                  )}
+                                </button>
+                              </td>
+                            )}
                             <td className="td-align-center td-nowrap"></td>
                             <td className="td-align-center td-nowrap"><span className="sub-row-no">{(currentPage - 1) * itemsPerPage + index + 1}-{vgIndex + 1}</span></td>
                             <td className="td-align-center td-nowrap"></td>
@@ -1109,13 +1459,37 @@ const ProductListPageAdmin: React.FC = () => {
                             </td>
                             <td className="td-align-right stock-info-cell td-nowrap">
                               <span className='reserved-count-display'>예약: {vg.reservedCount} /</span>
-                              <InlineEditor
-                                initialValue={vg.configuredStock}
-                                type="number"
-                                onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id })}
-                                isLoading={updatingItems[`${item.uniqueId}-stock-${vg.id}`]}
-                                disabled={vg.status === '데이터 오류' || vg.status === '옵션 오류'}
-                              />
+                              {vg.configuredStock === -1 ? (
+                                <span style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  background: '#FEF2F2',
+                                  border: '1px solid #FCA5A5',
+                                  borderRadius: '6px',
+                                  color: '#DC2626',
+                                  fontWeight: 700,
+                                  fontSize: '13px'
+                                }}>
+                                  <AlertTriangle size={14} />
+                                  <InlineEditor
+                                    initialValue={vg.configuredStock}
+                                    type="number"
+                                    onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id })}
+                                    isLoading={updatingItems[`${item.uniqueId}-stock-${vg.id}`]}
+                                    disabled={vg.status === '데이터 오류' || vg.status === '옵션 오류'}
+                                  />
+                                </span>
+                              ) : (
+                                <InlineEditor
+                                  initialValue={vg.configuredStock}
+                                  type="number"
+                                  onSave={(newValue) => handleUpdate(item.uniqueId, 'stock', newValue, { productId: item.productId, roundId: item.round.roundId, vgId: vg.id })}
+                                  isLoading={updatingItems[`${item.uniqueId}-stock-${vg.id}`]}
+                                  disabled={vg.status === '데이터 오류' || vg.status === '옵션 오류'}
+                                />
+                              )}
                             </td>
                             <td className="td-align-center td-nowrap"></td>
                           </tr>
