@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import './AdminSidebar.css';
 import {
   Home, Package, ShoppingCart, Users, ExternalLink, Menu, Zap, PlusSquare, Wallet,
-  CalendarCheck, ClipboardList, Settings, AlertTriangle, MessageSquare
+  CalendarCheck, ClipboardList, Settings, AlertTriangle, MessageSquare, Tag
 } from 'lucide-react';
 import MenuGroup from './MenuGroup';
 import { ADMIN_HIDDEN_ROUTES } from "@/admin/adminHiddenRoutes";
@@ -90,6 +90,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isSidebarOpen, toggleSideba
           priority="normal"
         >
           <MenuItem to="/admin/products" icon={<Package size={22} />} text="상품 목록" isSidebarOpen={isSidebarOpen} end={true} />
+          <MenuItem to="/admin/category-manager" icon={<Tag size={22} />} text="카테고리 매핑" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/products/add" icon={<PlusSquare size={22} />} text="새 상품 등록" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/orders" icon={<ShoppingCart size={22} />} text="주문 통합 관리" isSidebarOpen={isSidebarOpen} />
           <MenuItem to="/admin/stock" icon={<ClipboardList size={22} />} text="재고 관리" isSidebarOpen={isSidebarOpen} />

@@ -193,6 +193,7 @@ const PickupCheckPage = React.lazy(() => import('@/pages/admin/PickupCheckPage')
 const AdminStockPage = React.lazy(() => import('@/pages/admin/AdminStockPage'));
 const AdminToolsPage = React.lazy(() => import('@/pages/admin/AdminToolsPage')); // 👈 추가
 const ReviewManagementPage = React.lazy(() => import('@/pages/admin/ReviewManagementPage'));
+const CategoryManagerPage = React.lazy(() => import('@/pages/admin/CategoryManagerPage'));
 // ✅ [추가] 후기 페이지도 청크 로드 실패 시 자동 복구
 const ReviewEventPage = React.lazy(() => {
   return import('@/pages/customer/ReviewEventPage').catch((error) => {
@@ -359,6 +360,7 @@ const router = createBrowserRouter([
           { path: "products", element: <ProductListPageAdmin /> },
           { path: "products/add", element: <ProductAddAdminPage /> },
           { path: "products/edit/:productId/:roundId", element: <SalesRoundEditPage /> },
+          { path: "category-manager", element: <CategoryManagerPage /> },
           { path: "stock", element: <AdminStockPage /> },
           { path: "orders", element: <OrderManagementPage /> },
           { path: "create-order", element: <CreateOrderPage /> },

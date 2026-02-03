@@ -10,6 +10,9 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "test": "vitest",
     "update-tiers": "tsx scripts/updateUserTiers.ts",
+    "auto-categorize": "node scripts/autoCategorizeProducts.js",
+    "cleanup-categories": "node scripts/cleanupDuplicateCategories.js",
+    "keep-only-categories": "node scripts/keepOnlyCategories.js",
     "deploy:parse": "npx firebase deploy --only functions:parseProductText --set-secrets GEMINI_API_KEY=projects/sso-do/secrets/GEMINI_API_KEY:latest"
   },
   "dependencies": {

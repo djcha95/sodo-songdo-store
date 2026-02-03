@@ -998,25 +998,26 @@ const fetchProduct = useCallback(async () => {
         setSelectedItem(availableItem);
     }, []);
 
-    // ✅ [수정] 일반 상품(옵션이 1개만 있는 경우)은 자동 선택, 그룹 상품 또는 선택지가 여러 개인 경우는 선택 요구
+    // ✅ [수정] 단일 그룹은 자동 선택하되, 아이템이 여러 개면 아이템만 수동 선택
     useEffect(() => {
         if (!displayRound || !displayRound.variantGroups || displayRound.variantGroups.length === 0) return;
 
         const isGroupProduct = displayRound.variantGroups.length > 1;
-        
-        // 일반 상품(옵션이 1개만 있는 경우)이고 아이템도 1개만 있으면 자동으로 선택
-        if (!isGroupProduct && !selectedVariantGroup) {
-            const singleVg = displayRound.variantGroups[0];
-            if (singleVg) {
-                // 아이템이 정확히 1개만 있는 경우에만 자동 선택
-                if (singleVg.items && singleVg.items.length === 1) {
-                    setSelectedVariantGroup(singleVg);
-                    setSelectedItem(singleVg.items[0]);
-                }
-                // 아이템이 여러 개이거나 그룹 상품인 경우는 자동 선택하지 않음 - 사용자가 선택해야 함
+        const singleVg = displayRound.variantGroups[0];
+
+        // 단일 그룹이면 그룹은 자동 선택 (아이템 선택 UI를 노출하기 위함)
+        if (!isGroupProduct && !selectedVariantGroup && singleVg) {
+            setSelectedVariantGroup(singleVg);
+
+            // 아이템이 정확히 1개면 자동 선택, 여러 개면 선택 대기
+            if (singleVg.items && singleVg.items.length === 1) {
+                setSelectedItem(singleVg.items[0]);
+            } else {
+                setSelectedItem(null);
             }
+            setQuantity(1);
         }
-        // 그룹 상품(옵션이 2개 이상) 또는 아이템이 여러 개인 경우는 자동 선택하지 않음
+        // 그룹 상품(옵션 2개 이상)은 자동 선택하지 않음
     }, [displayRound, selectedVariantGroup]);
 
 

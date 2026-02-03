@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Menu, Search } from 'lucide-react';
 import SideMenu from './SideMenu';
 import { db } from '../../firebase/firebaseConfig'; // Firebase 설정 확인 필요
 import { collection, getDocs, query } from 'firebase/firestore';
@@ -23,6 +23,7 @@ const ALL_CATEGORIES = [
 
 const Header: React.FC = () => {
   const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
   // ✅ 동적으로 변하는 카테고리 상태
   const [visibleCategories, setVisibleCategories] = useState(ALL_CATEGORIES);
 
@@ -172,6 +173,30 @@ const Header: React.FC = () => {
               <NavLink to="/?tab=home" className="brand-logo">
                 <span className="brand-emoji">🧧</span> 송도PICK
               </NavLink>
+            </div>
+
+            <div className="header-search-wrap">
+              <form
+                className="header-search-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const q = searchKeyword.trim();
+                  if (q) navigate(`/?tab=home&q=${encodeURIComponent(q)}`);
+                }}
+              >
+                <input
+                  type="search"
+                  className="header-search-input"
+                  placeholder="송도PICK에서 검색하기"
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  aria-label="상품 검색"
+                  autoComplete="off"
+                />
+                <button type="submit" className="header-search-submit" aria-label="검색">
+                  <Search size={20} strokeWidth={2} />
+                </button>
+              </form>
             </div>
 
             <div className="header-right">

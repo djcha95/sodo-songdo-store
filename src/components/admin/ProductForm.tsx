@@ -63,6 +63,7 @@ import ProductFormWizard from './ProductFormWizard';
 import ProductPreview from './ProductPreview';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { validateProductForm, getFieldError } from '@/utils/formValidation';
+import useCategories from '@/hooks/useCategories';
 
 import '@/pages/admin/ProductAddAdminPage.css';
 import { formatKRW, parseKRW } from '@/utils/number';
@@ -165,6 +166,109 @@ const ALL_LOYALTY_TIERS: LoyaltyTier[] = [
 
 const CATEGORY_OPTIONS = ['식품', '간식/디저트', '뷰티/생활', '주류/기타', '유아'] as const;
 
+const AUTO_CATEGORY_STORAGE_KEY = 'autoCategoryRules';
+
+type AutoCategoryRule = {
+  name: string;
+  keywords: string[];
+};
+
+const normalizeCategoryId = (name: string) =>
+  name
+    .trim()
+    .replace(/[\/\\?#%]/g, '-')
+    .replace(/\s+/g, '');
+
+const DEFAULT_AUTO_CATEGORY_RULES: AutoCategoryRule[] = [
+  {
+    name: '신선식품 / 정육 / 수산',
+    keywords: [
+      '삼겹살', '목살', '항정', '갈비', '한우', '소고기', '돼지고기', '닭', '막창',
+      '대하', '장어', '생선', '오징어',
+    ],
+  },
+  {
+    name: '간편식 / 밀키트 / 국·탕',
+    keywords: [
+      '만두', '국', '탕', '찌개', '밀키트', '볶음밥', '떡볶이', '피자', '핫도그', '우동', '냉면',
+    ],
+  },
+  {
+    name: '간식 / 디저트 / 베이커리',
+    keywords: [
+      '과자', '초콜릿', '젤리', '쿠키', '케이크', '떡', '약과', '아이스크림',
+    ],
+  },
+  {
+    name: '음료 / 커피 / 차',
+    keywords: [
+      '콜라', '사이다', '커피', '차', '콤부차', '주스', '음료',
+    ],
+  },
+  {
+    name: '건강식품 / 영양제',
+    keywords: [
+      '루테인', '오메가', '홍삼', '유산균', '비타민', '단백질', '밀크씨슬', '알부민',
+    ],
+  },
+  {
+    name: '뷰티 / 화장품 / 퍼스널케어',
+    keywords: [
+      '샴푸', '바디워시', '화장품', '크림', '앰플', '마스크팩', '선크림', '향수',
+    ],
+  },
+  {
+    name: '생활·청소·주방',
+    keywords: [
+      '세제', '휴지', '키친타올', '수세미', '탈취', '방향제', '곰팡이', '청소',
+    ],
+  },
+  {
+    name: '소형가전 / 생활기기',
+    keywords: [
+      '가전', '에어프라이어', '전자레인지', '믹서', '블렌더', '청소기', '선풍기', '가습기',
+    ],
+  },
+  {
+    name: '주류 / 와인 / 하이볼',
+    keywords: [
+      '와인', '위스키', '하이볼', '맥주', '소주',
+    ],
+  },
+];
+
+const loadAutoCategoryRules = (): AutoCategoryRule[] => {
+  try {
+    const raw = localStorage.getItem(AUTO_CATEGORY_STORAGE_KEY);
+    if (!raw) return DEFAULT_AUTO_CATEGORY_RULES;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_AUTO_CATEGORY_RULES;
+    const sanitized = parsed
+      .map((item) => ({
+        name: typeof item?.name === 'string' ? item.name.trim() : '',
+        keywords: Array.isArray(item?.keywords)
+          ? item.keywords.filter((v: any) => typeof v === 'string' && v.trim()).map((v: string) => v.trim())
+          : [],
+      }))
+      .filter((item) => item.name && item.keywords.length > 0);
+    return sanitized.length > 0 ? sanitized : DEFAULT_AUTO_CATEGORY_RULES;
+  } catch {
+    return DEFAULT_AUTO_CATEGORY_RULES;
+  }
+};
+
+const resolveAutoCategory = (name: string, rules: AutoCategoryRule[]) => {
+  const lower = name.trim().toLowerCase();
+  if (!lower) return { categoryId: null as string | null, label: '미분류' };
+  for (const rule of rules) {
+    const matched = rule.keywords.some((kw) => lower.includes(kw.toLowerCase()));
+    if (matched) {
+      return { categoryId: normalizeCategoryId(rule.name), label: rule.name };
+    }
+  }
+  return { categoryId: null as string | null, label: '미분류' };
+};
+
 // -------------------- modal --------------------
 interface SettingsModalProps {
   isOpen: boolean;
@@ -256,6 +360,61 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   );
 };
 
+interface AutoCategoryRuleModalProps {
+  isOpen: boolean;
+  value: string;
+  onChange: (next: string) => void;
+  onSave: () => void;
+  onReset: () => void;
+  onClose: () => void;
+}
+
+const AutoCategoryRuleModal: React.FC<AutoCategoryRuleModalProps> = ({
+  isOpen,
+  value,
+  onChange,
+  onSave,
+  onReset,
+  onClose,
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="admin-modal-header">
+          <h4>
+            <SlidersHorizontal size={20} /> 자동 카테고리 키워드 편집
+          </h4>
+        </div>
+        <div className="admin-modal-body">
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+            형식: [{'{ "name": "카테고리명", "keywords": ["키워드1", "키워드2"] }'}]
+          </p>
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            rows={14}
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+          />
+        </div>
+        <div className="admin-modal-footer">
+          <button type="button" onClick={onReset} className="ghost">
+            기본값 복원
+          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={onClose} className="ghost">
+              닫기
+            </button>
+            <button type="button" onClick={onSave}>
+              저장
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // -------------------- component --------------------
 const ProductForm: React.FC<ProductFormProps> = ({
   mode,
@@ -304,6 +463,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [isPreOrderEnabled, setIsPreOrderEnabled] = useState(true);
   const [preOrderTiers, setPreOrderTiers] = useState<LoyaltyTier[]>(['공구의 신', '공구왕']);
 
+  const { categories: categoryDocs } = useCategories();
+
   // 중복 검색
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
@@ -312,6 +473,19 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [categories, setCategories] = useState<string[]>([]);
   const [composition, setComposition] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [isCategoryManual, setIsCategoryManual] = useState(false);
+  const [autoCategoryRules, setAutoCategoryRules] = useState<AutoCategoryRule[]>(() =>
+    typeof window === 'undefined' ? DEFAULT_AUTO_CATEGORY_RULES : loadAutoCategoryRules()
+  );
+  const [autoCategoryRuleText, setAutoCategoryRuleText] = useState(
+    JSON.stringify(
+      typeof window === 'undefined' ? DEFAULT_AUTO_CATEGORY_RULES : loadAutoCategoryRules(),
+      null,
+      2
+    )
+  );
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
 
   // 이벤트 타입
   const [eventType, setEventType] = useState<'NONE' | 'CHUSEOK' | 'ANNIVERSARY' | 'CHRISTMAS' | 'PREMIUM' | 'SEOLLAL'>('NONE');
@@ -331,6 +505,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     imageUrls: imagePreviews.filter(p => !p.startsWith('blob:')),
     composition,
     categories,
+    categoryId,
     selectedStorageType,
     variantGroups,
     roundName,
@@ -341,7 +516,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     isPrepaymentRequired,
     eventType,
   }), [
-    groupName, imagePreviews, composition, categories,
+    groupName, imagePreviews, composition, categories, categoryId,
     selectedStorageType, variantGroups, roundName,
     publishDate, deadlineDate, pickupDate, pickupDeadlineDate,
     isPrepaymentRequired, eventType,
@@ -352,6 +527,52 @@ const ProductForm: React.FC<ProductFormProps> = ({
     data: formData,
     enabled: mode === 'newProduct' || mode === 'newRound',
   });
+
+  const autoSuggestion = useMemo(
+    () => resolveAutoCategory(groupName, autoCategoryRules),
+    [groupName, autoCategoryRules]
+  );
+
+  useEffect(() => {
+    if (!isCategoryManual) {
+      setCategoryId(autoSuggestion.categoryId);
+    }
+  }, [autoSuggestion.categoryId, isCategoryManual]);
+
+  const handleApplyAutoCategory = useCallback(() => {
+    setIsCategoryManual(false);
+    setCategoryId(autoSuggestion.categoryId);
+  }, [autoSuggestion.categoryId]);
+
+  const handleSaveAutoRules = useCallback(() => {
+    try {
+      const parsed = JSON.parse(autoCategoryRuleText);
+      if (!Array.isArray(parsed)) throw new Error('규칙 형식이 올바르지 않습니다.');
+      const sanitized: AutoCategoryRule[] = parsed
+        .map((item) => ({
+          name: typeof item?.name === 'string' ? item.name.trim() : '',
+          keywords: Array.isArray(item?.keywords)
+            ? item.keywords.filter((v: any) => typeof v === 'string' && v.trim()).map((v: string) => v.trim())
+            : [],
+        }))
+        .filter((item) => item.name && item.keywords.length > 0);
+      if (sanitized.length === 0) throw new Error('유효한 규칙이 없습니다.');
+      setAutoCategoryRules(sanitized);
+      localStorage.setItem(AUTO_CATEGORY_STORAGE_KEY, JSON.stringify(sanitized));
+      toast.success('자동 카테고리 규칙이 저장되었습니다.');
+      setIsRuleModalOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message ?? '규칙 저장에 실패했습니다.');
+    }
+  }, [autoCategoryRuleText]);
+
+  const handleResetAutoRules = useCallback(() => {
+    const text = JSON.stringify(DEFAULT_AUTO_CATEGORY_RULES, null, 2);
+    setAutoCategoryRuleText(text);
+    setAutoCategoryRules(DEFAULT_AUTO_CATEGORY_RULES);
+    localStorage.setItem(AUTO_CATEGORY_STORAGE_KEY, text);
+    toast.success('기본 규칙으로 복원했습니다.');
+  }, []);
 
   // 검증
   const validation = useMemo(() => {
@@ -499,6 +720,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
           setSelectedStorageType(product.storageType);
 
           setCategories((product as any).categories || []);
+          setCategoryId((product as any).categoryId ?? null);
+          setIsCategoryManual(Boolean((product as any).categoryId));
           setComposition((product as any).composition || '');
           setExtraInfo((product as any).extraInfo || '');
 
@@ -696,6 +919,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
         if (saved.groupName) setGroupName(saved.groupName);
         if (saved.composition) setComposition(saved.composition);
         if (saved.categories) setCategories(saved.categories);
+        if (saved.categoryId !== undefined) {
+          setCategoryId(saved.categoryId ?? null);
+          setIsCategoryManual(Boolean(saved.categoryId));
+        }
         if (saved.selectedStorageType) setSelectedStorageType(saved.selectedStorageType);
         if (saved.variantGroups) setVariantGroups(saved.variantGroups);
         if (saved.roundName) setRoundName(saved.roundName);
@@ -1182,6 +1409,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         description: '', // 상품 설명 필드 제거됨 (빈 문자열로 유지)
         storageType: selectedStorageType,
         ...( { categories } as any ),
+        ...( { categoryId } as any ),
         ...( { composition: composition.trim() } as any ),
         ...( { extraInfo: extraInfo.trim() ? extraInfo.trim() : null } as any ),
       };
@@ -1329,6 +1557,14 @@ const ProductForm: React.FC<ProductFormProps> = ({
         setIsPreOrderEnabled={setIsPreOrderEnabled}
         preOrderTiers={preOrderTiers}
         setPreOrderTiers={setPreOrderTiers}
+      />
+      <AutoCategoryRuleModal
+        isOpen={isRuleModalOpen}
+        value={autoCategoryRuleText}
+        onChange={setAutoCategoryRuleText}
+        onSave={handleSaveAutoRules}
+        onReset={handleResetAutoRules}
+        onClose={() => setIsRuleModalOpen(false)}
       />
 
       <div className="product-add-page-wrapper smart-form">
@@ -1516,6 +1752,37 @@ const ProductForm: React.FC<ProductFormProps> = ({
                     </ul>
                   </div>
                 )}
+              </div>
+
+              <div className="form-group">
+                <label>카테고리(자동 분류)</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select
+                    value={categoryId ?? ''}
+                    onChange={(e) => {
+                      const next = e.target.value || null;
+                      setCategoryId(next);
+                      setIsCategoryManual(true);
+                    }}
+                    style={{ minWidth: 240 }}
+                  >
+                    <option value="">미분류</option>
+                    {categoryDocs.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}{cat.isActive ? '' : ' (비활성)'}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={handleApplyAutoCategory}>
+                    자동 적용
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setIsRuleModalOpen(true)}>
+                    키워드 편집
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
+                  자동 추천: {autoSuggestion.label}
+                </div>
               </div>
 
               <div className="form-group">

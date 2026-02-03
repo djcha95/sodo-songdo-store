@@ -60,6 +60,72 @@
   align-items: center;
 }
 
+/* 검색창: 로고와 예약내역 사이 남은 너비 전부 사용 */
+.header-search-wrap {
+  flex: 1;
+  min-width: 0;
+  margin: 0 8px;
+}
+
+.header-search-form {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 12px 0 14px;
+  background: #F3F4F6;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.header-search-form:focus-within {
+  background: #fff;
+  border-color: #E5E7EB;
+  box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.06);
+}
+
+.header-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111;
+  letter-spacing: -0.3px;
+}
+
+.header-search-input::placeholder {
+  color: #9CA3AF;
+}
+
+.header-search-input:focus {
+  outline: none;
+}
+
+.header-search-submit {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.header-search-submit:hover {
+  color: #111;
+  background: rgba(0, 0, 0, 0.05);
+}
+
 /* 우측 버튼 */
 .header-action-btn {
   padding: 6px 12px;
