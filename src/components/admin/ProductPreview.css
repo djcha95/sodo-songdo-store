@@ -214,6 +214,47 @@
   color: #374151;
 }
 
+.preview-option-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preview-select-wrapper {
+  width: 100%;
+}
+
+.preview-price-select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1e293b;
+  background-color: #f8fafc;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.9rem center;
+  background-repeat: no-repeat;
+  background-size: 1.4em 1.4em;
+  padding-right: 2.8rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.preview-price-select:focus {
+  outline: none;
+  border-color: #8E1E20;
+  box-shadow: 0 0 0 3px rgba(212, 36, 38, 0.2);
+  background-color: #fff;
+}
+
+.preview-price-select:invalid {
+  color: #6b7280;
+}
+
 /* 모바일 반응형 */
 @media (max-width: 768px) {
   .product-preview-container {

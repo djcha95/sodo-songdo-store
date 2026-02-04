@@ -139,6 +139,22 @@ const computeDefaultDeadlineFromPublish = (publishAt: Date): Date => {
   return target.hour(13).minute(0).second(0).millisecond(0).toDate();
 };
 
+// ✅ 픽업 마감일 계산 (냉장/신선은 당일, 실온/냉동은 +1일)
+// ✅ 금요일 픽업 + 2일 상품(실온/냉동)은 다음 주 월요일로 보정
+const computePickupDeadlineFromPickupDate = (
+  pickupDate: Date,
+  storageType: StorageType
+): Date => {
+  const base = dayjs(pickupDate);
+  let target = base;
+
+  if (storageType === 'ROOM' || storageType === 'FROZEN') {
+    target = base.day() === 5 ? base.add(3, 'day') : base.add(1, 'day');
+  }
+
+  return target.hour(13).minute(0).second(0).millisecond(0).toDate();
+};
+
 const normalizeNumberInput = (v: string): number | '' => {
   if (v === '') return '';
   const n = Number(v);
@@ -163,8 +179,6 @@ const ALL_LOYALTY_TIERS: LoyaltyTier[] = [
   '공구새싹',
   '공구초보',
 ];
-
-const CATEGORY_OPTIONS = ['식품', '간식/디저트', '뷰티/생활', '주류/기타', '유아'] as const;
 
 const AUTO_CATEGORY_STORAGE_KEY = 'autoCategoryRules';
 
@@ -591,13 +605,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   // 진행률 계산
   const progress = useMemo(() => {
-    const totalFields = 10;
+    const totalFields = 9;
     let completedFields = 0;
 
     if (groupName.trim()) completedFields++;
     if (composition.trim()) completedFields++;
     if (imagePreviews.length > 0) completedFields++;
-    if (categories.length > 0) completedFields++;
     if (variantGroups.length > 0) completedFields++;
     if (variantGroups.every(vg => vg.items.length > 0 && vg.items.every(i => i.name && i.price))) completedFields++;
     if (deadlineDate) completedFields++;
@@ -606,7 +619,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     if (validation.isValid) completedFields++;
 
     return Math.round((completedFields / totalFields) * 100);
-  }, [groupName, composition, imagePreviews, categories, variantGroups, deadlineDate, pickupDate, pickupDeadlineDate, validation.isValid]);
+  }, [groupName, composition, imagePreviews, variantGroups, deadlineDate, pickupDate, pickupDeadlineDate, validation.isValid]);
 
   // 키보드 단축키
   useEffect(() => {
@@ -868,16 +881,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
             // ✅ [보정] 기존 데이터가 비어있는 경우에만 보관타입 기반으로 자동 채움 (덮어쓰지 않음)
             if (!loadedPickupDeadline && loadedPickup) {
               const st = product.storageType;
-              if (st === 'COLD' || st === 'FRESH') {
-                setPickupDeadlineDate(loadedPickup);
-              } else if (st === 'ROOM' || st === 'FROZEN') {
-                const next = new Date(loadedPickup);
-                next.setDate(next.getDate() + 1);
-                next.setHours(13, 0, 0, 0);
-                setPickupDeadlineDate(next);
-              } else {
-                setPickupDeadlineDate(null);
-              }
+              setPickupDeadlineDate(computePickupDeadlineFromPickupDate(loadedPickup, st));
             } else {
               setPickupDeadlineDate(loadedPickupDeadline);
             }
@@ -996,12 +1000,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
 
-    const newPickupDeadline = new Date(pickupDate);
-    if (selectedStorageType === 'ROOM' || selectedStorageType === 'FROZEN') {
-      newPickupDeadline.setDate(newPickupDeadline.getDate() + 1);
-    }
-    newPickupDeadline.setHours(13, 0, 0, 0);
-    setPickupDeadlineDate(newPickupDeadline);
+    setPickupDeadlineDate(computePickupDeadlineFromPickupDate(pickupDate, selectedStorageType));
   }, [pickupDate, selectedStorageType, mode]);
 
   // -------------------- single mode sync groupName to first VG --------------------
@@ -1786,48 +1785,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
 
               <div className="form-group">
-                <label>카테고리</label>
-                <div
-                  className="category-chip-group"
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    flexWrap: 'wrap',
-                    marginTop: '8px',
-                  }}
-                >
-                  {CATEGORY_OPTIONS.map((c) => {
-                    const active = categories.includes(c);
-                    return (
-                      <button
-                        type="button"
-                        key={c}
-                        className={`chip ${active ? 'active' : ''}`}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          border: active ? '1px solid #000' : '1px solid #ddd',
-                          backgroundColor: active ? '#000' : '#fff',
-                          color: active ? '#fff' : '#666',
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => {
-                          // 한 개만 선택 가능 (이미 선택된 경우 해제, 아니면 선택)
-                          if (active) {
-                            setCategories([]);
-                          } else {
-                            setCategories([c]);
-                          }
-                        }}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="form-group">
                 <label>구성 *</label>
                 {getFieldError('composition', validation) && (
                   <div className={`field-error ${getFieldError('composition', validation)?.type}`}>
@@ -2310,6 +2267,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 categories={categories}
                 extraInfo={extraInfo}
                 expirationDate={variantGroups[0]?.expirationDate || null}
+                variantGroups={variantGroups}
               />
             </div>
           </main>

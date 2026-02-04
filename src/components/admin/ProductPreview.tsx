@@ -1,6 +1,6 @@
 // src/components/admin/ProductPreview.tsx - 실시간 미리보기 컴포넌트
 
-import React from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Eye, Package, Calendar, Hourglass, Sun, Snowflake, Tag } from 'lucide-react';
 import dayjs from 'dayjs';
 import './ProductPreview.css';
@@ -18,6 +18,15 @@ interface ProductPreviewProps {
   categories: string[];
   extraInfo?: string;
   expirationDate?: Date | null;
+  variantGroups: Array<{
+    id: string;
+    groupName: string;
+    items: Array<{
+      id: string;
+      name: string;
+      price: number | '';
+    }>;
+  }>;
 }
 
 const ProductPreview: React.FC<ProductPreviewProps> = ({
@@ -33,6 +42,7 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
   categories,
   extraInfo,
   expirationDate,
+  variantGroups,
 }) => {
   const storageLabels: Record<string, string> = {
     ROOM: '실온',
@@ -50,6 +60,65 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
 
   const storageLabel = storageLabels[storageType] || '실온';
   const storageIcon = storageIcons[storageType] || <Sun size={16} />;
+
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState('');
+
+  const hasMultipleGroups = variantGroups.length > 1;
+
+  useEffect(() => {
+    if (variantGroups.length === 0) {
+      setSelectedGroupId('');
+      setSelectedItemId('');
+      return;
+    }
+
+    if (!hasMultipleGroups) {
+      setSelectedGroupId(variantGroups[0].id);
+      return;
+    }
+
+    if (!variantGroups.some((vg) => vg.id === selectedGroupId)) {
+      setSelectedGroupId('');
+    }
+  }, [variantGroups, hasMultipleGroups, selectedGroupId]);
+
+  const selectedVariantGroup = useMemo(() => {
+    if (variantGroups.length === 0) return null;
+    if (!hasMultipleGroups) return variantGroups[0];
+    return variantGroups.find((vg) => vg.id === selectedGroupId) || null;
+  }, [variantGroups, hasMultipleGroups, selectedGroupId]);
+
+  useEffect(() => {
+    if (!selectedVariantGroup) {
+      setSelectedItemId('');
+      return;
+    }
+
+    if (selectedVariantGroup.items.length === 1) {
+      setSelectedItemId(selectedVariantGroup.items[0].id);
+      return;
+    }
+
+    if (!selectedVariantGroup.items.some((it) => it.id === selectedItemId)) {
+      setSelectedItemId('');
+    }
+  }, [selectedVariantGroup, selectedItemId]);
+
+  const selectedItem = useMemo(() => {
+    if (!selectedVariantGroup) return null;
+    return selectedVariantGroup.items.find((it) => it.id === selectedItemId) || null;
+  }, [selectedVariantGroup, selectedItemId]);
+
+  const displayPrice = useMemo(() => {
+    if (selectedItem && typeof selectedItem.price === 'number') {
+      return selectedItem.price;
+    }
+    if (selectedVariantGroup && typeof selectedVariantGroup.items?.[0]?.price === 'number') {
+      return selectedVariantGroup.items[0].price;
+    }
+    return typeof price === 'number' ? price : null;
+  }, [selectedItem, selectedVariantGroup, price]);
 
   return (
     <div className="product-preview-container">
@@ -111,6 +180,62 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
               whiteSpace: 'pre-wrap'
             }}>
               {description}
+            </div>
+          )}
+
+          {/* 옵션 선택 (상세 페이지와 동일한 UI 톤) */}
+          {variantGroups.length > 0 && (
+            <div className="preview-option-section" style={{ marginTop: '16px' }}>
+              {hasMultipleGroups && (
+                <div className="preview-select-wrapper">
+                  <select
+                    className="preview-price-select"
+                    value={selectedGroupId}
+                    onChange={(e) => {
+                      setSelectedGroupId(e.target.value);
+                      setSelectedItemId('');
+                    }}
+                  >
+                    <option value="" disabled>옵션을 선택해주세요.</option>
+                    {variantGroups.map((vg) => {
+                      const representativePrice = vg.items?.[0]?.price;
+                      const priceText = typeof representativePrice === 'number'
+                        ? ` (${representativePrice.toLocaleString()}원)`
+                        : '';
+                      return (
+                        <option key={vg.id} value={vg.id}>
+                          {`${vg.groupName || '옵션명 없음'}${priceText}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {selectedVariantGroup && selectedVariantGroup.items.length > 1 && (
+                <div className="preview-select-wrapper">
+                  <select
+                    className="preview-price-select"
+                    value={selectedItemId}
+                    onChange={(e) => setSelectedItemId(e.target.value)}
+                  >
+                    <option value="" disabled>세부 옵션을 선택해주세요.</option>
+                    {selectedVariantGroup.items.map((item) => {
+                      const basePrice = typeof selectedVariantGroup.items?.[0]?.price === 'number'
+                        ? selectedVariantGroup.items[0].price
+                        : 0;
+                      const itemPrice = typeof item.price === 'number' ? item.price : basePrice;
+                      const priceDiff = itemPrice - basePrice;
+                      const priceText = priceDiff > 0 ? ` (+${priceDiff.toLocaleString()}원)` : '';
+                      return (
+                        <option key={item.id} value={item.id}>
+                          {item.name || '세부 옵션명 없음'}{priceText}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -177,7 +302,7 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 backgroundColor: storageType === 'FROZEN' ? '#3b82f6' : 
-                                 storageType === 'COLD' ? '#0ea5e9' : 
+                                 storageType === 'COLD' ? '#ef4444' : 
                                  storageType === 'ROOM' ? '#64748b' : '#10b981'
               }}>
                 {storageLabel}
@@ -202,8 +327,8 @@ const ProductPreview: React.FC<ProductPreviewProps> = ({
                 <Package size={16} />가격
               </div>
               <div className="preview-info-value" style={{ color: '#1e293b', fontWeight: 700 }}>
-                {typeof price === 'number' && price > 0 ? (
-                  <span>{price.toLocaleString()}원</span>
+                {typeof displayPrice === 'number' && displayPrice > 0 ? (
+                  <span>{displayPrice.toLocaleString()}원</span>
                 ) : (
                   <span style={{ color: '#cbd5e1' }}>가격 설정 필요</span>
                 )}
